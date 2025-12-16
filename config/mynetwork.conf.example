@@ -1,0 +1,46 @@
+# ===========================================
+# MynetworK Configuration File
+# ===========================================
+#
+# This file contains the configuration for all plugins and application settings.
+# 
+# Usage:
+#   1. Copy this file to mynetwork.conf
+#   2. Edit the configuration as needed
+#   3. Mount it in Docker: ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
+#   4. Restart the container or call POST /api/config/import
+#
+# Format: INI (key=value)
+# Sections: [app], [plugin.<plugin_id>]
+#
+# ===========================================
+
+# Application Settings
+[app]
+timezone=Europe/Paris
+language=fr
+theme=dark
+
+# Freebox Plugin Configuration
+[plugin.freebox]
+enabled=false
+# Note: Freebox token is stored separately in .freebox_token file
+
+# UniFi Plugin Configuration
+[plugin.unifi]
+enabled=false
+# For Controller API (local):
+# url=https://192.168.1.206:8443
+# username=admin
+# password=your_password
+# site=default
+# apiMode=controller
+
+# For Site Manager API (cloud):
+# apiKey=your_api_key
+# apiMode=site-manager
+
+# Scan Réseau Plugin (to come)
+[plugin.scan-reseau]
+enabled=false
+

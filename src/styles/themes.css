@@ -1,0 +1,460 @@
+/**
+ * Architecture de Thèmes - MynetworK
+ * 
+ * Ce fichier définit l'architecture CSS pour le système de thèmes.
+ * Les thèmes sont organisés en variables CSS pour faciliter le changement.
+ * 
+ * Thèmes disponibles :
+ * - dark : Thème sombre (pas trop noir)
+ * - glass : Glass moderne avec effet glassmorphism
+ * - modern : Moderne couleur avec dégradés
+ */
+
+/* ============================================
+   VARIABLES CSS PAR DÉFAUT (Thème Dark)
+   ============================================ */
+
+:root {
+  /* Couleurs de base */
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-card: #1a1a1a;
+  --bg-unifi-card: #050b14;
+  --bg-header: #111111;
+  --bg-footer: rgba(10, 10, 10, 0.9);
+  
+  /* Bordures */
+  --border-color: #333333;
+  --border-color-light: #444444;
+  --border-color-hover: #555555;
+  
+  /* Texte */
+  --text-primary: #e5e5e5;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --text-disabled: #444444;
+  
+  /* Accents */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-unifi: #1fb0ec;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-error: #ef4444;
+  --accent-info: #06b6d4;
+  
+  /* Button colors */
+  --button-bg: #1a1a1a;
+  --button-text: #e5e5e5;
+  --button-hover-bg: #252525;
+  --button-hover-text: #ffffff;
+  --button-active-bg: #3b82f6;
+  --button-active-text: #ffffff;
+  --button-border: #333333;
+  
+  /* Effets */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+  
+  /* Backdrop blur (pour glass) */
+  --backdrop-blur: blur(10px);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+}
+
+/* ============================================
+   THÈME DARK (Par défaut - pas trop noir)
+   ============================================ */
+
+[data-theme="dark"] {
+  /* Couleurs de base - Gris foncé au lieu de noir pur */
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-card: #1a1a1a;
+  --bg-unifi-card: #050b14;
+  --bg-header: #111111;
+  --bg-footer: rgba(10, 10, 10, 0.9);
+  
+  /* Bordures */
+  --border-color: #333333;
+  --border-color-light: #444444;
+  --border-color-hover: #555555;
+  
+  /* Texte */
+  --text-primary: #e5e5e5;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  
+  /* Accents */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-unifi: #1fb0ec;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-error: #ef4444;
+  
+  /* Button colors */
+  --button-bg: #1a1a1a;
+  --button-text: #e5e5e5;
+  --button-hover-bg: #252525;
+  --button-hover-text: #ffffff;
+  --button-active-bg: #3b82f6;
+  --button-active-text: #ffffff;
+  --button-border: #333333;
+  
+  /* Effets */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  
+  /* Pas de backdrop blur pour dark */
+  --backdrop-blur: none;
+}
+
+/* ============================================
+   THÈME GLASS (Glassmorphism moderne)
+   ============================================ */
+
+[data-theme="glass"] {
+  /* Couleurs de base - Transparence avec blur */
+  --bg-primary: rgba(15, 15, 15, 0.7);
+  --bg-secondary: rgba(26, 26, 26, 0.6);
+  --bg-tertiary: rgba(37, 37, 37, 0.5);
+  --bg-card: rgba(26, 26, 26, 0.5);
+  --bg-unifi-card: rgba(5, 11, 20, 0.7);
+  --bg-header: rgba(17, 17, 17, 0.8);
+  --bg-footer: rgba(10, 10, 10, 0.7);
+  
+  /* Bordures - Légèrement transparentes avec effet glass */
+  --border-color: rgba(255, 255, 255, 0.1);
+  --border-color-light: rgba(255, 255, 255, 0.15);
+  --border-color-hover: rgba(255, 255, 255, 0.25);
+  
+  /* Texte - Plus lumineux pour contraste */
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-tertiary: #aaaaaa;
+  
+  /* Accents - Plus vifs pour glassmorphism */
+  --accent-primary: #60a5fa;
+  --accent-primary-hover: #3b82f6;
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-error: #f87171;
+  --accent-info: #06b6d4;
+  
+  /* Button colors */
+  --button-bg: rgba(26, 26, 26, 0.6);
+  --button-text: #ffffff;
+  --button-hover-bg: rgba(37, 37, 37, 0.7);
+  --button-hover-text: #ffffff;
+  --button-active-bg: #60a5fa;
+  --button-active-text: #ffffff;
+  --button-border: rgba(255, 255, 255, 0.1);
+  
+  /* Effets - Backdrop blur activé pour glassmorphism */
+  --backdrop-blur: blur(20px);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
+  
+  /* Gradient de fond pour effet glass moderne */
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 50%, rgba(236, 72, 153, 0.1) 100%);
+}
+
+/* Application du backdrop-filter pour les éléments glass */
+[data-theme="glass"] .theme-card,
+[data-theme="glass"] .theme-header,
+[data-theme="glass"] .theme-footer {
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+}
+
+/* Apply glass effect to dark background utility classes used in the app.
+ * Directly targeting Tailwind arbitrary value classes like .bg-[#121212]
+ * with a class selector produces CSS parse warnings in some toolchains.
+ * Instead, we use an attribute selector that matches any element whose
+ * class list contains these utility classes. This keeps the visual effect
+ * while avoiding syntax errors during minification. */
+[data-theme="glass"] [class*="bg-[#121212]"],
+[data-theme="glass"] [class*="bg-[#1a1a1a]"] {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(26, 26, 26, 0.6) !important;
+}
+
+/* ============================================
+   THÈME MODERNE COULEUR (Dégradés modernes)
+   ============================================ */
+
+[data-theme="modern"] {
+  /* Couleurs de base - Avec dégradés modernes */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --bg-unifi-card: rgba(15, 23, 42, 0.95);
+  --bg-header: rgba(15, 23, 42, 0.95);
+  --bg-footer: rgba(15, 23, 42, 0.9);
+  
+  /* Bordures - Avec couleur moderne */
+  --border-color: rgba(59, 130, 246, 0.3);
+  --border-color-light: rgba(59, 130, 246, 0.4);
+  --border-color-hover: rgba(59, 130, 246, 0.6);
+  
+  /* Texte - Contraste élevé */
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #64748b;
+  
+  /* Accents - Dégradés colorés modernes */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-error: #ef4444;
+  --accent-info: #06b6d4;
+  
+  /* Button colors */
+  --button-bg: rgba(30, 41, 59, 0.8);
+  --button-text: #f1f5f9;
+  --button-hover-bg: rgba(51, 65, 85, 0.9);
+  --button-hover-text: #ffffff;
+  --button-active-bg: #3b82f6;
+  --button-active-text: #ffffff;
+  --button-border: rgba(59, 130, 246, 0.3);
+  
+  /* Effets - Ombres colorées avec dégradés */
+  --shadow-sm: 0 1px 2px rgba(59, 130, 246, 0.2);
+  --shadow-md: 0 4px 6px rgba(59, 130, 246, 0.3);
+  --shadow-lg: 0 10px 15px rgba(59, 130, 246, 0.4);
+  --shadow-xl: 0 20px 25px rgba(124, 58, 237, 0.4);
+  
+  /* Gradient de fond moderne avec couleurs vives */
+  background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 50%, #ec4899 100%);
+  --backdrop-blur: none;
+}
+
+/* Effets de dégradé pour les éléments modernes */
+[data-theme="modern"] .theme-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(51, 65, 85, 0.8) 100%);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+[data-theme="modern"] .theme-button-primary {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary-hover) 100%);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+}
+
+[data-theme="modern"] .theme-button-primary:hover {
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+  transform: translateY(-1px);
+}
+
+/* ============================================
+   UTILISATION DES VARIABLES DANS LES COMPOSANTS
+   ============================================ */
+
+/* Background utilities */
+.bg-theme-primary {
+  background-color: var(--bg-primary) !important;
+}
+
+.bg-theme-secondary {
+  background-color: var(--bg-secondary) !important;
+}
+
+.bg-theme-tertiary {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.bg-theme-card {
+  background-color: var(--bg-card) !important;
+}
+
+.bg-unifi-card {
+  background-color: var(--bg-unifi-card) !important;
+}
+
+.border-unifi-accent {
+  border-color: var(--accent-unifi) !important;
+}
+
+.text-unifi-accent {
+  color: var(--accent-unifi) !important;
+}
+
+.bg-theme-header {
+  background-color: var(--bg-header) !important;
+}
+
+.bg-theme-footer {
+  background-color: var(--bg-footer) !important;
+}
+
+/* Text utilities */
+.text-theme-primary {
+  color: var(--text-primary) !important;
+}
+
+.text-theme-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.text-theme-tertiary {
+  color: var(--text-tertiary) !important;
+}
+
+/* Border utilities */
+.border-theme {
+  border-color: var(--border-color) !important;
+}
+
+.border-theme-light {
+  border-color: var(--border-color-light) !important;
+}
+
+.border-theme-hover {
+  border-color: var(--border-color-hover) !important;
+}
+
+/* Button utilities */
+.btn-theme {
+  background-color: var(--button-bg) !important;
+  color: var(--button-text) !important;
+  border-color: var(--button-border) !important;
+}
+
+.btn-theme:hover {
+  background-color: var(--button-hover-bg) !important;
+  color: var(--button-hover-text) !important;
+}
+
+.btn-theme-active {
+  background-color: var(--button-active-bg) !important;
+  color: var(--button-active-text) !important;
+}
+
+/* Accent utilities */
+.bg-accent-primary {
+  background-color: var(--accent-primary) !important;
+}
+
+.bg-accent-primary-hover {
+  background-color: var(--accent-primary-hover) !important;
+}
+
+.text-accent-primary {
+  color: var(--accent-primary) !important;
+}
+
+.text-accent-success {
+  color: var(--accent-success) !important;
+}
+
+.text-accent-warning {
+  color: var(--accent-warning) !important;
+}
+
+.text-accent-error {
+  color: var(--accent-error) !important;
+}
+
+.text-accent-info {
+  color: var(--accent-info) !important;
+}
+
+/* Title colors - use accent-primary for main titles, accent-secondary for secondary titles */
+.theme-title-primary {
+  color: var(--accent-primary) !important;
+}
+
+.theme-title-secondary {
+  color: var(--accent-primary-hover) !important;
+}
+
+/* Card and section titles */
+.theme-card-title {
+  color: var(--accent-primary) !important;
+}
+
+.theme-section-title {
+  color: var(--accent-primary) !important;
+}
+
+/* Legacy classes for compatibility */
+.theme-applied {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.theme-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  backdrop-filter: var(--backdrop-blur);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-header {
+  background-color: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: var(--backdrop-blur);
+}
+
+.theme-footer {
+  background-color: var(--bg-footer);
+  border-top: 1px solid var(--border-color);
+  backdrop-filter: var(--backdrop-blur);
+}
+
+.theme-button-primary {
+  background-color: var(--accent-primary);
+  color: white;
+  border: 1px solid var(--accent-primary);
+}
+
+.theme-button-primary:hover {
+  background-color: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+
+.theme-text-primary {
+  color: var(--text-primary);
+}
+
+.theme-text-secondary {
+  color: var(--text-secondary);
+}
+
+.theme-text-tertiary {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   TRANSITIONS POUR CHANGEMENT DE THÈME
+   ============================================ */
+
+* {
+  transition: background-color var(--transition-normal),
+              color var(--transition-normal),
+              border-color var(--transition-normal),
+              box-shadow var(--transition-normal);
+}
+
+/* Désactiver les transitions pour certains éléments */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}
+

@@ -1,0 +1,51 @@
+# ===========================================
+# Docker ignore file
+# Excludes files from Docker build context
+# ===========================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Build output (will be rebuilt in container)
+dist/
+
+# Development files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.md
+!README.md
+
+# Environment and secrets
+.env
+.env.*
+*.local
+freebox_token.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+coverage/
+*.test.ts
+*.spec.ts
+__tests__/
+Doc_Dev/
+
+# Docker files (no need to copy themselves)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp

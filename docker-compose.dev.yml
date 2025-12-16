@@ -1,0 +1,48 @@
+# ===========================================
+# mynetwork - Multi-Source Network Dashboard
+# Docker Compose - Development Mode
+# ===========================================
+#
+# Docker Compose configuration for DEVELOPMENT with hot reload
+# Changes to source files automatically trigger recompilation and browser refresh
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Environment variables:
+#   DASHBOARD_PORT - Vite dev server port (default: 3000)
+#   SERVER_PORT    - Backend API port (default: 3003)
+#   FREEBOX_HOST   - Freebox server hostname (default: mafreebox.freebox.fr)
+#   JWT_SECRET     - JWT secret for authentication
+
+services:
+  mynetwork-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: mynetwork-dev
+    ports:
+      - "${DASHBOARD_PORT:-3000}:${DASHBOARD_PORT:-3000}"  # Vite dev server (frontend)
+      - "${SERVER_PORT:-3001}:${SERVER_PORT:-3001}"        # API server (backend)
+    environment:
+      - NODE_ENV=development
+      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
+      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      - JWT_SECRET=${JWT_SECRET:-dev_secret_change_in_production}
+      - VITE_PORT=${DASHBOARD_PORT:-3000}
+      - PORT=${SERVER_PORT:-3003}
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      # Preserve container's node_modules (avoid overwriting with host's)
+      - /app/node_modules
+      # Persistent storage for Freebox authentication token and database
+      - mynetwork_data_dev:/app/data
+      # Optional: Mount external configuration file
+      # Uncomment the line below to use an external config file
+      # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
+    restart: unless-stopped
+
+volumes:
+  mynetwork_data_dev:
+    name: mynetwork_data_dev

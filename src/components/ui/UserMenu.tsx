@@ -1,0 +1,188 @@
+/**
+ * UserMenu Component
+ * 
+ * Displays user avatar/badge with dropdown menu containing:
+ * - User information (username, email, role)
+ * - Settings option
+ * - Administration option (admin only)
+ * - Logout option
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
+
+interface User {
+    username: string;
+    email?: string;
+    role: 'admin' | 'user' | 'viewer';
+}
+
+interface UserMenuProps {
+    user?: User | null;
+    onSettingsClick?: () => void;
+    onAdminClick?: () => void;
+    onLogout?: () => void;
+}
+
+export const UserMenu: React.FC<UserMenuProps> = ({
+    user,
+    onSettingsClick,
+    onAdminClick,
+    onLogout
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Debug: log user to console
+    React.useEffect(() => {
+        if (user) {
+            console.log('[UserMenu] User received:', user);
+        } else {
+            console.log('[UserMenu] No user provided');
+        }
+    }, [user]);
+
+    // Calculate menu position when opened
+    useEffect(() => {
+        if (isOpen && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setMenuPosition({
+                top: rect.bottom + 8,
+                left: rect.right - 256 // 256px = w-64 (width of menu)
+            });
+        } else {
+            setMenuPosition(null);
+        }
+    }, [isOpen]);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isOpen]);
+
+    if (!user || !user.username) {
+        return null;
+    }
+
+    // Get user initials for avatar
+    const getInitials = (username: string): string => {
+        if (!username) return 'U';
+        return username
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2) || 'U';
+    };
+
+    const initials = getInitials(user.username);
+
+    return (
+        <>
+            {/* Avatar Button */}
+            <div className="relative">
+                <button
+                    ref={buttonRef}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsOpen(!isOpen);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg transition-colors"
+                >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                        {initials}
+                    </div>
+                    <ChevronDown 
+                        size={16} 
+                        className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    />
+                </button>
+            </div>
+
+            {/* Dropdown Menu - Rendered in portal to avoid overflow issues */}
+            {isOpen && menuPosition && createPortal(
+                <div 
+                    ref={menuRef}
+                    className="fixed w-64 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden"
+                    style={{ 
+                        top: `${menuPosition.top}px`, 
+                        left: `${menuPosition.left}px` 
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* User Info Section */}
+                    <div className="p-4 border-b border-gray-700">
+                        <div className="font-semibold text-gray-200">{user.username}</div>
+                        {user.email && (
+                            <div className="text-sm text-gray-400 mt-1">{user.email}</div>
+                        )}
+                        <div className="text-xs text-gray-500 mt-1 uppercase">
+                            {user.role === 'admin' ? 'Administrateur' : user.role === 'user' ? 'Utilisateur' : 'Lecteur'}
+                        </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-2">
+                        {/* User Profile / Change Avatar */}
+                        <button
+                            onClick={() => {
+                                setIsOpen(false);
+                                // TODO: Open avatar change modal
+                                alert('Fonctionnalité de changement d\'avatar à venir');
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
+                        >
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs">
+                                {initials}
+                            </div>
+                            <span>Changer l'avatar</span>
+                        </button>
+
+                        {/* Administration (Admin only) */}
+                        {user.role === 'admin' && (
+                            <button
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    onAdminClick?.();
+                                }}
+                                className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3 bg-blue-900/20 border-l-2 border-blue-500"
+                            >
+                                <Shield size={16} className="text-blue-400" />
+                                <span className="font-medium">Administration</span>
+                            </button>
+                        )}
+
+                        {/* Logout */}
+                        <button
+                            onClick={() => {
+                                setIsOpen(false);
+                                onLogout?.();
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
+                        >
+                            <LogOut size={16} className="text-gray-400" />
+                            <span>Déconnexion</span>
+                        </button>
+                    </div>
+                </div>,
+                document.body
+            )}
+        </>
+    );
+};
+

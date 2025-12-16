@@ -1,0 +1,10 @@
+🎉 Initial commit - MynetworK Dashboard
+
+✨ Features:
+- 🎨 Modern React dashboard with TypeScript
+- 🔌 Plugin system (Freebox, UniFi)
+- 🔐 JWT authentication
+- 🐳 Docker ready
+- 📊 Multi-source network monitoring
+
+🚀 Ready for deployment!
