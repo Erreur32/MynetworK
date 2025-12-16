@@ -35,6 +35,7 @@ data/
 # Environment variables
 .env
 .env.local
+commit-message.txt
 
 # Configuration files (contains sensitive data: passwords, tokens, API keys)
 config/mynetwork.conf
