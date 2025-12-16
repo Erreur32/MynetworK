@@ -276,7 +276,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">MynetworK</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.6</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
             </div>
           </>
         ) : pageType === 'freebox' ? (
@@ -284,7 +284,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">{boxName}</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.6</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
             </div>
           </>
         ) : pageType === 'unifi' ? (
@@ -304,7 +304,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-gray-200">UniFi Controller</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.6</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
             </div>
           </>
         ) : (
@@ -312,7 +312,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">MynetworK</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.6</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
             </div>
           </>
         )}
