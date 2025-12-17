@@ -1,6 +1,6 @@
-# Guide Complet des Plugins MynetwoK
+# Guide Complet des Plugins MynetworK
 
-Ce guide explique comment créer, développer et maintenir des plugins pour MynetwoK. Il est conçu pour être suivi par les IA et les développeurs.
+Ce guide explique comment créer, développer et maintenir des plugins pour MynetworK. Il est conçu pour être suivi par les IA et les développeurs.
 
 ## Table des matières
 
@@ -21,7 +21,7 @@ Ce guide explique comment créer, développer et maintenir des plugins pour Myne
 
 ### Système de plugins
 
-MynetwoK utilise un système de plugins modulaire où chaque plugin :
+MynetworK utilise un système de plugins modulaire où chaque plugin :
 - Hérite de `BasePlugin`
 - Est géré par `PluginManager`
 - Est stocké dans `server/plugins/[plugin-id]/`

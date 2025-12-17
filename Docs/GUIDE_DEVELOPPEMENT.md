@@ -1,4 +1,4 @@
-# Guide de Développement - MynetwoK
+# Guide de Développement - MynetworK
 
 ## 📋 Table des matières
 
@@ -13,7 +13,7 @@
 
 ## Vue d'ensemble du projet
 
-**MynetwoK** est un **dashboard multi-sources** pour gérer Freebox, UniFi et vos réseaux. Il est construit avec :
+**MynetworK** est un **dashboard multi-sources** pour gérer Freebox, UniFi et vos réseaux. Il est construit avec :
 
 - **Frontend** : React 19 + TypeScript + Vite + Tailwind CSS
 - **Backend** : Express 5 + Node.js + TypeScript
@@ -24,7 +24,7 @@
 ### Structure du projet
 
 ```
-MynetwoK/
+MynetworK/
 ├── src/                    # Frontend React
 │   ├── api/               # Client API (appelle le backend)
 │   ├── components/        # Composants React réutilisables

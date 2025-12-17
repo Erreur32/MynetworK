@@ -21,7 +21,7 @@
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    container_name: mynetwork
+    container_name: MynetworK
     restart: unless-stopped
 
     # Port mapping: host:container

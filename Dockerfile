@@ -1,5 +1,5 @@
 # ===========================================
-# Mynetwork - Multi-Source Network Dashboard
+# MynetworK - Multi-Source Network Dashboard
 # Docker Build - Multi-stage build for production deployment
 # ===========================================
 

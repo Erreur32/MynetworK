@@ -1,5 +1,5 @@
 # ===========================================
-# mynetwork - Multi-Source Network Dashboard
+# MynetworK - Multi-Source Network Dashboard
 # Docker Compose - Development Mode
 # ===========================================
 #
@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: mynetwork-dev
+    container_name: Mynetwork-dev
     ports:
       - "${DASHBOARD_PORT:-3000}:${DASHBOARD_PORT:-3000}"  # Vite dev server (frontend)
       - "${SERVER_PORT:-3001}:${SERVER_PORT:-3001}"        # API server (backend)
