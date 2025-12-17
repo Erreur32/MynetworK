@@ -46,6 +46,8 @@ import dhcpRoutes from './routes/dhcp.js';
 import configRoutes from './routes/config.js';
 import metricsRoutes from './routes/metrics.js';
 import apiDocsRoutes from './routes/api-docs.js';
+import securityRoutes from './routes/security.js';
+import { securityNotificationService } from './services/securityNotificationService.js';
 import { logger } from './utils/logger.js';
 
 // Initialize database
@@ -154,6 +156,7 @@ app.use('/api/capabilities', capabilitiesRoutes);
 app.use('/api/dhcp', dhcpRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/debug', debugRoutes);
+app.use('/api/security', securityRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -204,6 +207,14 @@ function getNetworkIP(): string | null {
     }
   }
   return null;
+}
+
+// Check JWT secret on startup and notify if default
+const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
+if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
+  securityNotificationService.notifyJwtSecretWarning().catch(err => {
+    logger.error('Security', 'Failed to send JWT secret warning notification:', err);
+  });
 }
 
 // Start server

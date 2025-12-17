@@ -20,6 +20,7 @@ import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { useFavicon } from '../../hooks/useFavicon';
 import { useUpdateStore } from '../../stores/updateStore';
+import { getVersionString } from '../../constants/version';
 import type { SystemInfo, ConnectionStatus, SystemSensor, SystemFan } from '../../types/api';
 import type { PageType } from './Footer';
 
@@ -284,7 +285,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex flex-col leading-tight relative">
               <span className="font-semibold text-theme-primary">MynetworK</span>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
+                <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
                 {updateInfo?.updateAvailable && updateInfo.enabled && (
                   <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
                     Nouvelle version disponible
@@ -298,7 +299,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">{boxName}</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
+              <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
             </div>
           </>
         ) : pageType === 'unifi' ? (
@@ -318,7 +319,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-gray-200">UniFi Controller</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
+              <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
             </div>
           </>
         ) : (
@@ -326,7 +327,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">MynetworK</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
+              <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
             </div>
           </>
         )}

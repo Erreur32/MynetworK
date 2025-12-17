@@ -330,11 +330,8 @@ export class UniFiPlugin extends BasePlugin {
     }
 
     async testConnection(): Promise<boolean> {
-        try {
-            return await this.apiService.testConnection();
-        } catch {
-            return false;
-        }
+        // Let errors propagate so they can be caught and displayed to the user
+        return await this.apiService.testConnection();
     }
 }
 

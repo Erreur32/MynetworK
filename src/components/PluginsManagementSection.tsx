@@ -44,8 +44,11 @@ export const PluginsManagementSection: React.FC = () => {
     useEffect(() => {
         if (isFreeboxRegistered && isFreeboxLoggedIn) {
             setFreeboxLoginModalOpen(false);
+            // Refresh plugins to update connection status after successful login
+            // This ensures the plugin is recognized as connected without requiring a restart
+            fetchPlugins();
         }
-    }, [isFreeboxRegistered, isFreeboxLoggedIn]);
+    }, [isFreeboxRegistered, isFreeboxLoggedIn, fetchPlugins]);
 
     const handleToggle = async (pluginId: string, enabled: boolean) => {
         await updatePluginConfig(pluginId, { enabled });
@@ -157,26 +160,25 @@ export const PluginsManagementSection: React.FC = () => {
                                         <p className="text-[10px] text-theme-tertiary">v{plugin.version}</p>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Status */}
-                            <div className="mb-2.5">
-                                {plugin.connectionStatus ? (
-                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
-                                        <CheckCircle size={11} />
-                                        <span>Connecté</span>
-                                    </div>
-                                ) : plugin.enabled ? (
-                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-[10px] font-medium">
-                                        <AlertCircle size={11} />
-                                        <span>Non connecté</span>
-                                    </div>
-                                ) : (
-                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-gray-400 text-[10px] font-medium">
-                                        <XCircle size={11} />
-                                        <span>Désactivé</span>
-                                    </div>
-                                )}
+                                {/* Status badge - top right */}
+                                <div className="flex-shrink-0">
+                                    {plugin.connectionStatus ? (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
+                                            <CheckCircle size={11} />
+                                            <span>Connecté</span>
+                                        </div>
+                                    ) : plugin.enabled ? (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-[10px] font-medium">
+                                            <AlertCircle size={11} />
+                                            <span>Non connecté</span>
+                                        </div>
+                                    ) : (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-gray-400 text-[10px] font-medium">
+                                            <XCircle size={11} />
+                                            <span>Désactivé</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Plugin-specific info */}
@@ -219,7 +221,7 @@ export const PluginsManagementSection: React.FC = () => {
                             )}
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-2.5 border-t border-theme">
+                            <div className="flex items-center justify-between pt-2.5">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-theme-tertiary font-medium">Actif</span>
                                     <button

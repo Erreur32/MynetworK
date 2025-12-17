@@ -647,29 +647,39 @@ export class UniFiApiService {
         try {
             if (this.apiMode === 'site-manager') {
                 if (!this.apiKey) {
-                    logger.debug('UniFi', 'Test connection failed: Site Manager API key not set');
-                    return false;
+                    const errorMsg = 'Site Manager API key not set';
+                    logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
                 }
                 // Test by making a simple API call to get sites
                 const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
                 if (!Array.isArray(sites) || sites.length === 0) {
-                    logger.debug('UniFi', 'Test connection failed: No sites found');
-                    return false;
+                    const errorMsg = 'No sites found or invalid response from Site Manager API';
+                    logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
                 }
                 logger.success('UniFi', `Test connection successful: Site Manager API - Found ${sites.length} site(s)`);
                 return true;
             } else {
                 // Controller API mode
                 if (!this.url || !this.username || !this.password) {
-                    logger.debug('UniFi', 'Test connection failed: Missing connection details');
-                    return false;
+                    const errorMsg = 'Missing connection details (URL, username, or password)';
+                    logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+
+                if (!this.site) {
+                    const errorMsg = 'Site name is required';
+                    logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
                 }
 
                 // Try to login
                 const loggedIn = await this.login();
                 if (!loggedIn) {
-                    logger.debug('UniFi', 'Test connection failed: Login returned false');
-                    return false;
+                    const errorMsg = 'Login failed. Verify URL, username, and password';
+                    logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
                 }
 
                 // Verify we can retrieve data from the site
@@ -677,20 +687,39 @@ export class UniFiApiService {
                     const encodedSite = encodeURIComponent(this.site);
                     const devices = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/device`);
                     if (!Array.isArray(devices)) {
-                        logger.debug('UniFi', 'Test connection failed: Could not retrieve devices (invalid response)');
+                        const errorMsg = `Could not retrieve devices from site "${this.site}". Invalid response format.`;
+                        logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
                         await this.logout();
-                        return false;
+                        throw new Error(errorMsg);
                     }
                     logger.success('UniFi', `Test connection successful: Controller API - Found ${devices.length} device(s) on site "${this.site}"`);
                     await this.logout();
                     return true;
                 } catch (dataError) {
-                    logger.error('UniFi', 'Test connection failed: Could not retrieve data from site:', dataError);
+                    const errorMsg = dataError instanceof Error 
+                        ? `Could not retrieve data from site "${this.site}": ${dataError.message}`
+                        : `Could not retrieve data from site "${this.site}"`;
+                    logger.error('UniFi', `Test connection failed: ${errorMsg}`, dataError);
                     await this.logout();
-                    return false;
+                    throw new Error(errorMsg);
                 }
             }
         } catch (error) {
+            // If it's already an Error with a message, re-throw it
+            if (error instanceof Error) {
+                logger.error('UniFi', 'Test connection error:', error);
+                // Try to logout if we're logged in
+                try {
+                    if (this.isAuthenticated) {
+                        await this.logout();
+                    }
+                } catch {
+                    // Ignore logout errors
+                }
+                throw error;
+            }
+            // Otherwise, wrap it in an Error
+            const errorMsg = error instanceof Error ? error.message : String(error);
             logger.error('UniFi', 'Test connection error:', error);
             // Try to logout if we're logged in
             try {
@@ -700,7 +729,7 @@ export class UniFiApiService {
             } catch {
                 // Ignore logout errors
             }
-            return false;
+            throw new Error(`Connection test failed: ${errorMsg}`);
         }
     }
 

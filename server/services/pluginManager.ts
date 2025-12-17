@@ -249,17 +249,30 @@ export class PluginManager {
 
     /**
      * Test connection for a plugin
+     * Returns an object with success status and optional error message
      */
-    async testPluginConnection(pluginId: string): Promise<boolean> {
+    async testPluginConnection(pluginId: string): Promise<{ success: boolean; error?: string }> {
         const plugin = this.plugins.get(pluginId);
         if (!plugin) {
-            return false;
+            return { success: false, error: 'Plugin not found' };
         }
 
         try {
-            return await plugin.testConnection();
-        } catch {
-            return false;
+            const result = await plugin.testConnection();
+            if (result) {
+                return { success: true };
+            } else {
+                // Test returned false but no exception was thrown
+                // This means the test failed silently (e.g., login failed, no data retrieved)
+                return { 
+                    success: false, 
+                    error: 'Connection test failed. Check logs for details or verify your configuration (URL, credentials, site name).' 
+                };
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error('PluginManager', `Test connection error for ${pluginId}:`, error);
+            return { success: false, error: errorMessage };
         }
     }
 }

@@ -34,6 +34,13 @@
     --border-color-light: #444444;
     --border-color-hover: #555555;
 
+    /* Input/Textarea Colors */
+    --input-bg: #1a1a1a;
+    --input-text: #e5e5e5;
+    --input-border: #333333;
+    --input-border-focus: #3b82f6;
+    --input-placeholder: #666666;
+
     /* Button Colors */
     --button-bg: #1a1a1a;
     --button-text: #e5e5e5;
@@ -43,94 +50,984 @@
     --button-active-text: #ffffff;
     --button-border: #333333;
 
+    /* Card/Container Colors */
+    --card-bg: #1a1a1a;
+    --card-border: #333333;
+
     /* Effects */
     --backdrop-blur: none;
 }
 
-/* Dark Theme - Minimal override (only backdrop-blur) */
+/* Dark Theme - Grayed borders and dark input backgrounds */
 [data-theme="dark"] {
+    /* Accent Colors */
+    --accent-unifi: #1fb0ec;
+
+    /* Border Colors - Grayed borders for better visibility (darker) */
+    --border-color: #383838;
+    --border-color-light: #424242;
+    --border-color-hover: #4d4d4d;
+
+    /* Input/Textarea Colors - Keep dark backgrounds */
+    --input-bg: #1a1a1a;
+    --input-text: #e5e5e5;
+    --input-border: #383838;
+    --input-border-focus: #3b82f6;
+    --input-placeholder: #666666;
+
+    /* Card/Container Colors - Grayed borders */
+    --card-bg: #1a1a1a;
+    --card-border: #383838;
+
+    /* Header Colors - Solid dark background, not transparent */
+    --bg-header: #151515;
+    --header-border: #383838;
+
+    /* Footer Colors - Solid dark background, not transparent */
+    --bg-footer: #151515;
+    --footer-border: #383838;
+
+    /* UniFi Card Background */
+    --bg-unifi-card: #1a1a1a;
+
+    /* Effects */
     --backdrop-blur: none;
 }
 
 /* Glass Theme - Transparent backgrounds with blur effect */
 [data-theme="glass"] {
-    /* Accent Colors */
-    --accent-primary: #60a5fa;
-    --accent-primary-hover: #3b82f6;
-    --accent-success: #34d399;
-    --accent-warning: #fbbf24;
-    --accent-error: #f87171;
-    --accent-info: #06b6d4;
+    /* Accent Colors - Sobres et élégants */
+    --accent-primary: #5b9bd5;
+    --accent-primary-hover: #4a8bc2;
+    --accent-success: #6bbf8e;
+    --accent-warning: #d4a574;
+    --accent-error: #d87a7a;
+    --accent-info: #6bb3d4;
+    --accent-unifi: #6bb3d4;
 
-    /* Background Colors - Transparent with glass effect */
-    --bg-primary: rgba(15, 15, 15, 0.7);
-    --bg-secondary: rgba(26, 26, 26, 0.6);
-    --bg-tertiary: rgba(37, 37, 37, 0.5);
-    --bg-card: rgba(26, 26, 26, 0.5);
-    --bg-header: rgba(17, 17, 17, 0.8);
-    --bg-footer: rgba(10, 10, 10, 0.7);
+    /* Background Colors - Glass effect raffiné */
+    --bg-primary: #0a0a0a;
+    --bg-secondary: rgba(20, 20, 25, 0.75);
+    --bg-tertiary: rgba(30, 30, 35, 0.65);
+    --bg-card: rgba(22, 22, 28, 0.8);
+    --bg-header: #0f0f0f;
+    --bg-footer: #0f0f0f;
 
-    /* Text Colors */
-    --text-primary: #ffffff;
-    --text-secondary: #cccccc;
-    --text-tertiary: #aaaaaa;
+    /* Text Colors - Très lisibles */
+    --text-primary: #e8e8e8;
+    --text-secondary: #b8b8b8;
+    --text-tertiary: #888888;
 
-    /* Border Colors - Subtle white borders */
-    --border-color: rgba(255, 255, 255, 0.1);
-    --border-color-light: rgba(255, 255, 255, 0.15);
-    --border-color-hover: rgba(255, 255, 255, 0.25);
+    /* Border Colors - Bordures glass subtiles */
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-color-light: rgba(255, 255, 255, 0.12);
+    --border-color-hover: rgba(255, 255, 255, 0.18);
 
     /* Button Colors */
-    --button-bg: rgba(26, 26, 26, 0.6);
-    --button-text: #ffffff;
-    --button-hover-bg: rgba(37, 37, 37, 0.7);
+    --button-bg: rgba(30, 30, 35, 0.7);
+    --button-text: #e8e8e8;
+    --button-hover-bg: rgba(40, 40, 45, 0.8);
     --button-hover-text: #ffffff;
-    --button-active-bg: #60a5fa;
+    --button-active-bg: #5b9bd5;
     --button-active-text: #ffffff;
     --button-border: rgba(255, 255, 255, 0.1);
 
+    /* Input/Textarea Colors - Glass effect */
+    --input-bg: rgba(25, 25, 30, 0.7);
+    --input-text: #e8e8e8;
+    --input-border: rgba(255, 255, 255, 0.1);
+    --input-border-focus: #5b9bd5;
+    --input-placeholder: #888888;
+
+    /* Cards - Glass effect raffiné */
+    --card-bg: rgba(22, 22, 28, 0.8);
+    --card-border: rgba(255, 255, 255, 0.08);
+
+    /* Header/Footer borders */
+    --header-border: rgba(255, 255, 255, 0.1);
+    --footer-border: rgba(255, 255, 255, 0.1);
+
+    /* Shadows - Subtiles */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+    /* UniFi Card Background */
+    --bg-unifi-card: rgba(22, 22, 28, 0.8);
+
     /* Effects */
-    --backdrop-blur: blur(20px);
+    --backdrop-blur: blur(16px);
 }
 
-/* Modern Theme - Colorful theme with purple/mauve accents */
+/* Modern Theme - Gradient bleu-mauve doux avec cartes transparentes */
 [data-theme="modern"] {
-    /* Accent Colors - Purple/mauve theme */
-    --accent-primary: #c084fc;
-    --accent-primary-hover: #a855f7;
-    --accent-success: #34d399;
-    --accent-warning: #fbbf24;
-    --accent-error: #f87171;
-    --accent-info: #60a5fa;
+    /* Accent Colors - Doux et harmonieux */
+    --accent-primary: #8b7cf6;
+    --accent-primary-hover: #7c6af0;
+    --accent-success: #6bbf8e;
+    --accent-warning: #d4a574;
+    --accent-error: #e88a8a;
+    --accent-info: #6bb3d4;
+    --accent-unifi: #6bb3d4;
 
-    /* Background Colors - Dark with purple tint and transparency */
-    --bg-primary: rgba(15, 15, 25, 0.7);
-    --bg-secondary: rgba(30, 25, 45, 0.6);
-    --bg-tertiary: rgba(45, 35, 65, 0.5);
-    --bg-card: rgba(40, 30, 60, 0.5);
-    --bg-header: rgba(20, 15, 35, 0.8);
-    --bg-footer: rgba(15, 15, 25, 0.75);
+    /* Background Colors - Gradient bleu-mauve doux */
+    --bg-primary: #0a0d14;
+    --bg-secondary: rgba(30, 25, 50, 0.4);
+    --bg-tertiary: rgba(40, 35, 65, 0.35);
+    --bg-card: rgba(35, 30, 55, 0.5);
+    --bg-header: rgba(40, 35, 60, 0.6);
+    --bg-footer: rgba(40, 35, 60, 0.6);
 
-    /* Text Colors */
-    --text-primary: #f8fafc;
-    --text-secondary: #e2e8f0;
-    --text-tertiary: #cbd5e1;
+    /* Text Colors - Très lisibles sur gradient */
+    --text-primary: #f0f2f8;
+    --text-secondary: #c8d0e0;
+    --text-tertiary: #9aa5b8;
 
-    /* Border Colors - Purple borders */
-    --border-color: rgba(192, 132, 252, 0.25);
-    --border-color-light: rgba(192, 132, 252, 0.35);
-    --border-color-hover: rgba(167, 139, 250, 0.4);
+    /* Borders - Aucune bordure visible */
+    --border-color: transparent;
+    --border-color-light: transparent;
+    --border-color-hover: transparent;
 
-    /* Button Colors - Purple transparent buttons */
-    --button-bg: rgba(192, 132, 252, 0.2);
-    --button-text: #f8fafc;
-    --button-hover-bg: rgba(167, 139, 250, 0.25);
-    --button-hover-text: #ffffff;
-    --button-active-bg: rgba(192, 132, 252, 0.5);
-    --button-active-text: #ffffff;
-    --button-border: rgba(192, 132, 252, 0.25);
+    /* Inputs - Transparents avec glass effect */
+    --input-bg: rgba(40, 35, 60, 0.6);
+    --input-text: #f0f2f8;
+    --input-border: transparent;
+    --input-border-focus: rgba(139, 124, 246, 0.5);
+    --input-placeholder: #9aa5b8;
+
+    /* Cards - Transparentes mais lisibles */
+    --card-bg: rgba(35, 30, 55, 0.5);
+    --card-border: transparent;
+
+    /* Header/Footer borders - Transparentes */
+    --header-border: transparent;
+    --footer-border: transparent;
+
+    /* Shadows - Subtiles pour la profondeur */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+    /* UniFi Card Background */
+    --bg-unifi-card: rgba(35, 30, 55, 0.5);
 
     /* Effects */
     --backdrop-blur: blur(12px);
+}
+
+[data-theme="nightly"] {
+    /* Background Colors */
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #252525;
+    --bg-card: #1a1a1a;
+    --bg-unifi-card: #050b14;
+    --bg-header: #111111;
+    --bg-footer: rgba(10, 10, 10, .9);
+
+    /* Border Colors - Super fines et très légères (pas blanches) */
+    --border-color: rgba(255, 255, 255, 0.03);
+    --border-color-light: rgba(255, 255, 255, 0.05);
+    --border-color-hover: rgba(255, 255, 255, 0.08);
+
+    /* Text Colors */
+    --text-primary: #e5e5e5;
+    --text-secondary: #999999;
+    --text-tertiary: #666666;
+
+    /* Accent Colors */
+    --accent-primary: #3b82f6;
+    --accent-primary-hover: #2563eb;
+    --accent-unifi: #1fb0ec;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --accent-error: #ef4444;
+
+    /* Button Colors */
+    --button-bg: #1a1a1a;
+    --button-text: #e5e5e5;
+    --button-hover-bg: #252525;
+    --button-hover-text: #ffffff;
+    --button-active-bg: #3b82f6;
+    --button-active-text: #ffffff;
+    --button-border: rgba(255, 255, 255, 0.03);
+
+    /* Input/Textarea Colors */
+    --input-bg: #1a1a1a;
+    --input-text: #e5e5e5;
+    --input-border: rgba(255, 255, 255, 0.03);
+    --input-border-focus: #3b82f6;
+    --input-placeholder: #666666;
+
+    /* Cards */
+    --card-bg: #1a1a1a;
+    --card-border: rgba(255, 255, 255, 0.03);
+
+    /* Header/Footer borders */
+    --header-border: rgba(255, 255, 255, 0.03);
+    --footer-border: rgba(255, 255, 255, 0.03);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, .4);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, .5);
+
+    /* Effects */
+    --backdrop-blur: none;
+}
+
+/* Global input/textarea/select styles using CSS variables */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] input[type="email"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="search"],
+[data-theme="dark"] input[type="tel"],
+[data-theme="dark"] input[type="url"],
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    outline: none;
+}
+
+/* Override hardcoded input backgrounds to use CSS variables */
+[data-theme="dark"] input.bg-\[#1a1a1a\],
+[data-theme="dark"] textarea.bg-\[#1a1a1a\] {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* Global input/textarea/select styles for Glass theme */
+[data-theme="glass"] input[type="text"],
+[data-theme="glass"] input[type="password"],
+[data-theme="glass"] input[type="email"],
+[data-theme="glass"] input[type="number"],
+[data-theme="glass"] input[type="search"],
+[data-theme="glass"] input[type="tel"],
+[data-theme="glass"] input[type="url"],
+[data-theme="glass"] textarea,
+[data-theme="glass"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="glass"] input::placeholder,
+[data-theme="glass"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="glass"] input:focus,
+[data-theme="glass"] textarea:focus,
+[data-theme="glass"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    outline: none;
+}
+
+/* Override hardcoded input backgrounds for Glass theme */
+[data-theme="glass"] input.bg-\[#1a1a1a\],
+[data-theme="glass"] textarea.bg-\[#1a1a1a\] {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* ============================================
+   GLASS THEME - Glassmorphism Effects
+   ============================================
+   Effets glass raffinés et sobres pour une lisibilité optimale
+*/
+
+/* Header and Footer - Opaque (no transparency) */
+[data-theme="glass"] header,
+[data-theme="glass"] .bg-theme-header,
+[data-theme="glass"] header.bg-theme-header {
+    background-color: var(--bg-header) !important;
+    border-color: var(--header-border) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="glass"] footer,
+[data-theme="glass"] .bg-theme-footer,
+[data-theme="glass"] footer.bg-theme-footer {
+    background-color: var(--bg-footer) !important;
+    border-color: var(--footer-border) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Cards - Glass effect raffiné avec backdrop blur */
+[data-theme="glass"] [class*="card"],
+[data-theme="glass"] [class*="section"],
+[data-theme="glass"] [class*="widget"],
+[data-theme="glass"] [class*="panel"],
+[data-theme="glass"] .bg-theme-secondary,
+[data-theme="glass"] .bg-theme-card {
+    background: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--card-border) !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* Secondary backgrounds - Glass effect subtil */
+[data-theme="glass"] .bg-theme-secondary {
+    background: var(--bg-secondary) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Tertiary backgrounds - Glass effect léger */
+[data-theme="glass"] .bg-theme-tertiary {
+    background: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Primary background - Fond sombre solide */
+[data-theme="glass"] body,
+[data-theme="glass"] .bg-theme-primary {
+    background-color: var(--bg-primary) !important;
+}
+
+/* Borders - Glass borders subtiles */
+[data-theme="glass"] .border,
+[data-theme="glass"] .border-theme,
+[data-theme="glass"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Rounded containers - Glass effect avec ombre subtile */
+[data-theme="glass"] .rounded,
+[data-theme="glass"] .rounded-lg,
+[data-theme="glass"] .rounded-xl,
+[data-theme="glass"] .rounded-2xl {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* Text colors for better readability */
+[data-theme="glass"] .text-theme-primary {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="glass"] .text-theme-secondary {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="glass"] .text-theme-tertiary {
+    color: var(--text-tertiary) !important;
+}
+
+/* Override any backdrop-blur classes on header and footer for glass theme */
+[data-theme="glass"] header[class*="backdrop"],
+[data-theme="glass"] footer[class*="backdrop"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Global input/textarea/select styles for Modern theme */
+[data-theme="modern"] input[type="text"],
+[data-theme="modern"] input[type="password"],
+[data-theme="modern"] input[type="email"],
+[data-theme="modern"] input[type="number"],
+[data-theme="modern"] input[type="search"],
+[data-theme="modern"] input[type="tel"],
+[data-theme="modern"] input[type="url"],
+[data-theme="modern"] textarea,
+[data-theme="modern"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="modern"] input::placeholder,
+[data-theme="modern"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="modern"] input:focus,
+[data-theme="modern"] textarea:focus,
+[data-theme="modern"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    outline: none;
+}
+
+/* Override hardcoded input backgrounds for Modern theme */
+[data-theme="modern"] input.bg-\[#1a1a1a\],
+[data-theme="modern"] textarea.bg-\[#1a1a1a\] {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* ============================================
+   MODERN THEME - Gradient bleu-mauve avec cartes transparentes
+   ============================================
+   Effet gradient doux avec cartes transparentes très lisibles
+*/
+
+/* Body - Gradient bleu-mauve-rose doux avec gradient diagonal visible sur tout l'écran */
+[data-theme="modern"] body,
+[data-theme="modern"] html {
+    background: 
+        linear-gradient(135deg, 
+            rgba(91, 155, 213, 0.35) 0%, 
+            rgba(139, 124, 246, 0.32) 25%, 
+            rgba(236, 72, 153, 0.3) 50%, 
+            rgba(139, 124, 246, 0.32) 75%, 
+            rgba(91, 155, 213, 0.35) 100%
+        ),
+        linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a1a2e 100%) !important;
+    background-size: 100% 100%, 400% 400% !important;
+    background-position: 0 0, 0 0 !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    animation: gradientShift 20s ease infinite !important;
+    color: var(--text-primary) !important;
+}
+
+/* Assurer que le contenu principal hérite aussi du gradient */
+[data-theme="modern"] main,
+[data-theme="modern"] .bg-theme-primary {
+    background: transparent !important;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Header and Footer - Plus clairs et semi-transparents avec glass effect */
+[data-theme="modern"] header,
+[data-theme="modern"] .bg-theme-header,
+[data-theme="modern"] header.bg-theme-header {
+    background: rgba(40, 35, 60, 0.6) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-color: transparent !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="modern"] footer,
+[data-theme="modern"] .bg-theme-footer,
+[data-theme="modern"] footer.bg-theme-footer {
+    background: rgba(40, 35, 60, 0.6) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-color: transparent !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Cards - Transparentes mais très lisibles avec glass effect */
+[data-theme="modern"] [class*="card"],
+[data-theme="modern"] [class*="section"],
+[data-theme="modern"] [class*="widget"],
+[data-theme="modern"] [class*="panel"],
+[data-theme="modern"] .bg-theme-secondary,
+[data-theme="modern"] .bg-theme-card {
+    background: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: transparent !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* Primary background - Utilise le gradient du body */
+[data-theme="modern"] .bg-theme-primary {
+    background: transparent !important;
+}
+
+/* Secondary backgrounds - Glass effect transparent */
+[data-theme="modern"] .bg-theme-secondary {
+    background: var(--bg-secondary) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Tertiary backgrounds - Glass effect plus transparent */
+[data-theme="modern"] .bg-theme-tertiary {
+    background: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Aucune bordure visible - Toutes transparentes */
+[data-theme="modern"] .border,
+[data-theme="modern"] .border-theme,
+[data-theme="modern"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border-color: transparent !important;
+}
+
+/* Rounded containers - Ombres subtiles pour la profondeur */
+[data-theme="modern"] .rounded,
+[data-theme="modern"] .rounded-lg,
+[data-theme="modern"] .rounded-xl,
+[data-theme="modern"] .rounded-2xl {
+    box-shadow: var(--shadow-sm) !important;
+}
+
+/* Text colors for excellent readability */
+[data-theme="modern"] .text-theme-primary {
+    color: var(--text-primary) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="modern"] .text-theme-secondary {
+    color: var(--text-secondary) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+[data-theme="modern"] .text-theme-tertiary {
+    color: var(--text-tertiary) !important;
+}
+
+/* Inputs - Glass effect avec focus visible */
+[data-theme="modern"] input:focus,
+[data-theme="modern"] textarea:focus,
+[data-theme="modern"] select:focus {
+    box-shadow: 0 0 0 2px var(--input-border-focus) !important;
+    outline: none !important;
+}
+
+/* Override any backdrop-blur classes on header and footer */
+[data-theme="modern"] header[class*="backdrop"],
+[data-theme="modern"] footer[class*="backdrop"] {
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+}
+
+/* Input/Textarea styles for Nightly theme */
+[data-theme="nightly"] input[type="text"],
+[data-theme="nightly"] input[type="password"],
+[data-theme="nightly"] input[type="email"],
+[data-theme="nightly"] input[type="number"],
+[data-theme="nightly"] input[type="search"],
+[data-theme="nightly"] input[type="tel"],
+[data-theme="nightly"] input[type="url"],
+[data-theme="nightly"] textarea,
+[data-theme="nightly"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="nightly"] input::placeholder,
+[data-theme="nightly"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="nightly"] input:focus,
+[data-theme="nightly"] textarea:focus,
+[data-theme="nightly"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    outline: none;
+}
+
+/* Override hardcoded input backgrounds for Nightly theme */
+[data-theme="nightly"] input.bg-\[#1a1a1a\],
+[data-theme="nightly"] textarea.bg-\[#1a1a1a\] {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* ============================================
+   GLOBAL BORDER STYLES FOR DARK THEME
+   ============================================
+   Apply gray borders everywhere, except for colored borders (alerts, warnings, etc.)
+*/
+
+/* All borders default to gray - but exclude colored borders */
+[data-theme="dark"] .border:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Gray border classes - override to use theme color */
+[data-theme="dark"] .border-gray-700,
+[data-theme="dark"] .border-gray-800,
+[data-theme="dark"] .border-gray-600,
+[data-theme="dark"] .border-gray-500,
+[data-theme="dark"] .border-gray-900 {
+    border-color: var(--border-color) !important;
+}
+
+/* Border overrides for common border classes - exclude colored ones */
+[data-theme="dark"] [class*="border-gray-"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Section borders and dividers - gray everywhere */
+[data-theme="dark"] .border-t:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .border-b:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .border-l:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .border-r:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Header and Footer specific styles for dark theme */
+[data-theme="dark"] header,
+[data-theme="dark"] .bg-theme-header,
+[data-theme="dark"] header.bg-theme-header {
+    background-color: var(--bg-header) !important;
+    border-color: var(--header-border) !important;
+    /* Remove transparency for solid background */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] footer,
+[data-theme="dark"] .bg-theme-footer,
+[data-theme="dark"] footer.bg-theme-footer {
+    background-color: var(--bg-footer) !important;
+    border-color: var(--footer-border) !important;
+    /* Remove transparency and backdrop blur for solid background */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Override any backdrop-blur classes on header and footer for dark theme */
+[data-theme="dark"] header[class*="backdrop"],
+[data-theme="dark"] footer[class*="backdrop"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Card and container backgrounds */
+[data-theme="dark"] .bg-\[#1a1a1a\] {
+    background-color: var(--card-bg) !important;
+}
+
+/* Rounded containers and cards - gray borders */
+[data-theme="dark"] .rounded:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .rounded-lg:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .rounded-xl:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] .rounded-2xl:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Specific targeting for dashboard, administration, Freebox, UniFi sections */
+[data-theme="dark"] [class*="card"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] [class*="section"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] [class*="widget"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] [class*="panel"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]),
+[data-theme="dark"] [class*="container"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* General border override - apply gray to all borders except colored ones */
+/* This catches any element with a border class that isn't explicitly colored */
+[data-theme="dark"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]):not([class*="border-transparent"]):not([class*="border-white"]):not([class*="border-black"]):not([class*="border-accent"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Body + utility classes for theme colors */
+[data-theme="dark"] body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+[data-theme="dark"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="dark"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="dark"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="dark"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="dark"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="dark"] .border-theme { border-color: var(--border-color) !important; }
+
+/* ============================================
+   GLOBAL DASHBOARD STYLES - All Themes
+   ============================================
+   Replace hardcoded colors with theme variables
+*/
+
+/* Background colors - Replace hardcoded backgrounds */
+[data-theme] .bg-\[#1a1a1a\],
+[data-theme] .bg-\[#181818\],
+[data-theme] .bg-\[#1b1b1b\] {
+    background-color: var(--card-bg) !important;
+}
+
+[data-theme] .bg-\[#101010\],
+[data-theme] .bg-\[#141414\] {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme] .bg-\[#252525\] {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Text colors - Replace hardcoded gray text */
+[data-theme] .text-gray-300,
+[data-theme] .text-gray-200,
+[data-theme] .text-gray-100 {
+    color: var(--text-primary) !important;
+}
+
+[data-theme] .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme] .text-gray-500 {
+    color: var(--text-tertiary) !important;
+}
+
+/* Border colors - Replace hardcoded gray borders */
+[data-theme] .border-gray-700,
+[data-theme] .border-gray-800,
+[data-theme] .border-gray-600,
+[data-theme] .border-gray-500 {
+    border-color: var(--border-color) !important;
+}
+
+/* Hover states */
+[data-theme] .hover\:bg-\[#252525\]:hover {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme] .hover\:text-gray-200:hover,
+[data-theme] .hover\:text-white:hover {
+    color: var(--text-primary) !important;
+}
+
+/* Theme-specific utility classes for glass, modern, and nightly */
+[data-theme="glass"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+[data-theme="glass"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="glass"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="glass"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="glass"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="glass"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="glass"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="glass"] .border-theme { border-color: var(--border-color) !important; }
+
+/* Glass theme - Card and container backgrounds */
+[data-theme="glass"] .bg-\[#1a1a1a\],
+[data-theme="glass"] .bg-\[#181818\],
+[data-theme="glass"] .bg-\[#1b1b1b\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="glass"] .bg-\[#101010\],
+[data-theme="glass"] .bg-\[#141414\] {
+    background-color: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+[data-theme="glass"] .bg-\[#252525\] {
+    background-color: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Glass theme - Border and text overrides */
+[data-theme="glass"] .border-gray-700,
+[data-theme="glass"] .border-gray-800,
+[data-theme="glass"] .border-gray-600,
+[data-theme="glass"] .border-gray-500 {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="glass"] .text-gray-300,
+[data-theme="glass"] .text-gray-200,
+[data-theme="glass"] .text-gray-100 {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="glass"] .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="glass"] .text-gray-500 {
+    color: var(--text-tertiary) !important;
+}
+
+[data-theme="modern"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+[data-theme="modern"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="modern"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="modern"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="modern"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="modern"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="modern"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="modern"] .border-theme { border-color: var(--border-color) !important; }
+
+/* Modern theme - Card and container backgrounds with glass effect */
+[data-theme="modern"] .bg-\[#1a1a1a\],
+[data-theme="modern"] .bg-\[#181818\],
+[data-theme="modern"] .bg-\[#1b1b1b\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="modern"] .bg-\[#101010\],
+[data-theme="modern"] .bg-\[#141414\] {
+    background-color: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+[data-theme="modern"] .bg-\[#252525\] {
+    background-color: var(--bg-tertiary) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* Modern theme - Border and text overrides (borders are transparent) */
+[data-theme="modern"] .border-gray-700,
+[data-theme="modern"] .border-gray-800,
+[data-theme="modern"] .border-gray-600,
+[data-theme="modern"] .border-gray-500 {
+    border-color: transparent !important;
+}
+
+[data-theme="modern"] .text-gray-300,
+[data-theme="modern"] .text-gray-200,
+[data-theme="modern"] .text-gray-100 {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="modern"] .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="modern"] .text-gray-500 {
+    color: var(--text-tertiary) !important;
+}
+
+[data-theme="nightly"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+[data-theme="nightly"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="nightly"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="nightly"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="nightly"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="nightly"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="nightly"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="nightly"] .border-theme { border-color: var(--border-color) !important; }
+
+/* Nightly theme - Card and container backgrounds */
+[data-theme="nightly"] .bg-\[#1a1a1a\],
+[data-theme="nightly"] .bg-\[#181818\],
+[data-theme="nightly"] .bg-\[#1b1b1b\] {
+    background-color: var(--card-bg) !important;
+}
+
+[data-theme="nightly"] .bg-\[#101010\],
+[data-theme="nightly"] .bg-\[#141414\] {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="nightly"] .bg-\[#252525\] {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Nightly theme - Border overrides */
+[data-theme="nightly"] .border-gray-700,
+[data-theme="nightly"] .border-gray-800,
+[data-theme="nightly"] .border-gray-600,
+[data-theme="nightly"] .border-gray-500 {
+    border-color: var(--border-color) !important;
+}
+
+/* Nightly theme - Text color overrides */
+[data-theme="nightly"] .text-gray-300,
+[data-theme="nightly"] .text-gray-200,
+[data-theme="nightly"] .text-gray-100 {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="nightly"] .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="nightly"] .text-gray-500 {
+    color: var(--text-tertiary) !important;
+}
+
+/* ============================================
+   UNIFI CARD BACKGROUND - All Themes
+   ============================================
+   Map bg-unifi-card to theme unifi card background
+*/
+
+[data-theme] .bg-unifi-card {
+    background-color: var(--bg-unifi-card) !important;
+}
+
+/* Glass and Modern themes - Add backdrop blur for unifi cards */
+[data-theme="glass"] .bg-unifi-card,
+[data-theme="modern"] .bg-unifi-card {
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* ============================================
+   FREEBOX & UNIFI PAGES - Additional overrides
+   ============================================
+   Ensure all hardcoded colors use theme variables
+*/
+
+/* Additional background colors for Freebox/UniFi pages */
+[data-theme] .bg-\[#050b14\] {
+    background-color: var(--bg-card) !important;
+}
+
+/* Additional text colors */
+[data-theme] .text-gray-600 {
+    color: var(--text-tertiary) !important;
+}
+
+/* Additional border colors for Freebox/UniFi */
+[data-theme] .border-gray-700\/60 {
+    border-color: var(--border-color) !important;
+    opacity: 0.6;
+}
+
+/* Hover states for Freebox/UniFi */
+[data-theme] .hover\:bg-\[#1a1a1a\]:hover {
+    background-color: var(--bg-card) !important;
+}
+
+/* Table backgrounds for Freebox/UniFi */
+[data-theme] .bg-gray-900 {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme] .bg-gray-800 {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme] .bg-gray-500 {
+    background-color: var(--border-color) !important;
+}
+
+/* Border colors for tables */
+[data-theme] .border-gray-700\/60 {
+    border-color: var(--border-color) !important;
+    opacity: 0.6;
+}
+
+/* UniFi specific colors - Map to theme accent colors */
+[data-theme] .text-unifi-accent {
+    color: var(--accent-unifi, var(--accent-primary)) !important;
+}
+
+[data-theme] .border-unifi-accent {
+    border-color: var(--accent-unifi, var(--accent-primary)) !important;
 }
 

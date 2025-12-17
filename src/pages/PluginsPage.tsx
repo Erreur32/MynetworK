@@ -5,14 +5,13 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Settings, Power, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Settings, Power, CheckCircle, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import { usePluginStore, type Plugin } from '../stores/pluginStore';
 import { useAuthStore } from '../stores/authStore';
 import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 import { Card } from '../components/widgets/Card';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
-import { PluginConfigModal } from '../components/modals/PluginConfigModal';
 import { LoginModal } from '../components/modals/LoginModal';
 
 interface PluginsPageProps {
@@ -24,40 +23,12 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
     const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
     const { capabilities, fetchCapabilities } = useCapabilitiesStore();
     const [testingPlugin, setTestingPlugin] = useState<string | null>(null);
-    const [configModalOpen, setConfigModalOpen] = useState(false);
-    const [selectedPluginId, setSelectedPluginId] = useState<string>('');
     const [freeboxLoginModalOpen, setFreeboxLoginModalOpen] = useState(false);
 
     useEffect(() => {
         fetchPlugins();
     }, [fetchPlugins]);
 
-    // Check if we need to open a plugin config modal from dashboard click
-    useEffect(() => {
-        const pluginIdToOpen = sessionStorage.getItem('openPluginConfig');
-        if (pluginIdToOpen) {
-            sessionStorage.removeItem('openPluginConfig');
-            // Wait for plugins to load before opening modal
-            if (plugins.length > 0) {
-                const plugin = plugins.find(p => p.id === pluginIdToOpen);
-                if (plugin) {
-                    if (plugin.id === 'freebox') {
-                        // For Freebox, open login modal if not registered/logged in
-                        checkFreeboxAuth().then(() => {
-                            const authState = useAuthStore.getState();
-                            if (!authState.isRegistered || !authState.isLoggedIn) {
-                                setFreeboxLoginModalOpen(true);
-                            }
-                        });
-                    } else {
-                        // For other plugins, open config modal
-                        setSelectedPluginId(pluginIdToOpen);
-                        setConfigModalOpen(true);
-                    }
-                }
-            }
-        }
-    }, [plugins, checkFreeboxAuth]);
 
     // Fetch Freebox capabilities when Freebox plugin is enabled and connected
     useEffect(() => {
@@ -91,8 +62,11 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
     useEffect(() => {
         if (isFreeboxRegistered && isFreeboxLoggedIn) {
             setFreeboxLoginModalOpen(false);
+            // Refresh plugins to update connection status after successful login
+            // This ensures the plugin is recognized as connected without requiring a restart
+            fetchPlugins();
         }
-    }, [isFreeboxRegistered, isFreeboxLoggedIn]);
+    }, [isFreeboxRegistered, isFreeboxLoggedIn, fetchPlugins]);
 
     const handleToggle = async (pluginId: string, enabled: boolean) => {
         await updatePluginConfig(pluginId, { enabled });
@@ -176,24 +150,35 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
                             </div>
                         )}
                         {plugins.map((plugin) => (
-                            <Card key={plugin.id} title={plugin.name}>
+                            <Card 
+                                key={plugin.id} 
+                                title={plugin.name}
+                                actions={
+                                    <div className="flex items-center gap-2">
+                                        {/* Status badge - top right */}
+                                        {plugin.connectionStatus ? (
+                                            <span className="flex items-center gap-1 text-xs text-green-400 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded">
+                                                <CheckCircle size={12} />
+                                                Connecté
+                                            </span>
+                                        ) : plugin.enabled ? (
+                                            <span className="flex items-center gap-1 text-xs text-yellow-400 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded">
+                                                <AlertCircle size={12} />
+                                                Non connecté
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center gap-1 text-xs text-gray-400 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded">
+                                                <XCircle size={12} />
+                                                Désactivé
+                                            </span>
+                                        )}
+                                    </div>
+                                }
+                            >
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="text-sm text-gray-400">Version {plugin.version}</p>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                {plugin.connectionStatus ? (
-                                                    <span className="flex items-center gap-1 text-xs text-green-400">
-                                                        <CheckCircle size={12} />
-                                                        Connecté
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-1 text-xs text-gray-500">
-                                                        <XCircle size={12} />
-                                                        Non connecté
-                                                    </span>
-                                                )}
-                                            </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -218,12 +203,15 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
                                         />
                                     </div>
 
-                                    {/* Configure Button */}
+                                    {/* Configure Button - Redirect to admin/plugins */}
                                     {plugin.id !== 'freebox' && (
                                         <button
                                             onClick={() => {
-                                                setSelectedPluginId(plugin.id);
-                                                setConfigModalOpen(true);
+                                                window.location.hash = '#admin';
+                                                // Navigate to settings with plugins tab
+                                                sessionStorage.setItem('adminTab', 'plugins');
+                                                // Trigger navigation (will be handled by App.tsx)
+                                                window.dispatchEvent(new Event('hashchange'));
                                             }}
                                             className="w-full mt-3 px-3 py-2 bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg text-sm text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2"
                                         >
@@ -276,17 +264,6 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
                         ))}
                     </div>
                 )}
-
-                {/* Plugin Config Modal */}
-                <PluginConfigModal
-                    isOpen={configModalOpen}
-                    onClose={() => {
-                        setConfigModalOpen(false);
-                        setSelectedPluginId('');
-                        fetchPlugins(); // Refresh after config
-                    }}
-                    pluginId={selectedPluginId}
-                />
 
                 {/* Freebox Login Modal - Opens automatically when Freebox plugin is enabled but not registered */}
                 <LoginModal isOpen={freeboxLoginModalOpen} />

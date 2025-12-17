@@ -11,6 +11,8 @@ import { loggingService } from '../services/loggingService.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
+import { bruteForceProtection } from '../services/bruteForceProtection.js';
+import { securityNotificationService } from '../services/securityNotificationService.js';
 
 const router = Router();
 
@@ -67,27 +69,106 @@ router.post('/login', asyncHandler(async (req, res) => {
 
     // Get client IP address
     const clientIp = req.ip || req.socket.remoteAddress || req.headers['x-forwarded-for']?.toString().split(',')[0] || undefined;
-    const result = await authService.login(username, password, clientIp);
 
-    // Log login
-    await loggingService.log({
-        action: 'user.login',
-        resource: 'user',
-        resourceId: result.user.id.toString(),
-        username: result.user.username,
-        ipAddress: req.ip || req.socket.remoteAddress,
-        userAgent: req.get('user-agent') || undefined,
-        level: 'info'
-    });
+    // Check brute force protection for username
+    if (bruteForceProtection.isBlocked(username)) {
+        const remainingTime = bruteForceProtection.getRemainingLockoutTime(username);
+        await securityNotificationService.notifyBlockedLogin(
+            username,
+            clientIp,
+            `Compte bloqué temporairement. Réessayez dans ${Math.ceil(remainingTime / 60)} minutes.`
+        );
+        throw createError(
+            `Too many failed login attempts. Please try again in ${Math.ceil(remainingTime / 60)} minutes.`,
+            429,
+            'ACCOUNT_LOCKED'
+        );
+    }
 
-    res.json({
-        success: true,
-        result: {
-            token: result.token,
-            user: result.user,
-            message: 'Login successful'
+    // Check brute force protection for IP address
+    if (clientIp && bruteForceProtection.isBlocked(clientIp)) {
+        const remainingTime = bruteForceProtection.getRemainingLockoutTime(clientIp);
+        await securityNotificationService.notifyIpBlocked(
+            clientIp,
+            'Too many failed login attempts',
+            Math.ceil(remainingTime / 60)
+        );
+        throw createError(
+            `IP address blocked due to too many failed attempts. Please try again in ${Math.ceil(remainingTime / 60)} minutes.`,
+            429,
+            'IP_BLOCKED'
+        );
+    }
+
+    try {
+        // Attempt login
+        const result = await authService.login(username, password, clientIp);
+
+        // Success - reset brute force counters
+        bruteForceProtection.recordSuccessfulAttempt(username);
+        if (clientIp) {
+            bruteForceProtection.recordSuccessfulAttempt(clientIp);
         }
-    });
+
+        // Check if this is a new IP address for this user
+        const user = UserRepository.findByUsername(username);
+        const isNewIp = user && user.lastLoginIp && user.lastLoginIp !== clientIp;
+
+        // Notify successful login
+        await securityNotificationService.notifySuccessfulLogin(
+            result.user.id,
+            result.user.username,
+            clientIp,
+            isNewIp || false
+        );
+
+        // Log login
+        await loggingService.log({
+            action: 'user.login',
+            resource: 'user',
+            resourceId: result.user.id.toString(),
+            username: result.user.username,
+            ipAddress: clientIp,
+            userAgent: req.get('user-agent') || undefined,
+            level: 'info'
+        });
+
+        res.json({
+            success: true,
+            result: {
+                token: result.token,
+                user: result.user,
+                message: 'Login successful'
+            }
+        });
+    } catch (error) {
+        // Login failed - record failed attempt
+        const wasBlocked = bruteForceProtection.recordFailedAttempt(username, clientIp);
+        const stats = bruteForceProtection.getStats(username);
+        
+        await securityNotificationService.notifyFailedLogin(
+            username,
+            clientIp,
+            stats.count
+        );
+
+        // Also record IP-based attempt
+        if (clientIp) {
+            bruteForceProtection.recordFailedAttempt(clientIp, clientIp);
+        }
+
+        // If account is now blocked, notify
+        if (wasBlocked) {
+            await securityNotificationService.notifyBlockedLogin(
+                username,
+                clientIp,
+                `Account locked after ${stats.count} failed attempts`
+            );
+        }
+
+        // Re-throw the original error
+        throw error;
+    }
 }));
 
 // GET /api/users/me - Get current user info

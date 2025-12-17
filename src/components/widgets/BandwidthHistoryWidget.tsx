@@ -147,7 +147,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
                                 isLoggedIn ? 'bg-emerald-400' : 'bg-red-500'
                             }`}
                         />
-                        <span>Reauth</span>
+                        <span>Auth</span>
                     </button>
                 </div>
             </div>

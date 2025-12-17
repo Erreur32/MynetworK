@@ -28,7 +28,8 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
             let connectionStatus = false;
             if (isEnabled) {
                 try {
-                    connectionStatus = await pluginManager.testPluginConnection(plugin.getId());
+                    const testResult = await pluginManager.testPluginConnection(plugin.getId());
+                    connectionStatus = testResult.success;
                 } catch {
                     connectionStatus = false;
                 }
@@ -90,7 +91,8 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
     let connectionStatus = false;
     if (isEnabled) {
         try {
-            connectionStatus = await pluginManager.testPluginConnection(pluginId);
+            const testResult = await pluginManager.testPluginConnection(pluginId);
+            connectionStatus = testResult.success;
         } catch {
             connectionStatus = false;
         }
@@ -297,7 +299,11 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
             }
         } else {
             // Use current plugin configuration
-            connectionStatus = await pluginManager.testPluginConnection(pluginId);
+            const testResult = await pluginManager.testPluginConnection(pluginId);
+            connectionStatus = testResult.success;
+            if (!testResult.success && testResult.error) {
+                errorMessage = testResult.error;
+            }
         }
     } catch (error) {
         errorMessage = error instanceof Error ? error.message : String(error);
@@ -314,7 +320,14 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
             // Include error details in the message
             message = `Connection failed: ${errorMessage}`;
         } else {
-            message = 'Connection failed: Unable to connect or retrieve data from UniFi';
+            // Fallback message with plugin-specific details
+            if (pluginId === 'unifi') {
+                message = 'Connection failed: Unable to connect or retrieve data from UniFi. Verify URL, credentials, and site name. Check backend logs for details.';
+            } else if (pluginId === 'freebox') {
+                message = 'Connection failed: Unable to connect to Freebox API. Check backend logs for details.';
+            } else {
+                message = 'Connection failed: Unable to connect. Check backend logs for details.';
+            }
         }
     }
 

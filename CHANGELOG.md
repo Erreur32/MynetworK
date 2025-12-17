@@ -2,6 +2,26 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.0] - 2025-12-17
+
+### 🐛 Corrigé
+
+### 🔧 Modifié
+
+### 📝 Documentation
+
+---
+
+## [0.0.9] - 2025-12-17
+
+### 🐛 Corrigé
+
+### 🔧 Modifié
+
+### 📝 Documentation
+
+---
+
 ## [0.0.8] - 2025-12-17
 
 ### 🐛 Corrigé

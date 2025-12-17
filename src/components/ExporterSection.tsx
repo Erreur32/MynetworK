@@ -39,15 +39,18 @@ export const ExporterSection: React.FC = () => {
     const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     useEffect(() => {
-        // Generate Prometheus URL
+        // Load config first
+        loadConfig();
+    }, []);
+
+    // Update Prometheus URL when config changes
+    // Note: The actual endpoint is on the main server, but the port in config is for Prometheus scrape configuration
+    useEffect(() => {
         // In development, Vite proxies /api to backend on port 3003
         // In production, backend is on the same port as frontend
         const isDev = import.meta.env.DEV;
         const backendPort = isDev ? '3003' : (window.location.port || '3003');
         setPrometheusUrl(`http://${window.location.hostname}:${backendPort}/api/metrics/prometheus`);
-        
-        // Load config after URL is set
-        loadConfig();
     }, []);
 
     const handleExportConfig = async () => {
@@ -218,8 +221,49 @@ export const ExporterSection: React.FC = () => {
                 {config.prometheus.enabled && (
                     <>
                         <SettingRow
+                            label="Port Prometheus"
+                            description="Port à configurer dans Prometheus pour scraper les métriques (utilisé dans la configuration Prometheus)"
+                        >
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min="1024"
+                                    max="65535"
+                                    value={config.prometheus.port || 9090}
+                                    onChange={(e) => {
+                                        const port = parseInt(e.target.value) || 9090;
+                                        setConfig({
+                                            ...config,
+                                            prometheus: { ...config.prometheus, port }
+                                        });
+                                    }}
+                                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                />
+                                <span className="text-sm text-gray-400">port</span>
+                            </div>
+                        </SettingRow>
+
+                        <SettingRow
+                            label="Chemin de l'endpoint"
+                            description="Chemin pour accéder aux métriques Prometheus"
+                        >
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={config.prometheus.path || '/metrics'}
+                                    onChange={(e) => setConfig({
+                                        ...config,
+                                        prometheus: { ...config.prometheus, path: e.target.value }
+                                    })}
+                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                    placeholder="/metrics"
+                                />
+                            </div>
+                        </SettingRow>
+
+                        <SettingRow
                             label="URL de l'endpoint"
-                            description="URL pour récupérer les métriques Prometheus"
+                            description="URL complète pour récupérer les métriques Prometheus"
                         >
                             <div className="flex items-center gap-2">
                                 <input
@@ -247,9 +291,13 @@ export const ExporterSection: React.FC = () => {
   - job_name: 'mynetwork'
     scrape_interval: 30s
     static_configs:
-      - targets: ['${window.location.hostname}:3003']
+      - targets: ['${window.location.hostname}:${config.prometheus.port || 9090}']
     metrics_path: '/api/metrics/prometheus'`}
                             </pre>
+                            <p className="text-xs text-blue-400 mt-2">
+                                <strong>Note :</strong> Le port configuré ({config.prometheus.port || 9090}) est utilisé pour la configuration Prometheus. 
+                                L'endpoint réel reste sur le serveur principal à <code className="text-blue-300">/api/metrics/prometheus</code>.
+                            </p>
                         </div>
                     </>
                 )}

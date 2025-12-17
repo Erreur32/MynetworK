@@ -26,9 +26,9 @@ echo "🔄 Mise à jour de la version de $OLD_VERSION vers $NEW_VERSION..."
 echo "  📝 Mise à jour de package.json..."
 sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package.json
 
-# 2. src/components/layout/Header.tsx (4 occurrences de v0.0.X)
-echo "  📝 Mise à jour de src/components/layout/Header.tsx..."
-sed -i "s/v$OLD_VERSION/v$NEW_VERSION/g" src/components/layout/Header.tsx
+# 2. src/constants/version.ts (fichier de constantes centralisé)
+echo "  📝 Mise à jour de src/constants/version.ts..."
+sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
 
 # 3. README.md (badge)
 echo "  📝 Mise à jour de README.md..."
@@ -83,9 +83,12 @@ echo "✅ Version mise à jour avec succès de $OLD_VERSION vers $NEW_VERSION"
 echo ""
 echo "📋 Fichiers modifiés:"
 echo "  - package.json"
-echo "  - src/components/layout/Header.tsx"
+echo "  - src/constants/version.ts"
 echo "  - README.md"
 echo "  - CHANGELOG.md"
+echo ""
+echo "ℹ️  Note: Les fichiers Header.tsx et SettingsPage.tsx utilisent maintenant"
+echo "   la constante APP_VERSION depuis src/constants/version.ts"
 echo ""
 echo "⚠️  N'oubliez pas de:"
 echo "  1. Vérifier le contenu de CHANGELOG.md et compléter les sections"

@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { rebootScheduler } from '../services/scheduler.js';
-import { asyncHandler } from '../middleware/errorHandler.js';
+import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { normalizeSystemInfo } from '../services/apiNormalizer.js';
+import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { authService } from '../services/authService.js';
+import { bruteForceProtection } from '../services/bruteForceProtection.js';
+import { securityNotificationService } from '../services/securityNotificationService.js';
 
 const router = Router();
 
@@ -61,6 +65,121 @@ router.post('/reboot/schedule', asyncHandler(async (req, res) => {
 router.post('/reboot', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.reboot();
   res.json(result);
+}));
+
+// GET /api/system/security - Get security configuration and status
+router.get('/security', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
+  const jwtSecretIsDefault = jwtSecret === 'change-me-in-production-please-use-strong-secret';
+  
+  const config = bruteForceProtection.getConfig();
+  
+  // Get current session timeout from authService (reads from DB or env var)
+  const jwtExpiresIn = authService.getCurrentJwtExpiresIn();
+  let sessionTimeoutHours = 24 * 7; // Default 7 days
+  if (jwtExpiresIn.endsWith('d')) {
+    sessionTimeoutHours = parseInt(jwtExpiresIn) * 24;
+  } else if (jwtExpiresIn.endsWith('h')) {
+    sessionTimeoutHours = parseInt(jwtExpiresIn);
+  } else if (jwtExpiresIn.endsWith('m')) {
+    sessionTimeoutHours = Math.round(parseInt(jwtExpiresIn) / 60);
+  }
+
+  res.json({
+    success: true,
+    result: {
+      jwtSecretIsDefault,
+      sessionTimeout: sessionTimeoutHours,
+      requireHttps: process.env.REQUIRE_HTTPS === 'true',
+      rateLimitEnabled: true, // Always enabled (can be configured later)
+      maxLoginAttempts: config.maxAttempts,
+      lockoutDuration: config.lockoutDuration,
+      trackingWindow: config.trackingWindow
+    }
+  });
+}));
+
+// POST /api/system/security - Update security configuration
+router.post('/security', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { maxLoginAttempts, lockoutDuration, sessionTimeoutHours } = req.body;
+
+  // Update brute force protection config
+  if (maxLoginAttempts !== undefined || lockoutDuration !== undefined) {
+    const currentConfig = bruteForceProtection.getConfig();
+    bruteForceProtection.setConfig({
+      maxAttempts: maxLoginAttempts !== undefined ? parseInt(maxLoginAttempts) : currentConfig.maxAttempts,
+      lockoutDuration: lockoutDuration !== undefined ? parseInt(lockoutDuration) : currentConfig.lockoutDuration
+    });
+
+    // Notify about security settings change
+    if (req.user) {
+      await securityNotificationService.notifySecuritySettingsChanged(
+        req.user.userId,
+        req.user.username,
+        { maxLoginAttempts, lockoutDuration }
+      );
+    }
+  }
+
+  // Update JWT expiration time (session timeout)
+  if (sessionTimeoutHours !== undefined) {
+    const hours = parseInt(sessionTimeoutHours);
+    if (isNaN(hours) || hours < 1 || hours > 168) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Session timeout must be between 1 and 168 hours (7 days)' }
+      });
+    }
+
+    // Convert hours to JWT format (prefer days if >= 24h, otherwise hours)
+    let jwtExpiresIn: string;
+    if (hours >= 24 && hours % 24 === 0) {
+      jwtExpiresIn = `${hours / 24}d`;
+    } else {
+      jwtExpiresIn = `${hours}h`;
+    }
+
+    try {
+      authService.updateJwtExpiresIn(jwtExpiresIn);
+      
+      // Notify about security settings change
+      if (req.user) {
+        await securityNotificationService.notifySecuritySettingsChanged(
+          req.user.userId,
+          req.user.username,
+          { sessionTimeout: jwtExpiresIn }
+        );
+      }
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Failed to update session timeout' }
+      });
+    }
+  }
+
+  const config = bruteForceProtection.getConfig();
+  const currentJwtExpiresIn = authService.getCurrentJwtExpiresIn();
+  let currentSessionTimeoutHours = 24 * 7; // Default
+  if (currentJwtExpiresIn.endsWith('d')) {
+    currentSessionTimeoutHours = parseInt(currentJwtExpiresIn) * 24;
+  } else if (currentJwtExpiresIn.endsWith('h')) {
+    currentSessionTimeoutHours = parseInt(currentJwtExpiresIn);
+  } else if (currentJwtExpiresIn.endsWith('m')) {
+    currentSessionTimeoutHours = Math.round(parseInt(currentJwtExpiresIn) / 60);
+  }
+  
+  res.json({
+    success: true,
+    result: {
+      maxLoginAttempts: config.maxAttempts,
+      lockoutDuration: config.lockoutDuration,
+      sessionTimeout: currentSessionTimeoutHours,
+      message: sessionTimeoutHours !== undefined 
+        ? 'Security settings updated. Note: New session timeout will apply to new login sessions only. Existing sessions will keep their original expiration time.'
+        : 'Security settings updated.'
+    }
+  });
 }));
 
 export default router;

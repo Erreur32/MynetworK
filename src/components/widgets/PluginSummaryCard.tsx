@@ -234,7 +234,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         >
                             <span className="w-1.5 h-1.5 rounded-full mr-1"
                                   style={{ backgroundColor: isFreeboxLoggedIn ? '#22c55e' : '#ef4444' }} />
-                            <span>Reauth</span>
+                            <span>Auth</span>
                         </button>
                     )}
                     {onViewDetails && (
@@ -297,7 +297,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {/* Freebox state graph (only for Freebox plugin, on all dashboards) */}
                         {pluginId === 'freebox' && connectionStatus && networkHistory && networkHistory.length > 0 && (
                             <div className="space-y-3">
-                                <h4 className="text-xs text-gray-400">État de la Freebox</h4>
                                 <div className="space-y-3">
                                     <BarChart
                                         data={networkHistory}
@@ -346,37 +345,39 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
 
 
-                        {(unifiControllerVersion || unifiControllerUpdateAvailable !== undefined || unifiControllerIp) && (
-                                    <div className="flex items-center justify-between pt-1 border-t border-gray-800 mt-1 text-[11px]">
-                                        <span className="text-gray-400">Controller</span>
-                                        <div className="flex flex-col items-end gap-0.5 text-gray-200">
-                                            {(stats.system as any)?.name && (
-                                                <span className="text-[10px] text-gray-300">
-                                                    Site&nbsp;:&nbsp;
-                                                    <span className="text-gray-100">
-                                                        {(stats.system as any).name}
-                                                    </span>
-                                                </span>
-                                            )}
-                                            {unifiControllerIp && (
-                                                <span className="text-[10px] text-gray-400">
-                                                    IP&nbsp;:&nbsp;
-                                                    <span className="text-gray-200">{unifiControllerIp}</span>
-                                                </span>
-                                            )}
-                                            <span className="flex items-center gap-2">
-                                                {unifiControllerVersion && (
-                                                    <span>v{unifiControllerVersion}</span>
-                                                )}
-                                                {unifiControllerUpdateAvailable && (
-                                                    <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
-                                                        Mise à jour dispo
+                        {((unifiControllerVersion || unifiControllerUpdateAvailable !== undefined || unifiControllerIp || (stats.system as any)?.name) && (
+                                    <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-gray-400">Controller</span>
+                                            <div className="flex flex-col items-end gap-0.5 text-gray-200">
+                                                {(stats.system as any)?.name && (
+                                                    <span className="text-[10px] text-gray-300">
+                                                        Site&nbsp;:&nbsp;
+                                                        <span className="text-gray-100">
+                                                            {(stats.system as any).name}
+                                                        </span>
                                                     </span>
                                                 )}
-                                            </span>
+                                                {unifiControllerIp && (
+                                                    <span className="text-[10px] text-gray-400">
+                                                        IP&nbsp;:&nbsp;
+                                                        <span className="text-gray-200">{unifiControllerIp}</span>
+                                                    </span>
+                                                )}
+                                                <span className="flex items-center gap-2">
+                                                    {unifiControllerVersion && (
+                                                        <span>v{unifiControllerVersion}</span>
+                                                    )}
+                                                    {unifiControllerUpdateAvailable && (
+                                                        <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
+                                                            Mise à jour dispo
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                )}                            
+                                ))}                            
  
                                 {(unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
                                     <div className="flex flex-col gap-1 pt-1 border-t border-gray-800 mt-1 text-[11px]">
@@ -486,7 +487,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         )}
 
                         {/* Freebox controller / firmware / WAN IP / DHCP & Port forwarding summary */}
-                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || connectionStatus) && (
+                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding))) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex flex-col">
@@ -621,16 +622,14 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         )}
 
                         {/* System Info (only temperature here, uptime globalisé en pied de carte) */}
-                        {stats.system && (
+                        {stats.system && stats.system.temperature && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-1">
-                                {stats.system.temperature && (
-                                    <div className="flex justify-between text-xs">
-                                        <span className="text-gray-400">Température</span>
-                                        <span className="text-gray-300">
-                                            {stats.system.temperature}°C
-                                        </span>
-                                    </div>
-                                )}
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-gray-400">Température</span>
+                                    <span className="text-gray-300">
+                                        {stats.system.temperature}°C
+                                    </span>
+                                </div>
                             </div>
                         )}
                     </div>

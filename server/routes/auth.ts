@@ -3,6 +3,7 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { modelDetection } from '../services/modelDetection.js';
 import { connectionWebSocket } from '../services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from '../services/freeboxNativeWebSocket.js';
+import { pluginManager } from '../services/pluginManager.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 
 const router = Router();
@@ -47,6 +48,20 @@ router.post('/login', asyncHandler(async (_req, res) => {
   // Notify WebSocket services
   connectionWebSocket.onLogin();
   freeboxNativeWebSocket.onLogin(); // Start native Freebox WebSocket (API v8+)
+
+  // Restart Freebox plugin if enabled to ensure it picks up the new session
+  // This is especially important after first-time registration/login
+  try {
+    const freeboxPlugin = pluginManager.getPlugin('freebox');
+    if (freeboxPlugin && freeboxPlugin.isEnabled()) {
+      // Restart the plugin to ensure it connects with the new session
+      await freeboxPlugin.stop();
+      await freeboxPlugin.start();
+    }
+  } catch (error) {
+    // Log but don't fail the login if plugin restart fails
+    console.error('[Auth] Failed to restart Freebox plugin after login:', error);
+  }
 
   res.json({
     success: true,

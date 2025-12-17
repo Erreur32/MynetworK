@@ -42,7 +42,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
 
             {/* Column 1 - à gauche (état des plugins + système serveur) */}
             <div className="flex flex-col gap-6">
-                <MultiSourceWidget onPluginClick={(pluginId) => onNavigateToPlugins?.(pluginId)} />
+                <MultiSourceWidget onPluginClick={() => onNavigateToPlugins?.()} />
                 <SystemServerWidget />
             </div>
 

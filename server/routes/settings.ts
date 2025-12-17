@@ -297,11 +297,11 @@ router.get('/theme', requireAuth, asyncHandler(async (req: AuthenticatedRequest,
 router.post('/theme', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { theme, customColors } = req.body;
   
-  if (!theme || !['dark', 'glass', 'modern'].includes(theme)) {
+  if (!theme || !['dark', 'glass', 'modern', 'nightly'].includes(theme)) {
     return res.status(400).json({
       success: false,
       error: {
-        message: 'Invalid theme. Must be one of: dark, glass, modern',
+        message: 'Invalid theme. Must be one of: dark, glass, modern, nightly',
         code: 'INVALID_THEME'
       }
     });

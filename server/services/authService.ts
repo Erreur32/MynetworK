@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { UserRepository, type User, type CreateUserInput } from '../database/models/User.js';
 import { logger } from '../utils/logger.js';
+import { getDatabase } from '../database/connection.js';
 
 export interface LoginResult {
     token: string;
@@ -26,11 +27,70 @@ export class AuthService {
 
     constructor() {
         this.jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
-        this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
+        // Load JWT expiration from database, fallback to environment variable, then default
+        this.jwtExpiresIn = this.getJwtExpiresIn();
         
         if (this.jwtSecret === 'change-me-in-production-please-use-strong-secret') {
             logger.warn('Auth', '⚠️  Using default JWT secret. Please set JWT_SECRET environment variable in production!');
         }
+    }
+
+    /**
+     * Get JWT expiration time from database or environment variable
+     * Priority: Database > Environment Variable > Default (7d)
+     */
+    private getJwtExpiresIn(): string {
+        try {
+            const db = getDatabase();
+            const stmt = db.prepare('SELECT value FROM app_config WHERE key = ?');
+            const result = stmt.get('jwt_expires_in') as { value: string } | undefined;
+            
+            if (result && result.value) {
+                return result.value;
+            }
+        } catch (error) {
+            // Database might not be initialized yet, fallback to env var
+            logger.debug('Auth', 'Could not read jwt_expires_in from database, using environment variable or default');
+        }
+        
+        return process.env.JWT_EXPIRES_IN || '7d';
+    }
+
+    /**
+     * Update JWT expiration time in database
+     * This will apply to new tokens only (existing tokens keep their expiration)
+     */
+    updateJwtExpiresIn(expiresIn: string): void {
+        // Validate format (should be like "7d", "24h", "30m", etc.)
+        const validFormat = /^\d+[smhd]$/i.test(expiresIn);
+        if (!validFormat) {
+            throw new Error('Invalid JWT expiration format. Use format like "7d", "24h", "30m", "60s"');
+        }
+
+        try {
+            const db = getDatabase();
+            const stmt = db.prepare(`
+                INSERT INTO app_config (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+            `);
+            stmt.run('jwt_expires_in', expiresIn);
+            
+            // Update the instance variable for new tokens
+            this.jwtExpiresIn = expiresIn;
+            
+            logger.info('Auth', `JWT expiration time updated to: ${expiresIn}`);
+        } catch (error) {
+            logger.error('Auth', `Failed to update JWT expiration time: ${error}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Get current JWT expiration time
+     */
+    getCurrentJwtExpiresIn(): string {
+        return this.jwtExpiresIn;
     }
 
     /**

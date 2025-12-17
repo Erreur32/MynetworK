@@ -390,10 +390,10 @@ const App: React.FC = () => {
     // Check if we should show administration mode (from URL hash or state)
     const showAdmin = window.location.hash === '#admin' || false;
     // Check if we should open a specific admin tab (from sessionStorage)
+    // Read it immediately to ensure it's available
     const adminTab = sessionStorage.getItem('adminTab') as 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | undefined;
-    if (adminTab) {
-      sessionStorage.removeItem('adminTab'); // Clear after reading
-    }
+    // Only clear if we're actually using it (to avoid clearing it before SettingsPage reads it)
+    // We'll let SettingsPage handle clearing it via useEffect
     return renderPageWithFooter(
       <SettingsPage 
         onBack={() => setCurrentPage('dashboard')} 
@@ -476,12 +476,11 @@ const App: React.FC = () => {
           <UnifiedDashboardPage 
             onNavigateToFreebox={() => setCurrentPage('freebox')}
             onNavigateToUniFi={() => setCurrentPage('unifi')}
-            onNavigateToPlugins={(pluginId) => {
-              setCurrentPage('plugins');
-              if (pluginId) {
-                // Store pluginId in sessionStorage to open config modal
-                sessionStorage.setItem('openPluginConfig', pluginId);
-              }
+            onNavigateToPlugins={() => {
+              // Set sessionStorage BEFORE changing page to ensure it's read
+              sessionStorage.setItem('adminTab', 'plugins');
+              window.location.hash = '#admin';
+              setCurrentPage('settings');
             }}
           />
         </main>

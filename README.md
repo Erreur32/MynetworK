@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.0.8-blue?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.1.0-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
@@ -70,6 +70,9 @@ services:
       # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      # ⚠️ SECURITE : Définissez JWT_SECRET via variable d'environnement
+      # Ne jamais utiliser la valeur par défaut en production !
+      # Voir section "Configuration sécurisée de JWT_SECRET" ci-dessous pour les exemples
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
       # Optional: External config file path
       - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
@@ -343,6 +346,87 @@ Consultez **[DEV/README-DEV.md](DEV/README-DEV.md)** pour toute la documentation
 | `FREEBOX_HOST` | `mafreebox.freebox.fr` | Hostname Freebox |
 | `PUBLIC_URL` | - | URL publique d'accès (pour nginx, etc.) |
 | `HOST_ROOT_PATH` | `/host` | Chemin du système de fichiers hôte monté |
+
+<details>
+<summary><strong>🔒 Configuration sécurisée de JWT_SECRET</strong></summary>
+
+**⚠️ IMPORTANT : Sécurité** - Le secret JWT par défaut est utilisé uniquement pour le développement. En production, vous **DEVEZ** définir une variable d'environnement `JWT_SECRET` avec une valeur unique et sécurisée.
+
+#### Pourquoi c'est important ?
+
+Le `JWT_SECRET` est utilisé pour signer et vérifier les tokens d'authentification. Si un secret faible ou par défaut est utilisé, un attaquant pourrait :
+- Forger des tokens JWT valides
+- Accéder à votre système sans authentification
+- Compromettre la sécurité de tous les utilisateurs
+
+#### Méthode 1 : Utiliser un fichier `.env` (Recommandé)
+
+Créez un fichier `.env` à la racine du projet :
+
+```bash
+# Générer un secret sécurisé (minimum 32 caractères)
+# Sur Linux/Mac :
+openssl rand -base64 32
+
+# Sur Windows PowerShell :
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+
+# Ajoutez dans votre fichier .env :
+JWT_SECRET=votre_secret_genere_aleatoirement_ici_minimum_32_caracteres
+```
+
+Ensuite, lancez Docker Compose avec le fichier `.env` :
+
+```bash
+docker-compose --env-file .env up -d
+```
+
+#### Méthode 2 : Définir directement dans la ligne de commande
+
+```bash
+# Générer un secret (voir commandes ci-dessus)
+# Puis lancer avec :
+JWT_SECRET=votre_secret_genere_aleatoirement docker-compose up -d
+```
+
+#### Méthode 3 : Utiliser les variables d'environnement système
+
+```bash
+# Sur Linux/Mac :
+export JWT_SECRET=$(openssl rand -base64 32)
+docker-compose up -d
+
+# Sur Windows PowerShell :
+$env:JWT_SECRET = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+docker-compose up -d
+```
+
+#### Exemple complet avec docker-compose.yml
+
+```yaml
+services:
+  mynetwork:
+    image: ghcr.io/erreur32/mynetwork:latest
+    environment:
+      # ⚠️ SECURITE : Définissez JWT_SECRET via variable d'environnement
+      # Ne jamais utiliser la valeur par défaut en production !
+      # Exemple de génération : openssl rand -base64 32
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+```
+
+**Note** : Le fichier `.env` ne doit **JAMAIS** être commité dans Git. Assurez-vous qu'il est dans votre `.gitignore`.
+
+#### Vérification
+
+Après le démarrage, vérifiez les logs pour confirmer que le secret personnalisé est utilisé :
+
+```bash
+docker-compose logs | grep -i "jwt\|secret"
+```
+
+Si vous voyez un avertissement concernant le secret par défaut, cela signifie que `JWT_SECRET` n'a pas été correctement configuré.
+
+</details>
 
 ### Commandes Docker utiles
 

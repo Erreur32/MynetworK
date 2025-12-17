@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Activity, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { usePluginStore, type PluginStats } from '../../stores/pluginStore';
 import { Card } from './Card';
 
@@ -21,30 +21,20 @@ interface MultiSourceWidgetProps {
 }
 
 export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className = '', onPluginClick }) => {
-    const { plugins, pluginStats, fetchAllStats } = usePluginStore();
-    const [isRefreshing, setIsRefreshing] = React.useState(false);
+    const { plugins, pluginStats } = usePluginStore();
 
     const activePlugins = plugins.filter((plugin) => plugin.enabled && plugin.connectionStatus);
-
-    const handleRefresh = async () => {
-        setIsRefreshing(true);
-        await fetchAllStats();
-        setTimeout(() => setIsRefreshing(false), 1000);
-    };
 
     return (
         <Card
             title="État des plugins"
             actions={
-                <button
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    className="text-xs bg-[#1a1a1a] border border-gray-700 px-2 py-1 rounded flex items-center gap-1 text-gray-400 hover:text-gray-200 transition-colors disabled:opacity-50"
-                    title="Refresh plugin stats"
-                >
-                    <Activity size={12} className={isRefreshing ? 'animate-spin' : ''} />
-                    Actualiser
-                </button>
+                <div className="text-xs text-gray-500">
+                    Plugins actifs :{' '}
+                    <span className="text-gray-200 font-medium">
+                        {activePlugins.length} / {plugins.length}
+                    </span>
+                </div>
             }
             className={className}
         >
@@ -59,15 +49,18 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
             ) : (
                 <div className="space-y-4">
                     <div>
-                        <h4 className="text-xs text-gray-400 mb-2">État &amp; configuration</h4>
                         <div className="flex flex-col gap-3">
                             {plugins.map((plugin) => {
                                 const stats = pluginStats[plugin.id] as PluginStats | null | undefined;
                                 const hasStats = !!stats;
                                 const isActive = plugin.enabled && plugin.connectionStatus;
 
-                                const apiMode =
-                                    (plugin.settings && (plugin.settings.apiMode as string)) || undefined;
+                                // Get API information from plugin properties (same as administration panel)
+                                const apiMode = plugin.apiMode;
+                                const apiVersion = plugin.apiVersion;
+                                const controllerFirmware = plugin.controllerFirmware;
+                                const firmware = plugin.firmware;
+                                const playerFirmware = plugin.playerFirmware;
 
                                 const source =
                                     stats && typeof (stats as any).source === 'string'
@@ -126,8 +119,8 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                 className={`rounded border border-gray-800 bg-[#111111] px-3 py-2 text-xs flex flex-col gap-1.5 ${
                                                     onPluginClick ? 'cursor-pointer' : ''
                                                 }`}
-                                                onClick={() => onPluginClick?.(plugin.id)}
-                                                title={onPluginClick ? `Cliquer pour configurer ${plugin.name}` : undefined}
+                                                onClick={() => onPluginClick?.()}
+                                                title={onPluginClick ? `Aller à l'administration pour configurer ${plugin.name}` : undefined}
                                     >
                                         {/* Header: plugin name, version and status */}
                                         <div className="flex items-center justify-between gap-2">
@@ -140,16 +133,38 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                             {plugin.name}
                                                         </span>
                                                 <span className="text-[10px] text-gray-500">
-                                                    Version {plugin.version || 'n/a'}
+                                                    {(() => {
+                                                        // Display real firmware version instead of plugin code version
+                                                        if (plugin.id === 'freebox' && plugin.firmware) {
+                                                            return `Firmware ${plugin.firmware}`;
+                                                        } else if (plugin.id === 'unifi' && plugin.controllerFirmware) {
+                                                            return `Firmware ${plugin.controllerFirmware}`;
+                                                        }
+                                                        // Fallback to plugin version if no firmware available
+                                                        return `Version ${plugin.version || 'n/a'}`;
+                                                    })()}
                                                 </span>
                                                     </div>
                                                 </div>
-                                            <div>
+                                            <div className="flex items-center gap-1.5">
                                                 {isActive ? (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/30 border border-emerald-700 text-emerald-400">
-                                                        <CheckCircle size={10} />
-                                                        Actif
-                                                    </span>
+                                                    <>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/30 border border-emerald-700 text-emerald-400">
+                                                            <CheckCircle size={10} />
+                                                            Actif
+                                                        </span>
+                                                        {hasStats ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-900/30 border border-blue-700 text-blue-400">
+                                                                <CheckCircle size={10} />
+                                                                OK
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700 text-yellow-400">
+                                                                <AlertCircle size={10} />
+                                                                Indispo
+                                                            </span>
+                                                        )}
+                                                    </>
                                                 ) : plugin.enabled ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700 text-yellow-400">
                                                         <AlertCircle size={10} />
@@ -164,39 +179,73 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                             </div>
                                         </div>
 
-                                        {/* Meta-information: API mode, stats source and timing */}
+                                        {/* Meta-information: API info, stats source and timing */}
                                         <div className="flex flex-col gap-1 mt-1.5">
-                                            <div className="flex items-center justify-between text-[11px] text-gray-400">
-                                                <span>
-                                                    API&nbsp;:
-                                                    <span className="ml-1 text-gray-300">
-                                                        {apiMode || 'n/a'}
-                                                    </span>
-                                                </span>
-                                                <span>
-                                                    Status&nbsp;:
-                                                    <span className="ml-1 text-gray-300">
-                                                        {hasStats ? 'OK' : 'indispo'}
-                                                    </span>
-                                                </span>
-                                            </div>
+                                            {/* Plugin-specific API information */}
+                                            {isActive && (
+                                                <div className="flex flex-col gap-1.5 text-[11px] text-gray-400 mb-1 p-2 bg-gray-900/30 rounded border border-gray-800/50">
+                                                    {plugin.id === 'freebox' && (
+                                                        <>
+                                                            {apiVersion && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-gray-500">Version API&nbsp;:</span>
+                                                                    <span className="text-cyan-400 font-mono font-medium text-xs">
+                                                                        {apiVersion}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {firmware && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-gray-500">Firmware Box&nbsp;:</span>
+                                                                    <span className="text-gray-200 font-mono font-medium text-xs">
+                                                                        {firmware}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {playerFirmware && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-gray-500">Firmware Player&nbsp;:</span>
+                                                                    <span className="text-gray-200 font-mono font-medium text-xs">
+                                                                        {playerFirmware}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                    {plugin.id === 'unifi' && (
+                                                        <>
+                                                            {apiMode && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-gray-500">Mode API&nbsp;:</span>
+                                                                    <span className="text-purple-400 font-mono font-medium text-xs">
+                                                                        {apiMode}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {controllerFirmware && (
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-gray-500">Version Firmware&nbsp;:</span>
+                                                                    <span className="text-gray-200 font-mono font-medium text-xs">
+                                                                        {controllerFirmware}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
 
+                                            {/* Source and timing info */}
                                             {(source || executionMs !== undefined) && (
-                                                <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-gray-500">
+                                                <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800">
                                                     {source && (
                                                         <span className="truncate max-w-[60%]">
-                                                            Source&nbsp;:{' '}
-                                                            <span className="text-gray-300">
-                                                                {source}
-                                                            </span>
+                                                            Source: <span className="text-gray-300">{source}</span>
                                                         </span>
                                                     )}
                                                     {executionMs !== undefined && (
                                                         <span>
-                                                            Temps&nbsp;:
-                                                            <span className="ml-1 text-gray-300">
-                                                                {executionMs} ms
-                                                            </span>
+                                                            Temps: <span className="text-gray-300">{executionMs} ms</span>
                                                         </span>
                                                     )}
                                                 </div>
@@ -212,16 +261,6 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                 );
                             })}
                         </div>
-                    </div>
-
-                    {/* Quick summary of active plugins */}
-                    <div className="pt-3 border-t border-gray-800">
-                        <p className="text-[11px] text-gray-500">
-                            Plugins actifs :{' '}
-                            <span className="text-gray-200 font-medium">
-                                {activePlugins.length} / {plugins.length}
-                            </span>
-                        </p>
                     </div>
                 </div>
             )}

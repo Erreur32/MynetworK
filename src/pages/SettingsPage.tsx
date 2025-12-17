@@ -32,7 +32,8 @@ import {
   Eye,
   EyeOff,
   Info,
-  Github
+  Github,
+  Sparkles
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
@@ -48,6 +49,8 @@ import { useUserAuthStore, type User } from '../stores/userAuthStore';
 import { ExporterSection } from '../components/ExporterSection';
 import { PluginsManagementSection } from '../components/PluginsManagementSection';
 import { LogsManagementSection } from '../components/LogsManagementSection';
+import logoMynetworK from '../icons/logo_mynetwork.svg';
+import { APP_VERSION, getVersionString } from '../constants/version';
 import { SecuritySection } from '../components/SecuritySection';
 import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
@@ -166,16 +169,18 @@ const AppLogsSection: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
   const [filter, setFilter] = useState<'all' | 'error' | 'warn' | 'info' | 'debug' | 'verbose'>('all');
+  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [totalLogs, setTotalLogs] = useState(0);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Scroll to bottom when new logs arrive (in live mode or after manual refresh)
+  // Scroll to bottom when new logs arrive (only in live mode)
   useEffect(() => {
-    if (logsEndRef.current) {
+    if (liveMode && logsEndRef.current) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
         if (logsEndRef.current) {
-          logsEndRef.current.scrollIntoView({ behavior: liveMode ? 'smooth' : 'auto' });
+          logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
       }, 100);
     }
@@ -184,17 +189,45 @@ const AppLogsSection: React.FC = () => {
   // Load initial logs when component mounts or filter changes
   useEffect(() => {
     loadLogs();
-  }, [filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, showAllLogs]);
 
   // Auto-refresh logs when live mode is enabled (polling every 2 seconds)
+  // In live mode, always load only the last 500 logs for performance
   useEffect(() => {
     if (liveMode) {
+      // Temporarily disable showAllLogs for live mode to avoid performance issues
+      const loadRecentLogs = async () => {
+        setIsLoading(true);
+        try {
+          const params = new URLSearchParams({ limit: '500' });
+          if (filter !== 'all') {
+            params.append('level', filter);
+          }
+          const response = await api.get<{ logs: any[]; total: number }>(`/api/debug/logs?${params}`);
+          if (response.success && response.result) {
+            setLogs(response.result.logs);
+            setTotalLogs(response.result.total || 0);
+            // Scroll to bottom in live mode
+            setTimeout(() => {
+              if (logsEndRef.current) {
+                logsEndRef.current.scrollIntoView({ behavior: 'auto' });
+              }
+            }, 150);
+          }
+        } catch (error) {
+          console.error('[AppLogsSection] Error loading logs:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
       // Load logs immediately when live mode is enabled
-      loadLogs();
+      loadRecentLogs();
       
       // Set up interval to refresh logs every 2 seconds
       refreshIntervalRef.current = setInterval(() => {
-        loadLogs();
+        loadRecentLogs();
       }, 2000);
     } else {
       // Clear interval when live mode is disabled
@@ -210,24 +243,29 @@ const AppLogsSection: React.FC = () => {
         refreshIntervalRef.current = null;
       }
     };
-  }, [liveMode]);
+  }, [liveMode, filter]);
 
   const loadLogs = async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '500' });
+      // Load all logs if showAllLogs is true, otherwise limit to 500
+      const limit = showAllLogs ? '10000' : '500'; // Max 10000 for performance
+      const params = new URLSearchParams({ limit });
       if (filter !== 'all') {
         params.append('level', filter);
       }
       const response = await api.get<{ logs: any[]; total: number }>(`/api/debug/logs?${params}`);
       if (response.success && response.result) {
         setLogs(response.result.logs);
-        // Scroll to bottom after loading logs
-        setTimeout(() => {
-          if (logsEndRef.current) {
-            logsEndRef.current.scrollIntoView({ behavior: 'auto' });
-          }
-        }, 150);
+        setTotalLogs(response.result.total || 0);
+        // Scroll to bottom only if live mode is enabled
+        if (liveMode) {
+          setTimeout(() => {
+            if (logsEndRef.current) {
+              logsEndRef.current.scrollIntoView({ behavior: 'auto' });
+            }
+          }, 150);
+        }
       }
     } catch (error) {
       console.error('[AppLogsSection] Error loading logs:', error);
@@ -237,10 +275,11 @@ const AppLogsSection: React.FC = () => {
   };
 
   const clearLogs = async () => {
-    if (!confirm('Voulez-vous vraiment effacer tous les logs ?')) return;
+    if (!confirm('Voulez-vous vraiment nettoyer la mémoire ?\n\nCela supprimera tous les logs du buffer en mémoire (max 1000 logs). Cette action est irréversible.')) return;
     try {
       await api.delete('/api/debug/logs');
       setLogs([]);
+      setTotalLogs(0);
     } catch (error) {
       console.error('[AppLogsSection] Error clearing logs:', error);
     }
@@ -287,6 +326,7 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-gray-600 text-white border-2 border-gray-500'
                 : 'bg-[#1a1a1a] text-gray-400 border border-gray-700 hover:bg-gray-800 hover:text-gray-300'
             }`}
+            title="Afficher tous les logs (tous niveaux confondus)"
           >
             Tous
           </button>
@@ -297,6 +337,7 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-red-600 text-white border-2 border-red-400'
                 : 'bg-[#1a1a1a] text-red-400 border border-red-800/50 hover:bg-red-900/20 hover:text-red-300'
             }`}
+            title="Afficher uniquement les logs d'erreur (niveau error)"
           >
             Erreurs
           </button>
@@ -307,6 +348,7 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-yellow-600 text-white border-2 border-yellow-400'
                 : 'bg-[#1a1a1a] text-yellow-400 border border-yellow-800/50 hover:bg-yellow-900/20 hover:text-yellow-300'
             }`}
+            title="Afficher uniquement les logs d'avertissement (niveau warn)"
           >
             Avertissements
           </button>
@@ -317,6 +359,7 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-cyan-600 text-white border-2 border-cyan-400'
                 : 'bg-[#1a1a1a] text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/20 hover:text-cyan-300'
             }`}
+            title="Afficher uniquement les logs informatifs (niveau info)"
           >
             Infos
           </button>
@@ -327,6 +370,7 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-blue-600 text-white border-2 border-blue-400'
                 : 'bg-[#1a1a1a] text-blue-400 border border-blue-800/50 hover:bg-blue-900/20 hover:text-blue-300'
             }`}
+            title="Afficher uniquement les logs de débogage (niveau debug)"
           >
             Debug
           </button>
@@ -337,16 +381,53 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-purple-600 text-white border-2 border-purple-400'
                 : 'bg-[#1a1a1a] text-purple-400 border border-purple-800/50 hover:bg-purple-900/20 hover:text-purple-300'
             }`}
+            title="Afficher uniquement les logs verbeux (niveau verbose)"
           >
             Verbose
           </button>
-          <span className="text-xs text-gray-500 ml-2">
+          <span 
+            className="text-xs text-gray-500 ml-2"
+            title={`${filteredLogs.length} log${filteredLogs.length !== 1 ? 's' : ''} affiché${filteredLogs.length !== 1 ? 's' : ''}${totalLogs > filteredLogs.length ? ` sur ${totalLogs} au total` : ''}`}
+          >
             {filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''}
+            {totalLogs > filteredLogs.length && ` / ${totalLogs} total`}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setLiveMode(!liveMode)}
+            onClick={() => {
+              const newShowAll = !showAllLogs;
+              setShowAllLogs(newShowAll);
+              // Disable live mode when enabling "show all" for performance
+              if (newShowAll && liveMode) {
+                setLiveMode(false);
+              }
+            }}
+            disabled={liveMode}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              showAllLogs
+                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+            } ${liveMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={liveMode 
+              ? 'Désactivez le mode Live pour afficher tous les logs' 
+              : showAllLogs 
+                ? 'Afficher les 500 derniers logs' 
+                : `Afficher tous les logs (${totalLogs} au total)`
+            }
+          >
+            <FileText size={14} />
+            <span>{showAllLogs ? '500 derniers' : 'Voir tout'}</span>
+          </button>
+          <button
+            onClick={() => {
+              const newLiveMode = !liveMode;
+              setLiveMode(newLiveMode);
+              // Disable "show all" when enabling live mode for performance
+              if (newLiveMode && showAllLogs) {
+                setShowAllLogs(false);
+              }
+            }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
               liveMode
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -365,18 +446,32 @@ const AppLogsSection: React.FC = () => {
             onClick={loadLogs}
             disabled={isLoading}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+            title="Rafraîchir manuellement la liste des logs"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={clearLogs}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm transition-colors"
+            className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+            title="Nettoyer la mémoire : supprime tous les logs du buffer en mémoire (max 1000 logs). Utile pour libérer la mémoire après un débogage."
           >
-            <Trash2 size={14} />
+            <Sparkles size={14} />
+            <span>Nettoyer</span>
           </button>
         </div>
       </div>
 
+      {showAllLogs && filteredLogs.length > 1000 && (
+        <div className="mb-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-400 text-sm">
+            <AlertCircle size={16} />
+            <span>
+              <strong>Attention :</strong> Affichage de {filteredLogs.length.toLocaleString()} logs. 
+              Cela peut affecter les performances du navigateur.
+            </span>
+          </div>
+        </div>
+      )}
       <div className="bg-[#0a0a0a] border border-gray-800 rounded-lg overflow-hidden mt-2">
         <div className="h-96 overflow-y-auto p-4 font-mono text-xs">
           {filteredLogs.length === 0 ? (
@@ -394,7 +489,7 @@ const AppLogsSection: React.FC = () => {
             <>
               {filteredLogs.map((log, index) => (
                 <div
-                  key={index}
+                  key={`${log.timestamp}-${index}`}
                   className={`mb-1 flex items-start gap-2 ${getLevelColor(log.level)}`}
                 >
                   <span className="text-gray-600 min-w-[80px]">{formatTimestamp(log.timestamp)}</span>
@@ -1092,27 +1187,16 @@ const InfoSection: React.FC = () => {
               Dashboard multi-sources pour la gestion de votre réseau. Intégration avec Freebox, UniFi Controller et autres systèmes réseau.
             </p>
             
-            <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-gray-700">
+            <div className="space-y-1">
+              <div className="flex items-center justify-start gap-2 py-2 border-b border-gray-700">
                 <span className="text-sm text-gray-400">Version</span>
-                <span className="text-sm font-mono text-theme-primary">0.0.7</span>
-              </div>
-              
-              <div className="flex items-center justify-between py-2 border-b border-gray-700">
+                <span className="text-sm font-mono text-theme-primary">{getVersionString()}</span>
+                    
                 <span className="text-sm text-gray-400">Licence</span>
                 <span className="text-sm text-theme-primary">Privée</span>
               </div>
-            </div>
-          </div>
-
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
-            <h3 className="text-lg font-semibold text-theme-primary mb-3 flex items-center gap-2">
-              <Github size={18} />
-              GitHub
-            </h3>
-            <p className="text-sm text-theme-secondary mb-4">
-              Le dépôt sera rendu public prochainement.
-            </p>
+              </div>
+              <br />
             <a
               href="https://github.com/Erreur32/MynetworK"
               target="_blank"
@@ -1307,7 +1391,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
-  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(initialAdminTab);
+  // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
+  const storedAdminTab = sessionStorage.getItem('adminTab') as AdminTab | null;
+  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(storedAdminTab || initialAdminTab);
+
+  // Update activeAdminTab when initialAdminTab changes (e.g., from navigation)
+  // Also check sessionStorage on mount
+  useEffect(() => {
+    const tabFromStorage = sessionStorage.getItem('adminTab') as AdminTab | null;
+    if (tabFromStorage) {
+      setActiveAdminTab(tabFromStorage);
+      sessionStorage.removeItem('adminTab'); // Clear after reading
+    } else if (initialAdminTab && initialAdminTab !== 'general') {
+      setActiveAdminTab(initialAdminTab);
+    }
+  }, [initialAdminTab]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -1749,7 +1847,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       {/* Header */}
       <header className="sticky top-0 z-40 bg-theme-header backdrop-blur-sm border-b border-theme" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
         <div className="max-w-[1920px] mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between relative">
             <div className="flex items-center gap-4">
               <button
                 onClick={onBack}
@@ -1772,12 +1870,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             </div>
 
+            {/* Logo centré - uniquement en mode administration */}
+            {mode === 'administration' && (
+              <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-3">
+                <img src={logoMynetworK} alt="MynetworK" className="w-12 h-12 flex-shrink-0" />
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-theme-primary text-lg">MynetworK</span>
+                  {import.meta.env.DEV ? (
+                    <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded text-xs font-semibold text-amber-400 flex items-center gap-1">
+                      <span>🔧</span>
+                      <span>DEV</span>
+                      <span className="text-amber-500/70 font-mono">v{APP_VERSION}</span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-theme-secondary font-mono">v{APP_VERSION}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {mode === 'administration' ? (
               <div className="flex items-center gap-3">
-                {/* App Version */}
-                <div className="px-3 py-1.5 bg-theme-secondary rounded-lg border border-theme">
-                  <span className="text-xs text-theme-secondary font-mono">v0.0.7</span>
-                </div>
                 {/* Date and Time (Freebox Revolution style with yellow LED) */}
                 <div className="flex items-center gap-2 bg-theme-secondary px-4 py-2 rounded-lg border border-theme">
                   <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
@@ -2030,12 +2143,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {activeAdminTab === 'debug' && (
               <div className="space-y-6">
-                <Section title="Niveaux de Log" icon={Monitor} iconColor="violet">
-                  <DebugLogSection />
-                </Section>
 
                 <Section title="Logs de l'application" icon={FileText} iconColor="cyan">
                   <AppLogsSection />
+                </Section>
+                <Section title="Niveaux de Log" icon={Monitor} iconColor="violet">
+                  <DebugLogSection />
                 </Section>
 
                 <Section title="Debug & Diagnostics" icon={Monitor} iconColor="violet">

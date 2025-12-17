@@ -70,7 +70,9 @@ router.get('/logs', requireAuth, requireAdmin, asyncHandler(async (req: Authenti
   const limit = parseInt(req.query.limit as string) || 500;
   const level = req.query.level as string | undefined;
   
-  let logs = logBuffer.getRecent(limit);
+  // If limit is very high (>= 10000), get all logs for performance
+  // The buffer has a maxSize of 1000, so getAll() is safe
+  let logs = limit >= 10000 ? logBuffer.getAll() : logBuffer.getRecent(limit);
   
   // Filter by level if specified
   if (level && level !== 'all') {

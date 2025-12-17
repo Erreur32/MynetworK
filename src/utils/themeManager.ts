@@ -4,7 +4,7 @@
  * Gère le changement de thème et la persistance dans localStorage
  */
 
-export type Theme = 'dark' | 'glass' | 'modern';
+export type Theme = 'dark' | 'glass' | 'modern' | 'nightly';
 
 const THEME_STORAGE_KEY = 'mynetwork_theme';
 const DEFAULT_THEME: Theme = 'dark';
@@ -16,7 +16,7 @@ export const applyTheme = (theme: Theme): void => {
   const html = document.documentElement;
   
   // Validate theme
-  if (!['dark', 'glass', 'modern'].includes(theme)) {
+  if (!['dark', 'glass', 'modern', 'nightly'].includes(theme)) {
     console.warn(`Invalid theme: ${theme}, using default: ${DEFAULT_THEME}`);
     theme = DEFAULT_THEME;
   }
@@ -45,7 +45,7 @@ export const getCurrentTheme = (): Theme => {
   // Vérifier d'abord dans localStorage
   try {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-    if (savedTheme && ['dark', 'glass', 'modern'].includes(savedTheme)) {
+    if (savedTheme && ['dark', 'glass', 'modern', 'nightly'].includes(savedTheme)) {
       return savedTheme as Theme;
     }
   } catch (error) {
@@ -54,7 +54,7 @@ export const getCurrentTheme = (): Theme => {
   
   // Vérifier l'attribut data-theme sur le HTML
   const htmlTheme = document.documentElement.getAttribute('data-theme');
-  if (htmlTheme && ['dark', 'glass', 'modern'].includes(htmlTheme)) {
+  if (htmlTheme && ['dark', 'glass', 'modern', 'nightly'].includes(htmlTheme)) {
     return htmlTheme as Theme;
   }
   
@@ -109,13 +109,18 @@ export const getAvailableThemes = (): Array<{ id: Theme; name: string; descripti
     },
     {
       id: 'glass',
-      name: 'Glass Moderne',
+      name: 'Dark Glass',
       description: 'Effet glassmorphism avec transparence'
     },
     {
       id: 'modern',
-      name: 'Moderne Couleur',
+      name: 'Moderne',
       description: 'Thème coloré avec dégradés modernes'
+    },
+    {
+      id: 'nightly',
+      name: 'Nightly',
+      description: 'Thème très sombre pour une utilisation nocturne'
     }
   ];
 };
