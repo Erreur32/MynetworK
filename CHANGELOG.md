@@ -2,33 +2,164 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
-## [0.0.7] - 2025-12-16
+## [0.0.8] - 2025-12-17
 
 ### 🐛 Corrigé
 
 ### 🔧 Modifié
 
 ### 📝 Documentation
+
+---
+
+## [0.0.8] - 2025-12-16
+
+### ✨ Ajouté
+
+**Thème Modern**
+- 🎨 Thème Modern amélioré avec dégradé mauve/bleu élégant
+- ✨ Effets glass modernes avec backdrop-blur pour les cartes
+- 🌈 Dégradé de fond fixe pour l'application (thème Modern)
+- 🎯 Couleurs ajoutées aux icônes des sections admin
+- 👁️ Exemples visuels pour chaque couleur dans l'éditeur de thème
+- 📐 Champs couleur réduits avec bordures fines
+
+**Interface Administration**
+- 🎨 Section thème réorganisée de manière professionnelle
+- 🎴 Cartes de prévisualisation avec effets glass élégants
+- 🎨 Couleurs cohérentes entre onglets et sections
+
+### 🔧 Modifié
+
+**Thème Modern**
+- Réduction de l'intensité du rose dans les dégradés (plus sobre)
+- Amélioration des effets de lumière et reflets glass
+- Optimisation des couleurs pour meilleure lisibilité
+- Uniformisation des couleurs dans l'interface admin
+
+**Fichiers modifiés**
+- `src/components/ThemeSection.tsx` - Amélioration du thème Modern avec dégradés et effets glass
+- `src/styles/themes.css` - Ajout du dégradé de fond fixe et effets glass pour le thème Modern
+- `src/pages/SettingsPage.tsx` - Ajout de couleurs aux icônes des sections admin
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.0.8
+- `commit-message.txt` - Message de commit pour la version 0.0.8
+
+---
+
+## [0.0.7] - 2025-12-16
+
+### ✨ Ajouté
+
+**Gestion des Utilisateurs**
+- 👤 Gestion complète des utilisateurs dans l'administration
+- 🖼️ Support de l'avatar utilisateur (upload Base64)
+- 📧 Validation du format email côté client
+- 🔑 Affichage/masquage du mot de passe avec icônes
+- ✏️ Modification du nom d'utilisateur
+- 📍 Affichage de la dernière connexion et IP
+
+**Interface Administration**
+- 📊 Section "Info" avec détails du projet, GitHub et auteur
+- 🎨 Amélioration des couleurs des onglets admin (debug, info)
+- 📦 Cartes plugins plus compactes avec informations détaillées (versions API, firmware)
+- 🎯 Déplacement de la gestion des utilisateurs dans l'onglet Général
+
+**Header Administration**
+- ⏰ Affichage de la date et heure (style Freebox Revolution)
+- 📌 Affichage de la version de l'application
+- 🗑️ Suppression du bouton "Actualiser" redondant
+
+### 🔧 Modifié
+
+**Backend**
+- `server/database/models/User.ts` - Support avatar, lastLoginIp, username modifiable
+- `server/routes/users.ts` - Gestion de l'avatar et IP de connexion
+- `server/services/authService.ts` - Enregistrement de l'IP lors de la connexion
+- `server/config.ts` - Séparation des tokens Freebox dev/prod (.freebox_token-dev)
+
+**Frontend**
+- `src/pages/SettingsPage.tsx` - Amélioration du profil utilisateur et gestion des utilisateurs
+- `src/components/ui/UserMenu.tsx` - Affichage de l'avatar dans le menu
+- `src/components/PluginsManagementSection.tsx` - Cartes plugins améliorées
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.0.7
 
 ---
 
 ## [0.0.6] - 2025-12-16
 
-### 🐛 Corrigé
+### ✨ Ajouté
+
+**Système de Logs**
+- 📋 Affichage des logs de l'application dans l'onglet Debug
+- 🔄 Système de polling pour les logs en temps réel (remplace WebSocket)
+- 🏷️ Filtres par niveau de log avec badges (Tous, Error, Warn, Info, Debug, Verbose)
+- 🧹 Bouton pour effacer les logs
+- ⚙️ Option d'activation des logs de debug dans l'administration
+
+**Vérification des Mises à Jour**
+- 🔍 Système de vérification des versions Docker disponibles
+- ⚙️ Option d'activation/désactivation dans l'administration
+- 🔄 Support de l'API GitHub (REST, GraphQL, Tags)
+- 📦 Support du GitHub Container Registry (ghcr.io)
 
 ### 🔧 Modifié
 
+**Backend**
+- `server/utils/logger.ts` - Intégration avec logBuffer pour stockage en mémoire
+- `server/utils/logBuffer.ts` - Nouveau système de buffer de logs rotatif
+- `server/routes/debug.ts` - Endpoints pour récupérer et effacer les logs
+- `server/routes/updates.ts` - Système de vérification des mises à jour amélioré
+
+**Frontend**
+- `src/pages/SettingsPage.tsx` - Section de logs avec polling et filtres
+- `src/stores/updateStore.ts` - Store pour la gestion des mises à jour
+
 ### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.0.6
 
 ---
 
 ## [0.0.5] - 2025-12-16
 
-### 🐛 Corrigé
+### ✨ Ajouté
+
+**Docker & CI/CD**
+- 🐳 Configuration Docker complète avec Dockerfile optimisé
+- 🔄 Workflow GitHub Actions pour build et publication automatique
+- 📦 Publication sur GitHub Container Registry (ghcr.io)
+- 🐙 Badge GitHub Actions dans le README
+- 📚 Documentation nginx avec exemples de configuration
+
+**Configuration**
+- 🌐 Support de PUBLIC_URL pour accès direct ou via proxy nginx
+- 📝 Fichier nginx.example.conf avec configurations HTTP/HTTPS
+- 📋 Logs Docker affichent l'URL exacte du frontend
 
 ### 🔧 Modifié
 
+**Backend**
+- `server/index.ts` - Amélioration des logs de démarrage avec URL frontend
+- Configuration du port par défaut (3000 pour cohérence Docker)
+
+**Frontend**
+- `src/components/widgets/SystemServerWidget.tsx` - Correction des imports BarChart et Activity
+
+**Configuration**
+- `docker-compose.yml` - Commentaires pour cas avec/sans nginx
+- `.github/workflows/docker-publish.yml` - Workflow CI/CD complet
+
 ### 📝 Documentation
+
+- `README.md` - Section nginx ajoutée avec exemples
+- `Docs/nginx.example.conf` - Configuration nginx complète
+- `CHANGELOG.md` - Ajout de la version 0.0.5
 
 ---
 

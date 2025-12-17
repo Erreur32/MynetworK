@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.0.7-blue?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.0.8-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
@@ -64,10 +64,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # PUBLIC_URL: URL publique d'accès au dashboard
-      # - Sans nginx (accès direct) : http://IP:PORT (ex: http://192.168.1.150:7505)
-      # - Avec nginx (reverse proxy) : http://domaine.com ou https://domaine.com
-      - PUBLIC_URL=${PUBLIC_URL:-http://192.168.1.150:7505}
+      # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
+      # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
+      # - Sans nginx, l'application fonctionne sans cette variable
+      # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
@@ -182,11 +182,7 @@ Si vous utilisez **nginx** comme reverse proxy devant MynetworK, vous devez conf
 
 **Cas 1 : Sans nginx (accès direct)**
 
-```yaml
-# docker-compose.yml
-environment:
-  - PUBLIC_URL=http://192.168.1.150:7505  # Accès direct au conteneur
-```
+Aucune configuration `PUBLIC_URL` nécessaire. L'application fonctionne directement sur le port mappé (ex: `http://VOTRE_IP:7505`).
 
 **Cas 2 : Avec nginx (reverse proxy)**
 

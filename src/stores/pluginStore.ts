@@ -16,6 +16,13 @@ export interface Plugin {
     configured: boolean;
     connectionStatus: boolean;
     settings: Record<string, unknown>;
+    // Freebox specific
+    firmware?: string;
+    playerFirmware?: string;
+    apiVersion?: string;
+    // UniFi specific
+    controllerFirmware?: string;
+    apiMode?: 'controller' | 'site-manager';
 }
 
 export interface PluginStats {

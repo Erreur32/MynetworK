@@ -9,6 +9,7 @@ import { config } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectionWebSocket } from './services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from './services/freeboxNativeWebSocket.js';
+import { logsWebSocket } from './services/logsWebSocket.js';
 
 // Database
 import { initializeDatabase, getDatabase } from './database/connection.js';
@@ -45,16 +46,19 @@ import dhcpRoutes from './routes/dhcp.js';
 import configRoutes from './routes/config.js';
 import metricsRoutes from './routes/metrics.js';
 import apiDocsRoutes from './routes/api-docs.js';
+import { logger } from './utils/logger.js';
 
 // Initialize database
-console.log('[Server] Initializing database...');
+logger.info('Server', 'Initializing database...');
 initializeDatabase();
+// Reload logger config after database is initialized
+logger.reloadConfig();
 
 // Create default admin user if no users exist
 async function createDefaultAdmin() {
     const users = UserRepository.findAll();
     if (users.length === 0) {
-        console.log('[Server] No users found, creating default admin user...');
+        logger.info('Server', 'No users found, creating default admin user...');
         try {
             const defaultUsername = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
             const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
@@ -67,12 +71,10 @@ async function createDefaultAdmin() {
                 role: 'admin'
             });
             
-            console.log(`[Server] Default admin user created:`);
-            console.log(`[Server]   Username: ${defaultUsername}`);
-            console.log(`[Server]   Password: ${defaultPassword}`);
-            console.log(`[Server]   ⚠️  Please change the default password after first login!`);
+            logger.success('Server', `Default admin user created: ${defaultUsername}`);
+            logger.warn('Server', '⚠️  Please change the default password after first login!');
         } catch (error) {
-            console.error('[Server] Failed to create default admin user:', error);
+            logger.error('Server', 'Failed to create default admin user:', error);
         }
     }
 }
@@ -80,12 +82,12 @@ createDefaultAdmin();
 
 // Initialize plugins
 async function initializePlugins() {
-    console.log('[Server] Initializing plugins...');
+    logger.info('Server', 'Initializing plugins...');
     try {
         await pluginManager.initializeAllPlugins();
-        console.log('[Server] All plugins initialized');
+        logger.success('Server', 'All plugins initialized');
     } catch (error) {
-        console.error('[Server] Failed to initialize plugins:', error);
+        logger.error('Server', 'Failed to initialize plugins:', error);
     }
 }
 
@@ -112,15 +114,17 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// Request logging
+// Request logging (only in debug mode)
 app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  logger.debug('HTTP', `${req.method} ${req.path}`);
   next();
 });
 
 // API Routes
 // New routes (users, plugins, logs)
 import logsRoutes from './routes/logs.js';
+import updatesRoutes from './routes/updates.js';
+import debugRoutes from './routes/debug.js';
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
@@ -148,6 +152,8 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/speedtest', speedtestRoutes);
 app.use('/api/capabilities', capabilitiesRoutes);
 app.use('/api/dhcp', dhcpRoutes);
+app.use('/api/updates', updatesRoutes);
+app.use('/api/debug', debugRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -182,8 +188,9 @@ server.on('upgrade', (request, socket, head) => {
   console.log('[HTTP] Upgrade request received:', request.url);
 });
 
-// Initialize WebSocket server (our internal dashboard WS)
+// Initialize WebSocket servers
 connectionWebSocket.init(server);
+logsWebSocket.init(server);
 
 // Helper function to get network IP address
 function getNetworkIP(): string | null {
@@ -227,35 +234,106 @@ server.listen(port, host, () => {
     ? (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${port}/ws/connection`)
     : `ws://localhost:${port}/ws/connection`;
   
+  // ANSI color codes for terminal output
+  const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    dim: '\x1b[2m',
+    cyan: '\x1b[36m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    white: '\x1b[37m',
+    bgCyan: '\x1b[46m',
+    bgBlue: '\x1b[44m',
+  };
+
+  // Helper function to calculate visible length (ignoring ANSI codes)
+  // Emojis are counted as 2 characters in most terminals
+  const visibleLength = (str: string): number => {
+    // Remove ANSI escape codes
+    const ansiRegex = /\x1b\[[0-9;]*m/g;
+    let cleaned = str.replace(ansiRegex, '');
+    // Count emojis as 2 characters (they typically take 2 character positions in terminal)
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    const emojiMatches = cleaned.match(emojiRegex);
+    const emojiCount = emojiMatches ? emojiMatches.length : 0;
+    // Remove emojis from length calculation and add them back as 2 chars each
+    const withoutEmojis = cleaned.replace(emojiRegex, '');
+    return withoutEmojis.length + (emojiCount * 2);
+  };
+
+  // Calculate content widths for all lines
+  const title = 'MynetworK Backend Server';
+  const subtitle = 'Multi-Source Network Dashboard';
+  
+  const contentLines = [
+    `  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
+    `  💻 Frontend Local:      ${frontendLocalUrl}`,
+    `  🔌 Backend API:         ${apiUrl}/api/health`,
+    `  🔗 WebSocket:           ${wsUrl}`,
+    `  📡 Freebox:             ${config.freebox.url}`,
+    `  Features:`,
+    `  ✓ User Authentication (JWT)`,
+    `  ✓ Plugin System (Freebox, UniFi, ...)`,
+    `  ✓ Activity Logging`
+  ];
+  
+  // Find the longest line (visible length)
+  const maxContentWidth = Math.max(
+    ...contentLines.map(line => visibleLength(line)),
+    visibleLength(title),
+    visibleLength(subtitle)
+  );
+  
+  // Calculate total width: content + borders (2 chars) + minimal padding (4 chars)
+  // Minimum width of 60 for readability
+  const width = Math.max(maxContentWidth + 4, 60);
+  const minPadding = 2;
+  
+  // Calculate padding for centered titles
+  const titlePadding = Math.max(Math.floor((width - visibleLength(title) - 2) / 2), minPadding);
+  const subtitlePadding = Math.max(Math.floor((width - visibleLength(subtitle) - 2) / 2), minPadding);
+  
+  // Helper to pad content lines
+  const padLine = (line: string, label: string, value: string): string => {
+    const labelVisible = visibleLength(label);
+    const valueVisible = visibleLength(value);
+    const totalVisible = visibleLength(line);
+    const padding = Math.max(width - totalVisible - 2, 0);
+    return line + ' '.repeat(padding);
+  };
+
   console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║              MynetworK Backend Server                     ║
-║        Multi-Source Network Dashboard                     ║
-╠═══════════════════════════════════════════════════════════╣
-║  🌐 Frontend WEB (Users): ${frontendWebUrl.padEnd(35)}║
-║  💻 Frontend Local:      ${frontendLocalUrl.padEnd(35)}║
-║  🔌 Backend API:         ${apiUrl}/api/health${' '.repeat(Math.max(0, 35 - (apiUrl.length + 15)))}║
-║  🔗 WebSocket:           ${wsUrl.padEnd(35)}║
-║  📡 Freebox:             ${config.freebox.url.padEnd(35)}║
-║                                                           ║
-║  Features:                                                ║
-║  - User Authentication (JWT)                              ║
-║  - Plugin System (Freebox, UniFi, ...)                    ║
-║  - Activity Logging                                       ║
-╚═══════════════════════════════════════════════════════════╝
+${colors.bright}${colors.cyan}╔${'═'.repeat(width)}╗${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${colors.cyan}${' '.repeat(width - titlePadding - visibleLength(title) - 2)}║${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${colors.cyan}${' '.repeat(width - subtitlePadding - visibleLength(subtitle) - 2)}║${colors.reset}
+${colors.bright}${colors.cyan}╠${'═'.repeat(width)}╣${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🌐 Frontend WEB (Users): ${frontendWebUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  💻 Frontend Local:      ${frontendLocalUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🔌 Backend API:         ${apiUrl}/api/health`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🔗 WebSocket:           ${wsUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  📡 Freebox:             ${config.freebox.url}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}${' '.repeat(width)}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${' '.repeat(Math.max(width - visibleLength('  Features:') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ User Authentication (JWT)') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Plugin System (Freebox, UniFi, ...)${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ Plugin System (Freebox, UniFi, ...)') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Activity Logging${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ Activity Logging') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
+${colors.bright}${colors.cyan}╚${'═'.repeat(width)}╝${colors.reset}
   `);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received, shutting down gracefully...');
+  logger.info('Server', 'SIGTERM received, shutting down gracefully...');
   server.close(() => {
-    console.log('[Server] HTTP server closed');
+    logger.info('Server', 'HTTP server closed');
     // Close database connection
     const db = getDatabase();
     if (db) {
       db.close();
-      console.log('[Server] Database connection closed');
+      logger.info('Server', 'Database connection closed');
     }
     process.exit(0);
   });

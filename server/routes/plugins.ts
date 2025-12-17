@@ -34,6 +34,28 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
                 }
             }
 
+            // Get plugin stats to extract version/firmware info
+            let pluginInfo: any = {};
+            if (isEnabled && connectionStatus) {
+                try {
+                    const stats = await pluginManager.getPluginStats(plugin.getId());
+                    if (stats?.system) {
+                        const systemStats = stats.system as any;
+                        // Extract version/firmware info based on plugin type
+                        if (plugin.getId() === 'freebox') {
+                            pluginInfo.firmware = systemStats.firmware;
+                            pluginInfo.playerFirmware = systemStats.playerFirmware;
+                            pluginInfo.apiVersion = systemStats.apiVersion;
+                        } else if (plugin.getId() === 'unifi') {
+                            pluginInfo.controllerFirmware = systemStats.version;
+                            pluginInfo.apiMode = systemStats.apiMode;
+                        }
+                    }
+                } catch {
+                    // Silently fail if stats cannot be retrieved
+                }
+            }
+
             return {
                 id: plugin.getId(),
                 name: plugin.getName(),
@@ -41,7 +63,8 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
                 enabled: isEnabled,
                 configured: dbConfig !== null,
                 connectionStatus,
-                settings: dbConfig?.settings || {}
+                settings: dbConfig?.settings || {},
+                ...pluginInfo
             };
         })
     );

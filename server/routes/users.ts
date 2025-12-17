@@ -65,7 +65,9 @@ router.post('/login', asyncHandler(async (req, res) => {
         throw createError('Username and password are required', 400, 'MISSING_CREDENTIALS');
     }
 
-    const result = await authService.login(username, password);
+    // Get client IP address
+    const clientIp = req.ip || req.socket.remoteAddress || req.headers['x-forwarded-for']?.toString().split(',')[0] || undefined;
+    const result = await authService.login(username, password, clientIp);
 
     // Log login
     await loggingService.log({
@@ -196,16 +198,23 @@ router.put('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
 
     const updateData: UpdateUserInput = {};
     
-    // Non-admins can only update email and password
+    // Non-admins can only update email, password, username, and avatar
     if (isAdmin) {
         if (req.body.email !== undefined) updateData.email = req.body.email;
         if (req.body.role !== undefined) updateData.role = req.body.role;
         if (req.body.enabled !== undefined) updateData.enabled = req.body.enabled;
+        if (req.body.username !== undefined) updateData.username = req.body.username;
     }
     
-    // Everyone can update their email
+    // Everyone can update their email, username, and avatar
     if (req.body.email !== undefined) {
         updateData.email = req.body.email;
+    }
+    if (req.body.username !== undefined) {
+        updateData.username = req.body.username;
+    }
+    if (req.body.avatar !== undefined) {
+        updateData.avatar = req.body.avatar; // Base64 encoded image
     }
 
     // Password change requires old password

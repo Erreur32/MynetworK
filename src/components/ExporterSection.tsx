@@ -187,7 +187,7 @@ export const ExporterSection: React.FC = () => {
             )}
 
             {/* Prometheus Section */}
-            <Section title="Prometheus" icon={Server}>
+            <Section title="Prometheus" icon={Server} iconColor="orange">
                 <SettingRow
                     label="Activer l'export Prometheus"
                     description="Expose les métriques au format Prometheus sur /api/metrics/prometheus"
@@ -256,7 +256,7 @@ export const ExporterSection: React.FC = () => {
             </Section>
 
             {/* InfluxDB Section */}
-            <Section title="InfluxDB" icon={Database}>
+            <Section title="InfluxDB" icon={Database} iconColor="cyan">
                 <SettingRow
                     label="Activer l'export InfluxDB"
                     description="Exporte les métriques au format InfluxDB Line Protocol"
@@ -395,7 +395,7 @@ export const ExporterSection: React.FC = () => {
             </div>
 
             {/* Configuration Export/Import Section */}
-            <Section title="Export/Import de Configuration" icon={FileText}>
+            <Section title="Export/Import de Configuration" icon={FileText} iconColor="amber">
                 <div className="space-y-4">
                     <SettingRow
                         label="Exporter la configuration"

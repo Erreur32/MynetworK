@@ -32,11 +32,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # PUBLIC_URL: URL publique d'accès au dashboard
-      # - Sans nginx (accès direct) : http://IP:PORT (ex: http://192.168.1.150:7505)
-      # - Avec nginx (reverse proxy) : http://domaine.com ou https://domaine.com
-      # Voir README section "Configuration nginx" pour plus de détails
-      - PUBLIC_URL=${PUBLIC_URL:-http://192.168.1.150:7505}
+      # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
+      # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
+      # - Sans nginx, l'application fonctionne sans cette variable
+      # - Décommentez et configurez si vous utilisez nginx :
+      # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}

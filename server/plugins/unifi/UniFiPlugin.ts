@@ -6,6 +6,7 @@
 
 import { BasePlugin } from '../base/BasePlugin.js';
 import { UniFiApiService } from './UniFiApiService.js';
+import { logger } from '../../utils/logger.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 
 export class UniFiPlugin extends BasePlugin {
@@ -22,17 +23,14 @@ export class UniFiPlugin extends BasePlugin {
         const settings = config.settings;
         const apiMode = (settings?.apiMode as 'controller' | 'site-manager') || 'controller';
 
-        console.log(`[UniFiPlugin] Initializing with mode: ${apiMode}, enabled: ${config.enabled}`);
-        console.log(`[UniFiPlugin] Settings keys:`, Object.keys(settings || {}));
+        logger.debug('UniFiPlugin', `Initializing with mode: ${apiMode}, enabled: ${config.enabled}`);
 
         if (apiMode === 'site-manager') {
             // Site Manager API mode
             const apiKey = settings?.apiKey as string;
             if (apiKey) {
                 this.apiService.setSiteManagerConnection(apiKey);
-                console.log('[UniFiPlugin] Site Manager API key set');
-            } else {
-                console.log('[UniFiPlugin] Site Manager API key not provided');
+                logger.debug('UniFiPlugin', 'Site Manager API key set');
             }
         } else {
             // Controller API mode (local)
@@ -41,20 +39,10 @@ export class UniFiPlugin extends BasePlugin {
             const password = settings?.password as string;
             const site = (settings?.site as string) || 'default';
 
-            console.log(`[UniFiPlugin] Controller settings:`, {
-                hasUrl: !!url,
-                hasUsername: !!username,
-                hasPassword: !!password,
-                site,
-                url: url ? `${url.substring(0, 20)}...` : 'none'
-            });
-
             // Only set connection if all required settings are provided
             if (url && username && password) {
                 this.apiService.setConnection(url, username, password, site);
-                console.log('[UniFiPlugin] Controller connection details set');
-            } else {
-                console.log('[UniFiPlugin] Controller connection details incomplete');
+                logger.debug('UniFiPlugin', 'Controller connection details set');
             }
         }
     }
@@ -65,14 +53,14 @@ export class UniFiPlugin extends BasePlugin {
         
         // Double check: don't proceed if not enabled
         if (!this.isEnabled()) {
-            console.log('[UniFiPlugin] Plugin is not enabled, skipping connection');
+            logger.debug('UniFiPlugin', 'Plugin is not enabled, skipping connection');
             return;
         }
         
         // Only try to login if we have connection details
         // Use this.config directly (protected property from BasePlugin)
         if (!this.config) {
-            console.log('[UniFiPlugin] No configuration available, skipping login');
+            logger.debug('UniFiPlugin', 'No configuration available, skipping login');
             return;
         }
         
@@ -96,23 +84,22 @@ export class UniFiPlugin extends BasePlugin {
                 if (!loggedIn) {
                     throw new Error('Failed to authenticate with UniFi controller');
                 }
-                console.log('[UniFiPlugin] Successfully connected to UniFi controller');
+                logger.success('UniFiPlugin', 'Successfully connected to UniFi controller');
             } catch (error) {
-                console.error('[UniFiPlugin] Login failed:', error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 
                 // Si c'est une erreur SSL, ne pas faire planter le serveur
                 // Le plugin restera initialisé mais non connecté
                 if (errorMessage.includes('EPROTO') || errorMessage.includes('wrong version number') || 
                     errorMessage.includes('SSL') || errorMessage.includes('TLS')) {
-                    console.error('[UniFiPlugin] SSL/TLS error detected. The controller might be using HTTP instead of HTTPS.');
-                    console.error('[UniFiPlugin] The plugin will remain initialized but not connected.');
-                    console.error('[UniFiPlugin] Try configuring the URL with http:// instead of https://, or check the controller configuration.');
+                    logger.error('UniFiPlugin', 'SSL/TLS error detected. The controller might be using HTTP instead of HTTPS.');
+                    logger.warn('UniFiPlugin', 'Try configuring the URL with http:// instead of https://, or check the controller configuration.');
                     // Ne pas lancer d'erreur pour éviter de faire planter le serveur
                     // Le plugin pourra être reconnecté plus tard via l'interface
                     return;
                 }
                 
+                logger.error('UniFiPlugin', `Login failed: ${errorMessage}`);
                 // Pour les autres erreurs, lancer l'exception normalement
                 throw error;
             }
@@ -176,19 +163,19 @@ export class UniFiPlugin extends BasePlugin {
                 try {
                     await this.start();
                 } catch (error) {
-                    console.error('[UniFiPlugin] Failed to reconnect:', error);
+                    logger.error('UniFiPlugin', 'Failed to reconnect:', error);
                     throw error;
                 }
             } else {
                 const apiKey = settings?.apiKey as string;
                 if (!apiKey) {
-                    console.log('[UniFiPlugin] Missing Site Manager API key');
+                    logger.error('UniFiPlugin', 'Missing Site Manager API key');
                     throw new Error('UniFi Site Manager API key not configured');
                 }
                 try {
                     await this.start();
                 } catch (error) {
-                    console.error('[UniFiPlugin] Failed to reconnect:', error);
+                    logger.error('UniFiPlugin', 'Failed to reconnect:', error);
                     throw error;
                 }
             }
@@ -202,22 +189,19 @@ export class UniFiPlugin extends BasePlugin {
                 this.apiService.getSystemInfo()
             ]);
 
-            console.log(`[UniFiPlugin] Retrieved ${devices.length} devices, ${clients.length} clients`);
-            if (devices.length > 0) {
-                console.log(`[UniFiPlugin] Sample device:`, {
-                    name: devices[0].name,
-                    type: devices[0].type,
-                    model: devices[0].model,
-                    state: devices[0].state
-                });
-            }
-            if (clients.length > 0) {
-                console.log(`[UniFiPlugin] Sample client:`, {
-                    name: clients[0].name || clients[0].hostname,
-                    ip: clients[0].ip,
-                    mac: clients[0].mac
-                });
-            }
+            // Log summary only if debug is enabled
+            logger.debug('UniFiPlugin', `Retrieved ${devices.length} devices, ${clients.length} clients`);
+            logger.verbose('UniFiPlugin', `First device DEBUG:`, devices.length > 0 ? {
+                name: devices[0].name,
+                type: devices[0].type,
+                model: devices[0].model,
+                state: devices[0].state
+            } : 'No devices');
+            logger.verbose('UniFiPlugin', `First client DEBUG:`, clients.length > 0 ? {
+                name: clients[0].name || clients[0].hostname,
+                ip: clients[0].ip,
+                mac: clients[0].mac
+            } : 'No clients');
 
             // Normalize devices
             // UniFi devices from getAccessDevices are typically access points, switches, gateways
@@ -267,8 +251,11 @@ export class UniFiPlugin extends BasePlugin {
                 totalUpload: stats.wan?.tx_bytes || 0
             };
 
+            // Get API mode from settings
+            const apiMode = (this.config?.settings?.apiMode as 'controller' | 'site-manager') || 'controller';
+
             // Normalize system stats
-            const systemStats = {
+            const systemStats: any = {
                 // Uptime (in seconds) if available
                 uptime: sysinfo.uptime || 0,
                 // Controller / site display name when exposed by UniFi (e.g. "☠ UniFi Netwok 32")
@@ -283,6 +270,8 @@ export class UniFiPlugin extends BasePlugin {
                 unsupportedDeviceCount: typeof sysinfo.unsupported_device_count === 'number'
                     ? sysinfo.unsupported_device_count
                     : 0,
+                // API mode (controller vs site-manager)
+                apiMode: apiMode,
                 // Basic memory information if present
                 memory: sysinfo.mem ? {
                     total: sysinfo.mem.total,
@@ -335,7 +324,7 @@ export class UniFiPlugin extends BasePlugin {
                 sites
             };
         } catch (error) {
-            console.error('[UniFiPlugin] Failed to get stats:', error);
+            logger.error('UniFiPlugin', 'Failed to get stats:', error);
             throw error;
         }
     }

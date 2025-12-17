@@ -1,10 +1,21 @@
-🎉 Initial commit - MynetworK Dashboard
+🎨 v0.0.8 - Amélioration du thème Modern & UI Administration
 
 ✨ Features:
-- 🎨 Modern React dashboard with TypeScript
-- 🔌 Plugin system (Freebox, UniFi)
-- 🔐 JWT authentication
-- 🐳 Docker ready
-- 📊 Multi-source network monitoring
+- 🎨 Thème Modern amélioré avec dégradé mauve/bleu élégant
+- ✨ Effets glass modernes avec backdrop-blur pour les cartes
+- 🌈 Dégradé de fond fixe pour l'application (thème Modern)
+- 🎯 Couleurs ajoutées aux icônes des sections admin
+- 👁️ Exemples visuels pour chaque couleur dans l'éditeur de thème
+- 📐 Champs couleur réduits avec bordures fines
 
-🚀 Ready for deployment!
+🔧 Improvements:
+- Réduction de l'intensité du rose dans les dégradés (plus sobre)
+- Amélioration des effets de lumière et reflets glass
+- Optimisation des couleurs pour meilleure lisibilité
+- Uniformisation des couleurs dans l'interface admin
+
+🎨 UI/UX:
+- Section thème réorganisée de manière professionnelle
+- Cartes de prévisualisation avec effets glass élégants
+- Dégradé de fond fixe pour une expérience immersive
+- Couleurs cohérentes entre onglets et sections

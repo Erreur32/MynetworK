@@ -15,6 +15,8 @@ export interface User {
     enabled: boolean;
     createdAt: Date;
     lastLogin?: Date;
+    lastLoginIp?: string;
+    avatar?: string;
 }
 
 export interface CreateUserInput {
@@ -29,6 +31,8 @@ export interface UpdateUserInput {
     password?: string;
     role?: 'admin' | 'user' | 'viewer';
     enabled?: boolean;
+    avatar?: string;
+    username?: string;
 }
 
 /**
@@ -73,7 +77,9 @@ export class UserRepository {
             role: row.role,
             enabled: row.enabled === 1,
             createdAt: new Date(row.created_at),
-            lastLogin: row.last_login ? new Date(row.last_login) : undefined
+            lastLogin: row.last_login ? new Date(row.last_login) : undefined,
+            lastLoginIp: row.last_login_ip || undefined,
+            avatar: row.avatar || undefined
         };
     }
 
@@ -95,7 +101,9 @@ export class UserRepository {
             role: row.role,
             enabled: row.enabled === 1,
             createdAt: new Date(row.created_at),
-            lastLogin: row.last_login ? new Date(row.last_login) : undefined
+            lastLogin: row.last_login ? new Date(row.last_login) : undefined,
+            lastLoginIp: row.last_login_ip || undefined,
+            avatar: row.avatar || undefined
         };
     }
 
@@ -117,7 +125,9 @@ export class UserRepository {
             role: row.role,
             enabled: row.enabled === 1,
             createdAt: new Date(row.created_at),
-            lastLogin: row.last_login ? new Date(row.last_login) : undefined
+            lastLogin: row.last_login ? new Date(row.last_login) : undefined,
+            lastLoginIp: row.last_login_ip || undefined,
+            avatar: row.avatar || undefined
         };
     }
 
@@ -137,7 +147,9 @@ export class UserRepository {
             role: row.role,
             enabled: row.enabled === 1,
             createdAt: new Date(row.created_at),
-            lastLogin: row.last_login ? new Date(row.last_login) : undefined
+            lastLogin: row.last_login ? new Date(row.last_login) : undefined,
+            lastLoginIp: row.last_login_ip || undefined,
+            avatar: row.avatar || undefined
         }));
     }
 
@@ -165,12 +177,20 @@ export class UserRepository {
             updates.push('enabled = ?');
             values.push(input.enabled ? 1 : 0);
         }
+        if (input.avatar !== undefined) {
+            updates.push('avatar = ?');
+            values.push(input.avatar);
+        }
+        if (input.username !== undefined) {
+            updates.push('username = ?');
+            values.push(input.username);
+        }
         
         if (updates.length === 0) {
             return this.findById(id);
         }
         
-        updates.push('updated_at = CURRENT_TIMESTAMP');
+        // Add id to values for WHERE clause
         values.push(id);
         
         const stmt = db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`);
@@ -180,12 +200,17 @@ export class UserRepository {
     }
 
     /**
-     * Update last login timestamp
+     * Update last login timestamp and IP
      */
-    static updateLastLogin(id: number): void {
+    static updateLastLogin(id: number, ipAddress?: string): void {
         const db = getDatabase();
-        const stmt = db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?');
-        stmt.run(id);
+        if (ipAddress) {
+            const stmt = db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP, last_login_ip = ? WHERE id = ?');
+            stmt.run(ipAddress, id);
+        } else {
+            const stmt = db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?');
+            stmt.run(id);
+        }
     }
 
     /**

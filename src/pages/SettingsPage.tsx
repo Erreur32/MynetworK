@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   Settings,
   Wifi,
@@ -25,7 +25,14 @@ import {
   Calendar,
   Lightbulb,
   FileText,
-  Plug
+  Plug,
+  User as UserIcon,
+  Mail,
+  Key,
+  Eye,
+  EyeOff,
+  Info,
+  Github
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
@@ -43,16 +50,17 @@ import { PluginsManagementSection } from '../components/PluginsManagementSection
 import { LogsManagementSection } from '../components/LogsManagementSection';
 import { SecuritySection } from '../components/SecuritySection';
 import { ThemeSection } from '../components/ThemeSection';
+import { useUpdateStore } from '../stores/updateStore';
 
 interface SettingsPageProps {
   onBack: () => void;
   mode?: 'freebox' | 'administration';
-  initialAdminTab?: 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug';
+  initialAdminTab?: 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info';
   onNavigateToPage?: (page: 'plugins' | 'users' | 'logs') => void;
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system';
-type AdminTab = 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug';
+type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info';
 
 // Toggle component
 const Toggle: React.FC<{
@@ -81,7 +89,7 @@ export const SettingRow: React.FC<{
   description?: string;
   children: React.ReactNode;
 }> = ({ label, description, children }) => (
-  <div className="flex items-center justify-between py-4 border-b border-gray-800 last:border-b-0">
+  <div className="flex items-center justify-between py-3 border-b border-gray-800 last:border-b-0">
     <div className="flex-1">
       <h4 className="text-sm font-medium text-white">{label}</h4>
       {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
@@ -97,12 +105,29 @@ export const Section: React.FC<{
   children: React.ReactNode;
   permissionError?: string | null;
   freeboxSettingsUrl?: string | null;
-}> = ({ title, icon: Icon, children, permissionError, freeboxSettingsUrl }) => (
-  <div className={`bg-theme-card rounded-xl border border-theme overflow-hidden ${permissionError ? 'opacity-60' : ''}`} style={{ backdropFilter: 'var(--backdrop-blur)' }}>
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-theme bg-theme-primary">
-      <Icon size={18} className="text-theme-secondary" />
-      <h3 className="font-medium theme-section-title">{title}</h3>
-    </div>
+  iconColor?: 'blue' | 'purple' | 'emerald' | 'cyan' | 'red' | 'amber' | 'yellow' | 'violet' | 'teal' | 'orange';
+}> = ({ title, icon: Icon, children, permissionError, freeboxSettingsUrl, iconColor }) => {
+  const iconColorClasses: Record<string, string> = {
+    blue: 'text-blue-400',
+    purple: 'text-purple-400',
+    emerald: 'text-emerald-400',
+    cyan: 'text-cyan-400',
+    red: 'text-red-400',
+    amber: 'text-amber-400',
+    yellow: 'text-yellow-400',
+    violet: 'text-violet-300',
+    teal: 'text-teal-300',
+    orange: 'text-orange-400'
+  };
+  
+  const iconClassName = iconColor ? iconColorClasses[iconColor] : 'text-theme-secondary';
+  
+  return (
+    <div className={`bg-theme-card rounded-xl border border-theme overflow-hidden ${permissionError ? 'opacity-60' : ''}`} style={{ backdropFilter: 'var(--backdrop-blur)' }}>
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-theme bg-theme-primary">
+        <Icon size={18} className={iconClassName} />
+        <h3 className="font-medium theme-section-title">{title}</h3>
+      </div>
     {permissionError && (
       <div className="px-4 py-3 bg-amber-900/20 border-b border-amber-700/30">
         <p className="text-amber-400 text-xs">
@@ -124,9 +149,441 @@ export const Section: React.FC<{
         </p>
       </div>
     )}
-    <div className={`px-4 ${permissionError ? 'pointer-events-none' : ''}`}>{children}</div>
+    <div className={`px-4 py-4 ${permissionError ? 'pointer-events-none' : ''}`}>{children}</div>
   </div>
-);
+  );
+};
+
+// App Logs Section Component (for Administration > Debug tab)
+const AppLogsSection: React.FC = () => {
+  const [logs, setLogs] = useState<Array<{
+    timestamp: string;
+    level: 'error' | 'warn' | 'info' | 'debug' | 'verbose';
+    prefix: string;
+    message: string;
+    args?: any[];
+  }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [liveMode, setLiveMode] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'error' | 'warn' | 'info' | 'debug' | 'verbose'>('all');
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Scroll to bottom when new logs arrive (in live mode or after manual refresh)
+  useEffect(() => {
+    if (logsEndRef.current) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        if (logsEndRef.current) {
+          logsEndRef.current.scrollIntoView({ behavior: liveMode ? 'smooth' : 'auto' });
+        }
+      }, 100);
+    }
+  }, [logs, liveMode]);
+
+  // Load initial logs when component mounts or filter changes
+  useEffect(() => {
+    loadLogs();
+  }, [filter]);
+
+  // Auto-refresh logs when live mode is enabled (polling every 2 seconds)
+  useEffect(() => {
+    if (liveMode) {
+      // Load logs immediately when live mode is enabled
+      loadLogs();
+      
+      // Set up interval to refresh logs every 2 seconds
+      refreshIntervalRef.current = setInterval(() => {
+        loadLogs();
+      }, 2000);
+    } else {
+      // Clear interval when live mode is disabled
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
+  }, [liveMode]);
+
+  const loadLogs = async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: '500' });
+      if (filter !== 'all') {
+        params.append('level', filter);
+      }
+      const response = await api.get<{ logs: any[]; total: number }>(`/api/debug/logs?${params}`);
+      if (response.success && response.result) {
+        setLogs(response.result.logs);
+        // Scroll to bottom after loading logs
+        setTimeout(() => {
+          if (logsEndRef.current) {
+            logsEndRef.current.scrollIntoView({ behavior: 'auto' });
+          }
+        }, 150);
+      }
+    } catch (error) {
+      console.error('[AppLogsSection] Error loading logs:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const clearLogs = async () => {
+    if (!confirm('Voulez-vous vraiment effacer tous les logs ?')) return;
+    try {
+      await api.delete('/api/debug/logs');
+      setLogs([]);
+    } catch (error) {
+      console.error('[AppLogsSection] Error clearing logs:', error);
+    }
+  };
+
+  const getLevelColor = (level: string) => {
+    switch (level) {
+      case 'error':
+        return 'text-red-400';
+      case 'warn':
+        return 'text-yellow-400';
+      case 'info':
+        return 'text-cyan-400';
+      case 'debug':
+        return 'text-blue-400';
+      case 'verbose':
+        return 'text-magenta-400';
+      default:
+        return 'text-gray-400';
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // Memoize filtered logs to ensure updates when logs or filter change
+  const filteredLogs = useMemo(() => {
+    if (filter === 'all') {
+      return logs;
+    }
+    return logs.filter(log => log.level === filter);
+  }, [logs, filter]);
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 mt-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'all'
+                ? 'bg-gray-600 text-white border-2 border-gray-500'
+                : 'bg-[#1a1a1a] text-gray-400 border border-gray-700 hover:bg-gray-800 hover:text-gray-300'
+            }`}
+          >
+            Tous
+          </button>
+          <button
+            onClick={() => setFilter('error')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'error'
+                ? 'bg-red-600 text-white border-2 border-red-400'
+                : 'bg-[#1a1a1a] text-red-400 border border-red-800/50 hover:bg-red-900/20 hover:text-red-300'
+            }`}
+          >
+            Erreurs
+          </button>
+          <button
+            onClick={() => setFilter('warn')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'warn'
+                ? 'bg-yellow-600 text-white border-2 border-yellow-400'
+                : 'bg-[#1a1a1a] text-yellow-400 border border-yellow-800/50 hover:bg-yellow-900/20 hover:text-yellow-300'
+            }`}
+          >
+            Avertissements
+          </button>
+          <button
+            onClick={() => setFilter('info')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'info'
+                ? 'bg-cyan-600 text-white border-2 border-cyan-400'
+                : 'bg-[#1a1a1a] text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/20 hover:text-cyan-300'
+            }`}
+          >
+            Infos
+          </button>
+          <button
+            onClick={() => setFilter('debug')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'debug'
+                ? 'bg-blue-600 text-white border-2 border-blue-400'
+                : 'bg-[#1a1a1a] text-blue-400 border border-blue-800/50 hover:bg-blue-900/20 hover:text-blue-300'
+            }`}
+          >
+            Debug
+          </button>
+          <button
+            onClick={() => setFilter('verbose')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filter === 'verbose'
+                ? 'bg-purple-600 text-white border-2 border-purple-400'
+                : 'bg-[#1a1a1a] text-purple-400 border border-purple-800/50 hover:bg-purple-900/20 hover:text-purple-300'
+            }`}
+          >
+            Verbose
+          </button>
+          <span className="text-xs text-gray-500 ml-2">
+            {filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setLiveMode(!liveMode)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              liveMode
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+            }`}
+            title={liveMode ? 'Rafraîchissement automatique activé (toutes les 2 secondes)' : 'Activer le rafraîchissement automatique'}
+          >
+            <div className={`w-2 h-2 rounded-full ${
+              liveMode 
+                ? 'bg-white animate-pulse'
+                : 'bg-gray-400'
+            }`} />
+            <span>Live</span>
+          </button>
+          <button
+            onClick={loadLogs}
+            disabled={isLoading}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={clearLogs}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-[#0a0a0a] border border-gray-800 rounded-lg overflow-hidden mt-2">
+        <div className="h-96 overflow-y-auto p-4 font-mono text-xs">
+          {filteredLogs.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">
+              <FileText size={32} className="mx-auto mb-2 opacity-50" />
+              <p>Aucun log disponible</p>
+              {liveMode && (
+                <p className="text-xs text-gray-400 mt-2">Rafraîchissement automatique activé (toutes les 2 secondes)</p>
+              )}
+              {!liveMode && (
+                <p className="text-xs text-gray-400 mt-2">Activez le mode Live pour un rafraîchissement automatique</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {filteredLogs.map((log, index) => (
+                <div
+                  key={index}
+                  className={`mb-1 flex items-start gap-2 ${getLevelColor(log.level)}`}
+                >
+                  <span className="text-gray-600 min-w-[80px]">{formatTimestamp(log.timestamp)}</span>
+                  <span className="text-gray-500 min-w-[80px]">[{log.prefix}]</span>
+                  <span className="flex-1">{log.message}</span>
+                  {log.args && log.args.length > 0 && (
+                    <span className="text-gray-600 text-[10px]">
+                      {JSON.stringify(log.args).substring(0, 100)}
+                    </span>
+                  )}
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+// Debug Log Section Component (for Administration > Debug tab)
+const DebugLogSection: React.FC = () => {
+  const [debugConfig, setDebugConfig] = useState<{ debug: boolean; verbose: boolean } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get<{ debug: boolean; verbose: boolean }>('/api/debug/config');
+      if (response.success && response.result) {
+        setDebugConfig(response.result);
+      }
+    } catch (error) {
+      console.error('[DebugLogSection] Error loading config:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggle = async (field: 'debug' | 'verbose', enabled: boolean) => {
+    if (!debugConfig) return;
+    
+    setIsSaving(true);
+    try {
+      const newConfig = { ...debugConfig, [field]: enabled };
+      const response = await api.post<{ debug: boolean; verbose: boolean }>('/api/debug/config', newConfig);
+      if (response.success && response.result) {
+        setDebugConfig(response.result);
+      }
+    } catch (error) {
+      console.error('[DebugLogSection] Error setting config:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading || !debugConfig) {
+    return (
+      <div className="py-4 text-center text-gray-500">
+        <Loader2 size={20} className="mx-auto mb-2 animate-spin" />
+        <p className="text-sm">Chargement...</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SettingRow
+        label="Logs de debug"
+        description="Active l'affichage des logs de debug dans la console du serveur (informations détaillées sur les opérations)"
+      >
+        <Toggle
+          enabled={debugConfig.debug}
+          onChange={(enabled) => handleToggle('debug', enabled)}
+          disabled={isSaving}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Logs verbeux"
+        description="Active l'affichage des logs très détaillés (verbose) - nécessite que le mode debug soit activé"
+      >
+        <Toggle
+          enabled={debugConfig.verbose}
+          onChange={(enabled) => handleToggle('verbose', enabled)}
+          disabled={isSaving || !debugConfig.debug}
+        />
+      </SettingRow>
+      {!debugConfig.debug && (
+        <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+          <p className="text-xs text-blue-400">
+            Les logs de debug sont désactivés. Activez-les pour voir les détails des opérations dans les logs du serveur.
+          </p>
+        </div>
+      )}
+      {debugConfig.debug && (
+        <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <p className="text-xs text-amber-400">
+            Les logs de debug sont activés. Les logs du serveur afficheront plus d'informations détaillées.
+          </p>
+        </div>
+      )}
+    </>
+  );
+};
+
+// Update Check Section Component (for Administration > General tab)
+const UpdateCheckSection: React.FC = () => {
+  const { updateConfig, updateInfo, loadConfig, setConfig, checkForUpdates, isLoading } = useUpdateStore();
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+    if (updateConfig?.enabled) {
+      checkForUpdates();
+    }
+  }, []);
+
+  const handleToggle = async (enabled: boolean) => {
+    setIsSaving(true);
+    try {
+      await setConfig(enabled);
+    } catch (error) {
+      console.error('[UpdateCheckSection] Error setting config:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <SettingRow
+        label="Vérification automatique des mises à jour"
+        description="Active la vérification des nouvelles versions disponibles sur GitHub Container Registry"
+      >
+        <Toggle
+          enabled={updateConfig?.enabled ?? true}
+          onChange={handleToggle}
+          disabled={isSaving}
+        />
+      </SettingRow>
+      {updateConfig?.enabled && (
+        <>
+          <div className="py-3 border-t border-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-400">Version actuelle</span>
+              <span className="text-sm font-mono text-white">{updateInfo?.currentVersion || '0.0.0'}</span>
+            </div>
+            {updateInfo?.latestVersion && (
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-400">Dernière version disponible</span>
+                <span className="text-sm font-mono text-amber-400">{updateInfo.latestVersion}</span>
+              </div>
+            )}
+            {updateInfo?.updateAvailable && (
+              <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-400 font-semibold mb-1">Nouvelle version disponible !</p>
+                <p className="text-xs text-gray-400">
+                  Une mise à jour est disponible. Pour mettre à jour, utilisez :
+                </p>
+                <code className="block mt-2 text-xs text-cyan-300 bg-[#0a0a0a] p-2 rounded border border-gray-800">
+                  docker-compose pull && docker-compose up -d
+                </code>
+              </div>
+            )}
+            {updateInfo?.error && (
+              <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-xs text-red-400">Erreur lors de la vérification : {updateInfo.error}</p>
+              </div>
+            )}
+            <button
+              onClick={checkForUpdates}
+              disabled={isLoading}
+              className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              Vérifier maintenant
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+};
 
 // User Profile Section Component (for Administration > General tab)
 const UserProfileSection: React.FC = () => {
@@ -140,20 +597,95 @@ const UserProfileSection: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPasswordFields, setShowPasswordFields] = useState(false);
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
       setUsername(currentUser.username);
       setEmail(currentUser.email || '');
+      // Set avatar preview if user has avatar
+      if (currentUser.avatar) {
+        setAvatarPreview(currentUser.avatar);
+      } else {
+        setAvatarPreview(null);
+      }
     }
   }, [currentUser]);
+
+  // Validate email format
+  const validateEmail = (emailValue: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(emailValue);
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEmail = e.target.value;
+    setEmail(newEmail);
+    
+    // Clear error if email is cleared
+    if (!newEmail || newEmail.trim().length === 0) {
+      setEmailError(null);
+      return;
+    }
+    
+    // Validate format only if email is provided
+    if (!validateEmail(newEmail)) {
+      setEmailError('Format d\'email invalide');
+    } else {
+      setEmailError(null);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
     setSuccessMessage(null);
+    setEmailError(null);
 
     try {
+      // Check if user is logged in
+      if (!currentUser || !currentUser.id) {
+        setError('Vous devez être connecté pour modifier votre profil');
+        setIsSaving(false);
+        return;
+      }
+
+      // Validate username
+      if (!username || username.trim().length === 0) {
+        setError('Le nom d\'utilisateur ne peut pas être vide');
+        setIsSaving(false);
+        return;
+      }
+
+      if (username.length < 3) {
+        setError('Le nom d\'utilisateur doit contenir au moins 3 caractères');
+        setIsSaving(false);
+        return;
+      }
+
+      // Validate email format BEFORE making any API call
+      // If email is provided and different from current, it must be valid
+      if (email !== currentUser?.email) {
+        if (!email || email.trim().length === 0) {
+          setEmailError('L\'email ne peut pas être vide');
+          setError('Veuillez corriger les erreurs avant de sauvegarder');
+          setIsSaving(false);
+          return;
+        }
+        if (!validateEmail(email)) {
+          setEmailError('Format d\'email invalide');
+          setError('Veuillez corriger les erreurs avant de sauvegarder');
+          setIsSaving(false);
+          return;
+        }
+      }
+
       // Validate password if changing
       if (showPasswordFields && newPassword) {
         if (newPassword.length < 8) {
@@ -175,8 +707,13 @@ const UserProfileSection: React.FC = () => {
 
       const updateData: any = {};
       
-      // Update email if changed
-      if (email !== currentUser?.email) {
+      // Update username if changed
+      if (username !== currentUser?.username) {
+        updateData.username = username;
+      }
+      
+      // Update email if changed (only if valid - already validated above)
+      if (email !== currentUser?.email && email && validateEmail(email)) {
         updateData.email = email;
       }
 
@@ -192,7 +729,16 @@ const UserProfileSection: React.FC = () => {
         return;
       }
 
+      // Log request details in development
+      if (import.meta.env.DEV) {
+        console.log('[UserProfile] Saving profile:', { userId: currentUser?.id, updateData });
+      }
+      
       const response = await api.put(`/api/users/${currentUser?.id}`, updateData);
+      
+      if (import.meta.env.DEV) {
+        console.log('[UserProfile] Response:', response);
+      }
       
       if (response.success) {
         setSuccessMessage('Profil mis à jour avec succès');
@@ -200,13 +746,29 @@ const UserProfileSection: React.FC = () => {
         setNewPassword('');
         setConfirmPassword('');
         setShowPasswordFields(false);
+        setShowOldPassword(false);
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
         // Refresh user data
         await checkAuth();
       } else {
-        setError(response.error?.message || 'Échec de la mise à jour');
+        // Show detailed error message
+        const errorMsg = response.error?.message || 'Échec de la mise à jour';
+        setError(errorMsg);
+        console.error('[UserProfile] Update failed:', response.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la mise à jour');
+      // Enhanced error handling
+      console.error('[UserProfile] Exception during save:', err);
+      if (err instanceof Error) {
+        if (err.message.includes('fetch') || err.message.includes('network')) {
+          setError('Impossible de contacter le serveur. Vérifiez que le serveur backend est démarré.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Erreur lors de la mise à jour du profil');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -215,28 +777,160 @@ const UserProfileSection: React.FC = () => {
   return (
     <>
       {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded text-red-400 text-sm">
+        <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-400 text-sm flex items-center gap-2">
+          <AlertCircle size={16} className="text-red-400" />
           {error}
         </div>
       )}
       {successMessage && (
-        <div className="mb-4 p-3 bg-emerald-900/30 border border-emerald-700 rounded text-emerald-400 text-sm">
+        <div className="mb-4 p-3 bg-emerald-900/30 border border-emerald-700 rounded-lg text-emerald-400 text-sm flex items-center gap-2">
+          <Save size={16} className="text-emerald-400" />
           {successMessage}
         </div>
       )}
 
+      {/* Avatar Section */}
+      <SettingRow
+        label="Avatar"
+        description="Changer votre photo de profil"
+      >
+        <div className="flex items-center gap-4 w-full">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xl overflow-hidden">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span>
+                  {currentUser?.username
+                    ?.split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2) || 'U'}
+                </span>
+              )}
+            </div>
+            {avatarFile && (
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-[#1a1a1a]">
+                <Save size={12} className="text-white" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <label className="block">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setAvatarFile(file);
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setAvatarPreview(reader.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="hidden"
+              />
+              <span className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm cursor-pointer transition-colors">
+                Choisir une image
+              </span>
+            </label>
+            {avatarFile && (
+              <button
+                onClick={async () => {
+                  if (!currentUser || isUploadingAvatar) return;
+                  
+                  setIsUploadingAvatar(true);
+                  setError(null);
+                  setSuccessMessage(null);
+                  
+                  try {
+                    // Convert file to base64 using Promise
+                    const base64String = await new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onerror = () => reject(new Error('Erreur lors de la lecture du fichier'));
+                      reader.onloadend = () => {
+                        if (reader.result && typeof reader.result === 'string') {
+                          resolve(reader.result);
+                        } else {
+                          reject(new Error('Impossible de convertir le fichier en base64'));
+                        }
+                      };
+                      reader.readAsDataURL(avatarFile);
+                    });
+                    
+                    // Check if base64 string is too large (should not happen with 5MB limit, but double-check)
+                    if (base64String.length > 10 * 1024 * 1024) { // ~10MB base64
+                      setError('L\'image est trop volumineuse après conversion');
+                      setIsUploadingAvatar(false);
+                      return;
+                    }
+                    
+                    // Upload to server
+                    const response = await api.put(`/api/users/${currentUser.id}`, {
+                      avatar: base64String
+                    });
+                    
+                    if (response.success) {
+                      setSuccessMessage('Avatar mis à jour avec succès');
+                      setAvatarFile(null);
+                      // Keep preview to show new avatar
+                      await checkAuth();
+                    } else {
+                      // Handle API error
+                      const errorMessage = response.error?.message || 'Échec de la mise à jour de l\'avatar';
+                      setError(errorMessage);
+                    }
+                  } catch (err) {
+                    // Handle conversion or network errors
+                    if (err instanceof Error) {
+                      if (err.message.includes('Network') || err.message.includes('fetch')) {
+                        setError('Impossible de contacter le serveur. Vérifiez votre connexion réseau.');
+                      } else {
+                        setError(err.message);
+                      }
+                    } else {
+                      setError('Erreur lors de la mise à jour de l\'avatar');
+                    }
+                  } finally {
+                    setIsUploadingAvatar(false);
+                  }
+                }}
+                disabled={isUploadingAvatar}
+                className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+              >
+                {isUploadingAvatar ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Enregistrement...</span>
+                  </>
+                ) : (
+                  <span>Enregistrer l'avatar</span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </SettingRow>
+
       <SettingRow
         label="Nom d'utilisateur"
-        description="Votre nom d'utilisateur (non modifiable)"
+        description="Votre nom d'utilisateur (minimum 3 caractères)"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 w-full">
+          <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 flex-shrink-0">
+            <UserIcon size={18} className="text-blue-400" />
+          </div>
           <input
             type="text"
             value={username}
-            disabled
-            className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm opacity-50 cursor-not-allowed"
+            onChange={(e) => setUsername(e.target.value)}
+            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            placeholder="Nom d'utilisateur"
           />
-          <span className="text-xs text-gray-500">Non modifiable</span>
         </div>
       </SettingRow>
 
@@ -244,54 +938,110 @@ const UserProfileSection: React.FC = () => {
         label="Email"
         description="Votre adresse email"
       >
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="px-3 py-2 btn-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:border-accent-primary transition-colors"
-        />
+        <div className="flex flex-col gap-2 w-full">
+          <div className="flex items-center gap-3 w-full">
+            <div className="p-2 bg-purple-500/10 rounded-lg border border-purple-500/20 flex-shrink-0">
+              <Mail size={18} className="text-purple-400" />
+            </div>
+            <input
+              type="email"
+              value={email}
+              onChange={handleEmailChange}
+              className={`flex-1 px-3 py-2 bg-[#1a1a1a] border rounded-lg text-white text-sm focus:outline-none transition-colors ${
+                emailError ? 'border-red-500 focus:border-red-500' : 'border-gray-700 focus:border-purple-500'
+              }`}
+              placeholder="votre@email.com"
+            />
+          </div>
+          {emailError && (
+            <p className="text-xs text-red-400 ml-12">{emailError}</p>
+          )}
+        </div>
       </SettingRow>
 
       <SettingRow
         label="Mot de passe"
         description={showPasswordFields ? "Modifier votre mot de passe" : "Cliquez pour modifier votre mot de passe"}
       >
-        <div className="flex flex-col gap-2 w-full">
+        <div className="flex flex-col gap-3 w-full">
           {!showPasswordFields ? (
             <button
               onClick={() => setShowPasswordFields(true)}
-              className="px-3 py-2 btn-theme rounded-lg text-theme-primary text-sm hover:bg-theme-tertiary transition-colors text-left"
+              className="flex items-center gap-3 px-4 py-3 bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg text-white text-sm transition-colors group"
             >
-              Modifier le mot de passe
+              <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 group-hover:bg-amber-500/20 transition-colors">
+                <Key size={18} className="text-amber-400" />
+              </div>
+              <span className="flex-1 text-left">Modifier le mot de passe</span>
+              <Edit2 size={16} className="text-gray-400 group-hover:text-amber-400 transition-colors" />
             </button>
           ) : (
             <>
-              <input
-                type="password"
-                placeholder="Mot de passe actuel"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                className="px-3 py-2 btn-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:border-accent-primary transition-colors"
-              />
-              <input
-                type="password"
-                placeholder="Nouveau mot de passe (min. 8 caractères)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="px-3 py-2 btn-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:border-accent-primary transition-colors"
-              />
-              <input
-                type="password"
-                placeholder="Confirmer le nouveau mot de passe"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="px-3 py-2 btn-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:border-accent-primary transition-colors"
-              />
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3 w-full">
+                <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 flex-shrink-0">
+                  <Key size={18} className="text-amber-400" />
+                </div>
+                <input
+                  type={showOldPassword ? 'text' : 'password'}
+                  placeholder="Mot de passe actuel"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOldPassword(!showOldPassword)}
+                  className="p-2 text-gray-400 hover:text-amber-400 transition-colors"
+                  title={showOldPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  {showOldPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 w-full">
+                <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 flex-shrink-0">
+                  <Key size={18} className="text-emerald-400" />
+                </div>
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Nouveau mot de passe (min. 8 caractères)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="p-2 text-gray-400 hover:text-emerald-400 transition-colors"
+                  title={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 w-full">
+                <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 flex-shrink-0">
+                  <Key size={18} className="text-emerald-400" />
+                </div>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirmer le nouveau mot de passe"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="p-2 text-gray-400 hover:text-emerald-400 transition-colors"
+                  title={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="px-4 py-2 bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors flex items-center gap-2"
+                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors flex items-center justify-center gap-2"
                 >
                   <Save size={16} />
                   {isSaving ? 'Enregistrement...' : 'Enregistrer'}
@@ -304,7 +1054,7 @@ const UserProfileSection: React.FC = () => {
                     setConfirmPassword('');
                     setError(null);
                   }}
-                  className="px-4 py-2 btn-theme hover:bg-theme-tertiary rounded-lg text-theme-primary text-sm transition-colors"
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white text-sm transition-colors"
                 >
                   Annuler
                 </button>
@@ -315,18 +1065,89 @@ const UserProfileSection: React.FC = () => {
       </SettingRow>
 
       {!showPasswordFields && (
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-end pt-4">
           <button
             onClick={handleSave}
-            disabled={isSaving || email === currentUser?.email}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors flex items-center gap-2"
+            disabled={isSaving || (email === currentUser?.email && username === currentUser?.username) || !!emailError}
+            className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20"
           >
-            <Save size={16} />
+            <Save size={18} />
             {isSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}
           </button>
         </div>
       )}
     </>
+  );
+};
+
+// Info Section Component (for Administration > Info tab)
+const InfoSection: React.FC = () => {
+  return (
+    <div className="space-y-6">
+      <Section title="Informations du projet" icon={Info} iconColor="teal">
+        <div className="space-y-4">
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
+            <h3 className="text-lg font-semibold text-theme-primary mb-3">MynetworK</h3>
+            <p className="text-sm text-theme-secondary mb-4">
+              Dashboard multi-sources pour la gestion de votre réseau. Intégration avec Freebox, UniFi Controller et autres systèmes réseau.
+            </p>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-gray-700">
+                <span className="text-sm text-gray-400">Version</span>
+                <span className="text-sm font-mono text-theme-primary">0.0.7</span>
+              </div>
+              
+              <div className="flex items-center justify-between py-2 border-b border-gray-700">
+                <span className="text-sm text-gray-400">Licence</span>
+                <span className="text-sm text-theme-primary">Privée</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
+            <h3 className="text-lg font-semibold text-theme-primary mb-3 flex items-center gap-2">
+              <Github size={18} />
+              GitHub
+            </h3>
+            <p className="text-sm text-theme-secondary mb-4">
+              Le dépôt sera rendu public prochainement.
+            </p>
+            <a
+              href="https://github.com/Erreur32/MynetworK"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+            >
+              <Github size={16} />
+              <span>Voir sur GitHub</span>
+              <ExternalLink size={14} />
+            </a>
+          </div>
+
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
+            <h3 className="text-lg font-semibold text-theme-primary mb-3">Auteur</h3>
+            <div className="space-y-2">
+              <p className="text-sm text-theme-secondary">
+                Développé par <span className="text-theme-primary font-medium">Erreur32</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
+            <h3 className="text-lg font-semibold text-theme-primary mb-3">Technologies</h3>
+            <div className="flex flex-wrap gap-2">
+              <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">React</span>
+              <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">TypeScript</span>
+              <span className="px-3 py-1 bg-green-900/30 border border-green-700 rounded text-xs text-green-400">Node.js</span>
+              <span className="px-3 py-1 bg-cyan-900/30 border border-cyan-700 rounded text-xs text-cyan-400">Express</span>
+              <span className="px-3 py-1 bg-purple-900/30 border border-purple-700 rounded text-xs text-purple-400">SQLite</span>
+              <span className="px-3 py-1 bg-yellow-900/30 border border-yellow-700 rounded text-xs text-yellow-400">Docker</span>
+            </div>
+          </div>
+        </div>
+      </Section>
+    </div>
   );
 };
 
@@ -378,7 +1199,7 @@ const UsersManagementSection: React.FC = () => {
   };
 
   return (
-    <Section title="Gestion des utilisateurs" icon={Users}>
+    <>
       {error && (
         <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded text-red-400 text-sm">
           {error}
@@ -398,39 +1219,83 @@ const UsersManagementSection: React.FC = () => {
               <p>Aucun utilisateur trouvé</p>
             </div>
           ) : (
-            users.map((user) => (
-              <div key={user.id} className="flex items-center justify-between py-3 px-4 bg-theme-secondary rounded-lg border border-theme">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-theme-primary">{user.username}</span>
-                    {user.role === 'admin' && (
-                      <span className="px-2 py-0.5 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">
-                        Admin
-                      </span>
+            users.map((user) => {
+              // Get user initials for avatar
+              const getInitials = (username: string): string => {
+                if (!username) return 'U';
+                return username
+                  .split(' ')
+                  .map(n => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2) || 'U';
+              };
+              const initials = getInitials(user.username);
+
+              return (
+                <div key={user.id} className="flex items-start gap-3 py-3 px-4 bg-theme-secondary rounded-lg border border-theme">
+                  {/* Avatar */}
+                  <div className="flex-shrink-0">
+                    {user.avatar ? (
+                      <img 
+                        src={user.avatar} 
+                        alt={user.username}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-700"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-700">
+                        {initials}
+                      </div>
                     )}
                   </div>
-                  <p className="text-sm text-theme-secondary">{user.email}</p>
-                  <p className="text-xs text-theme-tertiary mt-1">
-                    Créé le {new Date(user.createdAt).toLocaleDateString('fr-FR')}
-                  </p>
+                  
+                  {/* User Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-medium text-theme-primary">{user.username}</span>
+                      {user.role === 'admin' && (
+                        <span className="px-2 py-0.5 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400 whitespace-nowrap">
+                          Admin
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-theme-secondary truncate">{user.email}</p>
+                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-theme-tertiary">
+                      <span>Créé le {new Date(user.createdAt).toLocaleDateString('fr-FR')}</span>
+                      {user.lastLogin && (
+                        <>
+                          <span className="text-gray-600">•</span>
+                          <span>Dernière connexion: {new Date(user.lastLogin).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} {new Date(user.lastLogin).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </>
+                      )}
+                      {user.lastLoginIp && (
+                        <>
+                          <span className="text-gray-600">•</span>
+                          <span className="font-mono text-gray-400">IP: {user.lastLoginIp}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {user.id !== currentUser?.id && (
+                      <button
+                        onClick={() => handleDelete(user.id)}
+                        className="p-2 hover:bg-red-900/20 rounded text-red-400 hover:text-red-300 transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {user.id !== currentUser?.id && (
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="p-2 hover:bg-red-900/20 rounded text-red-400 hover:text-red-300 transition-colors"
-                      title="Supprimer"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
-    </Section>
+    </>
   );
 };
 
@@ -440,11 +1305,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   initialAdminTab = 'general',
   onNavigateToPage
 }) => {
+  const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(initialAdminTab);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Modal states
   const [showParentalModal, setShowParentalModal] = useState(false);
@@ -849,24 +1716,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
-  const freeboxTabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
-    { id: 'network', label: 'Réseau', icon: Globe },
-    { id: 'wifi', label: 'WiFi', icon: Wifi },
-    { id: 'dhcp', label: 'DHCP', icon: Network },
-    { id: 'storage', label: 'Stockage', icon: HardDrive },
-    { id: 'security', label: 'Sécurité', icon: Shield },
-    { id: 'system', label: 'Système', icon: Server }
+  const freeboxTabs: { id: SettingsTab; label: string; icon: React.ElementType; color: string }[] = [
+    { id: 'network', label: 'Réseau', icon: Globe, color: 'blue' },
+    { id: 'wifi', label: 'WiFi', icon: Wifi, color: 'cyan' },
+    { id: 'dhcp', label: 'DHCP', icon: Network, color: 'emerald' },
+    { id: 'storage', label: 'Stockage', icon: HardDrive, color: 'amber' },
+    { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
+    { id: 'system', label: 'Système', icon: Server, color: 'purple' }
   ];
 
-  const adminTabs: { id: AdminTab; label: string; icon: React.ElementType }[] = [
-    { id: 'general', label: 'Général', icon: Settings },
-    { id: 'users', label: 'Utilisateurs', icon: Users },
-    { id: 'plugins', label: 'Plugins', icon: Server },
-    { id: 'logs', label: 'Logs', icon: FileText },
-    { id: 'security', label: 'Sécurité', icon: Shield },
-    { id: 'exporter', label: 'Exporter', icon: Share2 },
-    { id: 'theme', label: 'Thème', icon: Lightbulb },
-    { id: 'debug', label: 'Debug', icon: Monitor }
+  // Update time every minute
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(new Date());
+    updateTime(); // Set initial time
+    const interval = setInterval(updateTime, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const adminTabs: { id: AdminTab; label: string; icon: React.ElementType; color: string }[] = [
+    { id: 'general', label: 'Général', icon: Settings, color: 'blue' },
+    { id: 'plugins', label: 'Plugins', icon: Plug, color: 'emerald' },
+    { id: 'logs', label: 'Logs', icon: FileText, color: 'cyan' },
+    { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
+    { id: 'exporter', label: 'Exporter', icon: Share2, color: 'amber' },
+    { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
+    { id: 'debug', label: 'Debug', icon: Monitor, color: 'violet' },
+    { id: 'info', label: 'Info', icon: Info, color: 'teal' }
   ];
 
   return (
@@ -897,13 +1772,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={fetchSettings}
-                  className="p-2 hover:bg-theme-tertiary rounded-lg transition-colors"
-              title="Actualiser"
-            >
-              <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
-            </button>
+            {mode === 'administration' ? (
+              <div className="flex items-center gap-3">
+                {/* App Version */}
+                <div className="px-3 py-1.5 bg-theme-secondary rounded-lg border border-theme">
+                  <span className="text-xs text-theme-secondary font-mono">v0.0.7</span>
+                </div>
+                {/* Date and Time (Freebox Revolution style with yellow LED) */}
+                <div className="flex items-center gap-2 bg-theme-secondary px-4 py-2 rounded-lg border border-theme">
+                  <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
+                  <div className="flex flex-col items-end">
+                    <div className="text-sm font-mono text-theme-primary font-semibold">
+                      {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div className="text-xs text-theme-secondary">
+                      {currentTime.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={fetchSettings}
+                className="p-2 hover:bg-theme-tertiary rounded-lg transition-colors"
+                title="Actualiser"
+              >
+                <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -914,17 +1810,67 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
             {adminTabs.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeAdminTab === tab.id;
+              const colorClasses: Record<string, { active: string; inactive: string; icon: string }> = {
+                blue: {
+                  active: 'bg-blue-500/20 border-blue-500/50 text-blue-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-blue-500/50 hover:text-blue-400',
+                  icon: 'text-blue-400'
+                },
+                purple: {
+                  active: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-purple-500/50 hover:text-purple-400',
+                  icon: 'text-purple-400'
+                },
+                emerald: {
+                  active: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400',
+                  icon: 'text-emerald-400'
+                },
+                cyan: {
+                  active: 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-cyan-500/50 hover:text-cyan-400',
+                  icon: 'text-cyan-400'
+                },
+                red: {
+                  active: 'bg-red-500/20 border-red-500/50 text-red-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-red-500/50 hover:text-red-400',
+                  icon: 'text-red-400'
+                },
+                amber: {
+                  active: 'bg-amber-500/20 border-amber-500/50 text-amber-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-amber-500/50 hover:text-amber-400',
+                  icon: 'text-amber-400'
+                },
+                yellow: {
+                  active: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-yellow-500/50 hover:text-yellow-400',
+                  icon: 'text-yellow-400'
+                },
+                violet: {
+                  active: 'bg-violet-500/20 border-violet-500/50 text-violet-300',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-violet-500/50 hover:text-violet-300',
+                  icon: 'text-violet-300'
+                },
+                teal: {
+                  active: 'bg-teal-500/20 border-teal-500/50 text-teal-300',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-teal-500/50 hover:text-teal-300',
+                  icon: 'text-teal-300'
+                }
+              };
+              const colors = colorClasses[tab.color] || colorClasses.blue;
+              
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveAdminTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors whitespace-nowrap ${
-                    activeAdminTab === tab.id
-                      ? 'btn-theme-active border-theme-hover text-theme-primary'
-                      : 'btn-theme border-theme text-theme-secondary hover:text-theme-primary hover:border-theme-hover'
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all whitespace-nowrap ${
+                    isActive
+                      ? `${colors.active} shadow-lg shadow-${tab.color}-500/20`
+                      : `bg-theme-secondary ${colors.inactive}`
                   }`}
                 >
-                  <Icon size={16} />
+                  <Icon size={16} className={isActive ? 'text-white' : 'text-gray-400'} />
                   <span className="text-sm font-medium">{tab.label}</span>
                 </button>
               );
@@ -934,17 +1880,52 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
             {freeboxTabs.map((tab) => {
               const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const colorClasses: Record<string, { active: string; inactive: string; icon: string }> = {
+                blue: {
+                  active: 'bg-blue-500/20 border-blue-500/50 text-blue-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-blue-500/50 hover:text-blue-400',
+                  icon: 'text-blue-400'
+                },
+                cyan: {
+                  active: 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-cyan-500/50 hover:text-cyan-400',
+                  icon: 'text-cyan-400'
+                },
+                emerald: {
+                  active: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400',
+                  icon: 'text-emerald-400'
+                },
+                amber: {
+                  active: 'bg-amber-500/20 border-amber-500/50 text-amber-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-amber-500/50 hover:text-amber-400',
+                  icon: 'text-amber-400'
+                },
+                red: {
+                  active: 'bg-red-500/20 border-red-500/50 text-red-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-red-500/50 hover:text-red-400',
+                  icon: 'text-red-400'
+                },
+                purple: {
+                  active: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-purple-500/50 hover:text-purple-400',
+                  icon: 'text-purple-400'
+                }
+              };
+              const colors = colorClasses[tab.color] || colorClasses.blue;
+              
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'btn-theme-active border-theme-hover text-theme-primary'
-                      : 'btn-theme border-theme text-theme-secondary hover:text-theme-primary hover:border-theme-hover'
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all whitespace-nowrap ${
+                    isActive
+                      ? `${colors.active} shadow-lg shadow-${tab.color}-500/20`
+                      : `bg-theme-secondary ${colors.inactive}`
                   }`}
                 >
-                  <Icon size={16} />
+                  <Icon size={16} className={isActive ? 'text-white' : 'text-gray-400'} />
                   <span className="text-sm font-medium">{tab.label}</span>
                 </button>
               );
@@ -964,36 +1945,55 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         {mode === 'administration' && (
           <>
             {activeAdminTab === 'general' && (
-              <div className="space-y-6">
-                {/* User Profile Section */}
-                <Section title="Mon Profil" icon={Users}>
-                  <UserProfileSection />
-                </Section>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Colonne 1 */}
+                <div className="space-y-6">
+                  <Section title="Mon Profil" icon={Users} iconColor="blue">
+                    <UserProfileSection />
+                  </Section>
+                  
+                  {/* Gestion des utilisateurs (Admin only) */}
+                  {currentUser?.role === 'admin' && (
+                    <Section title="Gestion des utilisateurs" icon={Users} iconColor="purple">
+                      <UsersManagementSection />
+                    </Section>
+                  )}
+                </div>
 
-                <Section title="Localisation" icon={Globe}>
-                  <SettingRow
-                    label="Fuseau horaire"
-                    description="Définit le fuseau horaire de l'application"
-                  >
-                    <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
-                      <option value="Europe/Paris">Europe/Paris (UTC+1)</option>
-                      <option value="UTC">UTC (UTC+0)</option>
-                      <option value="America/New_York">America/New_York (UTC-5)</option>
-                    </select>
-                  </SettingRow>
-                </Section>
+                {/* Colonne 2 */}
+                <div className="space-y-6">
+                  <Section title="Localisation" icon={Globe} iconColor="cyan">
+                    <SettingRow
+                      label="Fuseau horaire"
+                      description="Définit le fuseau horaire de l'application"
+                    >
+                      <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
+                        <option value="Europe/Paris">Europe/Paris (UTC+1)</option>
+                        <option value="UTC">UTC (UTC+0)</option>
+                        <option value="America/New_York">America/New_York (UTC-5)</option>
+                      </select>
+                    </SettingRow>
+                  </Section>
 
-                <Section title="Langue" icon={Globe}>
-                  <SettingRow
-                    label="Langue de l'interface"
-                    description="Sélectionnez la langue d'affichage"
-                  >
-                    <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
-                      <option value="fr">Français</option>
-                      <option value="en">English</option>
-                    </select>
-                  </SettingRow>
-                </Section>
+                  <Section title="Langue" icon={Globe} iconColor="cyan">
+                    <SettingRow
+                      label="Langue de l'interface"
+                      description="Sélectionnez la langue d'affichage"
+                    >
+                      <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
+                        <option value="fr">Français</option>
+                        <option value="en">English</option>
+                      </select>
+                    </SettingRow>
+                  </Section>
+                </div>
+
+                {/* Colonne 3 */}
+                <div className="space-y-6">
+                  <Section title="Mises à jour" icon={RefreshCw} iconColor="amber">
+                    <UpdateCheckSection />
+                  </Section>
+                </div>
               </div>
             )}
 
@@ -1003,11 +2003,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             )}
 
-            {activeAdminTab === 'users' && (
-              <div className="space-y-6">
-                <UsersManagementSection />
-              </div>
-            )}
 
             {activeAdminTab === 'plugins' && (
               <div className="space-y-6">
@@ -1029,9 +2024,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <ExporterSection />
             )}
 
+            {activeAdminTab === 'info' && (
+              <InfoSection />
+            )}
+
             {activeAdminTab === 'debug' && (
               <div className="space-y-6">
-                <Section title="Debug & Diagnostics" icon={Monitor}>
+                <Section title="Niveaux de Log" icon={Monitor} iconColor="violet">
+                  <DebugLogSection />
+                </Section>
+
+                <Section title="Logs de l'application" icon={FileText} iconColor="cyan">
+                  <AppLogsSection />
+                </Section>
+
+                <Section title="Debug & Diagnostics" icon={Monitor} iconColor="violet">
                   <div className="py-4 space-y-2 text-xs text-gray-400">
                     <p>
                       Cette section regroupe des informations utiles pour le debug de MynetworK&nbsp;:
@@ -1056,10 +2063,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         endpoint <code className="text-[11px] text-sky-300">/api/metrics/influxdb</code> si activé.
                       </li>
                     </ul>
-                    <p className="pt-2 text-[11px] text-gray-500">
-                      Pour analyser la mémoire ou le CPU du navigateur, utilisez les outils de profilage de votre
-                      navigateur (onglet&nbsp;<span className="text-gray-300">Performance / Memory</span>).
-                    </p>
+ 
                   </div>
                 </Section>
               </div>

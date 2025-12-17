@@ -23,8 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Freebox token (sensitive)
+# Freebox tokens (sensitive)
 .freebox_token
+.freebox_token-dev
 
 # Database files (contains sensitive data: users, passwords, tokens, configs)
 data/

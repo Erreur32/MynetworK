@@ -19,6 +19,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { useFavicon } from '../../hooks/useFavicon';
+import { useUpdateStore } from '../../stores/updateStore';
 import type { SystemInfo, ConnectionStatus, SystemSensor, SystemFan } from '../../types/api';
 import type { PageType } from './Footer';
 
@@ -42,9 +43,11 @@ interface HeaderProps {
     username: string;
     email?: string;
     role: 'admin' | 'user' | 'viewer';
+    avatar?: string;
   } | null;
   onSettingsClick?: () => void;
   onAdminClick?: () => void;
+  onProfileClick?: () => void;
   onLogout?: () => void;
   unifiStats?: {
     network?: {
@@ -192,6 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
   user,
   onSettingsClick,
   onAdminClick,
+  onProfileClick,
   onLogout,
   unifiStats
 }) => {
@@ -262,6 +266,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Freebox session status (for visual indicator in header)
   const { isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
+  
+  // Update check info
+  const { updateInfo } = useUpdateStore();
 
   // Determine if we should show Freebox info
   const showFreeboxInfo = pageType === 'freebox' && connectionStatus;
@@ -273,10 +280,17 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3 bg-theme-secondary px-4 py-2 rounded-lg border border-theme">
         {pageType === 'dashboard' ? (
           <>
-            <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
-            <div className="flex flex-col leading-tight">
+            <img src={logoMynetworK} alt="MynetworK" className="w-12 h-12 flex-shrink-0" />
+            <div className="flex flex-col leading-tight relative">
               <span className="font-semibold text-theme-primary">MynetworK</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
+                {updateInfo?.updateAvailable && updateInfo.enabled && (
+                  <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
+                    Nouvelle version disponible
+                  </span>
+                )}
+              </div>
             </div>
           </>
         ) : pageType === 'freebox' ? (
@@ -284,7 +298,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">{boxName}</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
             </div>
           </>
         ) : pageType === 'unifi' ? (
@@ -304,7 +318,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-gray-200">UniFi Controller</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
             </div>
           </>
         ) : (
@@ -312,7 +326,7 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">MynetworK</span>
-              <span className="text-[10px] text-gray-400 font-normal">v0.0.7</span>
+              <span className="text-[10px] text-gray-400 font-normal">v0.0.8</span>
             </div>
           </>
         )}
@@ -611,6 +625,7 @@ export const Header: React.FC<HeaderProps> = ({
             user={user}
             onSettingsClick={onSettingsClick}
             onAdminClick={onAdminClick}
+            onProfileClick={onProfileClick}
             onLogout={onLogout}
           />
         )}

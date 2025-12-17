@@ -107,7 +107,7 @@ export const LogsManagementSection: React.FC = () => {
 
     if (currentUser?.role !== 'admin') {
         return (
-            <Section title="Journal des événements" icon={Filter}>
+            <Section title="Journal des événements" icon={Filter} iconColor="cyan">
                 <div className="text-center py-8 text-gray-500">
                     <AlertCircle size={32} className="mx-auto mb-2" />
                     <p>Accès administrateur requis</p>
@@ -117,7 +117,7 @@ export const LogsManagementSection: React.FC = () => {
     }
 
     return (
-        <Section title="Journal des événements" icon={Filter}>
+        <Section title="Journal des événements" icon={Filter} iconColor="cyan">
             <div className="space-y-4">
                 {/* Filters */}
                 <div className="flex items-center gap-2 flex-wrap">

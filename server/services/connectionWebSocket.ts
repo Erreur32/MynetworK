@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { WebSocket as WsType } from 'ws';
 import { freeboxApi } from './freeboxApi.js';
 import { normalizeSystemInfo } from './apiNormalizer.js';
+import { logger } from '../utils/logger.js';
 
 interface ConnectionStatus {
   type: string;
@@ -45,18 +46,18 @@ class ConnectionWebSocketService {
    * Initialize the WebSocket server
    */
   init(server: import('http').Server) {
-    console.log('[WS] Initializing WebSocket server...');
+    logger.debug('WS', 'Initializing WebSocket server...');
 
     this.wss = new WebSocketServer({ server, path: '/ws/connection' });
 
-    console.log('[WS] WebSocket server created on path /ws/connection');
+    logger.debug('WS', 'WebSocket server created on path /ws/connection');
 
     this.wss.on('error', (error) => {
-      console.error('[WS] Server error:', error);
+      logger.error('WS', 'Server error:', error);
     });
 
     this.wss.on('connection', (ws: ClientWebSocket, req) => {
-      console.log('[WS] Client connected from:', req.socket.remoteAddress);
+      logger.debug('WS', `Client connected from: ${req.socket.remoteAddress}`);
       ws.isAlive = true;
 
       ws.on('pong', () => {
@@ -64,7 +65,7 @@ class ConnectionWebSocketService {
       });
 
       ws.on('close', () => {
-        console.log('[WS] Client disconnected');
+        logger.debug('WS', 'Client disconnected');
         // Stop polling if no more clients
         if (this.wss && this.wss.clients.size === 0) {
           this.stopPolling();
@@ -72,7 +73,7 @@ class ConnectionWebSocketService {
       });
 
       ws.on('error', (error) => {
-        console.error('[WS] Client error:', error.message);
+        logger.error('WS', `Client error: ${error.message}`);
       });
 
       // Start polling if this is the first client
@@ -93,7 +94,7 @@ class ConnectionWebSocketService {
       });
     }, 30000);
 
-    console.log('[WS] WebSocket server initialized on /ws/connection');
+    logger.debug('WS', 'WebSocket server initialized on /ws/connection');
   }
 
   /**
@@ -102,7 +103,7 @@ class ConnectionWebSocketService {
   private startPolling() {
     if (this.connectionPollingInterval) return;
 
-    console.log('[WS] Starting connection and system status polling');
+    logger.debug('WS', 'Starting connection and system status polling');
 
     // Connection status polling (every 1 second)
     this.connectionPollingInterval = setInterval(async () => {
@@ -124,12 +125,12 @@ class ConnectionWebSocketService {
    */
   private stopPolling() {
     if (this.connectionPollingInterval) {
-      console.log('[WS] Stopping connection status polling');
+      logger.debug('WS', 'Stopping connection status polling');
       clearInterval(this.connectionPollingInterval);
       this.connectionPollingInterval = null;
     }
     if (this.systemPollingInterval) {
-      console.log('[WS] Stopping system status polling');
+      logger.debug('WS', 'Stopping system status polling');
       clearInterval(this.systemPollingInterval);
       this.systemPollingInterval = null;
     }
@@ -235,7 +236,7 @@ class ConnectionWebSocketService {
       this.wss = null;
     }
 
-    console.log('[WS] WebSocket service closed');
+    logger.debug('WS', 'WebSocket service closed');
   }
 
   /**

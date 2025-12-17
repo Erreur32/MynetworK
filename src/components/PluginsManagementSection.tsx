@@ -100,7 +100,7 @@ export const PluginsManagementSection: React.FC = () => {
 
     return (
         <>
-            <Section title="Gestion des plugins" icon={Settings}>
+            <Section title="Gestion des plugins" icon={Settings} iconColor="emerald">
                 {lastTestMessage && (
                     <div
                         className={`mb-4 px-4 py-3 rounded-lg border-2 flex items-center gap-3 ${
@@ -122,79 +122,140 @@ export const PluginsManagementSection: React.FC = () => {
                         </div>
                     </div>
                 )}
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                     {plugins.map((plugin) => (
                         <div
                             key={plugin.id}
-                            className="bg-[#1a1a1a] rounded-lg p-4 border border-gray-800"
+                            className={`rounded-lg p-3 border transition-all hover:shadow-lg ${
+                                plugin.enabled && plugin.connectionStatus
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50 hover:shadow-emerald-500/20'
+                                    : plugin.enabled
+                                        ? 'bg-yellow-500/10 border-yellow-500/30 hover:border-yellow-500/50 hover:shadow-yellow-500/20'
+                                        : 'bg-gray-500/10 border-gray-500/30 hover:border-gray-500/50 hover:shadow-gray-500/20'
+                            }`}
                         >
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                        <Settings size={20} className="text-blue-400" />
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-2.5">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                        plugin.enabled && plugin.connectionStatus 
+                                            ? 'bg-emerald-500/20 border border-emerald-500/30' 
+                                            : plugin.enabled 
+                                                ? 'bg-yellow-500/20 border border-yellow-500/30'
+                                                : 'bg-gray-500/20 border border-gray-500/30'
+                                    }`}>
+                                        <Settings size={16} className={
+                                            plugin.enabled && plugin.connectionStatus 
+                                                ? 'text-emerald-400' 
+                                                : plugin.enabled 
+                                                    ? 'text-yellow-400'
+                                                    : 'text-gray-400'
+                                        } />
                                     </div>
-                                    <div>
-                                        <h4 className="font-medium text-white">{plugin.name}</h4>
-                                        <p className="text-xs text-gray-400">Version {plugin.version}</p>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-semibold text-theme-primary text-sm truncate">{plugin.name}</h4>
+                                        <p className="text-[10px] text-theme-tertiary">v{plugin.version}</p>
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {plugin.connectionStatus ? (
-                                        <div className="flex items-center gap-1 text-green-400 text-xs">
-                                            <CheckCircle size={14} />
-                                            <span>Connecté</span>
-                                        </div>
-                                    ) : plugin.enabled ? (
-                                        <div className="flex items-center gap-1 text-yellow-400 text-xs">
-                                            <AlertCircle size={14} />
-                                            <span>Non connecté</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-1 text-gray-500 text-xs">
-                                            <XCircle size={14} />
-                                            <span>Désactivé</span>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between pt-3 border-t border-gray-800">
+                            {/* Status */}
+                            <div className="mb-2.5">
+                                {plugin.connectionStatus ? (
+                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
+                                        <CheckCircle size={11} />
+                                        <span>Connecté</span>
+                                    </div>
+                                ) : plugin.enabled ? (
+                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-[10px] font-medium">
+                                        <AlertCircle size={11} />
+                                        <span>Non connecté</span>
+                                    </div>
+                                ) : (
+                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-gray-400 text-[10px] font-medium">
+                                        <XCircle size={11} />
+                                        <span>Désactivé</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Plugin-specific info */}
+                            {plugin.connectionStatus && (
+                                <div className="mb-2.5 space-y-1.5 p-2 bg-theme-primary/50 rounded border border-theme">
+                                    {plugin.id === 'freebox' && (
+                                        <>
+                                            {plugin.firmware && (
+                                                <div className="text-[10px] text-theme-secondary">
+                                                    <span className="text-theme-tertiary">Box:</span> <span className="text-theme-primary font-mono font-medium">{plugin.firmware}</span>
+                                                </div>
+                                            )}
+                                            {plugin.playerFirmware && (
+                                                <div className="text-[10px] text-theme-secondary">
+                                                    <span className="text-theme-tertiary">Player:</span> <span className="text-theme-primary font-mono font-medium">{plugin.playerFirmware}</span>
+                                                </div>
+                                            )}
+                                            {plugin.apiVersion && (
+                                                <div className="text-[10px] text-theme-secondary">
+                                                    <span className="text-theme-tertiary">API:</span> <span className="text-cyan-400 font-mono font-medium">{plugin.apiVersion}</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    {plugin.id === 'unifi' && (
+                                        <>
+                                            {plugin.controllerFirmware && (
+                                                <div className="text-[10px] text-theme-secondary">
+                                                    <span className="text-theme-tertiary">Firmware:</span> <span className="text-theme-primary font-mono font-medium">{plugin.controllerFirmware}</span>
+                                                </div>
+                                            )}
+                                            {plugin.apiMode && (
+                                                <div className="text-[10px] text-theme-secondary">
+                                                    <span className="text-theme-tertiary">Mode:</span> <span className="text-purple-400 font-mono font-medium">{plugin.apiMode}</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex items-center justify-between pt-2.5 border-t border-theme">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm text-gray-400">Activer</span>
+                                    <span className="text-[10px] text-theme-tertiary font-medium">Actif</span>
                                     <button
                                         onClick={() => handleToggle(plugin.id, !plugin.enabled)}
-                                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                                            plugin.enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                                        className={`relative w-9 h-5 rounded-full transition-all ${
+                                            plugin.enabled ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : 'bg-gray-600'
                                         }`}
                                     >
                                         <span
-                                            className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                                                plugin.enabled ? 'translate-x-5' : 'translate-x-0'
+                                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-md ${
+                                                plugin.enabled ? 'translate-x-4' : 'translate-x-0'
                                             }`}
                                         />
                                     </button>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                     {plugin.enabled && (
                                         <button
                                             onClick={() => handleTest(plugin.id)}
                                             disabled={testingPlugin === plugin.id}
-                                            className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+                                            className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-blue-500/30"
+                                            title="Tester la connexion"
                                         >
                                             {testingPlugin === plugin.id ? (
                                                 <RefreshCw size={12} className="animate-spin" />
                                             ) : (
                                                 <RefreshCw size={12} />
                                             )}
-                                            Tester
                                         </button>
                                     )}
                                     <button
                                         onClick={() => handleConfigure(plugin.id)}
-                                        className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition-colors flex items-center gap-1"
+                                        className="p-1.5 bg-theme-secondary border border-theme hover:bg-theme-primary hover:border-emerald-500/50 rounded-lg text-theme-primary transition-all hover:shadow-lg hover:shadow-emerald-500/10"
+                                        title="Configurer"
                                     >
                                         <Settings size={12} />
-                                        Configurer
                                     </button>
                                 </div>
                             </div>

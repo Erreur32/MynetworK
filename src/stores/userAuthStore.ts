@@ -17,6 +17,8 @@ export interface User {
     enabled: boolean;
     createdAt: string;
     lastLogin?: string;
+    lastLoginIp?: string;
+    avatar?: string;
 }
 
 interface LoginResponse {

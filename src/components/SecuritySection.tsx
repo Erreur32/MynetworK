@@ -89,7 +89,7 @@ export const SecuritySection: React.FC = () => {
 
             {/* JWT Secret Warning */}
             {jwtSecretWarning && (
-                <Section title="Avertissement de sécurité" icon={AlertTriangle}>
+                <Section title="Avertissement de sécurité" icon={AlertTriangle} iconColor="amber">
                     <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                         <div className="flex items-start gap-3">
                             <AlertTriangle size={20} className="text-yellow-400 mt-0.5" />
@@ -110,7 +110,7 @@ export const SecuritySection: React.FC = () => {
             )}
 
             {/* Authentication Settings */}
-            <Section title="Authentification" icon={Lock}>
+            <Section title="Authentification" icon={Lock} iconColor="blue">
                 <SettingRow
                     label="Délai d'expiration de session"
                     description="Durée avant expiration de la session utilisateur (en heures)"
@@ -184,7 +184,7 @@ export const SecuritySection: React.FC = () => {
             </Section>
 
             {/* Security Information */}
-            <Section title="Informations de sécurité" icon={Key}>
+            <Section title="Informations de sécurité" icon={Key} iconColor="purple">
                 <div className="space-y-3">
                     <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                         <div className="flex justify-between items-center">

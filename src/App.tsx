@@ -31,6 +31,7 @@ import {
 import { usePluginStore } from './stores/pluginStore';
 import { startPermissionsRefresh, stopPermissionsRefresh } from './stores/authStore';
 import { useCapabilitiesStore } from './stores/capabilitiesStore';
+import { useUpdateStore } from './stores/updateStore';
 import { POLLING_INTERVALS, formatSpeed } from './utils/constants';
 import {
   MoreHorizontal,
@@ -125,11 +126,22 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserAuthenticated, plugins]); // Zustand functions are stable
 
+  // Update check store
+  const { loadConfig, checkForUpdates } = useUpdateStore();
+
   // Fetch plugins and stats when authenticated
   useEffect(() => {
     if (isUserAuthenticated) {
       fetchPlugins();
       fetchAllStats();
+      
+      // Load update check config and check for updates if enabled
+      loadConfig().then(() => {
+        const { updateConfig } = useUpdateStore.getState();
+        if (updateConfig?.enabled) {
+          checkForUpdates();
+        }
+      });
       
       // Refresh stats periodically
       const interval = setInterval(() => {
@@ -281,6 +293,13 @@ const App: React.FC = () => {
     // SettingsPage will handle showing the admin tab
   };
 
+  const handleProfileClick = () => {
+    window.location.hash = '#admin';
+    setCurrentPage('settings');
+    // SettingsPage will open with 'general' tab (Mon Profil)
+    sessionStorage.setItem('adminTab', 'general');
+  };
+
   // Show loading state while checking authentication
   if (userAuthLoading) {
     return (
@@ -370,10 +389,16 @@ const App: React.FC = () => {
   if (currentPage === 'settings') {
     // Check if we should show administration mode (from URL hash or state)
     const showAdmin = window.location.hash === '#admin' || false;
+    // Check if we should open a specific admin tab (from sessionStorage)
+    const adminTab = sessionStorage.getItem('adminTab') as 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | undefined;
+    if (adminTab) {
+      sessionStorage.removeItem('adminTab'); // Clear after reading
+    }
     return renderPageWithFooter(
       <SettingsPage 
         onBack={() => setCurrentPage('dashboard')} 
         mode={showAdmin ? 'administration' : 'freebox'}
+        initialAdminTab={adminTab || 'general'}
         onNavigateToPage={(page) => setCurrentPage(page)}
       />
     );
@@ -412,6 +437,7 @@ const App: React.FC = () => {
           user={user || undefined}
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
           onLogout={handleLogout}
           unifiStats={pluginStats['unifi'] || null}
         />
@@ -443,6 +469,7 @@ const App: React.FC = () => {
           user={user || undefined}
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
           onLogout={handleLogout}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
@@ -474,6 +501,7 @@ const App: React.FC = () => {
           user={user || undefined}
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
           onLogout={handleLogout}
         />
 
@@ -868,6 +896,7 @@ const App: React.FC = () => {
         user={user || undefined}
         onSettingsClick={handleSettingsClick}
         onAdminClick={handleAdminClick}
+        onProfileClick={handleProfileClick}
         onLogout={handleLogout}
       />
       <main className="p-4 md:p-6 max-w-[1920px] mx-auto">

@@ -10,18 +10,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings, LogOut, Shield, ChevronDown } from 'lucide-react';
+import { Settings, LogOut, Shield, ChevronDown, User } from 'lucide-react';
 
 interface User {
     username: string;
     email?: string;
     role: 'admin' | 'user' | 'viewer';
+    avatar?: string;
 }
 
 interface UserMenuProps {
     user?: User | null;
     onSettingsClick?: () => void;
     onAdminClick?: () => void;
+    onProfileClick?: () => void;
     onLogout?: () => void;
 }
 
@@ -29,6 +31,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     user,
     onSettingsClick,
     onAdminClick,
+    onProfileClick,
     onLogout
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -104,9 +107,17 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                     }}
                     className="flex items-center gap-2 px-3 py-2 bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg transition-colors"
                 >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                        {initials}
-                    </div>
+                    {user.avatar ? (
+                        <img 
+                            src={user.avatar} 
+                            alt={user.username}
+                            className="w-8 h-8 rounded-full object-cover border-2 border-gray-600"
+                        />
+                    ) : (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                            {initials}
+                        </div>
+                    )}
                     <ChevronDown 
                         size={16} 
                         className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -127,30 +138,42 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 >
                     {/* User Info Section */}
                     <div className="p-4 border-b border-gray-700">
-                        <div className="font-semibold text-gray-200">{user.username}</div>
-                        {user.email && (
-                            <div className="text-sm text-gray-400 mt-1">{user.email}</div>
-                        )}
-                        <div className="text-xs text-gray-500 mt-1 uppercase">
-                            {user.role === 'admin' ? 'Administrateur' : user.role === 'user' ? 'Utilisateur' : 'Lecteur'}
+                        <div className="flex items-center gap-3">
+                            {user.avatar ? (
+                                <img 
+                                    src={user.avatar} 
+                                    alt={user.username}
+                                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-600"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-base border-2 border-gray-600">
+                                    {initials}
+                                </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-gray-200 truncate">{user.username}</div>
+                                {user.email && (
+                                    <div className="text-sm text-gray-400 mt-1 truncate">{user.email}</div>
+                                )}
+                                <div className="text-xs text-gray-500 mt-1 uppercase">
+                                    {user.role === 'admin' ? 'Administrateur' : user.role === 'user' ? 'Utilisateur' : 'Lecteur'}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Menu Items */}
                     <div className="py-2">
-                        {/* User Profile / Change Avatar */}
+                        {/* Mon Profil */}
                         <button
                             onClick={() => {
                                 setIsOpen(false);
-                                // TODO: Open avatar change modal
-                                alert('Fonctionnalité de changement d\'avatar à venir');
+                                onProfileClick?.();
                             }}
                             className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                         >
-                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs">
-                                {initials}
-                            </div>
-                            <span>Changer l'avatar</span>
+                            <User size={16} className="text-gray-400" />
+                            <span>Mon Profil</span>
                         </button>
 
                         {/* Administration (Admin only) */}

@@ -7,6 +7,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { UserRepository, type User, type CreateUserInput } from '../database/models/User.js';
+import { logger } from '../utils/logger.js';
 
 export interface LoginResult {
     token: string;
@@ -28,7 +29,7 @@ export class AuthService {
         this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '7d';
         
         if (this.jwtSecret === 'change-me-in-production-please-use-strong-secret') {
-            console.warn('[Auth] WARNING: Using default JWT secret. Please set JWT_SECRET environment variable in production!');
+            logger.warn('Auth', '⚠️  Using default JWT secret. Please set JWT_SECRET environment variable in production!');
         }
     }
 
@@ -75,7 +76,7 @@ export class AuthService {
     /**
      * Login user and return JWT token
      */
-    async login(username: string, password: string): Promise<LoginResult> {
+    async login(username: string, password: string, ipAddress?: string): Promise<LoginResult> {
         // Find user by username
         const user = UserRepository.findByUsername(username);
         
@@ -93,8 +94,8 @@ export class AuthService {
             throw new Error('Invalid credentials');
         }
 
-        // Update last login
-        UserRepository.updateLastLogin(user.id);
+        // Update last login and IP
+        UserRepository.updateLastLogin(user.id, ipAddress);
 
         // Generate JWT token
         const payload: TokenPayload = {

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {config, API_ENDPOINTS} from '../../config.js';
+import { logger } from '../../utils/logger.js';
 
 // Freebox uses self-signed certificates, so we need to disable TLS verification
 // This is safe since we're only communicating with the local Freebox
@@ -71,18 +72,16 @@ export class FreeboxApiService {
     // Load app_token from file
     private loadToken() {
         const tokenPath = this.getTokenPath();
-        console.log(`[FreeboxAPI] Token file path: ${tokenPath}`);
         if (fs.existsSync(tokenPath)) {
             try {
                 const data = JSON.parse(fs.readFileSync(tokenPath, 'utf-8')) as TokenData;
                 this.appToken = data.appToken;
-                console.log('[FreeboxAPI] Loaded app_token from file');
+                // Token loaded silently - only log if debug enabled
             } catch {
-                console.log('[FreeboxAPI] Failed to load token file');
+                // Failed to load - will need registration
             }
-        } else {
-            console.log('[FreeboxAPI] No token file found - registration required');
         }
+        // No token file - registration will be required (logged when needed)
     }
 
     // Save app_token to file
@@ -95,7 +94,7 @@ export class FreeboxApiService {
         }
         fs.writeFileSync(tokenPath, JSON.stringify({appToken}, null, 2), 'utf-8');
         this.appToken = appToken;
-        console.log(`[FreeboxAPI] Saved app_token to ${tokenPath}`);
+        // Token saved silently
     }
 
     // Reset/delete app_token (for re-registration when token is invalid)
@@ -103,13 +102,11 @@ export class FreeboxApiService {
         const tokenPath = this.getTokenPath();
         if (fs.existsSync(tokenPath)) {
             fs.unlinkSync(tokenPath);
-            console.log(`[FreeboxAPI] Deleted token file: ${tokenPath}`);
         }
         this.appToken = null;
         this.sessionToken = null;
         this.challenge = null;
         this.permissions = {};
-        console.log('[FreeboxAPI] Token reset - re-registration required');
     }
 
     // Build full API URL
@@ -284,7 +281,7 @@ export class FreeboxApiService {
         this.challenge = response.result.challenge;
         this.permissions = response.result.permissions;
 
-        console.log('[FreeboxAPI] Login successful');
+        logger.success('FreeboxAPI', 'Login successful');
 
         return {
             sessionToken: this.sessionToken,
@@ -298,7 +295,7 @@ export class FreeboxApiService {
         if (this.sessionToken) {
             await this.request('POST', API_ENDPOINTS.LOGIN_LOGOUT, undefined, true);
             this.sessionToken = null;
-            console.log('[FreeboxAPI] Logged out');
+            logger.debug('FreeboxAPI', 'Logged out');
         }
     }
 
@@ -365,18 +362,13 @@ export class FreeboxApiService {
     }
 
     async reboot(): Promise<FreeboxApiResponse> {
-        console.log('[FreeboxAPI] Attempting reboot...');
+        logger.info('FreeboxAPI', 'Attempting reboot...');
         const result = await this.request('POST', API_ENDPOINTS.SYSTEM_REBOOT);
-        console.log('[FreeboxAPI] Reboot result:', {
-            success: result.success,
-            error_code: result.error_code,
-            msg: result.msg
-        });
 
         if (!result.success) {
-            console.error('[FreeboxAPI] Reboot failed:', result.msg || result.error_code);
+            logger.error('FreeboxAPI', `Reboot failed: ${result.msg || result.error_code}`);
         } else {
-            console.log('[FreeboxAPI] Reboot command sent successfully');
+            logger.success('FreeboxAPI', 'Reboot command sent successfully');
         }
 
         return result;

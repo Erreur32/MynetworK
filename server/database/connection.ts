@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,7 +40,7 @@ export function getDatabase(): Database.Database {
         // Enable WAL mode for better concurrency
         db.pragma('journal_mode = WAL');
         
-        console.log(`[Database] Connected to SQLite database: ${dbPath}`);
+        logger.success('Database', `Connected to SQLite database: ${dbPath}`);
     }
     
     return db;
@@ -52,7 +53,7 @@ export function closeDatabase(): void {
     if (db) {
         db.close();
         db = null;
-        console.log('[Database] Connection closed');
+        logger.debug('Database', 'Connection closed');
     }
 }
 
@@ -72,9 +73,34 @@ export function initializeDatabase(): void {
             role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin', 'user', 'viewer')),
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            last_login DATETIME
+            last_login DATETIME,
+            last_login_ip TEXT,
+            avatar TEXT
         )
     `);
+
+    // Add new columns if they don't exist (migration for existing databases)
+    try {
+        database.exec(`
+            ALTER TABLE users ADD COLUMN last_login_ip TEXT;
+        `);
+    } catch (e: any) {
+        // Column already exists, ignore error
+        if (!e.message?.includes('duplicate column name')) {
+            logger.debug('Database', 'Migration: last_login_ip column may already exist');
+        }
+    }
+
+    try {
+        database.exec(`
+            ALTER TABLE users ADD COLUMN avatar TEXT;
+        `);
+    } catch (e: any) {
+        // Column already exists, ignore error
+        if (!e.message?.includes('duplicate column name')) {
+            logger.debug('Database', 'Migration: avatar column may already exist');
+        }
+    }
 
     // Plugin configurations table
     database.exec(`
@@ -140,6 +166,6 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_user_plugin_permissions_plugin_id ON user_plugin_permissions(plugin_id);
     `);
 
-    console.log('[Database] Schema initialized');
+    logger.success('Database', 'Schema initialized');
 }
 

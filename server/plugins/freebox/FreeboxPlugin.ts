@@ -127,6 +127,18 @@ export class FreeboxPlugin extends BasePlugin {
                 networkStats.upload = conn.rate_up || 0;
             }
 
+            // Get API version info
+            let apiVersion: string | undefined;
+            try {
+                const apiVersionResult = await this.apiService.getApiVersion();
+                if (apiVersionResult.success && apiVersionResult.result) {
+                    const versionInfo = apiVersionResult.result as any;
+                    apiVersion = versionInfo.api_version || versionInfo.apiVersion;
+                }
+            } catch {
+                // Silently fail if API version cannot be retrieved
+            }
+
             // Normalize system stats
             const systemStats: PluginStats['system'] = {};
             if (systemResult.status === 'fulfilled' && systemResult.value.success && systemResult.value.result) {
@@ -156,6 +168,13 @@ export class FreeboxPlugin extends BasePlugin {
 
                 if (playerFirmware) {
                     (systemStats as any).playerFirmware = playerFirmware;
+                }
+
+                // Add API version if available
+                if (apiVersion) {
+                    (systemStats as any).apiVersion = apiVersion;
+                } else if (sys.api_version) {
+                    (systemStats as any).apiVersion = sys.api_version;
                 }
             }
 

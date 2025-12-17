@@ -44,8 +44,31 @@ class ApiClient {
     };
 
     try {
+      // Log request for debugging (only in development)
+      if (import.meta.env.DEV) {
+        console.log(`[API] ${method} ${url}`, { body: body ? JSON.stringify(body).substring(0, 100) : 'none', hasToken: !!token });
+      }
+      
       const response = await fetch(url, options);
-      const data = await response.json();
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data: any;
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, read as text for error details
+        const text = await response.text();
+        console.error(`[API] Non-JSON response from ${method} ${url}:`, text);
+        return {
+          success: false,
+          error: {
+            code: 'INVALID_RESPONSE',
+            message: `Réponse invalide du serveur: ${response.status} ${response.statusText}`
+          }
+        };
+      }
 
       // Check for Freebox auth_required error (session expired or permissions changed)
       if (data && !data.success && data.error_code === 'auth_required') {
@@ -98,6 +121,15 @@ class ApiClient {
 
       // Handle network errors (no response, timeout, etc.)
       if (!response.ok) {
+        // Log error details in development
+        if (import.meta.env.DEV) {
+          console.error(`[API] ${method} ${url} failed:`, {
+            status: response.status,
+            statusText: response.statusText,
+            data: data
+          });
+        }
+        
         // Network error (no connection, timeout, etc.)
         if (response.status === 0 || response.status >= 500) {
           return {
@@ -133,11 +165,20 @@ class ApiClient {
       return data as ApiResponse<T>;
     } catch (error) {
       console.error(`[API] ${method} ${endpoint} failed:`, error);
+      
+      // Provide more detailed error messages
+      let errorMessage = 'Erreur réseau';
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        errorMessage = 'Impossible de contacter le serveur. Vérifiez que le serveur est démarré et accessible.';
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       return {
         success: false,
         error: {
           code: 'NETWORK_ERROR',
-          message: error instanceof Error ? error.message : 'Network error'
+          message: errorMessage
         }
       };
     }

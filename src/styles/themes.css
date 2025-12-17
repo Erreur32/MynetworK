@@ -192,50 +192,106 @@
 }
 
 /* ============================================
-   THÈME MODERNE COULEUR (Dégradés modernes)
+   THÈME MODERNE COULEUR (Dégradés Mauve/Rose/Bleu + Glass)
    ============================================ */
 
 [data-theme="modern"] {
-  /* Couleurs de base - Avec dégradés modernes */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-card: rgba(30, 41, 59, 0.8);
-  --bg-unifi-card: rgba(15, 23, 42, 0.95);
-  --bg-header: rgba(15, 23, 42, 0.95);
-  --bg-footer: rgba(15, 23, 42, 0.9);
+  /* Couleurs de base - Glass moderne avec dégradé mauve/rose/bleu */
+  --bg-primary: rgba(15, 15, 25, 0.7);
+  --bg-secondary: rgba(30, 25, 45, 0.6);
+  --bg-tertiary: rgba(45, 35, 65, 0.5);
+  --bg-card: rgba(40, 30, 60, 0.5);
+  --bg-unifi-card: rgba(20, 15, 35, 0.7);
+  --bg-header: rgba(20, 15, 35, 0.8);
+  --bg-footer: rgba(15, 15, 25, 0.75);
   
-  /* Bordures - Avec couleur moderne */
-  --border-color: rgba(59, 130, 246, 0.3);
-  --border-color-light: rgba(59, 130, 246, 0.4);
-  --border-color-hover: rgba(59, 130, 246, 0.6);
+  /* Bordures - Mauve subtiles avec effet glass (rose réduit) */
+  --border-color: rgba(192, 132, 252, 0.25);
+  --border-color-light: rgba(192, 132, 252, 0.35);
+  --border-color-hover: rgba(167, 139, 250, 0.4);
   
-  /* Texte - Contraste élevé */
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-tertiary: #94a3b8;
-  --text-disabled: #64748b;
+  /* Texte - Blanc cassé pour contraste élégant */
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-tertiary: #cbd5e1;
+  --text-disabled: #94a3b8;
   
-  /* Accents - Dégradés colorés modernes */
-  --accent-primary: #3b82f6;
-  --accent-primary-hover: #2563eb;
-  --accent-success: #10b981;
-  --accent-warning: #f59e0b;
-  --accent-error: #ef4444;
-  --accent-info: #06b6d4;
+  /* Accents - Dégradé Mauve/Rose/Bleu élégant */
+  --accent-primary: #c084fc;
+  --accent-primary-hover: #a855f7;
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-error: #f87171;
+  --accent-info: #60a5fa;
   
-  /* Button colors */
-  --button-bg: rgba(30, 41, 59, 0.8);
-  --button-text: #f1f5f9;
-  --button-hover-bg: rgba(51, 65, 85, 0.9);
+  /* Button colors - Glass avec couleurs modernes */
+  --button-bg: rgba(192, 132, 252, 0.2);
+  --button-text: #f8fafc;
+  --button-hover-bg: rgba(167, 139, 250, 0.25);
   --button-hover-text: #ffffff;
-  --button-active-bg: #3b82f6;
+  --button-active-bg: rgba(192, 132, 252, 0.5);
   --button-active-text: #ffffff;
-  --button-border: rgba(59, 130, 246, 0.3);
+  --button-border: rgba(192, 132, 252, 0.4);
   
-  /* Effets - Ombres colorées avec dégradés */
-  --shadow-sm: 0 1px 2px rgba(59, 130, 246, 0.2);
-  --shadow-md: 0 4px 6px rgba(59, 130, 246, 0.3);
+  /* Effets - Backdrop blur pour glass moderne */
+  --backdrop-blur: blur(12px);
+  --shadow-sm: 0 1px 2px rgba(139, 92, 246, 0.3);
+  --shadow-md: 0 4px 6px rgba(139, 92, 246, 0.4);
+  --shadow-lg: 0 10px 15px rgba(139, 92, 246, 0.5);
+  --shadow-xl: 0 20px 25px rgba(139, 92, 246, 0.6);
+  
+  /* Gradient de fond élégant - Mauve/Bleu (rose réduit) */
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(167, 139, 250, 0.1) 40%, rgba(59, 130, 246, 0.15) 80%, rgba(139, 92, 246, 0.1) 100%);
+}
+
+/* Dégradé de fond pour le body/html de l'application */
+[data-theme="modern"] body,
+[data-theme="modern"] html {
+  background: linear-gradient(135deg, 
+    rgba(15, 15, 25, 0.95) 0%, 
+    rgba(30, 25, 45, 0.9) 25%,
+    rgba(20, 20, 35, 0.92) 50%,
+    rgba(25, 20, 40, 0.9) 75%,
+    rgba(15, 15, 25, 0.95) 100%
+  );
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Dégradé subtil avec teinte mauve/bleu pour le fond principal */
+[data-theme="modern"] .bg-theme-primary,
+[data-theme="modern"] [class*="min-h-screen"] {
+  background: linear-gradient(135deg, 
+    rgba(15, 15, 25, 0.98) 0%, 
+    rgba(25, 20, 40, 0.95) 30%,
+    rgba(20, 25, 45, 0.95) 60%,
+    rgba(15, 15, 25, 0.98) 100%
+  ) !important;
+  background-attachment: fixed;
+}
+
+/* Application du backdrop-filter pour les éléments glass du thème modern */
+[data-theme="modern"] .theme-card,
+[data-theme="modern"] .theme-header,
+[data-theme="modern"] .theme-footer,
+[data-theme="modern"] [class*="bg-theme-card"],
+[data-theme="modern"] [class*="bg-theme-secondary"],
+[data-theme="modern"] [class*="bg-theme-primary"] {
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid rgba(192, 132, 252, 0.2);
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Effet glass pour les cartes spécifiques */
+[data-theme="modern"] [class*="bg-[#1a1a1a]"],
+[data-theme="modern"] [class*="bg-[#121212]"] {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(40, 30, 60, 0.5) !important;
+  border: 1px solid rgba(192, 132, 252, 0.25) !important;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
   --shadow-lg: 0 10px 15px rgba(59, 130, 246, 0.4);
   --shadow-xl: 0 20px 25px rgba(124, 58, 237, 0.4);
   

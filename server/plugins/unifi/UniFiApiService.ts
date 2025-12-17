@@ -16,6 +16,8 @@ if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
+import { logger } from '../../utils/logger.js';
+
 export interface UniFiDevice {
     _id: string;
     name: string;
@@ -125,7 +127,7 @@ export class UniFiApiService {
                         throw new Error('UniFi Site Manager API key not set');
                     }
                     this.isAuthenticated = true;
-                    console.log('[UniFi] Site Manager API authenticated');
+                    logger.success('UniFi', 'Site Manager API authenticated');
                     return true;
                 } else {
                     if (!this.url || !this.username || !this.password) {
@@ -135,11 +137,11 @@ export class UniFiApiService {
                     // Controller API (local) using HTTP + session cookie (curl-like)
                     await this.rawControllerLogin();
                     this.isAuthenticated = true;
-                    console.log('[UniFi] Controller API authenticated via HTTP session cookie');
+                    logger.success('UniFi', 'Controller API authenticated via HTTP session cookie');
                     return true;
                 }
             } catch (error) {
-                console.error('[UniFi] Login failed:', error);
+                logger.error('UniFi', 'Login failed:', error);
         this.isAuthenticated = false;
                 return false;
             } finally {
@@ -176,7 +178,7 @@ export class UniFiApiService {
                     // Ignore errors on logout, as the session may already be invalid
                 });
             } catch (error) {
-                console.error('[UniFi] HTTP logout failed:', error);
+                logger.debug('UniFi', 'HTTP logout failed:', error);
             }
         }
 
@@ -241,7 +243,7 @@ export class UniFiApiService {
         const baseUrl = this.url.replace(/\/+$/, '');
         const loginUrl = `${baseUrl}/api/login`;
 
-        console.log('[UniFi] Performing HTTP login to controller via /api/login...');
+        // Login is verbose (only shown if verbose debug enabled)
 
         const response = await fetch(loginUrl, {
             method: 'POST',
@@ -289,7 +291,7 @@ export class UniFiApiService {
         this.lastLoginAt = Date.now();
         this.isAuthenticated = true;
 
-        console.log('[UniFi] HTTP session cookie stored successfully');
+        // Session stored successfully (logged at verbose level if needed)
     }
 
     /**
@@ -342,7 +344,7 @@ export class UniFiApiService {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (message.startsWith('UNIFI_SESSION_EXPIRED')) {
-                console.log('[UniFi] Session appears to be expired, re-authenticating and retrying request...');
+                logger.debug('UniFi', 'Session appears to be expired, re-authenticating and retrying request...');
                 // Force a fresh login and retry once
                 this.sessionCookie = null;
                 this.isAuthenticated = false;
@@ -358,7 +360,7 @@ export class UniFiApiService {
      */
     private async ensureLoggedIn(): Promise<void> {
         if (!this.isLoggedIn()) {
-            console.log('[UniFi] Not logged in, attempting login...');
+            logger.debug('UniFi', 'Not logged in, attempting login...');
             const loggedIn = await this.login();
             if (!loggedIn) {
                 throw new Error('Failed to login to UniFi controller');
@@ -395,7 +397,7 @@ export class UniFiApiService {
                             })));
                         }
                     } catch (error) {
-                        console.warn(`[UniFi] Failed to get devices for site ${site.name}:`, error);
+                        logger.debug('UniFi', `Failed to get devices for site ${site.name}:`, error);
                     }
                 }
 
@@ -403,7 +405,7 @@ export class UniFiApiService {
             } else {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/device
                 const encodedSite = encodeURIComponent(this.site);
-                console.log(`[UniFi] Getting devices for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
+                logger.debug('UniFi', `Getting devices for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
                 const devices = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/device`);
 
                 return devices.map((d: any) => ({
@@ -419,7 +421,7 @@ export class UniFiApiService {
                 }));
             }
         } catch (error) {
-            console.error('[UniFi] Failed to get devices:', error);
+            logger.error('UniFi', 'Failed to get devices:', error);
             throw error;
         }
     }
@@ -453,7 +455,7 @@ export class UniFiApiService {
                             })));
                         }
                     } catch (error) {
-                        console.warn(`[UniFi] Failed to get clients for site ${site.name}:`, error);
+                        logger.debug('UniFi', `Failed to get clients for site ${site.name}:`, error);
                     }
                 }
 
@@ -461,12 +463,12 @@ export class UniFiApiService {
             } else {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/sta
                 const encodedSite = encodeURIComponent(this.site);
-                console.log(`[UniFi] Getting clients for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
+                logger.debug('UniFi', `Getting clients for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
                 const clients = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/sta`);
                 return clients;
             }
         } catch (error) {
-            console.error('[UniFi] Failed to get clients:', error);
+            logger.error('UniFi', 'Failed to get clients:', error);
             throw error;
         }
     }
@@ -492,7 +494,7 @@ export class UniFiApiService {
                             totalTxBytes += metrics.wan.tx_bytes || 0;
                         }
                     } catch (error) {
-                        console.warn(`[UniFi] Failed to get metrics for site ${site.name}:`, error);
+                        logger.debug('UniFi', `Failed to get metrics for site ${site.name}:`, error);
                     }
                 }
 
@@ -531,7 +533,7 @@ export class UniFiApiService {
                     const txPackets = wanStats.tx_packets || wanStats.packets_t || 0;
                     
                     if (rxBytes > 0 || txBytes > 0) {
-                        console.log(`[UniFi] Found WAN stats from dashboard (node-unifi pattern): rx=${rxBytes}, tx=${txBytes}`);
+                        logger.verbose('UniFi', `Found WAN stats from dashboard (node-unifi pattern): rx=${rxBytes}, tx=${txBytes}`);
                         return {
                             wan: {
                                 rx_bytes: rxBytes,
@@ -541,8 +543,8 @@ export class UniFiApiService {
                             }
                         };
                     }
-                } catch (error) {
-                    console.warn('[UniFi] Failed to get dashboard stats (node-unifi pattern), trying sysinfo:', error);
+                    } catch (error) {
+                        logger.debug('UniFi', 'Failed to get dashboard stats (node-unifi pattern), trying sysinfo:', error);
                 }
                 
                 // Fallback: Try to get WAN stats from sysinfo (some controllers expose it there)
@@ -550,7 +552,7 @@ export class UniFiApiService {
                     const sysinfo = await this.getSystemInfo();
                     if (sysinfo && sysinfo.wan) {
                         const wan = sysinfo.wan;
-                        console.log(`[UniFi] Found WAN stats from sysinfo: rx=${wan.rx_bytes || 0}, tx=${wan.tx_bytes || 0}`);
+                        logger.verbose('UniFi', `Found WAN stats from sysinfo: rx=${wan.rx_bytes || 0}, tx=${wan.tx_bytes || 0}`);
                         return {
                             wan: {
                                 rx_bytes: wan.rx_bytes || 0,
@@ -561,11 +563,11 @@ export class UniFiApiService {
                         };
                     }
                 } catch (error) {
-                    console.warn('[UniFi] Failed to get WAN stats from sysinfo:', error);
+                    logger.debug('UniFi', 'Failed to get WAN stats from sysinfo:', error);
                 }
                 
                 // If all methods fail, return empty stats (graceful degradation)
-                console.log('[UniFi] No WAN stats available, returning empty stats');
+                logger.debug('UniFi', 'No WAN stats available, returning empty stats');
                 return {
                     wan: {
                         rx_bytes: 0,
@@ -574,7 +576,7 @@ export class UniFiApiService {
                 };
             }
         } catch (error) {
-            console.error('[UniFi] Failed to get network stats:', error);
+            logger.error('UniFi', 'Failed to get network stats:', error);
             throw error;
         }
     }
@@ -597,7 +599,7 @@ export class UniFiApiService {
             } else {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/sysinfo
                 const encodedSite = encodeURIComponent(this.site);
-                console.log(`[UniFi] Getting system info for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
+                logger.debug('UniFi', `Getting system info for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
 
                 const sysinfoResponse = await this.controllerRequest<any>(`/api/s/${encodedSite}/stat/sysinfo`);
 
@@ -609,11 +611,11 @@ export class UniFiApiService {
                     sysinfoData = sysinfoResponse;
                 }
 
-                console.log('[UniFi] getSystemInfo - extracted sysinfo via HTTP');
+                logger.verbose('UniFi', 'getSystemInfo - extracted sysinfo via HTTP');
                 return sysinfoData || {};
             }
         } catch (error) {
-            console.error('[UniFi] Failed to get system info:', error);
+            logger.error('UniFi', 'Failed to get system info:', error);
             throw error;
         }
     }
@@ -632,7 +634,7 @@ export class UniFiApiService {
         try {
             return await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
         } catch (error) {
-            console.error('[UniFi] Failed to get sites:', error);
+            logger.error('UniFi', 'Failed to get sites:', error);
             throw error;
         }
     }
@@ -645,32 +647,28 @@ export class UniFiApiService {
         try {
             if (this.apiMode === 'site-manager') {
                 if (!this.apiKey) {
-                    console.log('[UniFi] Test connection failed: Site Manager API key not set');
+                    logger.debug('UniFi', 'Test connection failed: Site Manager API key not set');
                     return false;
                 }
                 // Test by making a simple API call to get sites
                 const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
                 if (!Array.isArray(sites) || sites.length === 0) {
-                    console.log('[UniFi] Test connection failed: No sites found');
+                    logger.debug('UniFi', 'Test connection failed: No sites found');
                     return false;
                 }
-                console.log(`[UniFi] Test connection successful: Site Manager API - Found ${sites.length} site(s)`);
+                logger.success('UniFi', `Test connection successful: Site Manager API - Found ${sites.length} site(s)`);
                 return true;
             } else {
                 // Controller API mode
                 if (!this.url || !this.username || !this.password) {
-                    console.log('[UniFi] Test connection failed: Missing connection details', {
-                        hasUrl: !!this.url,
-                        hasUsername: !!this.username,
-                        hasPassword: !!this.password
-                    });
+                    logger.debug('UniFi', 'Test connection failed: Missing connection details');
                     return false;
                 }
 
                 // Try to login
                 const loggedIn = await this.login();
                 if (!loggedIn) {
-                    console.log('[UniFi] Test connection failed: Login returned false');
+                    logger.debug('UniFi', 'Test connection failed: Login returned false');
                     return false;
                 }
 
@@ -679,21 +677,21 @@ export class UniFiApiService {
                     const encodedSite = encodeURIComponent(this.site);
                     const devices = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/device`);
                     if (!Array.isArray(devices)) {
-                        console.log('[UniFi] Test connection failed: Could not retrieve devices (invalid response)');
+                        logger.debug('UniFi', 'Test connection failed: Could not retrieve devices (invalid response)');
                         await this.logout();
                         return false;
                     }
-                    console.log(`[UniFi] Test connection successful: Controller API - Found ${devices.length} device(s) on site "${this.site}"`);
+                    logger.success('UniFi', `Test connection successful: Controller API - Found ${devices.length} device(s) on site "${this.site}"`);
                     await this.logout();
                     return true;
                 } catch (dataError) {
-                    console.error('[UniFi] Test connection failed: Could not retrieve data from site:', dataError);
+                    logger.error('UniFi', 'Test connection failed: Could not retrieve data from site:', dataError);
                     await this.logout();
                     return false;
                 }
             }
         } catch (error) {
-            console.error('[UniFi] Test connection error:', error);
+            logger.error('UniFi', 'Test connection error:', error);
             // Try to logout if we're logged in
             try {
                 if (this.isAuthenticated) {

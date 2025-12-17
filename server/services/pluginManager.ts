@@ -7,6 +7,7 @@
 import { FreeboxPlugin } from '../plugins/freebox/FreeboxPlugin.js';
 import { UniFiPlugin } from '../plugins/unifi/UniFiPlugin.js';
 import { PluginConfigRepository } from '../database/models/PluginConfig.js';
+import { logger } from '../utils/logger.js';
 import type { IPlugin, PluginStats, PluginConfig } from '../plugins/base/PluginInterface.js';
 
 export class PluginManager {
@@ -24,7 +25,7 @@ export class PluginManager {
      */
     registerPlugin(plugin: IPlugin): void {
         this.plugins.set(plugin.getId(), plugin);
-        console.log(`[PluginManager] Registered plugin: ${plugin.getName()} (${plugin.getId()})`);
+        logger.debug('PluginManager', `Registered plugin: ${plugin.getName()} (${plugin.getId()})`);
     }
 
     /**
@@ -85,7 +86,7 @@ export class PluginManager {
             try {
                 await plugin.start();
             } catch (error) {
-                console.error(`[PluginManager] Failed to start plugin ${pluginId}:`, error);
+                logger.error('PluginManager', `Failed to start plugin ${pluginId}:`, error);
                 // Don't throw - plugin will remain initialized but not started
             }
         }
@@ -95,17 +96,17 @@ export class PluginManager {
      * Initialize all plugins from database
      */
     async initializeAllPlugins(): Promise<void> {
-        console.log('[PluginManager] Initializing all plugins...');
+        logger.debug('PluginManager', 'Initializing all plugins...');
         
         for (const plugin of this.plugins.values()) {
             try {
                 await this.initializePlugin(plugin.getId());
             } catch (error) {
-                console.error(`[PluginManager] Failed to initialize plugin ${plugin.getId()}:`, error);
+                logger.error('PluginManager', `Failed to initialize plugin ${plugin.getId()}:`, error);
             }
         }
         
-        console.log('[PluginManager] All plugins initialized');
+        logger.debug('PluginManager', 'All plugins initialized');
     }
 
     /**
@@ -150,7 +151,7 @@ export class PluginManager {
             try {
                 await plugin.start();
             } catch (error) {
-                console.error(`[PluginManager] Failed to start plugin ${pluginId}:`, error);
+                logger.error('PluginManager', `Failed to start plugin ${pluginId}:`, error);
                 throw error;
             }
         }
@@ -187,7 +188,7 @@ export class PluginManager {
                     
                     // Only log error if it's not a "not configured" error (expected for unconfigured plugins)
                     if (!errorMessage.includes('not configured') && !errorMessage.includes('not fully configured')) {
-                        console.error(`[PluginManager] Failed to get stats for plugin ${id}:`, error);
+                        logger.error('PluginManager', `Failed to get stats for plugin ${id}:`, error);
                     }
                     // Return null instead of throwing to allow other plugins to work
                     allStats[id] = null;
@@ -227,7 +228,7 @@ export class PluginManager {
                     
                     // Only log error if it's not a "not configured" error (expected for unconfigured plugins)
                     if (!errorMessage.includes('not configured') && !errorMessage.includes('not fully configured')) {
-                        console.error(`[PluginManager] Failed to get stats for plugin ${id}:`, error);
+                        logger.error('PluginManager', `Failed to get stats for plugin ${id}:`, error);
                     }
                     return { id, stats: null, success: false };
                 }

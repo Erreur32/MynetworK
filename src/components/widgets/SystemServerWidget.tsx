@@ -69,6 +69,7 @@ export const SystemServerWidget: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isNetworkLoading, setIsNetworkLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
 
     const fetchSystemInfo = async () => {
         try {
@@ -96,6 +97,14 @@ export const SystemServerWidget: React.FC = () => {
     useEffect(() => {
         fetchSystemInfo();
         fetchNetworkData();
+    }, []);
+
+    // Update date/time every second
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentDateTime(new Date());
+        }, 1000);
+        return () => clearInterval(interval);
     }, []);
 
     // Poll every 30 seconds
@@ -291,6 +300,26 @@ export const SystemServerWidget: React.FC = () => {
 
                 {/* System Info */}
                 <div className="pt-4 border-t border-gray-700 space-y-2 text-xs">
+                    {/* Date and Time */}
+                    <div className="flex justify-between items-center bg-[#05151a] px-3 py-2 rounded border border-cyan-900/60 mb-2">
+                        <span className="text-gray-400">Date / Heure</span>
+                        <div className="text-right">
+                            <div className="text-cyan-300 font-mono font-semibold">
+                                {currentDateTime.toLocaleDateString('fr-FR', { 
+                                    day: '2-digit', 
+                                    month: '2-digit', 
+                                    year: 'numeric' 
+                                })}
+                            </div>
+                            <div className="text-cyan-300 font-mono font-semibold">
+                                {currentDateTime.toLocaleTimeString('fr-FR', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit', 
+                                    second: '2-digit' 
+                                })}
+                            </div>
+                        </div>
+                    </div>
                     <div className="flex justify-between">
                         <span className="text-gray-500">Uptime</span>
                         <span className="text-gray-300">{formatUptime(systemInfo.uptime)}</span>
@@ -303,10 +332,13 @@ export const SystemServerWidget: React.FC = () => {
                         <span className="text-gray-500">Platform</span>
                         <span className="text-gray-300">{systemInfo.platform} ({systemInfo.arch})</span>
                     </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Node.js</span>
-                        <span className="text-gray-300">{systemInfo.nodeVersion}</span>
-                    </div>
+                    {/* Show Node.js version only in development mode */}
+                    {import.meta.env.DEV && (
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Node.js</span>
+                            <span className="text-gray-300">{systemInfo.nodeVersion}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Network Traffic */}

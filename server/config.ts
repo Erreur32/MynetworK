@@ -5,14 +5,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Determine token file path:
-// 1. Use FREEBOX_TOKEN_FILE env var if set (Docker/production)
-// 2. Otherwise use local file relative to project root
+// 1. Use FREEBOX_TOKEN_FILE env var if set (Docker/production) - highest priority
+// 2. If NODE_ENV=development, use .freebox_token-dev to separate dev/prod tokens
+// 3. Otherwise use .freebox_token in project root (production or undefined)
 const getTokenFilePath = (): string => {
   if (process.env.FREEBOX_TOKEN_FILE) {
     return process.env.FREEBOX_TOKEN_FILE;
   }
-  // Default: .freebox_token in project root (one level up from server/)
-  return path.join(__dirname, '..', '.freebox_token');
+  
+  // Separate token files for dev and prod to avoid conflicts
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const tokenFileName = isDevelopment ? '.freebox_token-dev' : '.freebox_token';
+  
+  return path.join(__dirname, '..', tokenFileName);
 };
 
 // Server configuration
