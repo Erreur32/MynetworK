@@ -1,51 +1,79 @@
-# ===========================================
-# Docker ignore file
-# Excludes files from Docker build context
-# ===========================================
-
 # Dependencies
-node_modules/
-npm-debug.log*
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
 
-# Build output (will be rebuilt in container)
-dist/
+# Build outputs
+dist
+dist-ssr
+*.local
 
 # Development files
-.git/
-.gitignore
-.vscode/
-.idea/
-*.md
-!README.md
-
-# Environment and secrets
-.env
-.env.*
-*.local
-freebox_token.json
-
-# OS files
+.vscode
+.idea
 .DS_Store
-Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# Test files
-coverage/
-*.test.ts
-*.spec.ts
-__tests__/
+# Environment and config files
+.env
+.env.local
+.env.*.local
+commit-message.txt
+
+# Database and data files
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Configuration files (sensitive)
+config/mynetwork.conf
+config/*.conf
+!config/*.example
+!config/*.example.conf
+
+# Freebox tokens
+.freebox_token
+.freebox_token-dev
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation (not needed in Docker image)
+Docs/
 Doc_Dev/
+Aide*
 
-# Docker files (no need to copy themselves)
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+# Scripts (development only)
+scripts/
+
+# CI/CD
+.github/
+.cursor/
+
+# Backup files
+*.backup
+*.bak
+*~
 
 # Logs
-logs/
+logs
 *.log
 
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.swp
+# Test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# IDE
+.claude
+.reboot_schedule.json
+

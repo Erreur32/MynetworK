@@ -1,6 +1,6 @@
 # Template pour nouveaux plugins
 
-Ce document décrit les bonnes pratiques pour créer un nouveau plugin dans MyscanR.
+Ce document décrit les bonnes pratiques pour créer un nouveau plugin dans MynetwoK.
 
 ## Structure de base
 

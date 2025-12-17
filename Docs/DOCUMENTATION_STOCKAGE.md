@@ -1,292 +1,259 @@
-# Documentation - Stockage des Données MyscanR
+# 📦 Documentation Stockage – MynetworK
 
-## 📊 Où sont stockées les données ?
-
-### 1. **Statistiques (Stats)**
-
-**Réponse : Les stats ne sont PAS stockées en base de données.**
-
-- Les statistiques sont récupérées **en temps réel** via les méthodes `getStats()` des plugins
-- Elles sont calculées à la demande et retournées directement via l'API
-- Aucune table de stats n'existe dans la base de données
-- Les stats sont temporaires et ne persistent pas entre les redémarrages
-
-**Exemples de stats :**
-- Stats système (CPU, RAM, Disque, Réseau) : récupérées depuis le système d'exploitation
-- Stats Freebox : récupérées via l'API Freebox en temps réel
-- Stats UniFi : récupérées via l'API UniFi Controller/Site Manager en temps réel
-
-**Avantages :**
-- Données toujours à jour
-- Pas de stockage inutile
-- Pas de synchronisation nécessaire
-
-**Inconvénients :**
-- Pas d'historique des stats
-- Nécessite une connexion active aux APIs externes
+Ce document décrit comment et où sont stockées les données dans MynetworK.
 
 ---
 
-### 2. **Configurations des Plugins**
+## 🎯 Vue d'ensemble
 
-**Réponse : Les configurations sont stockées dans la base de données SQLite.**
-
-**Emplacement :**
-- **Fichier de base de données :** `data/dashboard.db`
-- **Table :** `plugin_configs`
-- **Structure :**
-  ```sql
-  CREATE TABLE plugin_configs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      plugin_id TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 0,
-      settings TEXT NOT NULL DEFAULT '{}',  -- JSON string
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(plugin_id)
-  )
-  ```
-
-**Exemples de configurations stockées :**
-- **Freebox :** Token d'authentification (dans un fichier séparé `.freebox_token`)
-- **UniFi :** URL, username, password, site, apiMode, apiKey
-- **Scan Réseau :** (à venir)
-
-**Accès :**
-- Via l'API : `GET /api/plugins/:id` retourne la configuration
-- Via la base de données : directement dans `plugin_configs.settings` (format JSON)
+MynetworK utilise deux types de stockage :
+1. **Base de données SQLite** : Données applicatives (utilisateurs, plugins, logs, settings)
+2. **Fichier de configuration** : Configuration externe optionnelle (`config/mynetwork.conf`)
 
 ---
 
-### 3. **Configuration de l'Application**
+## 💾 Base de Données SQLite
 
-**Réponse : Actuellement, tout est en base de données. Pas de fichier `.conf` externe.**
+### Emplacement
 
-**Stockage actuel :**
-- **Utilisateurs :** Table `users` dans `data/dashboard.db`
-- **Configurations plugins :** Table `plugin_configs` dans `data/dashboard.db`
-- **Logs :** Table `logs` dans `data/dashboard.db`
-- **Permissions :** Table `user_plugin_permissions` dans `data/dashboard.db`
+#### Mode Développement (npm)
 
-**Emplacement du fichier de base de données :**
-- **Variable d'environnement :** `DATABASE_PATH` (optionnel)
-- **Par défaut :** `data/dashboard.db` (dans le répertoire du projet)
-- **Dans Docker :** Monté dans le volume `mynetwork_data` → `/app/data/dashboard.db`
+**Fichier** : `./data/dashboard.db` (dans le répertoire du projet)
 
----
+**Variable d'environnement** (optionnel) :
+```env
+DATABASE_PATH=./data/dashboard.db
+```
 
-### 4. **Fichier `.conf` Externe avec Docker**
+⚠️ **Ce fichier est UNIQUEMENT pour le développement local.**
 
-**Réponse : Actuellement NON, mais c'est possible à implémenter.**
+#### Mode Production (Docker)
 
-**Situation actuelle :**
-- Toutes les configurations sont dans la base de données SQLite
-- Pas de fichier `.conf` externe
-- Le volume Docker monte uniquement `data/` pour la persistance
+**Dans le conteneur** : `/app/data/dashboard.db`
 
-**Pour rendre la config accessible en fichier `.conf` externe :**
+**Volume Docker** : `mynetwork_data` (volume nommé, isolé)
 
-1. **Option 1 : Exporter depuis la base de données**
-   - Créer un endpoint API : `GET /api/config/export`
-   - Générer un fichier `.conf` depuis les données de la base
-   - Permettre le montage du fichier dans Docker
-
-2. **Option 2 : Fichier de configuration principal**
-- Créer un fichier `config.conf` ou `mynetwork.conf`
-   - Lire ce fichier au démarrage
-   - Synchroniser avec la base de données
-   - Monter ce fichier dans Docker : `./config/mynetwork.conf:/app/config/mynetwork.conf`
-
-3. **Option 3 : Variables d'environnement**
-   - Utiliser des variables d'environnement dans `docker-compose.yml`
-   - Plus simple mais moins flexible
-
-**Exemple de structure Docker pour fichier `.conf` :**
+**Configuration** (`docker-compose.yml`) :
 ```yaml
 volumes:
-  - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro  # Lecture seule
-  - mynetwork_data:/app/data  # Base de données
+  - mynetwork_data:/app/data  # Volume isolé
+```
+
+⚠️ **La base de données Docker est COMPLÈTEMENT SÉPARÉE de `./data/dashboard.db`**
+
+---
+
+## 📊 Structure de la Base de Données
+
+### Table `users`
+
+Stockage des utilisateurs et authentification :
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,  -- Hash bcrypt
+    email TEXT,
+    role TEXT DEFAULT 'user',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### Table `plugin_config`
+
+Configuration des plugins :
+
+```sql
+CREATE TABLE IF NOT EXISTS plugin_config (
+    id TEXT PRIMARY KEY,           -- Plugin ID (ex: 'freebox', 'unifi')
+    enabled INTEGER DEFAULT 0,     -- 0 = disabled, 1 = enabled
+    settings TEXT,                 -- JSON string
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### Table `app_config`
+
+Configuration de l'application (settings) :
+
+```sql
+CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,           -- Clé unique (ex: 'metrics_config')
+    value TEXT NOT NULL,             -- Valeur en JSON (string)
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### Table `logs`
+
+Logs applicatifs :
+
+```sql
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level TEXT NOT NULL,            -- 'info', 'warn', 'error'
+    message TEXT NOT NULL,
+    source TEXT,                     -- 'system', 'plugin:freebox', etc.
+    metadata TEXT,                   -- JSON string
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
 ```
 
 ---
 
-## 📁 Structure des Fichiers
+## ⚙️ Fichier de Configuration Externe
 
-```
-MyscanR/
-├── data/
-│   ├── dashboard.db          # Base de données SQLite (toutes les configs)
-│   └── .freebox_token        # Token Freebox (fichier séparé)
-├── config/                    # (À créer si besoin)
-│   └── mynetwork.conf          # Fichier de config externe (optionnel)
-└── ...
-```
+### Emplacement
 
-**Dans Docker :**
-```
-/app/
-├── data/
-│   ├── dashboard.db          # Volume persistant
-│   └── .freebox_token        # Volume persistant
-└── config/                   # (Si monté)
-    └── mynetwork.conf          # Volume monté depuis l'hôte
+**Fichier** : `config/mynetwork.conf` (optionnel)
+
+**Format** : JSON ou propriétés (selon l'implémentation)
+
+### Utilisation
+
+Le fichier `.conf` est utilisé pour :
+- Configuration des plugins (si non stockée en DB)
+- Paramètres système
+- Override de variables d'environnement
+
+⚠️ **Le fichier `.conf` est ignoré par Git** (voir `.gitignore`)
+
+### Exemple
+
+```json
+{
+  "plugins": {
+    "freebox": {
+      "host": "mafreebox.freebox.fr",
+      "appId": "fr.freebox.mynetwork"
+    }
+  },
+  "system": {
+    "port": 3003,
+    "logLevel": "info"
+  }
+}
 ```
 
 ---
 
-## 🔧 Recommandations
+## 🔒 Sécurité et Git
 
-### Pour avoir un fichier `.conf` externe :
+### Fichiers Ignorés par Git
 
-1. **Créer un endpoint d'export/import**
-   - `GET /api/config/export` → Génère `mynetwork.conf`
-   - `POST /api/config/import` → Lit `mynetwork.conf` et met à jour la DB
+Les fichiers suivants sont dans `.gitignore` et ne seront **jamais** commités :
 
-2. **Créer un service de synchronisation**
-   - Au démarrage : Lire `config/mynetwork.conf` si présent
-   - Synchroniser avec la base de données
-   - Permettre l'export manuel
+- `data/dashboard.db` : Base de données (données sensibles)
+- `config/mynetwork.conf` : Configuration (tokens, secrets)
+- `.env.local` : Variables d'environnement locales
+- `.freebox_token*` : Tokens Freebox
 
-3. **Format du fichier `.conf` proposé :**
-   ```ini
-   [app]
-   timezone=Europe/Paris
-   language=fr
-   theme=dark
+### Pourquoi ?
 
-   [plugin.freebox]
-   enabled=true
-
-   [plugin.unifi]
-   enabled=true
-   url=https://192.168.1.206:8443
-   username=admin
-   site=default
-   apiMode=controller
-
-   [users]
-   default_admin_username=admin
-   default_admin_password=admin123
-   ```
+- ❌ Contient des données sensibles (mots de passe hashés, tokens, configs)
+- ❌ Spécifique à chaque environnement (dev, prod, chaque développeur)
+- ❌ Peut être volumineux
+- ✅ Chaque développeur a sa propre base de données locale
+- ✅ En production Docker, la base est dans un volume isolé
 
 ---
 
-## 📝 Résumé
+## 🔄 Synchronisation
 
-| Type de données | Stockage | Emplacement | Persistant |
-|----------------|----------|-------------|------------|
-| **Stats** | Mémoire (temps réel) | Non stocké | ❌ Non |
-| **Config plugins** | Base de données | `data/dashboard.db` → `plugin_configs` | ✅ Oui |
-| **Utilisateurs** | Base de données | `data/dashboard.db` → `users` | ✅ Oui |
-| **Logs** | Base de données | `data/dashboard.db` → `logs` | ✅ Oui |
-| **Token Freebox** | Fichier | `data/.freebox_token` | ✅ Oui |
-| **Config app** | Base de données | `data/dashboard.db` → `app_config` | ✅ Oui |
-| **Config métriques** | Base de données | `data/dashboard.db` → `app_config` | ✅ Oui |
-| **Fichier .conf** | ✅ Implémenté | `config/mynetwork.conf` | ✅ Oui (si monté) |
+### Pas de Synchronisation Automatique
 
----
+Les settings de l'app dans `app_config` :
+- ✅ Sont sauvegardées directement dans la base de données
+- ❌ Ne sont **PAS** exportées vers le fichier `.conf`
+- ❌ Ne sont **PAS** synchronisées avec un fichier externe
 
-## 🐳 Docker - Volumes
+### Export Manuel (si nécessaire)
 
-**Volume actuel :**
-```yaml
-volumes:
-  - mynetwork_data:/app/data
-```
+Pour exporter les settings :
 
-**Pour ajouter un fichier `.conf` externe :**
-```yaml
-volumes:
-  - mynetwork_data:/app/data
-  - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
-```
-
-**Accès depuis l'hôte :**
-- Base de données : `docker volume inspect mynetwork_data` → Localiser le volume
-- Fichier .conf : `./config/mynetwork.conf` (si monté)
-
----
-
-**Note :** Un fichier `.conf` externe est maintenant implémenté ! Voir la section ci-dessous.
-
----
-
-## ✅ Implémentation du Fichier `.conf` Externe
-
-### Fonctionnalités Implémentées
-
-1. **Export de configuration** : `GET /api/config/export`
-   - Génère un fichier `.conf` au format INI depuis la base de données
-   - Option `?write=true` pour écrire directement dans le fichier
-
-2. **Import de configuration** : `POST /api/config/import`
-   - Lit un fichier `.conf` et met à jour la base de données
-   - Accepte le contenu directement dans le body ou un chemin de fichier
-
-3. **Synchronisation automatique** : Au démarrage du serveur
-   - Si le fichier `.conf` existe → Import dans la base de données
-   - Si le fichier n'existe pas → Export de la configuration actuelle
-
-4. **Montage Docker** : Support pour monter un fichier `.conf` externe
-   - Décommentez la ligne dans `docker-compose.yml` :
-     ```yaml
-     - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
-     ```
-
-### Format du Fichier `.conf`
-
-Format INI standard :
-```ini
-[app]
-timezone=Europe/Paris
-language=fr
-theme=dark
-
-[plugin.freebox]
-enabled=true
-
-[plugin.unifi]
-enabled=true
-url=https://192.168.1.206:8443
-username=admin
-password=your_password
-site=default
-apiMode=controller
-```
-
-### Emplacement du Fichier
-
-- **Variable d'environnement :** `CONFIG_FILE_PATH` (optionnel)
-- **Par défaut :** `config/mynetwork.conf` (dans le répertoire du projet)
-- **Dans Docker :** `/app/config/mynetwork.conf`
-
-### Exemple d'Utilisation
-
-1. **Exporter la configuration actuelle :**
+1. **Via SQLite** :
    ```bash
-   curl -X GET "http://localhost:3003/api/config/export?write=true" \
-     -H "Authorization: Bearer YOUR_TOKEN"
+   sqlite3 data/dashboard.db "SELECT key, value FROM app_config" > app_settings_backup.txt
    ```
 
-2. **Importer depuis un fichier :**
+2. **Via l'API** :
    ```bash
-   curl -X POST "http://localhost:3003/api/config/import" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"content": "[app]\ntimezone=Europe/Paris\n..."}'
+   curl http://localhost:3003/api/metrics/config > metrics_config_backup.json
    ```
 
-3. **Vérifier le statut du fichier :**
-   ```bash
-   curl -X GET "http://localhost:3003/api/config/file" \
-     -H "Authorization: Bearer YOUR_TOKEN"
-   ```
+---
 
-### Synchronisation au Démarrage
+## 🚫 Pas d'Interférence entre Dev et Prod
 
-Le serveur synchronise automatiquement la configuration au démarrage :
-- Si `config/mynetwork.conf` existe → Import dans la DB
-- Sinon → Export de la DB vers le fichier
+### Mode Dev (npm run dev:server)
 
-**Note :** Les mots de passe et clés API sont masqués dans l'export pour des raisons de sécurité.
+**Base de données** : `./data/dashboard.db` (fichier local)
+- ✅ Votre propre base de données locale
+- ✅ Uniquement pour le développement
+- ✅ Ne partage PAS avec Docker/production
+- ✅ Ne sera PAS dans Git (ignoré)
+
+### Mode Production (Docker)
+
+**Base de données** : Volume Docker `mynetwork_data` (isolé)
+- ✅ Base de données complètement séparée
+- ✅ Volume Docker isolé du système de fichiers local
+- ✅ Aucune interférence avec votre dev local
+- ✅ Pas dans le répertoire du projet (géré par Docker)
+
+### Résumé
+
+| Mode | Emplacement | Type | Isolation |
+|------|-------------|------|-----------|
+| **Dev (npm)** | `./data/dashboard.db` | Fichier local | ✅ Séparé |
+| **Prod (Docker)** | Volume `mynetwork_data` | Volume Docker | ✅ Séparé |
+
+---
+
+## 🛠️ Commandes Utiles
+
+### Voir toutes les settings
+
+```bash
+sqlite3 data/dashboard.db "SELECT * FROM app_config;"
+```
+
+### Voir une setting spécifique
+
+```bash
+sqlite3 data/dashboard.db "SELECT value FROM app_config WHERE key = 'metrics_config';"
+```
+
+### Sauvegarder la base de données
+
+```bash
+cp data/dashboard.db data/dashboard.db.backup
+```
+
+### Localiser le volume Docker (prod)
+
+```bash
+docker volume inspect mynetwork_data
+```
+
+---
+
+## 📍 Résumé
+
+| Question | Réponse |
+|----------|---------|
+| **Où sont stockées les settings ?** | Base de données SQLite |
+| **Fichier exact ?** | `./data/dashboard.db` (dev) ou volume Docker (prod) |
+| **Table ?** | `app_config` |
+| **Format ?** | Clé-valeur (JSON pour les valeurs) |
+| **Fichier `.conf` ?** | ❌ Non, uniquement pour les plugins (optionnel) |
+| **Synchronisation ?** | ❌ Non, stockage direct en DB |
+| **Dans Git ?** | ❌ **NON, ignoré par `.gitignore`** |
+| **Interfère avec prod ?** | ❌ **NON, Docker utilise un volume isolé** |
+| **Partagé entre devs ?** | ❌ **NON, chaque dev a sa propre base** |
+
+---
+
+**Dernière mise à jour** : 2025-01-17
 

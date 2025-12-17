@@ -1,6 +1,6 @@
-# Guide Complet des Plugins MyscanR
+# Guide Complet des Plugins MynetwoK
 
-Ce guide explique comment créer, développer et maintenir des plugins pour MyscanR. Il est conçu pour être suivi par les IA et les développeurs.
+Ce guide explique comment créer, développer et maintenir des plugins pour MynetwoK. Il est conçu pour être suivi par les IA et les développeurs.
 
 ## Table des matières
 
@@ -21,7 +21,7 @@ Ce guide explique comment créer, développer et maintenir des plugins pour Mysc
 
 ### Système de plugins
 
-MyscanR utilise un système de plugins modulaire où chaque plugin :
+MynetwoK utilise un système de plugins modulaire où chaque plugin :
 - Hérite de `BasePlugin`
 - Est géré par `PluginManager`
 - Est stocké dans `server/plugins/[plugin-id]/`
