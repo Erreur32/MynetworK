@@ -216,24 +216,24 @@
 }
 
 [data-theme="nightly"] {
-    /* Background Colors */
-    --bg-primary: #0f0f0f;
+    /* Background Colors - Noir vers gris foncé, moins de transparence */
+    --bg-primary: #0a0a0a;
     --bg-secondary: #1a1a1a;
     --bg-tertiary: #252525;
-    --bg-card: #1a1a1a;
-    --bg-unifi-card: #050b14;
-    --bg-header: #111111;
-    --bg-footer: rgba(10, 10, 10, .9);
+    --bg-card: #151515;
+    --bg-unifi-card: #0f0f0f;
+    --bg-header: #0d0d0d;
+    --bg-footer: #0d0d0d;
 
-    /* Border Colors - Super fines et très légères (pas blanches) */
-    --border-color: rgba(255, 255, 255, 0.03);
-    --border-color-light: rgba(255, 255, 255, 0.05);
-    --border-color-hover: rgba(255, 255, 255, 0.08);
+    /* Border Colors - Super fines avec teinte chaude (anti-lumière bleue) */
+    --border-color: rgba(230, 225, 215, 0.08);
+    --border-color-light: rgba(230, 225, 215, 0.12);
+    --border-color-hover: rgba(230, 225, 215, 0.18);
 
-    /* Text Colors */
-    --text-primary: #e5e5e5;
-    --text-secondary: #999999;
-    --text-tertiary: #666666;
+    /* Text Colors - Couleurs chaudes, pas de blanc pur (anti-lumière bleue) */
+    --text-primary: #f5f3f0;
+    --text-secondary: #c4beb5;
+    --text-tertiary: #8a857d;
 
     /* Accent Colors */
     --accent-primary: #3b82f6;
@@ -243,29 +243,29 @@
     --accent-warning: #f59e0b;
     --accent-error: #ef4444;
 
-    /* Button Colors */
+    /* Button Colors - Moins de transparence */
     --button-bg: #1a1a1a;
-    --button-text: #e5e5e5;
+    --button-text: #f5f3f0;
     --button-hover-bg: #252525;
-    --button-hover-text: #ffffff;
+    --button-hover-text: #faf9f7;
     --button-active-bg: #3b82f6;
-    --button-active-text: #ffffff;
-    --button-border: rgba(255, 255, 255, 0.03);
+    --button-active-text: #faf9f7;
+    --button-border: rgba(230, 225, 215, 0.08);
 
-    /* Input/Textarea Colors */
-    --input-bg: #1a1a1a;
-    --input-text: #e5e5e5;
-    --input-border: rgba(255, 255, 255, 0.03);
+    /* Input/Textarea Colors - Moins de transparence */
+    --input-bg: #151515;
+    --input-text: #f5f3f0;
+    --input-border: rgba(230, 225, 215, 0.08);
     --input-border-focus: #3b82f6;
-    --input-placeholder: #666666;
+    --input-placeholder: #8a857d;
 
-    /* Cards */
-    --card-bg: #1a1a1a;
-    --card-border: rgba(255, 255, 255, 0.03);
+    /* Cards - Moins de transparence */
+    --card-bg: #151515;
+    --card-border: rgba(230, 225, 215, 0.08);
 
-    /* Header/Footer borders */
-    --header-border: rgba(255, 255, 255, 0.03);
-    --footer-border: rgba(255, 255, 255, 0.03);
+    /* Header/Footer borders - Couleurs chaudes avec teinte bleue subtile */
+    --header-border: rgba(150, 180, 200, 0.2);
+    --footer-border: rgba(150, 180, 200, 0.2);
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
@@ -274,6 +274,96 @@
 
     /* Effects */
     --backdrop-blur: none;
+}
+
+[data-theme="neon"] {
+    --bg-primary: rgba(15, 15, 25, .7);
+    --bg-secondary: rgba(30, 25, 45, .6);
+    --bg-tertiary: rgba(45, 35, 65, .5);
+    --bg-card: rgba(40, 30, 60, .5);
+    --bg-unifi-card: rgba(20, 15, 35, .7);
+    --bg-header: rgba(20, 15, 35, .8);
+    --bg-footer: rgba(15, 15, 25, .75);
+    --border-color: rgba(192, 132, 252, .25);
+    --border-color-light: rgba(192, 132, 252, .35);
+    --border-color-hover: rgba(167, 139, 250, .4);
+    --text-primary: #f8fafc;
+    --text-secondary: #e2e8f0;
+    --text-tertiary: #cbd5e1;
+    --text-disabled: #94a3b8;
+    --accent-primary: #c084fc;
+    --accent-primary-hover: #a855f7;
+    --accent-unifi: #1fb0ec;
+    --accent-success: #34d399;
+    --accent-warning: #fbbf24;
+    --accent-error: #f87171;
+    --accent-info: #60a5fa;
+    --button-bg: rgba(192, 132, 252, .2);
+    --button-text: #f8fafc;
+    --button-hover-bg: rgba(167, 139, 250, .25);
+    --button-hover-text: #ffffff;
+    --button-active-bg: rgba(192, 132, 252, .5);
+    --button-active-text: #ffffff;
+    --button-border: rgba(192, 132, 252, .4);
+    --input-bg: rgba(30, 25, 45, .6);
+    --input-text: #f8fafc;
+    --input-border: rgba(192, 132, 252, .25);
+    --input-border-focus: #c084fc;
+    --input-placeholder: #cbd5e1;
+    --card-bg: rgba(40, 30, 60, .5);
+    --card-border: rgba(192, 132, 252, .25);
+    --header-border: rgba(192, 132, 252, .25);
+    --footer-border: rgba(192, 132, 252, .25);
+    --backdrop-blur: blur(12px);
+    --shadow-sm: 0 1px 2px rgba(139, 92, 246, .3);
+    --shadow-md: 0 4px 6px rgba(139, 92, 246, .4);
+    --shadow-lg: 0 10px 15px rgba(139, 92, 246, .5);
+    --shadow-xl: 0 20px 25px rgba(139, 92, 246, .6);
+}
+
+/* Neon theme - Beautiful animated gradient background */
+[data-theme="neon"] body,
+[data-theme="neon"] html {
+    background: 
+        linear-gradient(135deg, 
+            rgba(192, 132, 252, 0.35) 0%,
+            rgba(167, 139, 250, 0.3) 20%,
+            rgba(139, 92, 246, 0.32) 40%,
+            rgba(59, 130, 246, 0.25) 60%,
+            rgba(192, 132, 252, 0.35) 80%,
+            rgba(167, 139, 250, 0.3) 100%
+        ),
+        linear-gradient(135deg, 
+            #0f0a1a 0%,
+            #1a0f2e 25%,
+            #1e0f3a 50%,
+            #2a1545 75%,
+            #1a0f2e 100%
+        ) !important;
+    background-size: 100% 100%, 400% 400% !important;
+    background-position: 0 0, 0 0 !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    animation: neonGradientShift 35s ease infinite !important;
+}
+
+/* Ensure body and html take full viewport for Neon theme */
+[data-theme="neon"] body {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+[data-theme="neon"] html {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+@keyframes neonGradientShift {
+    0% { background-position: 0% 50%, 0% 50%; }
+    50% { background-position: 100% 50%, 100% 50%; }
+    100% { background-position: 0% 50%, 0% 50%; }
 }
 
 /* Global input/textarea/select styles using CSS variables */
@@ -301,6 +391,31 @@
 [data-theme="dark"] select:focus {
     border-color: var(--input-border-focus) !important;
     outline: none;
+    box-shadow: 0 0 0 1px var(--input-border-focus) !important;
+}
+
+/* Dark theme - Reduce shadows on selected/focused elements */
+[data-theme="dark"] *:focus,
+[data-theme="dark"] *:focus-visible {
+    box-shadow: 0 0 0 1px var(--input-border-focus, var(--border-color)) !important;
+    outline: none !important;
+}
+
+/* Dark theme - Remove or reduce shadows on interactive elements */
+[data-theme="dark"] button:focus,
+[data-theme="dark"] a:focus,
+[data-theme="dark"] [role="button"]:focus {
+    box-shadow: 0 0 0 1px var(--input-border-focus, var(--border-color)) !important;
+    outline: none !important;
+}
+
+/* Dark theme - Remove shadows on hover for cleaner look */
+[data-theme="dark"] button:hover,
+[data-theme="dark"] a:hover,
+[data-theme="dark"] [role="button"]:hover,
+[data-theme="dark"] .hover\:shadow-md:hover,
+[data-theme="dark"] .hover\:shadow-lg:hover {
+    box-shadow: none !important;
 }
 
 /* Override hardcoded input backgrounds to use CSS variables */
@@ -479,24 +594,33 @@
 */
 
 /* Body - Gradient bleu-mauve-rose doux avec gradient diagonal visible sur tout l'écran */
+/* Modern theme - Full gradient complet et visible */
 [data-theme="modern"] body,
 [data-theme="modern"] html {
     background: 
         linear-gradient(135deg, 
-            rgba(91, 155, 213, 0.35) 0%, 
-            rgba(139, 124, 246, 0.32) 25%, 
-            rgba(236, 72, 153, 0.3) 50%, 
-            rgba(139, 124, 246, 0.32) 75%, 
-            rgba(91, 155, 213, 0.35) 100%
+            rgba(91, 155, 213, 0.4) 0%, 
+            rgba(139, 124, 246, 0.38) 20%, 
+            rgba(236, 72, 153, 0.35) 40%, 
+            rgba(139, 124, 246, 0.38) 60%, 
+            rgba(91, 155, 213, 0.4) 80%,
+            rgba(139, 124, 246, 0.38) 100%
         ),
-        linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a1a2e 100%) !important;
+        linear-gradient(135deg, 
+            #1a1a2e 0%, 
+            #16213e 20%, 
+            #0f3460 40%, 
+            #533483 60%, 
+            #1a1a2e 80%,
+            #16213e 100%
+        ) !important;
     background-size: 100% 100%, 400% 400% !important;
     background-position: 0 0, 0 0 !important;
     background-attachment: fixed !important;
     background-repeat: no-repeat !important;
     min-height: 100vh !important;
     width: 100% !important;
-    animation: gradientShift 20s ease infinite !important;
+    animation: gradientShift 25s ease infinite !important;
     color: var(--text-primary) !important;
 }
 
@@ -641,6 +765,40 @@
 /* Override hardcoded input backgrounds for Nightly theme */
 [data-theme="nightly"] input.bg-\[#1a1a1a\],
 [data-theme="nightly"] textarea.bg-\[#1a1a1a\] {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* Input/Textarea styles for Neon theme */
+[data-theme="neon"] input[type="text"],
+[data-theme="neon"] input[type="password"],
+[data-theme="neon"] input[type="email"],
+[data-theme="neon"] input[type="number"],
+[data-theme="neon"] input[type="search"],
+[data-theme="neon"] input[type="tel"],
+[data-theme="neon"] input[type="url"],
+[data-theme="neon"] textarea,
+[data-theme="neon"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="neon"] input::placeholder,
+[data-theme="neon"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="neon"] input:focus,
+[data-theme="neon"] textarea:focus,
+[data-theme="neon"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.2) !important;
+    outline: none;
+}
+
+[data-theme="neon"] input.bg-\[#1a1a1a\],
+[data-theme="neon"] textarea.bg-\[#1a1a1a\] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -914,11 +1072,64 @@
 [data-theme="nightly"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
 [data-theme="nightly"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
 [data-theme="nightly"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
-[data-theme="nightly"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="nightly"] .bg-theme-card { 
+    background-color: var(--bg-card) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
 [data-theme="nightly"] .text-theme-primary { color: var(--text-primary) !important; }
 [data-theme="nightly"] .text-theme-secondary { color: var(--text-secondary) !important; }
 [data-theme="nightly"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
 [data-theme="nightly"] .border-theme { border-color: var(--border-color) !important; }
+
+/* ============================================
+   NIGHTLY THEME - Header and Footer Colors
+   ============================================
+   Opaque backgrounds with blue accent colors
+*/
+[data-theme="nightly"] header,
+[data-theme="nightly"] .bg-theme-header,
+[data-theme="nightly"] header.bg-theme-header {
+    background: linear-gradient(135deg, #0d0d0d 0%, #121212 50%, #0d0d0d 100%) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--header-border) !important;
+}
+
+[data-theme="nightly"] footer,
+[data-theme="nightly"] .bg-theme-footer,
+[data-theme="nightly"] footer.bg-theme-footer {
+    background: linear-gradient(135deg, #0d0d0d 0%, #121212 50%, #0d0d0d 100%) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--footer-border) !important;
+}
+
+/* ============================================
+   NIGHTLY THEME - Light Animated Network Background
+   ============================================
+   Simple and lightweight network effect
+*/
+/* Nightly theme - Gradient noir vers gris foncé, pas d'animation */
+[data-theme="nightly"] body,
+[data-theme="nightly"] html {
+    position: relative;
+    overflow-x: hidden;
+    background: linear-gradient(135deg, #0a0a0a 0%, #0f0f0f 25%, #1a1a1a 50%, #151515 75%, #0a0a0a 100%) !important;
+    background-attachment: fixed !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+}
+
+/* Neon theme - Global theme variable overrides */
+[data-theme="neon"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+[data-theme="neon"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="neon"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="neon"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="neon"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="neon"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="neon"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="neon"] .border-theme { border-color: var(--border-color) !important; }
 
 /* Nightly theme - Card and container backgrounds */
 [data-theme="nightly"] .bg-\[#1a1a1a\],
@@ -959,6 +1170,91 @@
     color: var(--text-tertiary) !important;
 }
 
+/* Neon theme - Border and text overrides */
+[data-theme="neon"] .border-gray-700,
+[data-theme="neon"] .border-gray-800,
+[data-theme="neon"] .border-gray-600,
+[data-theme="neon"] .border-gray-500 {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="neon"] .text-gray-300,
+[data-theme="neon"] .text-gray-200,
+[data-theme="neon"] .text-gray-100 {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="neon"] .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="neon"] .text-gray-500 {
+    color: var(--text-tertiary) !important;
+}
+
+/* Neon theme - Header and footer with backdrop blur */
+[data-theme="neon"] header,
+[data-theme="neon"] .bg-theme-header,
+[data-theme="neon"] header.bg-theme-header {
+    background-color: var(--bg-header) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--header-border) !important;
+}
+
+[data-theme="neon"] footer,
+[data-theme="neon"] .bg-theme-footer,
+[data-theme="neon"] footer.bg-theme-footer {
+    background-color: var(--bg-footer) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--footer-border) !important;
+}
+
+/* Neon theme - Cards with glass effect and very light gradient shadows */
+[data-theme="neon"] [class*="card"],
+[data-theme="neon"] [class*="section"],
+[data-theme="neon"] [class*="widget"],
+[data-theme="neon"] [class*="panel"],
+[data-theme="neon"] .bg-theme-secondary,
+[data-theme="neon"] .bg-theme-card {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--card-border) !important;
+    /* Very light shadows - minimal glow effect */
+    box-shadow: 
+        0 1px 3px rgba(192, 132, 252, 0.1),
+        0 2px 6px rgba(139, 92, 246, 0.12),
+        0 0 0 1px rgba(192, 132, 252, 0.1) inset !important;
+}
+
+/* Neon theme - Light shadows for main card containers */
+[data-theme="neon"] [class*="Card"],
+[data-theme="neon"] .bg-theme-card,
+[data-theme="neon"] div[class*="rounded-xl"],
+[data-theme="neon"] div[class*="rounded-2xl"] {
+    box-shadow: 
+        0 2px 8px rgba(192, 132, 252, 0.12),
+        0 1px 4px rgba(139, 92, 246, 0.15),
+        0 0 0 1px rgba(192, 132, 252, 0.12) inset !important;
+}
+
+/* Neon theme - Specific shadow for Card component - very light */
+[data-theme="neon"] .bg-theme-card.rounded-xl {
+    box-shadow: 
+        0 2px 8px rgba(192, 132, 252, 0.12),
+        0 1px 4px rgba(139, 92, 246, 0.15),
+        0 0 0 1px rgba(192, 132, 252, 0.12) inset !important;
+}
+
+/* Neon theme - Border overrides */
+[data-theme="neon"] .border,
+[data-theme="neon"] .border-theme,
+[data-theme="neon"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border-color: var(--border-color) !important;
+}
+
 /* ============================================
    UNIFI CARD BACKGROUND - All Themes
    ============================================
@@ -969,9 +1265,51 @@
     background-color: var(--bg-unifi-card) !important;
 }
 
-/* Glass and Modern themes - Add backdrop blur for unifi cards */
+/* Glass, Modern and Neon themes - Add backdrop blur for unifi cards */
 [data-theme="glass"] .bg-unifi-card,
-[data-theme="modern"] .bg-unifi-card {
+[data-theme="modern"] .bg-unifi-card,
+[data-theme="neon"] .bg-unifi-card {
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Neon theme - Transparent backgrounds for UniFi cards and tables */
+[data-theme="neon"] .bg-unifi-card {
+    background-color: rgba(20, 15, 35, 0.3) !important;
+}
+
+[data-theme="neon"] table,
+[data-theme="neon"] thead,
+[data-theme="neon"] tbody,
+[data-theme="neon"] tr,
+[data-theme="neon"] td,
+[data-theme="neon"] th {
+    background-color: transparent !important;
+}
+
+/* Neon theme - Transparent backgrounds for table rows (alternating) */
+[data-theme="neon"] tbody tr:nth-child(even),
+[data-theme="neon"] tbody tr.bg-\[#101010\],
+[data-theme="neon"] tbody tr.bg-\[#141414\] {
+    background-color: rgba(45, 35, 65, 0.2) !important;
+}
+
+[data-theme="neon"] tbody tr:nth-child(odd) {
+    background-color: transparent !important;
+}
+
+/* Neon theme - Transparent backgrounds for table headers */
+[data-theme="neon"] thead.bg-\[#181818\],
+[data-theme="neon"] thead tr {
+    background-color: rgba(30, 25, 45, 0.3) !important;
+}
+
+/* Neon theme - Transparent backgrounds for internal card sections */
+/* Ces règles doivent venir APRÈS les règles générales pour avoir priorité */
+[data-theme="neon"] .bg-\[#1a1a1a\],
+[data-theme="neon"] .bg-\[#151515\],
+[data-theme="neon"] .bg-\[#181818\] {
+    background-color: rgba(40, 30, 60, 0.3) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
@@ -992,15 +1330,105 @@
     color: var(--text-tertiary) !important;
 }
 
-/* Additional border colors for Freebox/UniFi */
-[data-theme] .border-gray-700\/60 {
-    border-color: var(--border-color) !important;
-    opacity: 0.6;
+/* ============================================
+   UNIFORMISATION DES FONDS DE CARTES
+   ============================================
+   Remplace toutes les couleurs codées en dur par les variables de thème
+   pour une cohérence visuelle parfaite sur toutes les cartes
+   NOTE: Les règles spécifiques par thème (comme Neon) doivent venir APRÈS
+*/
+
+/* Fonds de cartes principales - uniformisation (sauf Neon et Nightly qui ont leurs propres règles) */
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#151515\],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#181818\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
-/* Hover states for Freebox/UniFi */
-[data-theme] .hover\:bg-\[#1a1a1a\]:hover {
-    background-color: var(--bg-card) !important;
+/* Nightly theme - Pas de transparence sur les blocs */
+[data-theme="nightly"] .bg-\[#1a1a1a\],
+[data-theme="nightly"] .bg-\[#151515\],
+[data-theme="nightly"] .bg-\[#181818\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Fonds alternatifs pour tableaux (lignes paires/impaires) - sauf Neon et Nightly */
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#101010\],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#141414\] {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Fond pour sections spéciales (Docker, info système, etc.) - sauf Neon et Nightly */
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#05151a\] {
+    background-color: var(--bg-secondary) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Fond pour widgets et panneaux - sauf Neon et Nightly */
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#111111\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Nightly theme - Pas de transparence sur les sections spéciales */
+[data-theme="nightly"] .bg-\[#101010\],
+[data-theme="nightly"] .bg-\[#141414\],
+[data-theme="nightly"] .bg-\[#05151a\],
+[data-theme="nightly"] .bg-\[#111111\] {
+    background-color: var(--bg-secondary) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Bordures uniformes pour toutes les cartes */
+[data-theme] .border-gray-800,
+[data-theme] .border-gray-700,
+[data-theme] .border-gray-700\/60 {
+    border-color: var(--border-color) !important;
+}
+
+/* Hover states uniformisés */
+[data-theme] .hover\:bg-\[#1a1a1a\]:hover,
+[data-theme] .hover\:bg-\[#252525\]:hover {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Progress bars backgrounds - uniformisation */
+[data-theme] .bg-\[#1a1a1a\].rounded-full {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Tables headers - uniformisation (sauf Neon) */
+[data-theme]:not([data-theme="neon"]) thead.bg-\[#181818\] {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Freebox et UniFi cards - fonds uniformisés (sauf Neon) */
+[data-theme]:not([data-theme="neon"]) [class*="plugin"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="Plugin"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="freebox"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="Freebox"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="unifi"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="UniFi"] .bg-\[#1a1a1a\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* System server widget - fond uniformisé (sauf Neon) */
+[data-theme]:not([data-theme="neon"]) [class*="System"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="system"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="Server"] .bg-\[#1a1a1a\],
+[data-theme]:not([data-theme="neon"]) [class*="server"] .bg-\[#1a1a1a\] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
 /* Table backgrounds for Freebox/UniFi */

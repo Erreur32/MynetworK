@@ -163,6 +163,33 @@ const DEFAULT_COLORS: Record<Theme, ThemeColors> = {
         buttonActiveText: '#ffffff',
         buttonBorder: '#333333',
     },
+    neon: {
+        accentPrimary: '#c084fc',
+        accentPrimaryHover: '#a855f7',
+        accentSuccess: '#34d399',
+        accentWarning: '#fbbf24',
+        accentError: '#f87171',
+        accentInfo: '#60a5fa',
+        bgPrimary: 'rgba(15, 15, 25, 0.7)',
+        bgSecondary: 'rgba(30, 25, 45, 0.6)',
+        bgTertiary: 'rgba(45, 35, 65, 0.5)',
+        bgCard: 'rgba(40, 30, 60, 0.5)',
+        bgHeader: 'rgba(20, 15, 35, 0.8)',
+        bgFooter: 'rgba(15, 15, 25, 0.75)',
+        textPrimary: '#f8fafc',
+        textSecondary: '#e2e8f0',
+        textTertiary: '#cbd5e1',
+        borderColor: 'rgba(192, 132, 252, 0.25)',
+        borderColorLight: 'rgba(192, 132, 252, 0.35)',
+        borderColorHover: 'rgba(167, 139, 250, 0.4)',
+        buttonBg: 'rgba(192, 132, 252, 0.2)',
+        buttonText: '#f8fafc',
+        buttonHoverBg: 'rgba(167, 139, 250, 0.25)',
+        buttonHoverText: '#ffffff',
+        buttonActiveBg: 'rgba(192, 132, 252, 0.5)',
+        buttonActiveText: '#ffffff',
+        buttonBorder: 'rgba(192, 132, 252, 0.4)',
+    },
 };
 
 export const ThemeSection: React.FC = () => {
@@ -477,6 +504,33 @@ export const ThemeSection: React.FC = () => {
                                                 className="absolute inset-0 rounded-xl"
                                                 style={{
                                                     boxShadow: 'inset 0 0 20px rgba(139, 124, 246, 0.2), 0 0 15px rgba(91, 155, 213, 0.15)'
+                                                }}
+                                            />
+                                        </>
+                                    )}
+                                    {theme.id === 'neon' && (
+                                        <>
+                                            {/* Gradient néon avec effets lumineux */}
+                                            <div 
+                                                className="absolute inset-0"
+                                                style={{
+                                                    background: 'linear-gradient(135deg, #8b5cf626, #a78bfa1a, #3b82f626 80%, #8b5cf61a)'
+                                                }}
+                                            />
+                                            {/* Carte avec effet glass et bordures néon */}
+                                            <div 
+                                                className="absolute inset-0 opacity-60"
+                                                style={{
+                                                    background: 'rgba(40, 30, 60, 0.5)',
+                                                    backdropFilter: 'blur(12px)',
+                                                    border: '1px solid rgba(192, 132, 252, 0.25)'
+                                                }}
+                                            />
+                                            {/* Lueur néon pour la profondeur */}
+                                            <div 
+                                                className="absolute inset-0 rounded-xl"
+                                                style={{
+                                                    boxShadow: 'inset 0 0 20px rgba(192, 132, 252, 0.15), 0 0 20px rgba(139, 92, 246, 0.3)'
                                                 }}
                                             />
                                         </>
