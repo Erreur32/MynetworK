@@ -1,63 +1,57 @@
 # ===========================================
-# MynetworK - Multi-Source Network Dashboard
-# Docker Build - Multi-stage build for production deployment
+# MynetworK - Node 22 Alpine - TS -> JS
 # ===========================================
 
-# Stage 1: Build frontend (native platform for speed)
-FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+# ---------- Stage 1 : Build ----------
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first (better caching)
+# deps complètes
 COPY package*.json ./
 RUN npm ci
 
-# Copy source files
 COPY . .
 
-# Build frontend (Vite)
-RUN npm run build
+# build frontend + backend
+RUN npm run build \
+ && npx tsc --project tsconfig.json
 
-# Stage 2: Production image (target platform)
-FROM node:20-alpine AS production
 
-# Security: Create non-root user and install build tools for native modules (e.g. bcrypt)
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S freebox -u 1001 -G nodejs && \
-    apk add --no-cache python3 make g++
+# ---------- Stage 2 : Production ----------
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Create data directory for persistent token storage
-RUN mkdir -p /app/data && chown -R freebox:nodejs /app/data
+# outils runtime nécessaires
+RUN apk add --no-cache wget
 
-# Copy package files and install production dependencies only
-# We allow scripts to run so native modules like bcrypt can build correctly
-COPY --chown=freebox:nodejs package*.json ./
+# user non-root
+RUN addgroup -S nodejs && adduser -S node -G nodejs
+
+# data
+RUN mkdir -p /app/data && chown -R node:node /app
+
+USER node
+
+# deps prod
+COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy built frontend from builder
-COPY --chown=freebox:nodejs --from=builder /app/dist ./dist
+# frontend
+COPY --chown=node:node --from=builder /app/dist ./dist
 
-# Copy backend source (TypeScript files - tsx runs them directly)
-COPY --chown=freebox:nodejs --from=builder /app/server ./server
-COPY --chown=freebox:nodejs --from=builder /app/tsconfig.json ./
+# backend JS
+COPY --chown=node:node --from=builder /app/server ./server
 
-# Environment variables with defaults
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
 ENV FREEBOX_HOST=mafreebox.freebox.fr
 
-# Health check (use 127.0.0.1 instead of localhost to avoid IPv6 issues in Alpine)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT}/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+ CMD wget -q --spider http://127.0.0.1:${PORT}/api/health || exit 1
 
-# Switch to non-root user
-USER freebox
-
-# Expose port
 EXPOSE 3000
 
-# Start the server directly with tsx (not through npm to avoid double process)
-CMD ["node_modules/.bin/tsx", "server/index.ts"]
+CMD ["node", "server/index.js"]
