@@ -64,8 +64,8 @@ class ConnectionWebSocketService {
         ws.isAlive = true;
       });
 
-      ws.on('close', () => {
-        logger.debug('WS', 'Client disconnected');
+      ws.on('close', (code, reason) => {
+        logger.debug('WS', `Client disconnected: code=${code}, reason=${reason.toString()}`);
         // Stop polling if no more clients
         if (this.wss && this.wss.clients.size === 0) {
           this.stopPolling();
@@ -73,7 +73,10 @@ class ConnectionWebSocketService {
       });
 
       ws.on('error', (error) => {
-        logger.error('WS', `Client error: ${error.message}`);
+        // Only log non-socket errors to avoid spam
+        if (error.message && !error.message.includes('socket') && !error.message.includes('ECONNRESET')) {
+          logger.error('WS', `Client error: ${error.message}`);
+        }
       });
 
       // Start polling if this is the first client

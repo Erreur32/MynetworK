@@ -9,3 +9,4 @@ export { UsersPage } from './UsersPage';
 export { LogsPage } from './LogsPage';
 export { UnifiedDashboardPage } from './UnifiedDashboardPage';
 export { UniFiPage } from './UniFiPage';
+export { SearchPage } from './SearchPage';

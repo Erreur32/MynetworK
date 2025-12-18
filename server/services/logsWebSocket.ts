@@ -63,7 +63,11 @@ class LogsWebSocketService {
       });
 
       ws.on('error', (error) => {
-        logger.error('LogsWS', `Client error: ${error instanceof Error ? error.message : String(error)}`);
+        // Only log non-socket errors to avoid spam
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage && !errorMessage.includes('socket') && !errorMessage.includes('ECONNRESET')) {
+          logger.error('LogsWS', `Client error: ${errorMessage}`);
+        }
       });
 
       // Start listening for new logs if there are clients and not already listening

@@ -1,0 +1,54 @@
+# ===========================================
+# MynetworK - Hardened - TS -> JS
+# ===========================================
+
+# ---------- Stage 1 : Build ----------
+FROM --platform=$BUILDPLATFORM docker/hardened-node:22 AS builder
+
+WORKDIR /app
+
+# deps complètes (dev inclus)
+COPY package*.json ./
+RUN npm ci
+
+# sources
+COPY . .
+
+# build frontend + backend TS
+RUN npm run build \
+ && npx tsc --project tsconfig.json
+
+
+# ---------- Stage 2 : Production ----------
+FROM docker/hardened-node:22
+
+WORKDIR /app
+
+# runtime strict (pas d'outils build)
+USER node
+
+# deps prod uniquement
+COPY --chown=node:node package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# frontend
+COPY --chown=node:node --from=builder /app/dist ./dist
+
+# backend JS compilé
+COPY --chown=node:node --from=builder /app/server ./server
+
+# data
+RUN mkdir -p /app/data
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+ENV FREEBOX_HOST=mafreebox.freebox.fr
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+ CMD wget -q --spider http://127.0.0.1:${PORT}/api/health || exit 1
+
+EXPOSE 3000
+
+# JS pur (plus de tsx)
+CMD ["node", "server/index.js"]

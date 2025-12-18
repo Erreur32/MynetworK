@@ -439,9 +439,9 @@ export const ThemeSection: React.FC = () => {
                                     {theme.id === 'glass' && (
                                         <>
                                             {/* Glass effect raffiné avec backdrop blur */}
-                                            <div 
+                                        <div 
                                                 className="absolute inset-0"
-                                                style={{
+                                            style={{
                                                     background: 'rgba(20, 20, 25, 0.75)',
                                                     backdropFilter: 'blur(16px)'
                                                 }}
@@ -478,8 +478,8 @@ export const ThemeSection: React.FC = () => {
                                                 className="absolute inset-0 rounded-xl"
                                                 style={{
                                                     boxShadow: 'inset 0 0 30px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.4)'
-                                                }}
-                                            />
+                                            }}
+                                        />
                                         </>
                                     )}
                                     {theme.id === 'modern' && (
@@ -649,7 +649,7 @@ export const ThemeSection: React.FC = () => {
 
                             {/* Color Categories Grid - Compact blocks like plugin cards */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            
+
                             {/* Primary Colors */}
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">

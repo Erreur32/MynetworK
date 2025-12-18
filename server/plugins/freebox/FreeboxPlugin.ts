@@ -107,16 +107,31 @@ export class FreeboxPlugin extends BasePlugin {
             // Normalize devices
             const devices: Device[] = [];
             if (devicesResult.status === 'fulfilled' && devicesResult.value.success && Array.isArray(devicesResult.value.result)) {
-                devices.push(...devicesResult.value.result.map((device: any) => ({
-                    id: device.id?.toString() || device.mac || '',
-                    name: device.primary_name || device.hostname || 'Unknown Device',
-                    ip: device.l3connectivities?.[0]?.addr || device.ip,
-                    mac: device.mac,
-                    type: device.vendor_name || 'unknown',
-                    active: device.active === true,
-                    lastSeen: device.last_time_reachable ? new Date(device.last_time_reachable * 1000) : undefined,
-                    ...device // Include all original fields
-                })));
+                devices.push(...devicesResult.value.result.map((device: any) => {
+                    // Extract MAC address from l2ident if available, otherwise use device.mac
+                    let mac = device.mac;
+                    if (!mac && device.l2ident) {
+                        // l2ident.id contains the MAC if type is "mac_address"
+                        if (device.l2ident.type === 'mac_address' || device.l2ident.type === 'mac') {
+                            mac = device.l2ident.id;
+                        } else if (device.l2ident.id && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(device.l2ident.id)) {
+                            // If l2ident.id looks like a MAC address, use it
+                            mac = device.l2ident.id;
+                        }
+                    }
+                    
+                    return {
+                        id: device.id?.toString() || mac || '',
+                        name: device.primary_name || device.hostname || 'Unknown Device',
+                        ip: device.l3connectivities?.[0]?.addr || device.ip,
+                        mac: mac,
+                        type: device.vendor_name || 'unknown',
+                        active: device.active === true,
+                        lastSeen: device.last_time_reachable ? new Date(device.last_time_reachable * 1000) : undefined,
+                        hostname: device.primary_name || device.hostname,
+                        ...device // Include all original fields
+                    };
+                }));
             }
 
             // Normalize network stats

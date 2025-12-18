@@ -35,10 +35,28 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onBack }) => {
             if (response.success && response.result) {
                 setUsers(response.result);
             } else {
-                setError(response.error?.message || 'Failed to fetch users');
+                const errorMsg = response.error?.message || 'Échec du chargement des utilisateurs';
+                setError(errorMsg);
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch users');
+        } catch (err: any) {
+            // Handle network/socket errors
+            let errorMessage = 'Échec du chargement des utilisateurs';
+            
+            if (err.message) {
+                if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
+                    errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+                } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
+                    errorMessage = 'La requête a expiré. Veuillez réessayer.';
+                } else if (err.error?.message) {
+                    errorMessage = err.error.message;
+                } else {
+                    errorMessage = err.message;
+                }
+            } else if (err.error?.message) {
+                errorMessage = err.error.message;
+            }
+            
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -54,10 +72,28 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onBack }) => {
             if (response.success) {
                 await fetchUsers();
             } else {
-                alert(response.error?.message || 'Failed to delete user');
+                const errorMsg = response.error?.message || 'Échec de la suppression';
+                alert(errorMsg);
             }
-        } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to delete user');
+        } catch (err: any) {
+            // Handle network/socket errors
+            let errorMessage = 'Échec de la suppression';
+            
+            if (err.message) {
+                if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
+                    errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+                } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
+                    errorMessage = 'La requête a expiré. Veuillez réessayer.';
+                } else if (err.error?.message) {
+                    errorMessage = err.error.message;
+                } else {
+                    errorMessage = err.message;
+                }
+            } else if (err.error?.message) {
+                errorMessage = err.error.message;
+            }
+            
+            alert(errorMessage);
         }
     };
 

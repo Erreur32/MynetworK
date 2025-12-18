@@ -14,7 +14,7 @@ import {
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
-import { TvPage, PhonePage, FilesPage, VmsPage, AnalyticsPage, SettingsPage, PluginsPage, UsersPage, LogsPage, UnifiedDashboardPage, UniFiPage } from './pages';
+import { TvPage, PhonePage, FilesPage, VmsPage, AnalyticsPage, SettingsPage, PluginsPage, UsersPage, LogsPage, UnifiedDashboardPage, UniFiPage, SearchPage } from './pages';
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import {
@@ -95,8 +95,16 @@ const App: React.FC = () => {
   const [historyFilter, setHistoryFilter] = useState<'all' | 'connection' | 'calls' | 'notifications'>('all');
   const [historyPeriod, setHistoryPeriod] = useState<'30d' | '7d' | '24h'>('30d');
 
-  // Check user auth on mount
+  // State for search query (used when on search page) - declared at component level
+  const [headerSearchQuery, setHeaderSearchQuery] = useState<string>('');
+
+  // Check user auth on mount and clean URL hash
   useEffect(() => {
+    // Clean URL hash if present (legacy support)
+    if (window.location.hash === '#admin') {
+      window.history.replaceState(null, '', window.location.pathname);
+      sessionStorage.setItem('adminMode', 'true');
+    }
     checkUserAuth();
     
     // Listen for theme changes to force re-render
@@ -162,6 +170,17 @@ const App: React.FC = () => {
     }
     return () => stopPermissionsRefresh();
   }, [isFreeboxLoggedIn]);
+
+  // Initialize search query from sessionStorage when navigating to search page
+  useEffect(() => {
+    if (currentPage === 'search') {
+      const query = sessionStorage.getItem('searchQuery') || '';
+      if (query && !headerSearchQuery) {
+        setHeaderSearchQuery(query);
+        sessionStorage.removeItem('searchQuery');
+      }
+    }
+  }, [currentPage, headerSearchQuery]);
 
   // WebSocket for real-time connection status (replaces polling)
   // Only enable if Freebox is logged in
@@ -288,13 +307,13 @@ const App: React.FC = () => {
   };
 
   const handleAdminClick = () => {
-    window.location.hash = '#admin';
+    sessionStorage.setItem('adminMode', 'true');
     setCurrentPage('settings');
     // SettingsPage will handle showing the admin tab
   };
 
   const handleProfileClick = () => {
-    window.location.hash = '#admin';
+    sessionStorage.setItem('adminMode', 'true');
     setCurrentPage('settings');
     // SettingsPage will open with 'general' tab (Mon Profil)
     sessionStorage.setItem('adminTab', 'general');
@@ -387,8 +406,12 @@ const App: React.FC = () => {
 
   // Render Settings page
   if (currentPage === 'settings') {
-    // Check if we should show administration mode (from URL hash or state)
-    const showAdmin = window.location.hash === '#admin' || false;
+    // Check if we should show administration mode (from sessionStorage)
+    // Clean URL hash if present
+    if (window.location.hash === '#admin') {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    const showAdmin = sessionStorage.getItem('adminMode') === 'true' || false;
     // Check if we should open a specific admin tab (from sessionStorage)
     // Read it immediately to ensure it's available
     const adminTab = sessionStorage.getItem('adminTab') as 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | undefined;
@@ -407,7 +430,14 @@ const App: React.FC = () => {
   // Render Plugins page
   if (currentPage === 'plugins') {
     return renderPageWithFooter(
-      <PluginsPage onBack={() => setCurrentPage('dashboard')} />
+      <PluginsPage 
+        onBack={() => setCurrentPage('dashboard')}
+        onNavigateToSettings={() => {
+          sessionStorage.setItem('adminMode', 'true');
+          sessionStorage.setItem('adminTab', 'plugins');
+          setCurrentPage('settings');
+        }}
+      />
     );
   }
 
@@ -422,6 +452,30 @@ const App: React.FC = () => {
   if (currentPage === 'logs') {
     return renderPageWithFooter(
       <LogsPage onBack={() => setCurrentPage('dashboard')} />
+    );
+  }
+
+  // Render Search page
+  if (currentPage === 'search') {
+    return renderPageWithFooter(
+      <>
+        <Header 
+          systemInfo={systemInfo} 
+          connectionStatus={connectionStatus}
+          pageType="search"
+          user={user || undefined}
+          onSettingsClick={handleSettingsClick}
+          onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
+          onLogout={handleLogout}
+          onSearchClick={() => setCurrentPage('search')}
+        />
+        <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
+          <SearchPage 
+            onBack={() => setCurrentPage('dashboard')} 
+          />
+        </main>
+      </>
     );
   }
 
@@ -471,6 +525,7 @@ const App: React.FC = () => {
           onAdminClick={handleAdminClick}
           onProfileClick={handleProfileClick}
           onLogout={handleLogout}
+          onSearchClick={() => setCurrentPage('search')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <UnifiedDashboardPage 
@@ -478,8 +533,8 @@ const App: React.FC = () => {
             onNavigateToUniFi={() => setCurrentPage('unifi')}
             onNavigateToPlugins={() => {
               // Set sessionStorage BEFORE changing page to ensure it's read
+              sessionStorage.setItem('adminMode', 'true');
               sessionStorage.setItem('adminTab', 'plugins');
-              window.location.hash = '#admin';
               setCurrentPage('settings');
             }}
           />

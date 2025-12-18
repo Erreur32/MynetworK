@@ -12,12 +12,13 @@ import {
   Plug,
   Users,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { usePluginStore } from '../../stores/pluginStore';
 
-export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs';
+export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search';
 
 interface FooterProps {
   currentPage?: PageType;
@@ -63,6 +64,15 @@ export const Footer: React.FC<FooterProps> = ({
       // Sur le dashboard: masquer Freebox, Paramètres et les onglets Freebox (accès via les cartes/plugins)
       // Le bouton "Administration" de l'app est géré séparément dans le footer du dashboard
       if (currentPage === 'dashboard') {
+        if (tab.id === 'freebox' || 
+            tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
+            tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
+          return false;
+        }
+      }
+      
+      // Sur la page de recherche: afficher les mêmes onglets que le dashboard
+      if (currentPage === 'search') {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
             tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
@@ -168,11 +178,26 @@ export const Footer: React.FC<FooterProps> = ({
             );
           })}
           
-          {/* Show "Administration" button on dashboard if settings tab is hidden */}
-          {currentPage === 'dashboard' && !visibleTabs.find(t => t.id === 'settings') && (
+          {/* Show "Recherche" button on dashboard and search page */}
+          {(currentPage === 'dashboard' || currentPage === 'search') && (
+            <button
+              onClick={() => onPageChange?.('search')}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
+                currentPage === 'search'
+                  ? 'btn-theme-active border-theme-hover text-theme-primary'
+                  : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
+              }`}
+            >
+              <Search size={18} />
+              <span className="text-sm font-medium whitespace-nowrap">Recherche</span>
+            </button>
+          )}
+          
+          {/* Show "Administration" button on dashboard and search page if settings tab is hidden */}
+          {(currentPage === 'dashboard' || currentPage === 'search') && !visibleTabs.find(t => t.id === 'settings') && (
             <button
               onClick={() => {
-                window.location.hash = '#admin';
+                sessionStorage.setItem('adminMode', 'true');
                 onPageChange?.('settings');
               }}
               className="flex items-center gap-3 px-4 py-3 rounded-lg border transition-all btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary"

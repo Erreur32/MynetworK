@@ -105,11 +105,28 @@ router.get('/ping', asyncHandler(async (req, res) => {
   const target = (req.query.target as string) || '8.8.8.8'; // Google DNS as default
   const count = Math.min(parseInt(req.query.count as string) || 10, 20); // Max 20 pings
 
-  try {
-    // Run ping command
-    const { stdout } = await execAsync(`ping ${PING_FLAG} ${count} ${target}`, {
-      timeout: 30000
+  // Check if request is still active before processing
+  if (req.socket.destroyed) {
+    return res.json({
+      success: false,
+      error: {
+        code: 'connection_closed',
+        message: 'Connexion fermée'
+      }
     });
+  }
+
+  try {
+    // Run ping command with proper error handling
+    const { stdout } = await execAsync(`ping ${PING_FLAG} ${count} ${target}`, {
+      timeout: 30000,
+      maxBuffer: 1024 * 1024 // 1MB buffer
+    });
+
+    // Check if response is still writable
+    if (res.headersSent || req.socket.destroyed) {
+      return;
+    }
 
     const stats = parsePingOutput(stdout);
 
@@ -122,17 +139,31 @@ router.get('/ping', asyncHandler(async (req, res) => {
 
     console.log('[Speedtest] Ping result:', result, 'raw stats:', stats);
 
-    res.json({
-      success: true,
-      result
-    });
-  } catch (error) {
+    // Check again before sending response
+    if (!res.headersSent && !req.socket.destroyed) {
+      res.json({
+        success: true,
+        result
+      });
+    }
+  } catch (error: any) {
+    // Check if response is still writable
+    if (res.headersSent || req.socket.destroyed) {
+      return;
+    }
+
     console.error('[Speedtest] Ping failed:', error);
+    
+    // Handle specific error types
+    const errorMessage = error.message || 'Impossible de mesurer la latence';
+    const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT');
+    const isSocketError = errorMessage.includes('socket') || errorMessage.includes('ECONNRESET');
+
     res.json({
       success: false,
       error: {
-        code: 'ping_failed',
-        message: 'Impossible de mesurer la latence'
+        code: isTimeout ? 'ping_timeout' : isSocketError ? 'connection_error' : 'ping_failed',
+        message: isTimeout ? 'Timeout lors du ping' : isSocketError ? 'Erreur de connexion' : 'Impossible de mesurer la latence'
       }
     });
   }

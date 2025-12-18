@@ -1,0 +1,59 @@
+# ===========================================
+# MynetworK - Docker Hardened Image (Node 20)
+# ===========================================
+
+# ---------- Stage 1 : Build ----------
+FROM --platform=$BUILDPLATFORM docker/hardened-node:20 AS builder
+
+WORKDIR /app
+
+# deps
+COPY package*.json ./
+RUN npm ci
+
+# sources
+COPY . .
+
+# build Vite
+RUN npm run build
+
+
+# ---------- Stage 2 : Production ----------
+FROM docker/hardened-node:20
+
+WORKDIR /app
+
+# besoin root temporairement (bcrypt, etc.)
+USER root
+RUN apk add --no-cache python3 make g++
+
+# data persistante
+RUN mkdir -p /app/data && chown -R node:node /app
+
+# retour user non-root
+USER node
+
+# deps prod uniquement
+COPY --chown=node:node package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# frontend
+COPY --chown=node:node --from=builder /app/dist ./dist
+
+# backend
+COPY --chown=node:node --from=builder /app/server ./server
+COPY --chown=node:node --from=builder /app/tsconfig.json ./
+
+# env
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+ENV FREEBOX_HOST=mafreebox.freebox.fr
+
+# healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+ CMD wget -q --spider http://127.0.0.1:${PORT}/api/health || exit 1
+
+EXPOSE 3000
+
+CMD ["node_modules/.bin/tsx", "server/index.ts"]

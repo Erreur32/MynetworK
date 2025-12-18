@@ -9,7 +9,8 @@ import {
   Wifi,
   Activity,
   Phone,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import logoUltra from '../../icons/logo_ultra.svg';
 import logoMynetworK from '../../icons/logo_mynetwork.svg';
@@ -198,6 +199,7 @@ export const Header: React.FC<HeaderProps> = ({
   onAdminClick,
   onProfileClick,
   onLogout,
+  onSearchClick,
   unifiStats
 }) => {
   // Get capabilities for model name (respects mock mode)
@@ -207,6 +209,19 @@ export const Header: React.FC<HeaderProps> = ({
   const [showCpuTooltip, setShowCpuTooltip] = useState(false);
   const [showHddTooltip, setShowHddTooltip] = useState(false);
   const [showFanTooltip, setShowFanTooltip] = useState(false);
+  
+  // State for current time (for search page)
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Update time every minute (for search page)
+  useEffect(() => {
+    if (pageType === 'search') {
+      const updateTime = () => setCurrentTime(new Date());
+      updateTime(); // Set initial time
+      const interval = setInterval(updateTime, 60000); // Update every minute
+      return () => clearInterval(interval);
+    }
+  }, [pageType]);
 
   // Refs for tooltip positioning
   const cpuRef = React.useRef<HTMLDivElement | null>(null);
@@ -260,6 +275,8 @@ export const Header: React.FC<HeaderProps> = ({
       document.title = `Freebox OS${modelSuffix}`;
     } else if (pageType === 'unifi') {
       document.title = 'UniFi Controller - MynetworK';
+    } else if (pageType === 'search') {
+      document.title = 'Recherche - MynetworK';
     } else {
       document.title = 'MynetworK';
     }
@@ -322,6 +339,16 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
             </div>
           </>
+        ) : pageType === 'search' ? (
+          <>
+            <div className="w-7 h-7 flex items-center justify-center">
+              <Search className="w-7 h-7 text-accent-primary" />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="font-semibold text-theme-primary">Recherche</span>
+              <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
+            </div>
+          </>
         ) : (
           <>
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
@@ -332,6 +359,46 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
       </div>
+
+      {/* Search bar - Only on dashboard */}
+      {pageType === 'dashboard' && onSearchClick && (
+        <div className="flex-1 max-w-md mx-4 hidden md:flex">
+          <div className="relative w-full">
+            <input
+              type="text"
+              placeholder="Rechercher (nom, MAC, IP, port...)"
+              className="w-full px-4 py-2 pl-10 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && onSearchClick) {
+                  const query = (e.target as HTMLInputElement).value.trim();
+                  if (query) {
+                    sessionStorage.setItem('searchQuery', query);
+                    onSearchClick();
+                  }
+                }
+              }}
+            />
+            <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-theme-tertiary" />
+          </div>
+        </div>
+      )}
+
+      {/* Date and Time - Only on search page (center) */}
+      {pageType === 'search' && (
+        <div className="flex-1 flex items-center justify-center mx-4 hidden md:flex">
+          <div className="flex items-center gap-2 bg-theme-secondary px-4 py-2 rounded-lg border border-theme">
+            <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
+            <div className="flex flex-col items-end">
+              <div className="text-sm font-mono text-theme-primary font-semibold">
+                {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="text-xs text-theme-secondary">
+                {currentTime.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status badges and actions */}
       <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-hide" style={{ overflowY: 'visible' }}>

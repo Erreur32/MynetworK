@@ -163,21 +163,35 @@ class ApiClient {
       }
 
       return data as ApiResponse<T>;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[API] ${method} ${endpoint} failed:`, error);
       
       // Provide more detailed error messages
       let errorMessage = 'Erreur réseau';
+      let errorCode = 'NETWORK_ERROR';
+      
       if (error instanceof TypeError && error.message.includes('fetch')) {
         errorMessage = 'Impossible de contacter le serveur. Vérifiez que le serveur est démarré et accessible.';
       } else if (error instanceof Error) {
         errorMessage = error.message;
+        
+        // Handle socket errors specifically
+        if (error.message.includes('socket') || error.message.includes('ended') || error.message.includes('ECONNRESET')) {
+          errorCode = 'SOCKET_ERROR';
+          errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+        } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+          errorCode = 'TIMEOUT_ERROR';
+          errorMessage = 'La requête a expiré. Veuillez réessayer.';
+        } else if (error.message.includes('aborted') || error.message.includes('ABORTED')) {
+          errorCode = 'ABORTED_ERROR';
+          errorMessage = 'Requête annulée.';
+        }
       }
       
       return {
         success: false,
         error: {
-          code: 'NETWORK_ERROR',
+          code: errorCode,
           message: errorMessage
         }
       };

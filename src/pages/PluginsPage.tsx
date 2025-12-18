@@ -18,7 +18,7 @@ interface PluginsPageProps {
     onBack: () => void;
 }
 
-export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
+export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack, onNavigateToSettings }) => {
     const { plugins, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
     const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
     const { capabilities, fetchCapabilities } = useCapabilitiesStore();
@@ -207,11 +207,16 @@ export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack }) => {
                                     {plugin.id !== 'freebox' && (
                                         <button
                                             onClick={() => {
-                                                window.location.hash = '#admin';
                                                 // Navigate to settings with plugins tab
+                                                sessionStorage.setItem('adminMode', 'true');
                                                 sessionStorage.setItem('adminTab', 'plugins');
-                                                // Trigger navigation (will be handled by App.tsx)
-                                                window.dispatchEvent(new Event('hashchange'));
+                                                // Navigate to settings page
+                                                if (onNavigateToSettings) {
+                                                    onNavigateToSettings();
+                                                } else {
+                                                    // Fallback: use onBack and navigate manually
+                                                    onBack();
+                                                }
                                             }}
                                             className="w-full mt-3 px-3 py-2 bg-[#1a1a1a] hover:bg-[#252525] border border-gray-700 rounded-lg text-sm text-gray-300 hover:text-white transition-colors flex items-center justify-center gap-2"
                                         >

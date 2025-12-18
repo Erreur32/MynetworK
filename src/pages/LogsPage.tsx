@@ -53,9 +53,19 @@ export const LogsPage: React.FC<LogsPageProps> = ({ onBack }) => {
             const response = await api.get<{ logs: Log[]; total: number }>(`/api/logs?${params}`);
             if (response.success && response.result) {
                 setLogs(response.result.logs);
+            } else {
+                // Handle API error response
+                const errorMsg = response.error?.message;
+                if (errorMsg && !errorMsg.includes('socket') && !errorMsg.includes('ECONNRESET')) {
+                    console.error('Failed to fetch logs:', errorMsg);
+                }
             }
-        } catch (err) {
-            console.error('Failed to fetch logs:', err);
+        } catch (err: any) {
+            // Handle network/socket errors silently
+            const errorMessage = err.message || err.error?.message || '';
+            if (errorMessage && !errorMessage.includes('socket') && !errorMessage.includes('ECONNRESET')) {
+                console.error('Failed to fetch logs:', errorMessage);
+            }
         } finally {
             setIsLoading(false);
         }
