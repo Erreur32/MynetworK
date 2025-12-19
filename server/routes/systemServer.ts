@@ -418,7 +418,8 @@ const getDockerVersion = async (): Promise<string | null> => {
     // Method 3: Use Docker API via Unix socket (if docker socket is mounted)
     // This works even if docker binary is not available in container
     try {
-      const dockerSocket = '/var/run/docker.sock';
+      // Use DOCKER_HOST environment variable if set (for socket-proxy), otherwise use default socket
+      const dockerSocket = process.env.DOCKER_HOST?.replace('unix://', '') || '/var/run/docker.sock';
       try {
         await fs.access(dockerSocket);
         debugLog(`[SystemServer] Docker socket found at ${dockerSocket}, querying Docker API`);
@@ -559,10 +560,51 @@ const getDockerVersion = async (): Promise<string | null> => {
  */
 const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
   try {
-    const dockerSocket = '/var/run/docker.sock';
+    const http = await import('http');
+    
+    // Check if using socket-proxy via HTTP (DOCKER_HOST starts with http://)
+    const dockerHost = process.env.DOCKER_HOST;
+    if (dockerHost && dockerHost.startsWith('http://')) {
+      // Use HTTP API (socket-proxy)
+      const url = new URL(path, dockerHost);
+      return await new Promise<T | null>((resolve, reject) => {
+        const options = {
+          hostname: url.hostname,
+          port: url.port || '2375',
+          path: url.pathname,
+          method: 'GET'
+        };
+        
+        const req = http.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(data) as T);
+            } catch {
+              reject(new Error('Failed to parse Docker API response'));
+            }
+          });
+        });
+        
+        req.on('error', (err) => {
+          console.error(`[SystemServer] Docker API request error for ${path}:`, err);
+          reject(err);
+        });
+        req.setTimeout(3000, () => {
+          req.destroy();
+          const timeoutError = new Error(`Docker API request timeout for ${path}`);
+          console.error(`[SystemServer]`, timeoutError);
+          reject(timeoutError);
+        });
+        req.end();
+      });
+    }
+    
+    // Use Unix socket (default or socket-proxy socket)
+    const dockerSocket = dockerHost?.replace('unix://', '') || '/var/run/docker.sock';
     await fs.access(dockerSocket);
     
-    const http = await import('http');
     return await new Promise<T | null>((resolve, reject) => {
       const options = {
         socketPath: dockerSocket,
@@ -624,7 +666,8 @@ const getDockerStats = async (): Promise<{
 } | null> => {
   // Try to access Docker socket even if not running in Docker
   // This allows getting Docker stats when running locally (npm run dev) with Docker installed
-  const dockerSocket = '/var/run/docker.sock';
+  // Use DOCKER_HOST environment variable if set (for socket-proxy), otherwise use default socket
+  const dockerSocket = process.env.DOCKER_HOST?.replace('unix://', '') || '/var/run/docker.sock';
   
   try {
     await fs.access(dockerSocket);

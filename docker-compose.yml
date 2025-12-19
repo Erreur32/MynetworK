@@ -1,8 +1,42 @@
 services:
+  # Docker Socket Proxy - Secure access to Docker API
+  # This proxy limits Docker API access to read-only operations only
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: MynetworK-socket-proxy
+    environment:
+      - LOG_LEVEL=warning
+      - TZ=Europe/Paris
+      # Docker API permissions - Only read operations enabled
+      - CONTAINERS=1      # List containers (read-only)
+      - EVENTS=1          # Docker events (read-only)
+      - IMAGES=1          # List images (read-only)
+      - INFO=1            # Docker info (read-only)
+      - NETWORKS=1        # List networks (read-only)
+      - PING=1            # Docker ping (health check)
+      - POST=0            # Disable write operations (security)
+      - VERSION=1         # Docker version (read-only)
+      - VOLUMES=1         # List volumes (read-only)
+      - SYSTEM_DF=1       # Docker system disk usage (read-only)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    networks:
+      - mynetwork_network
+    ports:
+      # Expose HTTP API for Docker socket proxy (internal network only)
+      - "127.0.0.1:2375:2375"
+
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
     container_name: MynetworK
     restart: unless-stopped
+    depends_on:
+      - socket-proxy
 
     ports:
       - "${DASHBOARD_PORT:-7505}:3000"
@@ -17,13 +51,23 @@ services:
       - FREEBOX_DEVICE_NAME=${FREEBOX_DEVICE_NAME:-MynetworK Production}
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
       - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      # Host root path used to read real host metrics when running in Docker
+      # Required for disk usage and system information detection
+      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+      # Docker socket proxy URL (instead of direct access to docker.sock)
+      # Socket-proxy exposes HTTP API on port 2375
+      - DOCKER_HOST=http://socket-proxy:2375
 
     volumes:
       - mynetwork_data:/app/data
       - /:/host:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # No need to mount docker.sock - using HTTP API via socket-proxy instead
+      # This provides secure, read-only access to Docker API
+
+    networks:
+      - mynetwork_network
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
@@ -31,6 +75,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+networks:
+  mynetwork_network:
+    name: mynetwork_network
 
 volumes:
   mynetwork_data:
