@@ -12,7 +12,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 interface TokenData {
     appToken: string;
-    appId?: string; // Store app_id used when token was created
     trackId?: number;
     status?: string;
 }
@@ -103,28 +102,8 @@ class FreeboxApiService {
                 const fileContent = fs.readFileSync(tokenPath, 'utf-8');
                 console.log(`[FreeboxAPI] File content length: ${fileContent.length} bytes`);
                 const data = JSON.parse(fileContent) as TokenData;
-                
-                // Check if app_id has changed (token was created with different app_id)
-                const currentAppId = config.freebox.appId;
-                if (data.appId && data.appId !== currentAppId) {
-                    console.warn(`[FreeboxAPI] App ID has changed from '${data.appId}' to '${currentAppId}'. Token is no longer valid. Resetting token...`);
-                    this.resetToken();
-                    return; // Token has been reset, exit early
-                }
-                
-                // If token doesn't have app_id stored (old format), validate it by trying to use it
-                // But first, store the current app_id for future checks
-                if (!data.appId && data.appToken) {
-                    // Token from old format - we'll validate it on first use
-                    // For now, just load it but mark that we need to update the file
-                    this.appToken = data.appToken;
-                    // Update token file to include current app_id
-                    this.saveToken(data.appToken);
-                    console.log('[FreeboxAPI] Loaded app_token from file (old format, updated with current app_id)');
-                } else {
-                    this.appToken = data.appToken;
-                    console.log('[FreeboxAPI] Loaded app_token from file');
-                }
+                this.appToken = data.appToken;
+                console.log('[FreeboxAPI] Loaded app_token from file');
             } catch (error) {
                 console.log('[FreeboxAPI] Failed to load token file:', error);
             }
@@ -155,14 +134,9 @@ class FreeboxApiService {
         if (!fs.existsSync(tokenDir)) {
             fs.mkdirSync(tokenDir, {recursive: true});
         }
-        // Store app_id with token to detect changes later
-        const tokenData: TokenData = {
-            appToken,
-            appId: config.freebox.appId
-        };
-        fs.writeFileSync(tokenPath, JSON.stringify(tokenData, null, 2), 'utf-8');
+        fs.writeFileSync(tokenPath, JSON.stringify({appToken}, null, 2), 'utf-8');
         this.appToken = appToken;
-        console.log(`[FreeboxAPI] Saved app_token to ${tokenPath} (app_id: ${config.freebox.appId})`);
+        console.log(`[FreeboxAPI] Saved app_token to ${tokenPath}`);
     }
 
     // Reset/delete app_token (for re-registration when token is invalid)
@@ -344,29 +318,6 @@ class FreeboxApiService {
         );
 
         if (!response.success || !response.result) {
-            // Check if error indicates token is invalid or deleted
-            const errorCode = response.error_code?.toLowerCase() || '';
-            const errorMsg = (response.msg || '').toLowerCase();
-            
-            // Common error codes/messages when token is invalid or deleted:
-            // - "invalid_token", "invalid_app_token", "app_token_invalid"
-            // - "auth_required" (sometimes)
-            // - Messages containing "token", "app_token", "invalid", "unknown"
-            const isTokenInvalid = 
-                errorCode.includes('invalid') && (errorCode.includes('token') || errorCode.includes('app')) ||
-                errorCode.includes('app_token') ||
-                errorMsg.includes('invalid token') ||
-                errorMsg.includes('invalid app_token') ||
-                errorMsg.includes('unknown app_token') ||
-                errorMsg.includes('token invalide') ||
-                errorMsg.includes('app_token invalide');
-            
-            if (isTokenInvalid) {
-                console.warn('[FreeboxAPI] Token appears to be invalid or deleted on Freebox. Resetting local token...');
-                this.resetToken();
-                throw new Error('TOKEN_DELETED: Le token a été supprimé de la Freebox. Réenregistrement nécessaire.');
-            }
-            
             throw new Error(response.msg || response.error_code || 'Login failed');
         }
 
@@ -396,35 +347,8 @@ class FreeboxApiService {
     async checkSession(): Promise<boolean> {
         try {
             const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN);
-            
-            // If request failed, check if it's due to invalid token
-            if (!response.success) {
-                const errorCode = response.error_code?.toLowerCase() || '';
-                const errorMsg = (response.msg || '').toLowerCase();
-                
-                const isTokenInvalid = 
-                    errorCode.includes('invalid') && (errorCode.includes('token') || errorCode.includes('app')) ||
-                    errorCode.includes('app_token') ||
-                    errorMsg.includes('invalid token') ||
-                    errorMsg.includes('invalid app_token') ||
-                    errorMsg.includes('unknown app_token') ||
-                    errorMsg.includes('token invalide') ||
-                    errorMsg.includes('app_token invalide');
-                
-                if (isTokenInvalid && this.appToken) {
-                    console.warn('[FreeboxAPI] Token appears to be invalid during session check. Resetting local token...');
-                    this.resetToken();
-                }
-            }
-            
             return response.success && response.result?.logged_in === true;
-        } catch (error) {
-            // If error message indicates token issue, reset it
-            const errorMsg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-            if (errorMsg.includes('token') && this.appToken) {
-                console.warn('[FreeboxAPI] Token error during session check. Resetting local token...');
-                this.resetToken();
-            }
+        } catch {
             return false;
         }
     }

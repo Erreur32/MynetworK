@@ -60,19 +60,8 @@ export class FreeboxPlugin extends BasePlugin {
             
             if (!isLoggedIn) {
                 console.log('[FreeboxPlugin] Session not valid, attempting to login...');
-                try {
-                    await this.apiService.login();
-                    console.log('[FreeboxPlugin] Login successful');
-                } catch (loginError) {
-                    const errorMessage = loginError instanceof Error ? loginError.message : 'Unknown error';
-                    // Check if error indicates token was deleted
-                    if (errorMessage.includes('TOKEN_DELETED') || errorMessage.includes('Réenregistrement nécessaire')) {
-                        console.warn('[FreeboxPlugin] Token has been deleted from Freebox. Re-registration required.');
-                        // Token has been reset by login() method, plugin will show as not registered
-                        return; // Exit early, user needs to re-register
-                    }
-                    throw loginError; // Re-throw other errors
-                }
+                await this.apiService.login();
+                console.log('[FreeboxPlugin] Login successful');
             } else {
                 console.log('[FreeboxPlugin] Session is valid, maintaining connection');
             }
@@ -476,10 +465,7 @@ export class FreeboxPlugin extends BasePlugin {
     async testConnection(): Promise<boolean> {
         try {
             if (!this.apiService.isRegistered()) {
-                // Throw error with NOT_REGISTERED code so frontend can display appropriate message
-                const error = new Error('NOT_REGISTERED') as Error & { code?: string };
-                error.code = 'NOT_REGISTERED';
-                throw error;
+                return false;
             }
             
             // Check if logged in, try to reconnect if needed (same logic as getStats)
@@ -490,33 +476,15 @@ export class FreeboxPlugin extends BasePlugin {
                     await this.apiService.login();
                     console.log('[FreeboxPlugin] Reconnection successful in testConnection()');
                 } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    // Check if error indicates token was deleted
-                    if (errorMessage.includes('TOKEN_DELETED') || errorMessage.includes('Réenregistrement nécessaire')) {
-                        console.warn('[FreeboxPlugin] Token has been deleted from Freebox during test. Re-registration required.');
-                        // Throw error with TOKEN_DELETED code so frontend can display appropriate message
-                        const tokenError = new Error('TOKEN_DELETED') as Error & { code?: string };
-                        tokenError.code = 'TOKEN_DELETED';
-                        throw tokenError;
-                    }
-                    console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', errorMessage);
-                    throw error; // Re-throw to propagate error message
+                    console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', error);
+                    return false;
                 }
             }
             
             const result = await this.apiService.getSystemInfo();
             return result.success;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            if (errorMessage.includes('TOKEN_DELETED') || (error instanceof Error && (error as any).code === 'TOKEN_DELETED')) {
-                console.warn('[FreeboxPlugin] Token deleted detected in testConnection()');
-                // Re-throw with code for proper handling
-                const tokenError = new Error('TOKEN_DELETED') as Error & { code?: string };
-                tokenError.code = 'TOKEN_DELETED';
-                throw tokenError;
-            }
-            // Re-throw other errors to propagate them
-            throw error;
+        } catch {
+            return false;
         }
     }
 

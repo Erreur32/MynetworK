@@ -12,14 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Development Docker files
-docker-compose.dev.yml
-docker-compose.local.yml
-Dockerfile.dev
-Dockerfile_orig
-Dockerfile_DHI
-Dockerfile_Hardened
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -53,23 +45,15 @@ config/*.conf
 !config/*.example
 !config/*.example.conf
 
- 
+# Claude Code
+.claude
 .reboot_schedule.json
-commit-message.txt
-# Cursor AI rules (user-specific)
-.cursorrules
 
-# Development files and folders
+# Local comparison / archives that must never be committed
+# Private development folder (contains tokens, internal docs, secrets)
 Doc_dev/
 Doc_Dev/
 Aide*
-Aide_*
-TODO.md
-MynetworK.code-workspace
-*.code-workspace
-img-capture/
-index.html
-
 
 # Scripts with hardcoded credentials (development only)
 # These scripts contain sensitive credentials and should not be committed
@@ -79,10 +63,8 @@ unifi_script.sh
 unifi_token.sh
 unifi_token_interactif.sh
 unitfi_test.sh
-commit-message.txt
+
 # Backup files
 *.backup
 *.bak
-*~.cursorrules
-commit-message.txt
-.cursorrules
+*~

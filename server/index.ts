@@ -255,88 +255,6 @@ function getNetworkIP(): string | null {
   return null;
 }
 
-// Get host machine IP when running in Docker
-function getHostMachineIP(): string | null {
-  try {
-    // Method 1: Read host network interfaces from /host/sys/class/net/
-    // This gives us the real host machine IP addresses
-    const hostNetPath = '/host/sys/class/net';
-    if (fsSync.existsSync(hostNetPath)) {
-      const interfaces = fsSync.readdirSync(hostNetPath);
-      for (const iface of interfaces) {
-        // Skip virtual interfaces (lo, docker, veth, etc.)
-        if (iface === 'lo' || iface.startsWith('docker') || iface.startsWith('veth') || 
-            iface.startsWith('br-') || iface.startsWith('virbr')) {
-          continue;
-        }
-        
-        // Try to read IP address from /host/sys/class/net/<iface>/address (MAC) then get IP
-        // Better: read from /host/proc/net/route or use ip command via chroot
-        try {
-          // Use chroot to execute 'ip addr' on host to get real IPs
-          const { execSync } = require('child_process');
-          const ipCommand = `chroot /host ip -4 addr show ${iface} 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1`;
-          const result = execSync(ipCommand, { encoding: 'utf8', timeout: 2000 }).trim();
-          if (result && !result.startsWith('127.') && !result.startsWith('172.16.') && 
-              !result.startsWith('172.17.') && !result.startsWith('172.18.') && 
-              !result.startsWith('172.19.') && !result.startsWith('172.20.') && 
-              !result.startsWith('172.21.') && !result.startsWith('172.22.') && 
-              !result.startsWith('172.23.') && !result.startsWith('172.24.') && 
-              !result.startsWith('172.25.') && !result.startsWith('172.26.') && 
-              !result.startsWith('172.27.') && !result.startsWith('172.28.') && 
-              !result.startsWith('172.29.') && !result.startsWith('172.30.') && 
-              !result.startsWith('172.31.')) {
-            return result;
-          }
-        } catch {
-          // Continue to next interface
-        }
-      }
-    }
-    
-    // Method 2: Try to read from /host/proc/net/route to find interface with default route
-    // Then get IP of that interface from /host/proc/net/dev or ip command
-    const routePath = '/host/proc/net/route';
-    if (fsSync.existsSync(routePath)) {
-      const routeContent = fsSync.readFileSync(routePath, 'utf8');
-      const lines = routeContent.split('\n');
-      for (const line of lines) {
-        if (line.startsWith('Iface') || !line.trim()) continue;
-        const parts = line.split(/\s+/);
-        // Default route has destination 00000000
-        if (parts.length >= 3 && parts[1] === '00000000') {
-          const iface = parts[0];
-          if (iface && iface !== 'lo' && !iface.startsWith('docker') && 
-              !iface.startsWith('veth') && !iface.startsWith('br-')) {
-            try {
-              // Get IP of this interface using chroot ip command
-              const { execSync } = require('child_process');
-              const ipCommand = `chroot /host ip -4 addr show ${iface} 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1`;
-              const result = execSync(ipCommand, { encoding: 'utf8', timeout: 2000 }).trim();
-              if (result && !result.startsWith('127.') && !result.startsWith('172.16.') && 
-                  !result.startsWith('172.17.') && !result.startsWith('172.18.') && 
-                  !result.startsWith('172.19.') && !result.startsWith('172.20.') && 
-                  !result.startsWith('172.21.') && !result.startsWith('172.22.') && 
-                  !result.startsWith('172.23.') && !result.startsWith('172.24.') && 
-                  !result.startsWith('172.25.') && !result.startsWith('172.26.') && 
-                  !result.startsWith('172.27.') && !result.startsWith('172.28.') && 
-                  !result.startsWith('172.29.') && !result.startsWith('172.30.') && 
-                  !result.startsWith('172.31.')) {
-                return result;
-              }
-            } catch {
-              // Continue
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    // Fallback
-  }
-  return null;
-}
-
 // Check JWT secret on startup and notify if default
 const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
 if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
@@ -378,84 +296,27 @@ server.listen(port, host, () => {
   // Determine frontend URL to display based on environment
   const isProduction = process.env.NODE_ENV === 'production';
   const isDockerEnv = isDocker();
-  
-  // Get network IP (used for both frontend and backend URLs)
-  // Try to get host machine IP (not container IP) when in Docker
-  let networkIP: string | null = null;
-  if (isDockerEnv) {
-    // In Docker, get host machine IP from gateway
-    networkIP = getHostMachineIP();
-    // Fallback to container IP if host IP not found
-    if (!networkIP) {
-      networkIP = getNetworkIP();
-    }
-  } else if (!isProduction) {
-    // Development mode (not Docker): get local network IP
-    networkIP = getNetworkIP();
-  }
-  
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
   
   if (isProduction) {
-    // Production mode (Docker): use PUBLIC_URL, or detect host IP, or default to localhost
-    if (config.publicUrl) {
-      frontendWebUrl = config.publicUrl;
-      frontendLocalUrl = frontendWebUrl;
-    } else if (isDockerEnv && networkIP) {
-      // In Docker production, use detected host machine IP
-      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
-      frontendWebUrl = `http://${networkIP}:${dashboardPort}`;
-      frontendLocalUrl = frontendWebUrl;
-    } else {
-      // Fallback to localhost
-      frontendWebUrl = `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`;
-      frontendLocalUrl = frontendWebUrl;
-    }
+    // Production mode (Docker): use PUBLIC_URL or default to localhost with port mapping
+    frontendWebUrl = config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`;
+    frontendLocalUrl = frontendWebUrl;
   } else {
-    // Development mode: frontend is on Vite dev server
-    const vitePort = process.env.VITE_PORT || '3666';
-    // In Docker, use host machine IP for local URL too (more useful than localhost)
-    if (isDockerEnv && networkIP) {
-      frontendLocalUrl = `http://${networkIP}:${vitePort}`;
-      frontendWebUrl = frontendLocalUrl;
-    } else {
-      frontendLocalUrl = `http://localhost:${vitePort}`;
-      frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
-    }
+    // Development mode: frontend is on Vite dev server (port 5173)
+    const vitePort = process.env.VITE_PORT || '5173';
+    const networkIP = getNetworkIP();
+    frontendLocalUrl = `http://localhost:${vitePort}`;
+    frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
   }
   
-  // Determine API and WebSocket URLs
-  // Always prefer host machine IP over localhost when available
-  let apiUrl: string;
-  let wsUrl: string;
-  
-  if (isProduction) {
-    // Production: use PUBLIC_URL, or detect host IP, or default
-    if (config.publicUrl) {
-      apiUrl = config.publicUrl;
-      wsUrl = config.publicUrl.replace(/^http/, 'ws') + '/ws/connection';
-    } else if (networkIP) {
-      // Use detected host machine IP (preferred over localhost)
-      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
-      apiUrl = `http://${networkIP}:${dashboardPort}`;
-      wsUrl = `ws://${networkIP}:${dashboardPort}/ws/connection`;
-    } else {
-      // Fallback to localhost only if no network IP detected
-      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
-      apiUrl = `http://localhost:${dashboardPort}`;
-      wsUrl = `ws://localhost:${dashboardPort}/ws/connection`;
-    }
-  } else {
-    // Development: use host machine IP if available, otherwise localhost
-    if (networkIP) {
-      apiUrl = `http://${networkIP}:${port}`;
-      wsUrl = `ws://${networkIP}:${port}/ws/connection`;
-    } else {
-      apiUrl = `http://localhost:${port}`;
-      wsUrl = `ws://localhost:${port}/ws/connection`;
-    }
-  }
+  const apiUrl = isProduction 
+    ? (config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`)
+    : `http://localhost:${port}`;
+  const wsUrl = isProduction
+    ? (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${port}/ws/connection`)
+    : `ws://localhost:${port}/ws/connection`;
   
   // ANSI color codes for terminal output
   const colors = {
@@ -499,78 +360,8 @@ server.listen(port, host, () => {
   }
 
   // Calculate content widths for all lines
-  const title = isProduction || isDockerEnv ? 'MynetworK Backend Server' : 'MynetworK Backend Server [DEV]';
+  const title = 'MynetworK Backend Server';
   const subtitle = 'Multi-Source Network Dashboard';
-  
-  // Get container name if in Docker
-  let containerName: string | null = null;
-  if (isDockerEnv) {
-    try {
-      // Priority 1: CONTAINER_NAME env var (set in docker-compose.yml)
-      if (process.env.CONTAINER_NAME) {
-        containerName = process.env.CONTAINER_NAME.trim();
-      } else {
-        // Priority 2: Try to extract from /proc/self/cgroup (contains container name/id)
-        try {
-          const cgroupPath = '/proc/self/cgroup';
-          if (fsSync.existsSync(cgroupPath)) {
-            const cgroupContent = fsSync.readFileSync(cgroupPath, 'utf8');
-            // Look for container name in cgroup path (format: .../docker/container_id or .../name=container_name)
-            const dockerMatch = cgroupContent.match(/docker[\/\-]([a-f0-9]{12,64}|[a-zA-Z0-9_-]+)/);
-            if (dockerMatch && dockerMatch[1]) {
-              const candidate = dockerMatch[1];
-              // If it's not a hex ID (12+ hex chars), it might be a name
-              if (candidate.length > 12 && !/^[a-f0-9]{12,}$/.test(candidate)) {
-                containerName = candidate;
-              } else if (candidate.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(candidate)) {
-                // Could be a name if it contains letters/underscores
-                containerName = candidate;
-              }
-            }
-          }
-        } catch {
-          // Continue to next method
-        }
-        
-        // Priority 3: HOSTNAME env var (but might be container ID)
-        if (!containerName && process.env.HOSTNAME) {
-          const hostname = process.env.HOSTNAME.trim();
-          // Only use if it doesn't look like a container ID (12 hex chars)
-          if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
-            containerName = hostname;
-          }
-        }
-        
-        // Priority 4: /etc/hostname (but usually contains container ID)
-        if (!containerName) {
-          try {
-            const hostnamePath = '/etc/hostname';
-            if (fsSync.existsSync(hostnamePath)) {
-              const hostname = fsSync.readFileSync(hostnamePath, 'utf8').trim();
-              // Only use if it doesn't look like a container ID
-              if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
-                containerName = hostname;
-              }
-            }
-          } catch {
-            // Fallback to os.hostname()
-            if (!containerName) {
-              const hostname = os.hostname();
-              if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
-                containerName = hostname;
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // Final fallback
-      const hostname = os.hostname();
-      if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
-        containerName = hostname;
-      }
-    }
-  }
   
   // Determine version label with app version
   const versionLabel = isProduction || isDockerEnv 
@@ -578,12 +369,11 @@ server.listen(port, host, () => {
     : `DEV v${appVersion}`;
   
   const contentLines = [
-    ...(containerName ? [`  📦 Container:            ${containerName}`] : []),
-    `  🌐 Frontend WEB:    ${frontendWebUrl}`,
-    `  💻 Frontend Local:  ${frontendLocalUrl}`,
-    `  🔌 Backend API:     ${apiUrl}/api/health`,
-    `  🔗 WebSocket:       ${wsUrl}`,
-    `  📡 Freebox:         ${config.freebox.url}`,
+    `  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
+    `  💻 Frontend Local:      ${frontendLocalUrl}`,
+    `  🔌 Backend API:         ${apiUrl}/api/health`,
+    `  🔗 WebSocket:           ${wsUrl}`,
+    `  📡 Freebox:             ${config.freebox.url}`,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
@@ -595,8 +385,7 @@ server.listen(port, host, () => {
     ...contentLines.map(line => visibleLength(line)),
     visibleLength(title),
     visibleLength(subtitle),
-    visibleLength(versionLabel),
-    ...(containerName ? [visibleLength(`  📦 Container:            ${containerName}`)] : [])
+    visibleLength(versionLabel)
   );
   
   // Calculate total width: content + minimal padding (4 chars)
@@ -625,13 +414,12 @@ ${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${col
 ${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
-${containerName ? `${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}📦${colors.reset} ${colors.bright}Container:${colors.reset}            ${colors.cyan}${containerName}${colors.reset}${colors.reset}` : ''}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB:${colors.reset}    ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}   ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}    ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}     ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}          ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
@@ -647,7 +435,6 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
     `║${' '.repeat(subtitlePadding)}${subtitle}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}`,
     `╠${'═'.repeat(width)}`,
     `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
-    ...(containerName ? [`║  📦 Container:            ${containerName}`] : []),
     `╠${'═'.repeat(width)}`,
     `║  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
     `║  💻 Frontend Local:      ${frontendLocalUrl}`,

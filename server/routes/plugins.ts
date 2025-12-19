@@ -297,75 +297,26 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
                 // If no original config, just stop the plugin
                 await plugin.stop();
             }
-            } else {
-                // For Freebox plugin, check if app is registered first
-                if (pluginId === 'freebox') {
-                    const freeboxPlugin = plugin as any;
-                    if (freeboxPlugin.apiService && typeof freeboxPlugin.apiService.isRegistered === 'function') {
-                        const isRegistered = freeboxPlugin.apiService.isRegistered();
-                        if (!isRegistered) {
-                            // App is not registered - return specific error
-                            connectionStatus = false;
-                            errorMessage = 'NOT_REGISTERED';
-                            message = 'Application non enregistrée. Veuillez enregistrer l\'application via l\'onglet "Paramètres" ou le bouton "Auth".';
-                        } else {
-                            // App is registered, test connection
-                            try {
-                                const testResult = await pluginManager.testPluginConnection(pluginId);
-                                connectionStatus = testResult.success;
-                                if (!testResult.success && testResult.error) {
-                                    errorMessage = testResult.error;
-                                    // Check if error indicates token was deleted
-                                    if (testResult.error.includes('TOKEN_DELETED') || testResult.error.includes('Réenregistrement nécessaire')) {
-                                        errorMessage = 'TOKEN_DELETED';
-                                        message = 'Le token a été supprimé de la Freebox. Réenregistrement nécessaire. Veuillez enregistrer l\'application à nouveau via l\'onglet "Paramètres" → "Auth" ou le bouton "Auth".';
-                                    }
-                                }
-                            } catch (testError) {
-                                const testErrorMessage = testError instanceof Error ? testError.message : String(testError);
-                                // Check if error indicates token was deleted
-                                if (testErrorMessage.includes('TOKEN_DELETED') || testErrorMessage.includes('Réenregistrement nécessaire')) {
-                                    connectionStatus = false;
-                                    errorMessage = 'TOKEN_DELETED';
-                                    message = 'Le token a été supprimé de la Freebox. Réenregistrement nécessaire. Veuillez enregistrer l\'application à nouveau via l\'onglet "Paramètres" → "Auth" ou le bouton "Auth".';
-                                } else {
-                                    connectionStatus = false;
-                                    errorMessage = testErrorMessage;
-                                }
-                            }
-                        }
-                    } else {
-                        // Fallback to normal test
-                        const testResult = await pluginManager.testPluginConnection(pluginId);
-                        connectionStatus = testResult.success;
-                        if (!testResult.success && testResult.error) {
-                            errorMessage = testResult.error;
-                        }
-                    }
-                } else {
-                    // Use current plugin configuration for other plugins
-                    const testResult = await pluginManager.testPluginConnection(pluginId);
-                    connectionStatus = testResult.success;
-                    if (!testResult.success && testResult.error) {
-                        errorMessage = testResult.error;
-                    }
-                }
+        } else {
+            // Use current plugin configuration
+            const testResult = await pluginManager.testPluginConnection(pluginId);
+            connectionStatus = testResult.success;
+            if (!testResult.success && testResult.error) {
+                errorMessage = testResult.error;
             }
+        }
     } catch (error) {
         errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[PluginTest] Error testing ${pluginId}:`, error);
         connectionStatus = false;
     }
 
-    // Build a more informative message (only if not already set for Freebox NOT_REGISTERED case)
+    // Build a more informative message
     let message: string;
     if (connectionStatus) {
         message = 'Connection successful';
     } else {
-        if (errorMessage === 'NOT_REGISTERED') {
-            // Message already set above for Freebox not registered case
-            // Keep it as is
-        } else if (errorMessage) {
+        if (errorMessage) {
             // Include error details in the message
             message = `Connection failed: ${errorMessage}`;
         } else {

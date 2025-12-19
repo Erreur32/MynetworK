@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.1.2-blue?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.1.0-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
@@ -53,7 +53,7 @@
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    container_name: MynetworK
+    container_name: mynetwork
     restart: unless-stopped
 
     # Port mapping: host:container
@@ -62,26 +62,28 @@ services:
 
     # Environment configuration
     environment:
-      # Freebox configuration
+      - NODE_ENV=production
+      - PORT=3000
+      # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
+      # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
+      # - Sans nginx, l'application fonctionne sans cette variable
+      # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
-      # App name for Freebox API registration (visible in Freebox LCD/interface)
-      - FREEBOX_APP_NAME=${FREEBOX_APP_NAME:-MynetworK}
-      - FREEBOX_DEVICE_NAME=${FREEBOX_DEVICE_NAME:-MynetworK Production}
-      
       # ⚠️ SECURITE : Définissez JWT_SECRET via variable d'environnement
       # Ne jamais utiliser la valeur par défaut en production !
       # Voir section "Configuration sécurisée de JWT_SECRET" ci-dessous pour les exemples
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
-      
       # Optional: External config file path
       - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      
-      # Note: NODE_ENV et PORT sont définis dans le Dockerfile, pas besoin de les redéfinir ici
+      # Host root path used to read real host metrics when running in Docker
+      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
 
     # Persistent storage for Freebox API token, database, and config
     volumes:
       - mynetwork_data:/app/data
+      # Optional: Mount external configuration file
+      # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
       # Mount the host root filesystem read-only for system information
       - /:/host:ro
       # Mount /proc and /sys from host to access host system information
@@ -90,6 +92,11 @@ services:
       # Mount Docker socket to enable Docker version detection
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+    # Network mode options:
+    # Option 1: Bridge mode (default) - uses port mapping
+    # Option 2: Host mode - direct network access (uncomment below)
+    # network_mode: host
+
     # Health check
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
@@ -97,6 +104,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+    # Resource limits (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.1'
+    #       memory: 256M
 
 # Named volume for persistent token storage, database, and config
 volumes:
@@ -132,7 +149,7 @@ Le dashboard sera accessible sur :
 
 Pour la configuration Docker, voir la section [Variables d'environnement Docker](#variables-denvironnement-docker) ci-dessous.
 
-Pour la configuration en mode développement, voir [Doc_Dev/README-DEV.md](Doc_Dev/README-DEV.md).
+Pour la configuration en mode développement, voir [DEV/README-DEV.md](DEV/README-DEV.md).
 
 #### Fichier de configuration externe (`.conf`)
 
@@ -273,7 +290,7 @@ MynetworK utilise une architecture modulaire basée sur des plugins pour permett
 - **UniFi Controller** - Surveillance et gestion UniFi
 - **Scan Réseau** - Scanner réseau (à venir)
 
-Pour créer un nouveau plugin ou comprendre l'architecture, voir [Doc_Dev/ARCHITECTURE_PLUGINS.md](Doc_Dev/ARCHITECTURE_PLUGINS.md).
+Pour créer un nouveau plugin ou comprendre l'architecture, voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
 
 
 <details>
@@ -285,7 +302,7 @@ MynetworK utilise une architecture modulaire avec :
 - **Base de données SQLite** - Stockage des configurations et données
 - **Système de plugins** - Architecture extensible pour ajouter de nouvelles sources
 
-Pour plus de détails sur l'architecture, voir [Doc_Dev/ARCHITECTURE_PLUGINS.md](Doc_Dev/ARCHITECTURE_PLUGINS.md).
+Pour plus de détails sur l'architecture, voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
 
 </details>
 
@@ -300,12 +317,12 @@ Pour plus de détails sur l'architecture, voir [Doc_Dev/ARCHITECTURE_PLUGINS.md]
 
 ### Pour les Développeurs
 
-Consultez **[Doc_Dev/README-DEV.md](Doc_Dev/README-DEV.md)** pour toute la documentation de développement.
+Consultez **[DEV/README-DEV.md](DEV/README-DEV.md)** pour toute la documentation de développement.
 
 **Documentation principale** :
-- **[Doc_Dev/DOCUMENTATION.md](Doc_Dev/DOCUMENTATION.md)** - Index complet de la documentation
-- **[Doc_Dev/GUIDE_DEVELOPPEMENT.md](Doc_Dev/GUIDE_DEVELOPPEMENT.md)** - Guide pour développeurs
-- **[Doc_Dev/ARCHITECTURE_PLUGINS.md](Doc_Dev/ARCHITECTURE_PLUGINS.md)** - Architecture détaillée du système de plugins
+- **[DEV/DOCUMENTATION.md](DEV/DOCUMENTATION.md)** - Index complet de la documentation
+- **[DEV/GUIDE_DEVELOPPEMENT.md](DEV/GUIDE_DEVELOPPEMENT.md)** - Guide pour développeurs
+- **[DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md)** - Architecture détaillée du système de plugins
 
 </details>
 
@@ -324,12 +341,11 @@ Consultez **[Doc_Dev/README-DEV.md](Doc_Dev/README-DEV.md)** pour toute la docum
 | Variable | Défaut | Description |
 |----------|--------|-------------|
 | `DASHBOARD_PORT` | `7505` | Port d'accès au dashboard |
+| `PORT` | `3000` | Port du serveur backend (dans le conteneur) |
 | `JWT_SECRET` | (généré) | Secret JWT (changez en production !) |
 | `FREEBOX_HOST` | `mafreebox.freebox.fr` | Hostname Freebox |
-| `FREEBOX_APP_NAME` | `MynetworK` | Nom de l'application visible dans Freebox LCD/interface |
-| `FREEBOX_DEVICE_NAME` | `MynetworK Production` | Nom du device visible dans Freebox |
 | `PUBLIC_URL` | - | URL publique d'accès (pour nginx, etc.) |
-| `CONFIG_FILE_PATH` | `/app/config/mynetwork.conf` | Chemin du fichier de configuration externe |
+| `HOST_ROOT_PATH` | `/host` | Chemin du système de fichiers hôte monté |
 
 <details>
 <summary><strong>🔒 Configuration sécurisée de JWT_SECRET</strong></summary>

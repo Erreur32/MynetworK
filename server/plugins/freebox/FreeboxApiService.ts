@@ -10,7 +10,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 interface TokenData {
     appToken: string;
-    appId?: string; // Store app_id used when token was created
     trackId?: number;
     status?: string;
 }
@@ -81,28 +80,8 @@ export class FreeboxApiService {
         if (fs.existsSync(tokenPath)) {
             try {
                 const data = JSON.parse(fs.readFileSync(tokenPath, 'utf-8')) as TokenData;
-                
-                // Check if app_id has changed (token was created with different app_id)
-                const currentAppId = config.freebox.appId;
-                if (data.appId && data.appId !== currentAppId) {
-                    logger.warn('FreeboxAPI', `App ID has changed from '${data.appId}' to '${currentAppId}'. Token is no longer valid. Resetting token...`);
-                    this.resetToken();
-                    return; // Token has been reset, exit early
-                }
-                
-                // If token doesn't have app_id stored (old format), validate it by trying to use it
-                // But first, store the current app_id for future checks
-                if (!data.appId && data.appToken) {
-                    // Token from old format - we'll validate it on first use
-                    // For now, just load it but mark that we need to update the file
-                    this.appToken = data.appToken;
-                    // Update token file to include current app_id
-                    this.saveToken(data.appToken);
-                    logger.debug('FreeboxAPI', `Token loaded from ${tokenPath} (old format, updated with current app_id)`);
-                } else {
-                    this.appToken = data.appToken;
-                    logger.debug('FreeboxAPI', `Token loaded from ${tokenPath}`);
-                }
+                this.appToken = data.appToken;
+                logger.debug('FreeboxAPI', `Token loaded from ${tokenPath}`);
             } catch (error) {
                 logger.warn('FreeboxAPI', `Failed to load token file ${tokenPath}:`, error);
                 // Failed to load - will need registration
@@ -126,12 +105,7 @@ export class FreeboxApiService {
         if (!fs.existsSync(tokenDir)) {
             fs.mkdirSync(tokenDir, {recursive: true});
         }
-        // Store app_id with token to detect changes later
-        const tokenData: TokenData = {
-            appToken,
-            appId: config.freebox.appId
-        };
-        fs.writeFileSync(tokenPath, JSON.stringify(tokenData, null, 2), 'utf-8');
+        fs.writeFileSync(tokenPath, JSON.stringify({appToken}, null, 2), 'utf-8');
         this.appToken = appToken;
         // Token saved silently
     }

@@ -142,17 +142,13 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
       try {
         // Method 1: Use chroot to execute df from host context
         const chrootDfCommand = `chroot ${HOST_ROOT_PATH} df -k 2>&1 | grep -E '^/dev/[^l]' | awk '{print $6" "$2" "$4" "$3}'`;
-        console.log(`[SystemServer] Attempting chroot df command: chroot ${HOST_ROOT_PATH} df -k`);
         const { stdout, stderr } = await execAsync(chrootDfCommand, { timeout: 5000 });
         
         if (stderr && !stderr.includes('df:')) {
-          console.log(`[SystemServer] chroot df stderr: ${stderr}`);
+          debugLog(`[SystemServer] chroot df stderr: ${stderr}`);
         }
         
-        console.log(`[SystemServer] chroot df stdout (first 500 chars): ${stdout.substring(0, 500)}`);
         const lines = stdout.trim().split('\n').filter(line => line.trim());
-        console.log(`[SystemServer] chroot df parsed ${lines.length} lines`);
-        
         const disks: Array<{ mount: string; total: number; free: number; used: number; percentage: number }> = [];
         const processedMounts = new Set<string>();
         
@@ -164,8 +160,6 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
             const free = parseInt(parts[2], 10) * 1024;
             const used = parseInt(parts[3], 10) * 1024;
             const percentage = total > 0 ? (used / total) * 100 : 0;
-            
-            console.log(`[SystemServer] Processing mount: ${mount}, total: ${total} bytes, used: ${used} bytes`);
             
             // Filter out system directories
             if (mount !== '/' && 
@@ -186,7 +180,6 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                 used, 
                 percentage: Math.round(percentage * 100) / 100 
               });
-              console.log(`[SystemServer] ✓ Added disk: ${mount}`);
             } else if (mount === '/' && !processedMounts.has('/')) {
               // Always include root mount
               processedMounts.add('/');
@@ -197,30 +190,26 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                 used, 
                 percentage: Math.round(percentage * 100) / 100 
               });
-              console.log(`[SystemServer] ✓ Added root disk: /`);
-            } else {
-              console.log(`[SystemServer] Skipped mount: ${mount} (filtered or already processed)`);
             }
-          } else {
-            console.log(`[SystemServer] Skipped line (invalid format): ${line}`);
           }
         }
         
         if (disks.length > 0) {
-          console.log(`[SystemServer] ✓ Found ${disks.length} disk(s) using chroot method`);
+          debugLog(`[SystemServer] ✓ Found ${disks.length} disk(s) using chroot method`);
           return disks;
         } else {
-          console.log(`[SystemServer] ⚠ chroot df returned no valid disks (${lines.length} lines parsed, ${processedMounts.size} processed)`);
+          debugLog(`[SystemServer] chroot df returned no valid disks (${lines.length} lines parsed)`);
         }
       } catch (error) {
-        console.error(`[SystemServer] chroot df command failed:`, error);
+        debugLog(`[SystemServer] chroot df command failed: ${error}`);
       }
       
-      // Method 2: Use df directly on mounted host paths (no chroot needed)
-      // This reads all filesystems from the host by reading /host/proc/mounts
-      // and then querying each mount point via the mounted /host path
+      // Method 2: Use df directly on host filesystem via mounted path
+      // This reads all filesystems from the host by executing df in the host context
       try {
-        // Read host's /proc/mounts to get all mount points
+        // Execute df on the host root, which will show all mounted filesystems
+        // We need to use the host's df command, so we'll read /host/proc/mounts first
+        // to get mount points, then query each one
         const mountsPath = join(HOST_ROOT_PATH, 'proc', 'mounts');
         const mountsContent = await fs.readFile(mountsPath, 'utf8');
         const mountLines = mountsContent.split('\n').filter(line => line.trim());
@@ -235,7 +224,6 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
             const fstype = parts[2];
             
             // Only include real block devices (not loop, tmpfs, proc, sys, etc.)
-            // Exclude Docker bind mounts like /etc/resolv.conf, /etc/hostname, /etc/hosts
             if (device.startsWith('/dev/') && 
                 !device.includes('/dev/loop') &&
                 !device.includes('/dev/shm') &&
@@ -249,40 +237,26 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                 !mountpoint.includes('/dev/') &&
                 !mountpoint.includes('/run') &&
                 !mountpoint.includes('/tmp') &&
-                !mountpoint.startsWith('/host') &&
-                !mountpoint.startsWith('/etc/resolv.conf') &&
-                !mountpoint.startsWith('/etc/hostname') &&
-                !mountpoint.startsWith('/etc/hosts') &&
-                mountpoint !== '/etc/resolv.conf' &&
-                mountpoint !== '/etc/hostname' &&
-                mountpoint !== '/etc/hosts' &&
-                !mountpoint.startsWith('/app')) {
+                !mountpoint.startsWith('/host')) {
               realMounts.add(mountpoint);
             }
           }
         }
         
         if (realMounts.size > 0) {
-          // Get df output for all mount points by querying via mounted /host path
+          // Get df output for all mount points at once
           const mountPointsArray = Array.from(realMounts);
           const disks: Array<{ mount: string; total: number; free: number; used: number; percentage: number }> = [];
           
-          // Query each mount point by accessing it via the /host mount
+          // Query each mount point using df on the host path
           for (const mountpoint of mountPointsArray) {
             try {
-              // Access the mount point via the /host mount (e.g., /host/home for /home)
-              const hostPath = join(HOST_ROOT_PATH, mountpoint);
+              // Build path to mountpoint in host filesystem
+              const hostMountPath = mountpoint.startsWith('/') 
+                ? join(HOST_ROOT_PATH, mountpoint.substring(1))
+                : join(HOST_ROOT_PATH, mountpoint);
               
-              // Check if the path exists and is accessible
-              try {
-                await fs.access(hostPath);
-              } catch {
-                // Path not accessible, skip
-                continue;
-              }
-              
-              // Use df directly on the mounted path (works without chroot)
-              const dfCommand = `df -k "${hostPath}" 2>/dev/null | tail -n 1`;
+              const dfCommand = `df -k "${hostMountPath}" 2>/dev/null | tail -n 1`;
               const { stdout } = await execAsync(dfCommand, { timeout: 2000 });
               const parts = stdout.trim().split(/\s+/);
               
@@ -301,18 +275,16 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                     used,
                     percentage: Math.round(percentage * 100) / 100
                   });
-                  debugLog(`[SystemServer] ✓ Added disk: ${mountpoint} (${(total / 1024 / 1024 / 1024).toFixed(2)} GB)`);
                 }
               }
             } catch (error) {
               // Skip this mountpoint if df fails
-              debugLog(`[SystemServer] Failed to get disk info for ${mountpoint}: ${error}`);
               continue;
             }
           }
           
           if (disks.length > 0) {
-            console.log(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method (via /host mount)`);
+            debugLog(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method`);
             return disks;
           }
         }
@@ -320,10 +292,10 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         debugLog(`[SystemServer] /proc/mounts + df method failed: ${error}`);
       }
       
-      // Method 3: Fallback - query host root mount directly via /host mount (no chroot)
+      // Method 3: Fallback - query host root mount directly (single disk)
       try {
-        const hostRootPath = join(HOST_ROOT_PATH, '/');
-        const dfCommand = `df -k "${hostRootPath}" 2>/dev/null | tail -n 1`;
+        const hostRoot = HOST_ROOT_PATH;
+        const dfCommand = `df -k "${hostRoot}" 2>/dev/null | tail -n 1`;
         const { stdout } = await execAsync(dfCommand, { timeout: 5000 });
         const parts = stdout.trim().split(/\s+/);
 
@@ -334,7 +306,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
           const percentage = parseFloat(parts[4].replace('%', ''));
 
           if (!Number.isNaN(total) && total > 0) {
-            console.log(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
+            debugLog(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
             return [
               {
                 mount: '/',
@@ -580,10 +552,10 @@ const getDockerVersion = async (): Promise<string | null> => {
  */
 const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
   try {
-    const http = await import('http');
     const dockerSocket = '/var/run/docker.sock';
     await fs.access(dockerSocket);
     
+    const http = await import('http');
     return await new Promise<T | null>((resolve, reject) => {
       const options = {
         socketPath: dockerSocket,
@@ -603,20 +575,15 @@ const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
         });
       });
       
-      req.on('error', (err) => {
-        console.error(`[SystemServer] Docker API request error for ${path}:`, err);
-        reject(err);
-      });
+      req.on('error', reject);
       req.setTimeout(3000, () => {
         req.destroy();
-        const timeoutError = new Error(`Docker API request timeout for ${path}`);
-        console.error(`[SystemServer]`, timeoutError);
-        reject(timeoutError);
+        reject(new Error('Docker API request timeout'));
       });
       req.end();
     });
   } catch (error) {
-    console.error(`[SystemServer] Docker API query failed for ${path}:`, error);
+    debugLog(`[SystemServer] Docker API query failed for ${path}:`, error);
     return null;
   }
 };
@@ -649,9 +616,9 @@ const getDockerStats = async (): Promise<{
   
   try {
     await fs.access(dockerSocket);
-    console.log(`[SystemServer] ✓ Docker socket accessible at ${dockerSocket}`);
+    debugLog(`[SystemServer] Docker socket accessible at ${dockerSocket}`);
   } catch (accessError) {
-    console.log(`[SystemServer] ⚠ Docker socket not accessible at ${dockerSocket}:`, accessError);
+    debugLog(`[SystemServer] Docker socket not accessible at ${dockerSocket}:`, accessError);
     return null;
   }
 
@@ -660,11 +627,6 @@ const getDockerStats = async (): Promise<{
     // Get Docker version
     const versionInfo = await queryDockerApi<{ Version: string }>('/version');
     const dockerVersion = versionInfo?.Version ? `Docker version ${versionInfo.Version}` : null;
-    if (!dockerVersion) {
-      console.log(`[SystemServer] ⚠ Could not get Docker version from API`);
-    } else {
-      console.log(`[SystemServer] ✓ Docker version: ${dockerVersion}`);
-    }
     
     // Get containers stats
     const containers = await queryDockerApi<Array<{ State: string }>>('/containers/json?all=true');
@@ -674,38 +636,18 @@ const getDockerStats = async (): Promise<{
       stopped: containers.filter(c => c.State === 'exited').length,
       paused: containers.filter(c => c.State === 'paused').length
     } : { total: 0, running: 0, stopped: 0, paused: 0 };
-    if (!containers) {
-      console.log(`[SystemServer] ⚠ Could not get containers from API (queryDockerApi returned null)`);
-    } else {
-      console.log(`[SystemServer] ✓ Containers: ${containersStats.running}/${containersStats.total} running`);
-    }
     
     // Get images count
     const images = await queryDockerApi<Array<unknown>>('/images/json');
     const imagesCount = images ? images.length : 0;
-    if (!images) {
-      console.log(`[SystemServer] ⚠ Could not get images from API (queryDockerApi returned null)`);
-    } else {
-      console.log(`[SystemServer] ✓ Images: ${imagesCount}`);
-    }
     
     // Get volumes count
     const volumes = await queryDockerApi<{ Volumes?: Array<unknown> }>('/volumes');
     const volumesCount = volumes?.Volumes ? volumes.Volumes.length : 0;
-    if (!volumes) {
-      console.log(`[SystemServer] ⚠ Could not get volumes from API (queryDockerApi returned null)`);
-    } else {
-      console.log(`[SystemServer] ✓ Volumes: ${volumesCount}`);
-    }
     
     // Get networks count
     const networks = await queryDockerApi<Array<unknown>>('/networks');
     const networksCount = networks ? networks.length : 0;
-    if (!networks) {
-      console.log(`[SystemServer] ⚠ Could not get networks from API (queryDockerApi returned null)`);
-    } else {
-      console.log(`[SystemServer] ✓ Networks: ${networksCount}`);
-    }
     
     // Get disk usage (optional - may not be available on all Docker versions)
     let diskUsage: {
@@ -749,29 +691,17 @@ const getDockerStats = async (): Promise<{
       diskUsage
     };
     
-    // Always log in production to help diagnose issues
-    const formatBytesForLog = (bytes: number): string => {
-      if (bytes === 0) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-    };
-    console.log(`[SystemServer] ✓ Docker stats retrieved:`, {
+    debugLog(`[SystemServer] ✓ Docker stats retrieved:`, {
       version: dockerVersion,
       containers: `${containersStats.running}/${containersStats.total}`,
       images: imagesCount,
       volumes: volumesCount,
-      networks: networksCount,
-      diskUsage: diskUsage ? formatBytesForLog(diskUsage.total) : 'N/A'
+      networks: networksCount
     });
     
     return stats;
   } catch (error) {
     console.error(`[SystemServer] Error getting Docker stats:`, error);
-    // Log more details in production to help diagnose
-    console.error(`[SystemServer] Docker socket path: ${dockerSocket}`);
-    console.error(`[SystemServer] Docker socket accessible: ${fsSync.existsSync(dockerSocket)}`);
     return null;
   }
 };
@@ -886,34 +816,6 @@ router.get('/server', async (_req, res) => {
     const diskUsage = await getDiskUsage();
     const allDisks = await getAllDiskUsage();
     
-    // Filter out fake disks (Docker bind mounts, container paths, etc.)
-    const realDisks = allDisks.filter(d => 
-      d.mount !== '/etc/resolv.conf' &&
-      d.mount !== '/etc/hostname' &&
-      d.mount !== '/etc/hosts' &&
-      !d.mount.startsWith('/app') &&
-      !d.mount.startsWith('/host') &&
-      d.total > 100 * 1024 * 1024 // Only disks > 100MB
-    );
-    
-    // Log disk information for debugging (always log in production to help diagnose issues)
-    if (realDisks.length > 0) {
-      console.log(`[SystemServer] ✓ Found ${realDisks.length} disk(s):`, realDisks.map(d => `${d.mount} (${(d.total / (1024 * 1024 * 1024)).toFixed(2)} GB)`).join(', '));
-    } else {
-      console.log(`[SystemServer] ⚠ No disks found via getAllDiskUsage(), using fallback disk info`);
-    }
-    
-    // Get Docker stats (includes version)
-    const dockerStats = await getDockerStats();
-    
-    // Ensure Docker version is set (prefer dockerStats.version, then dockerVersion from getDockerVersion)
-    const finalDockerVersion = dockerStats?.version || dockerVersion || null;
-    if (finalDockerVersion) {
-      console.log(`[SystemServer] ✓ Docker version: ${finalDockerVersion}`);
-    } else if (isDocker()) {
-      console.log(`[SystemServer] ⚠ Running in Docker but could not detect version`);
-    }
-    
     const systemInfo = {
       platform: os.platform(),
       arch: os.arch(),
@@ -921,8 +823,8 @@ router.get('/server', async (_req, res) => {
       uptime,
       nodeVersion: process.version,
       docker: isDocker(),
-      dockerVersion: finalDockerVersion,
-      dockerStats: dockerStats,
+      dockerVersion: dockerVersion || null,
+      dockerStats: await getDockerStats(),
       cpu: {
         cores: os.cpus().length,
         model: os.cpus()[0]?.model || 'Unknown',
@@ -940,7 +842,7 @@ router.get('/server', async (_req, res) => {
         used: diskUsage.used,
         percentage: Math.round(diskUsage.percentage * 100) / 100
       },
-      disks: realDisks.map(d => ({
+      disks: allDisks.map(d => ({
         mount: d.mount,
         total: d.total,
         free: d.free,

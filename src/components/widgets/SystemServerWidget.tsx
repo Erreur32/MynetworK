@@ -12,7 +12,6 @@ import { Cpu, HardDrive, MemoryStick, Server, CheckCircle, XCircle, Activity, Lo
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
-import { Badge } from '../ui/Badge';
 
 interface DiskInfo {
     mount: string;
@@ -99,6 +98,14 @@ export const SystemServerWidget: React.FC = () => {
             const response = await api.get<SystemInfo>('/api/system/server');
             if (response.success && response.result) {
                 setSystemInfo(response.result);
+                // Debug: Log Docker stats to console
+                if (response.result.docker) {
+                    console.log('[SystemServerWidget] Docker detected:', {
+                        docker: response.result.docker,
+                        dockerVersion: response.result.dockerVersion,
+                        dockerStats: response.result.dockerStats
+                    });
+                }
             } else {
                 setError('Failed to fetch system info');
             }
@@ -185,9 +192,9 @@ export const SystemServerWidget: React.FC = () => {
                         <span className="flex items-center gap-2 text-gray-400">
                             <Cpu size={16} /> CPU
                         </span>
-                        <Badge variant="info" size="sm">
+                        <span className="text-white">
                             {systemInfo.cpu.cores} cores
-                        </Badge>
+                        </span>
                     </div>
                     <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                         <div
@@ -207,9 +214,9 @@ export const SystemServerWidget: React.FC = () => {
                         <span className="flex items-center gap-2 text-gray-400">
                             <MemoryStick size={16} /> RAM
                         </span>
-                        <Badge variant="success" size="sm">
+                        <span className="text-white">
                             {formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}
-                        </Badge>
+                        </span>
                     </div>
                     <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                         <div
@@ -236,9 +243,9 @@ export const SystemServerWidget: React.FC = () => {
                                     <span className="text-gray-400 font-mono text-xs">
                                         {disk.mount}
                                     </span>
-                                    <Badge variant="warning" size="sm">
+                                    <span className="text-white text-xs">
                                         {formatBytes(disk.used)} / {formatBytes(disk.total)}
-                                    </Badge>
+                                    </span>
                                 </div>
                                 <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                                     <div
@@ -259,9 +266,9 @@ export const SystemServerWidget: React.FC = () => {
                             <span className="flex items-center gap-2 text-gray-400">
                                 <HardDrive size={16} /> Disque
                             </span>
-                            <Badge variant="warning" size="sm">
+                            <span className="text-white">
                                 {formatBytes(systemInfo.disk.used)} / {formatBytes(systemInfo.disk.total)}
-                            </Badge>
+                            </span>
                         </div>
                         <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                             <div
