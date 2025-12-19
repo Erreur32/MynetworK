@@ -1309,24 +1309,52 @@ a:hover:focus,
 /* ============================================
    UNIFI CARD BACKGROUND - All Themes
    ============================================
-   Map bg-unifi-card to theme unifi card background
+   Map bg-unifi-card to theme unifi card background with UniFi blue/cyan accent colors
 */
 
-[data-theme] .bg-unifi-card {
-    background-color: var(--bg-unifi-card) !important;
+/* Dark theme - UniFi cards with blue/cyan tint */
+[data-theme="dark"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.15) 100%) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
 }
 
-/* Glass, Modern and Neon themes - Add backdrop blur for unifi cards */
-[data-theme="glass"] .bg-unifi-card,
-[data-theme="modern"] .bg-unifi-card,
-[data-theme="neon"] .bg-unifi-card {
+/* Glass theme - UniFi cards with blue/cyan glass effect */
+[data-theme="glass"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(8, 47, 73, 0.8) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
-/* Neon theme - Transparent backgrounds for UniFi cards and tables */
+/* Modern theme - UniFi cards with blue/cyan gradient */
+[data-theme="modern"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.6) 0%, rgba(14, 116, 144, 0.5) 50%, rgba(59, 130, 246, 0.3) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+/* Nightly theme - UniFi cards with subtle blue/cyan tint */
+[data-theme="nightly"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
+    border-color: rgba(150, 180, 200, 0.3) !important;
+}
+
+/* Neon theme - UniFi cards with cyan/purple accent */
 [data-theme="neon"] .bg-unifi-card {
-    background-color: rgba(20, 15, 35, 0.3) !important;
+    background: linear-gradient(135deg, rgba(20, 15, 35, 0.6) 0%, rgba(14, 116, 144, 0.4) 50%, rgba(192, 132, 252, 0.3) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: rgba(14, 116, 144, 0.5) !important;
+    box-shadow: 
+        0 1px 3px rgba(14, 116, 144, 0.2),
+        0 0 0 1px rgba(14, 116, 144, 0.15) inset !important;
+}
+
+/* Default fallback for other themes */
+[data-theme] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.15) 100%) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
 }
 
 [data-theme="neon"] table,

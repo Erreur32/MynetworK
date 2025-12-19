@@ -2,6 +2,76 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.2] - 2025-12-19
+
+### 🐛 Corrigé
+
+**Build & Docker**
+- ✅ Correction des warnings CSS lors du build (sélecteurs invalides avec crochets échappés remplacés par des sélecteurs d'attribut CSS valides)
+- ✅ Correction du warning Docker de sécurité concernant `FREEBOX_TOKEN_FILE` dans le Dockerfile (déplacé vers variables d'environnement runtime)
+- ✅ Correction du problème de permissions SQLite dans Docker (ajout d'un script d'entrée pour corriger les permissions du volume au démarrage)
+- ✅ Amélioration de la détection automatique du chemin du token Freebox en production Docker
+
+**Logs**
+- ✅ Suppression des logs de debug FreeboxPlugin (BSS items) qui polluaient les logs Docker
+
+### ✨ Ajouté
+
+**Page UniFi - Améliorations**
+- 📡 Ajout de l'affichage des bandes WiFi (2.4GHz, 5GHz, 6GHz) sur les cartes UniFi :
+  - Dans la carte UniFi du dashboard (colonne "Bandes" dans le tableau des APs)
+  - Dans l'onglet "Points d'accès" de la page UniFi (badges colorés cyan)
+- 🔍 Ajout d'un filtre wired/wireless dans l'onglet Clients UniFi :
+  - Filtre par défaut : uniquement les clients sans fil (wireless)
+  - Options : "Sans fil", "Filaire", "Tous"
+  - Filtre combinable avec le filtre de statut (actif/inactif)
+
+**Styles & Thèmes**
+- 🎨 Restauration des couleurs colorées pour toutes les cartes UniFi :
+  - Dégradés bleu/cyan caractéristiques d'UniFi selon le thème
+  - Effets glass et backdrop-blur pour les thèmes modernes
+  - Bordures colorées avec teinte bleue/cyan
+
+### 🔧 Modifié
+
+**Docker**
+- `Dockerfile` :
+  - Ajout de `su-exec` pour le script d'entrée
+  - Ajout du script `docker-entrypoint.sh` pour corriger les permissions au démarrage
+  - Retrait de `FREEBOX_TOKEN_FILE` et `FREEBOX_HOST` du Dockerfile (déplacés vers variables d'environnement)
+- `docker-entrypoint.sh` : Nouveau script d'entrée qui corrige automatiquement les permissions de `/app/data` au démarrage
+
+**Backend**
+- `server/config.ts` : Amélioration de la détection automatique du chemin du token en production Docker (détection du répertoire `/app`)
+- `server/plugins/freebox/FreeboxPlugin.ts` : Suppression des logs de debug BSS
+
+**Frontend**
+- `src/styles/themes.css` : 
+  - Remplacement de tous les sélecteurs CSS invalides (`.bg-\[#1a1a1a\]`) par des sélecteurs d'attribut valides (`[class*="bg-[#1a1a1a]"]`)
+  - Ajout de dégradés colorés pour les cartes UniFi selon chaque thème
+- `src/components/widgets/PluginSummaryCard.tsx` :
+  - Ajout de la colonne "Bandes" dans le tableau des APs UniFi
+  - Fonction `getUnifiBands()` pour extraire les bandes depuis `radio_table`
+- `src/pages/UniFiPage.tsx` :
+  - Ajout du filtre wired/wireless dans l'onglet Clients
+  - Ajout de l'affichage des bandes dans l'onglet "Points d'accès"
+  - Filtre par défaut : wireless uniquement
+
+**Configuration**
+- `src/constants/version.ts` : Version mise à jour à 0.1.2
+
+### 🔒 Sécurité
+
+**Docker**
+- ✅ Retrait des variables d'environnement sensibles du Dockerfile (conformité aux bonnes pratiques Docker)
+- ✅ Les variables sont maintenant définies uniquement au runtime via docker-compose ou variables d'environnement
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.1.2
+
+---
+
 ## [0.1.1] - 2025-12-18
 
 ### 🐛 Corrigé

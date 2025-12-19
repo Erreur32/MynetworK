@@ -28,6 +28,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
     const [clientSortDir, setClientSortDir] = useState<'asc' | 'desc'>('asc');
     const [clientSearch, setClientSearch] = useState<string>('');
     const [clientStatusFilter, setClientStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+    const [clientConnectionFilter, setClientConnectionFilter] = useState<'wireless' | 'wired' | 'all'>('wireless');
     // Filters for Alerts Réseau (overview tab)
     type AlertFilter = 'all' | 'info' | 'warning' | 'critical';
     const [alertsFilter, setAlertsFilter] = useState<AlertFilter>('all');
@@ -882,6 +883,33 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             return 'Wi‑Fi';
                                         };
 
+                                        const getUnifiBands = (device: any): string[] => {
+                                            const bands: string[] = [];
+                                            // Check radio_table (most common UniFi API structure)
+                                            if (device.radio_table && Array.isArray(device.radio_table)) {
+                                                device.radio_table.forEach((radio: any) => {
+                                                    const band = radio.radio || radio.name || '';
+                                                    if (band) {
+                                                        const bandLower = band.toLowerCase();
+                                                        if (bandLower.includes('ng') || bandLower.includes('2.4') || bandLower === '2g') {
+                                                            if (!bands.includes('2.4GHz')) bands.push('2.4GHz');
+                                                        } else if (bandLower.includes('na') || bandLower.includes('5') || bandLower === '5g') {
+                                                            if (!bands.includes('5GHz')) bands.push('5GHz');
+                                                        } else if (bandLower.includes('6') || bandLower === '6g') {
+                                                            if (!bands.includes('6GHz')) bands.push('6GHz');
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                            // Fallback: check radio fields directly
+                                            if (bands.length === 0) {
+                                                if (device.radio_ng || device.radio_2g) bands.push('2.4GHz');
+                                                if (device.radio_na || device.radio_5g) bands.push('5GHz');
+                                                if (device.radio_6g) bands.push('6GHz');
+                                            }
+                                            return bands.length > 0 ? bands : ['N/A'];
+                                        };
+
                                         const getClientsForAp = (ap: any): number => {
                                             const apName = (ap.name || ap.model || '').toString();
                                             const apMac = (ap.mac || '').toString().toLowerCase();
@@ -901,6 +929,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                     const clientsCount = getClientsForAp(device);
                                                     const wifiType = getWifiType(device);
                                                     const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
+                                                    const bands = getUnifiBands(device);
 
                                                     return (
                                                 <div
@@ -932,8 +961,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                         }`}
                                                                         title={
                                                                             device.active !== false
-                                                                                ? 'Point d’accès en ligne (état de mise à jour détaillé visible dans Vue d’ensemble)'
-                                                                                : 'Point d’accès hors ligne'
+                                                                                ? 'Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)'
+                                                                                : 'Point d'accès hors ligne'
                                                                         }
                                                                     />
                                                                 </div>
@@ -949,6 +978,19 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     <span className="text-gray-500">Type Wi‑Fi:&nbsp;</span>
                                                                     <span className="text-gray-300">{wifiType}</span>
                                                     </div>
+                                                                <div>
+                                                                    <span className="text-gray-500">Bandes:&nbsp;</span>
+                                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                                        {bands.map((band, bandIndex) => (
+                                                                            <span
+                                                                                key={`band-${bandIndex}`}
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300"
+                                                                            >
+                                                                                {band}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
                                                                 <div>
                                                                     <span className="text-gray-500">Clients connectés:&nbsp;</span>
                                                                     <span className="text-gray-300">{clientsCount}</span>
@@ -1217,10 +1259,20 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             return true;
                                         };
 
+                                        // Filter by connection type (wired/wireless)
+                                        const connectionFilteredClients = 
+                                            clientConnectionFilter === 'all'
+                                                ? clients
+                                                : clients.filter((c: any) => {
+                                                      const isWired = c.is_wired === true;
+                                                      return clientConnectionFilter === 'wired' ? isWired : !isWired;
+                                                  });
+
+                                        // Filter by status (active/inactive)
                                         const baseClients =
                                             clientStatusFilter === 'all'
-                                                ? clients
-                                                : clients.filter((c: any) =>
+                                                ? connectionFilteredClients
+                                                : connectionFilteredClients.filter((c: any) =>
                                                       clientStatusFilter === 'active' ? isClientActive(c) : !isClientActive(c)
                                                   );
 
@@ -1358,34 +1410,64 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                     <span className="text-gray-500">
                                                         {filteredClients.length} client(s) affiché(s) sur {clients.length}
                                                     </span>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[11px] text-gray-500 mr-1">État:</span>
-                                                        {(['active', 'inactive', 'all'] as const).map((mode) => (
-                                                            <button
-                                                                key={mode}
-                                                                type="button"
-                                                                onClick={() => setClientStatusFilter(mode)}
-                                                                className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
-                                                                    clientStatusFilter === mode
-                                                                        ? 'bg-sky-500/20 border-sky-400 text-sky-200'
-                                                                        : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
-                                                                }`}
-                                                                title={
-                                                                    mode === 'active'
-                                                                        ? 'Afficher uniquement les clients considérés comme actifs'
-                                                                        : mode === 'inactive'
-                                                                        ? 'Afficher uniquement les clients considérés comme inactifs'
-                                                                        : 'Afficher tous les clients'
-                                                                }
-                                                            >
-                                                                {mode === 'active'
-                                                                    ? 'Actifs'
-                                                                    : mode === 'inactive'
-                                                                    ? 'Inactifs'
-                                                                    : 'Tous'}
-                                                            </button>
-                                                        ))}
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-[11px] text-gray-500 mr-1">Connexion:</span>
+                                                            {(['wireless', 'wired', 'all'] as const).map((mode) => (
+                                                                <button
+                                                                    key={mode}
+                                                                    type="button"
+                                                                    onClick={() => setClientConnectionFilter(mode)}
+                                                                    className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                                                                        clientConnectionFilter === mode
+                                                                            ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200'
+                                                                            : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
+                                                                    }`}
+                                                                    title={
+                                                                        mode === 'wireless'
+                                                                            ? 'Afficher uniquement les clients sans fil'
+                                                                            : mode === 'wired'
+                                                                            ? 'Afficher uniquement les clients filaires'
+                                                                            : 'Afficher tous les clients'
+                                                                    }
+                                                                >
+                                                                    {mode === 'wireless'
+                                                                        ? 'Sans fil'
+                                                                        : mode === 'wired'
+                                                                        ? 'Filaire'
+                                                                        : 'Tous'}
+                                                                </button>
+                                                            ))}
                                                         </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-[11px] text-gray-500 mr-1">État:</span>
+                                                            {(['active', 'inactive', 'all'] as const).map((mode) => (
+                                                                <button
+                                                                    key={mode}
+                                                                    type="button"
+                                                                    onClick={() => setClientStatusFilter(mode)}
+                                                                    className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                                                                        clientStatusFilter === mode
+                                                                            ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                                                                            : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
+                                                                    }`}
+                                                                    title={
+                                                                        mode === 'active'
+                                                                            ? 'Afficher uniquement les clients considérés comme actifs'
+                                                                            : mode === 'inactive'
+                                                                            ? 'Afficher uniquement les clients considérés comme inactifs'
+                                                                            : 'Afficher tous les clients'
+                                                                    }
+                                                                >
+                                                                    {mode === 'active'
+                                                                        ? 'Actifs'
+                                                                        : mode === 'inactive'
+                                                                        ? 'Inactifs'
+                                                                        : 'Tous'}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                     <input
                                                         type="text"
                                                         value={clientSearch}

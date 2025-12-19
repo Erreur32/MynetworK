@@ -396,19 +396,6 @@ export class FreeboxPlugin extends BasePlugin {
                         }
                     }
                     
-                    console.log('[FreeboxPlugin] BSS item:', { 
-                        enabled: bss.enabled, 
-                        configEnabled: bss.config?.enabled,
-                        isEnabled,
-                        ssid,
-                        bssId: bss.id,
-                        bssName: bss.name,
-                        bssSsid: bss.ssid,
-                        channel: bss.channel,
-                        type: bss.type,
-                        raw: JSON.stringify(bss).substring(0, 200)
-                    });
-                    
                     // Only add if we have a valid SSID (not a MAC address) and it's enabled
                     if (isEnabled && ssid && ssid.trim() !== '') {
                         // Determine frequency band from channel or type
@@ -445,9 +432,6 @@ export class FreeboxPlugin extends BasePlugin {
                             band: band,
                             enabled: true
                         });
-                        console.log('[FreeboxPlugin] Added WiFi network:', ssid, 'band:', band);
-                    } else {
-                        console.log('[FreeboxPlugin] Skipped BSS:', { enabled: bss.enabled, ssid: bss.ssid, channel: bss.channel });
                     }
                 }
             } else {

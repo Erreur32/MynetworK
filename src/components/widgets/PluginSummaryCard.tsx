@@ -93,6 +93,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         ip?: string;
         clientsActive: number;
         clientsTotal: number;
+        bands: string[];
     }
 
     interface UnifiSwitchRow {
@@ -126,6 +127,34 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         // Get WiFi networks (SSIDs) from stats
         unifiWlans = (stats.wlans || []) as Array<{ name: string; enabled: boolean; ssid?: string }>;
 
+        // Helper function to extract bands from UniFi device
+        const getUnifiBands = (device: any): string[] => {
+            const bands: string[] = [];
+            // Check radio_table (most common UniFi API structure)
+            if (device.radio_table && Array.isArray(device.radio_table)) {
+                device.radio_table.forEach((radio: any) => {
+                    const band = radio.radio || radio.name || '';
+                    if (band) {
+                        const bandLower = band.toLowerCase();
+                        if (bandLower.includes('ng') || bandLower.includes('2.4') || bandLower === '2g') {
+                            if (!bands.includes('2.4GHz')) bands.push('2.4GHz');
+                        } else if (bandLower.includes('na') || bandLower.includes('5') || bandLower === '5g') {
+                            if (!bands.includes('5GHz')) bands.push('5GHz');
+                        } else if (bandLower.includes('6') || bandLower === '6g') {
+                            if (!bands.includes('6GHz')) bands.push('6GHz');
+                        }
+                    }
+                });
+            }
+            // Fallback: check radio fields directly
+            if (bands.length === 0) {
+                if (device.radio_ng || device.radio_2g) bands.push('2.4GHz');
+                if (device.radio_na || device.radio_5g) bands.push('5GHz');
+                if (device.radio_6g) bands.push('6GHz');
+            }
+            return bands.length > 0 ? bands : ['N/A'];
+        };
+
         // Build rows for APs (bornes Wi‑Fi)
         unifiApRows = devices
             .filter((d) => {
@@ -151,7 +180,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     name,
                     ip: d.ip as string | undefined,
                     clientsActive,
-                    clientsTotal: clientsForDevice.length
+                    clientsTotal: clientsForDevice.length,
+                    bands: getUnifiBands(d)
                 };
             });
 
@@ -446,10 +476,11 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left w-2/5">Nom</th>
-                                                        <th className="px-2 py-1 text-left w-1/5">IP</th>
-                                                        <th className="px-2 py-1 text-right w-1/5">Clients</th>
-                                                        <th className="px-2 py-1 text-right w-1/5">Total</th>
+                                                        <th className="px-2 py-1 text-left w-[30%]">Nom</th>
+                                                        <th className="px-2 py-1 text-left w-[20%]">IP</th>
+                                                        <th className="px-2 py-1 text-left w-[25%]">Bandes</th>
+                                                        <th className="px-2 py-1 text-right w-[12%]">Clients</th>
+                                                        <th className="px-2 py-1 text-right w-[13%]">Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -463,6 +494,18 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                             </td>
                                                             <td className="px-2 py-1 text-gray-400 truncate">
                                                                 {row.ip || 'n/a'}
+                                                            </td>
+                                                            <td className="px-2 py-1">
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {row.bands.map((band, bandIndex) => (
+                                                                        <span
+                                                                            key={`band-${bandIndex}`}
+                                                                            className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300"
+                                                                        >
+                                                                            {band}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
                                                             </td>
                                                             <td className="px-2 py-1 text-right text-gray-200">
                                                                 {row.clientsActive}
