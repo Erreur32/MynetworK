@@ -23,12 +23,20 @@ FROM node:22-alpine
 WORKDIR /app
 
 # outils nécessaires pour modules natifs (COMME AVANT)
-RUN apk add --no-cache python3 make g++ wget
+# su-exec is needed for the entrypoint script to switch from root to node user
+RUN apk add --no-cache python3 make g++ wget su-exec
 
 # data
 RUN mkdir -p /app/data && chown -R node:node /app
 
-USER node
+# Copy entrypoint script to fix permissions at runtime
+# Script runs as root to fix permissions, then switches to node user
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Keep root user for entrypoint script (it will switch to node user)
+# Use entrypoint script to fix permissions before starting the app
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # deps prod (COMME AVANT)
 COPY --chown=node:node package*.json ./
