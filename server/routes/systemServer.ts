@@ -216,12 +216,11 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         console.error(`[SystemServer] chroot df command failed:`, error);
       }
       
-      // Method 2: Use df directly on host filesystem via mounted path
-      // This reads all filesystems from the host by executing df in the host context
+      // Method 2: Use df directly on mounted host paths (no chroot needed)
+      // This reads all filesystems from the host by reading /host/proc/mounts
+      // and then querying each mount point via the mounted /host path
       try {
-        // Execute df on the host root, which will show all mounted filesystems
-        // We need to use the host's df command, so we'll read /host/proc/mounts first
-        // to get mount points, then query each one
+        // Read host's /proc/mounts to get all mount points
         const mountsPath = join(HOST_ROOT_PATH, 'proc', 'mounts');
         const mountsContent = await fs.readFile(mountsPath, 'utf8');
         const mountLines = mountsContent.split('\n').filter(line => line.trim());
@@ -264,15 +263,26 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         }
         
         if (realMounts.size > 0) {
-          // Get df output for all mount points at once
+          // Get df output for all mount points by querying via mounted /host path
           const mountPointsArray = Array.from(realMounts);
           const disks: Array<{ mount: string; total: number; free: number; used: number; percentage: number }> = [];
           
-          // Query each mount point using chroot to execute df in host context
+          // Query each mount point by accessing it via the /host mount
           for (const mountpoint of mountPointsArray) {
             try {
-              // Use chroot to execute df in the host context
-              const dfCommand = `chroot ${HOST_ROOT_PATH} df -k "${mountpoint}" 2>/dev/null | tail -n 1`;
+              // Access the mount point via the /host mount (e.g., /host/home for /home)
+              const hostPath = join(HOST_ROOT_PATH, mountpoint);
+              
+              // Check if the path exists and is accessible
+              try {
+                await fs.access(hostPath);
+              } catch {
+                // Path not accessible, skip
+                continue;
+              }
+              
+              // Use df directly on the mounted path (works without chroot)
+              const dfCommand = `df -k "${hostPath}" 2>/dev/null | tail -n 1`;
               const { stdout } = await execAsync(dfCommand, { timeout: 2000 });
               const parts = stdout.trim().split(/\s+/);
               
@@ -291,16 +301,18 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                     used,
                     percentage: Math.round(percentage * 100) / 100
                   });
+                  debugLog(`[SystemServer] ✓ Added disk: ${mountpoint} (${(total / 1024 / 1024 / 1024).toFixed(2)} GB)`);
                 }
               }
             } catch (error) {
               // Skip this mountpoint if df fails
+              debugLog(`[SystemServer] Failed to get disk info for ${mountpoint}: ${error}`);
               continue;
             }
           }
           
           if (disks.length > 0) {
-            debugLog(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method`);
+            console.log(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method (via /host mount)`);
             return disks;
           }
         }
@@ -308,9 +320,10 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         debugLog(`[SystemServer] /proc/mounts + df method failed: ${error}`);
       }
       
-      // Method 3: Fallback - query host root mount directly (single disk) using chroot
+      // Method 3: Fallback - query host root mount directly via /host mount (no chroot)
       try {
-        const dfCommand = `chroot ${HOST_ROOT_PATH} df -k / 2>/dev/null | tail -n 1`;
+        const hostRootPath = join(HOST_ROOT_PATH, '/');
+        const dfCommand = `df -k "${hostRootPath}" 2>/dev/null | tail -n 1`;
         const { stdout } = await execAsync(dfCommand, { timeout: 5000 });
         const parts = stdout.trim().split(/\s+/);
 
@@ -321,7 +334,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
           const percentage = parseFloat(parts[4].replace('%', ''));
 
           if (!Number.isNaN(total) && total > 0) {
-            debugLog(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
+            console.log(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
             return [
               {
                 mount: '/',

@@ -476,7 +476,10 @@ export class FreeboxPlugin extends BasePlugin {
     async testConnection(): Promise<boolean> {
         try {
             if (!this.apiService.isRegistered()) {
-                return false;
+                // Throw error with NOT_REGISTERED code so frontend can display appropriate message
+                const error = new Error('NOT_REGISTERED') as Error & { code?: string };
+                error.code = 'NOT_REGISTERED';
+                throw error;
             }
             
             // Check if logged in, try to reconnect if needed (same logic as getStats)
@@ -491,11 +494,13 @@ export class FreeboxPlugin extends BasePlugin {
                     // Check if error indicates token was deleted
                     if (errorMessage.includes('TOKEN_DELETED') || errorMessage.includes('Réenregistrement nécessaire')) {
                         console.warn('[FreeboxPlugin] Token has been deleted from Freebox during test. Re-registration required.');
-                        // Token has been reset, return false so frontend can prompt for re-registration
-                        return false;
+                        // Throw error with TOKEN_DELETED code so frontend can display appropriate message
+                        const tokenError = new Error('TOKEN_DELETED') as Error & { code?: string };
+                        tokenError.code = 'TOKEN_DELETED';
+                        throw tokenError;
                     }
                     console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', errorMessage);
-                    return false;
+                    throw error; // Re-throw to propagate error message
                 }
             }
             
@@ -503,10 +508,15 @@ export class FreeboxPlugin extends BasePlugin {
             return result.success;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            if (errorMessage.includes('TOKEN_DELETED')) {
+            if (errorMessage.includes('TOKEN_DELETED') || (error instanceof Error && (error as any).code === 'TOKEN_DELETED')) {
                 console.warn('[FreeboxPlugin] Token deleted detected in testConnection()');
+                // Re-throw with code for proper handling
+                const tokenError = new Error('TOKEN_DELETED') as Error & { code?: string };
+                tokenError.code = 'TOKEN_DELETED';
+                throw tokenError;
             }
-            return false;
+            // Re-throw other errors to propagate them
+            throw error;
         }
     }
 

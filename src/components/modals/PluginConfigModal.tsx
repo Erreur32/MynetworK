@@ -497,9 +497,6 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                         Si l'application n'est pas encore enregistrée, vous devrez appuyer sur le bouton de validation 
                                         sur l'écran LCD de votre Freebox.
                                     </p>
-                                    <p className="text-gray-500 text-xs mt-2">
-                                        Vous pouvez aussi enregistrer via l'onglet "Paramètres" → "Auth" ou le bouton "Auth" dans la page Plugins.
-                                    </p>
                                 </div>
                             </div>
                         </div>

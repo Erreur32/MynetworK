@@ -20,6 +20,8 @@ services:
       # Host root path used to read real host metrics when running in Docker
       # Required for disk usage and system information detection
       - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+      # Container name for display in logs (matches container_name above)
+      - CONTAINER_NAME=${CONTAINER_NAME:-MynetworK}
 
     volumes:
       - mynetwork_data:/app/data

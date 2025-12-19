@@ -506,22 +506,69 @@ server.listen(port, host, () => {
   let containerName: string | null = null;
   if (isDockerEnv) {
     try {
-      // Try to read container name from /etc/hostname or HOSTNAME env var
-      if (process.env.HOSTNAME) {
-        containerName = process.env.HOSTNAME;
+      // Priority 1: CONTAINER_NAME env var (set in docker-compose.yml)
+      if (process.env.CONTAINER_NAME) {
+        containerName = process.env.CONTAINER_NAME.trim();
       } else {
+        // Priority 2: Try to extract from /proc/self/cgroup (contains container name/id)
         try {
-          const hostnamePath = '/etc/hostname';
-          if (fsSync.existsSync(hostnamePath)) {
-            containerName = fsSync.readFileSync(hostnamePath, 'utf8').trim();
+          const cgroupPath = '/proc/self/cgroup';
+          if (fsSync.existsSync(cgroupPath)) {
+            const cgroupContent = fsSync.readFileSync(cgroupPath, 'utf8');
+            // Look for container name in cgroup path (format: .../docker/container_id or .../name=container_name)
+            const dockerMatch = cgroupContent.match(/docker[\/\-]([a-f0-9]{12,64}|[a-zA-Z0-9_-]+)/);
+            if (dockerMatch && dockerMatch[1]) {
+              const candidate = dockerMatch[1];
+              // If it's not a hex ID (12+ hex chars), it might be a name
+              if (candidate.length > 12 && !/^[a-f0-9]{12,}$/.test(candidate)) {
+                containerName = candidate;
+              } else if (candidate.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(candidate)) {
+                // Could be a name if it contains letters/underscores
+                containerName = candidate;
+              }
+            }
           }
         } catch {
-          // Fallback to os.hostname()
-          containerName = os.hostname();
+          // Continue to next method
+        }
+        
+        // Priority 3: HOSTNAME env var (but might be container ID)
+        if (!containerName && process.env.HOSTNAME) {
+          const hostname = process.env.HOSTNAME.trim();
+          // Only use if it doesn't look like a container ID (12 hex chars)
+          if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
+            containerName = hostname;
+          }
+        }
+        
+        // Priority 4: /etc/hostname (but usually contains container ID)
+        if (!containerName) {
+          try {
+            const hostnamePath = '/etc/hostname';
+            if (fsSync.existsSync(hostnamePath)) {
+              const hostname = fsSync.readFileSync(hostnamePath, 'utf8').trim();
+              // Only use if it doesn't look like a container ID
+              if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
+                containerName = hostname;
+              }
+            }
+          } catch {
+            // Fallback to os.hostname()
+            if (!containerName) {
+              const hostname = os.hostname();
+              if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
+                containerName = hostname;
+              }
+            }
+          }
         }
       }
     } catch {
-      containerName = os.hostname();
+      // Final fallback
+      const hostname = os.hostname();
+      if (hostname.length !== 12 || !/^[a-f0-9]{12}$/.test(hostname)) {
+        containerName = hostname;
+      }
     }
   }
   
