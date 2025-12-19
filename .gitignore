@@ -53,10 +53,9 @@ config/*.conf
 !config/*.example
 !config/*.example.conf
 
-# Claude Code
-.claude
+ 
 .reboot_schedule.json
-
+commit-message.txt
 # Cursor AI rules (user-specific)
 .cursorrules
 
@@ -71,6 +70,7 @@ MynetworK.code-workspace
 img-capture/
 index.html
 
+
 # Scripts with hardcoded credentials (development only)
 # These scripts contain sensitive credentials and should not be committed
 test-backend.sh
@@ -79,7 +79,7 @@ unifi_script.sh
 unifi_token.sh
 unifi_token_interactif.sh
 unitfi_test.sh
-
+commit-message.txt
 # Backup files
 *.backup
 *.bak

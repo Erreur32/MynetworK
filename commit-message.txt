@@ -1,37 +1,16 @@
-🔒 v0.0.10 - Système de sécurité avancé & centralisation des versions
+chore: corrections diverses
 
-✨ Features:
-- 🔒 Système de sécurité complet (brute force protection, audit, notifications)
-- 🛡️ Protection contre les attaques par force brute (blocage IP/compte)
-- 📊 Audit de sécurité avec logs détaillés et statistiques
-- 📧 Notifications de sécurité automatiques (login, blocage, changements)
-- ⚙️ Endpoint /api/system/security pour configuration centralisée
-- 📝 Centralisation des versions dans src/constants/version.ts
-- 🎯 Variables de version dans Header et SettingsPage (plus de versions en dur)
+🐛 Corrections
+- Correction de la détection IP visitor (127.0.0.1 → IP réelle)
+  - Amélioration de getClientIp.ts pour gérer X-Forwarded-For et IPv6
+  - Configuration du proxy Vite pour forwarder les headers IP
+- Amélioration de la détection du token Freebox supprimé
+  - Détection automatique et message clair pour re-registration
+- Amélioration des logs Docker (affichage IP machine, nom container)
 
-🔧 Improvements:
-- 🔄 Script update-version.sh adapté pour utiliser les constantes centralisées
-- 🚫 Désactivation des options de sécurité non implémentées dans l'UI
-- 📐 Réorganisation de la section sécurité en blocs/colonnes
-- 📋 Documentation complète des options de sécurité (ANALYSE_SECURITE.md)
-- 📊 Comparaison avec FreeboxOS-Ultra-Dashboard v1.0.5-beta (COMPARAISON_FREEBOXOS_DASHBOARD.md)
+📝 Documentation
+- Mise à jour de docker-compose.yml et docker-compose.example.yml
 
-🔒 Security:
-- Protection brute force avec tracking par username et IP
-- Blocage automatique après X tentatives échouées
-- Durée de blocage configurable (5-60 minutes)
-- Fenêtre de suivi des tentatives (30 minutes)
-- Notifications automatiques pour événements de sécurité
-- Audit complet avec export JSON/CSV
-- Détection et avertissement JWT secret par défaut
-
-📝 Documentation:
-- Doc_Dev/ANALYSE_SECURITE.md - Analyse complète des options de sécurité
-- Doc_Dev/COMPARAISON_FREEBOXOS_DASHBOARD.md - Comparaison avec projet original
-- TODO.md - Ajout des fonctionnalités de sécurité à venir
-
-🎨 UI/UX:
-- Section sécurité réorganisée en 2 colonnes (desktop)
-- Blocs visuels pour fonctionnalités actives/inactives
-- Badges d'information pour options non implémentées
-- Résumé des fonctionnalités actives vs à venir
+🔧 Améliorations
+- Amélioration de la détection Docker stats et disques en production
+- Uniformisation des badges système (CPU, RAM, Disk)
