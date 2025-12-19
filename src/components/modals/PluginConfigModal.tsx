@@ -103,7 +103,61 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         setIsTesting(true);
         setTestResult(null);
 
-        // Validate form first
+        // For Freebox, no form validation needed - just test connection
+        if (pluginId === 'freebox') {
+            try {
+                const result = await testPluginConnection(pluginId);
+                if (result) {
+                    // Check if the message indicates app is not registered or token was deleted
+                    const isNotRegistered = result.message && (
+                        result.message.includes('non enregistrée') ||
+                        result.message.includes('NOT_REGISTERED') ||
+                        result.message.includes('enregistrer')
+                    );
+                    
+                    const isTokenDeleted = result.message && (
+                        result.message.includes('token a été supprimé') ||
+                        result.message.includes('TOKEN_DELETED') ||
+                        result.message.includes('Réenregistrement nécessaire')
+                    );
+                    
+                    if (isTokenDeleted) {
+                        setTestResult({
+                            success: false,
+                            message: result.message || 'Le token a été supprimé de la Freebox. Réenregistrement nécessaire. Veuillez enregistrer l\'application à nouveau via l\'onglet "Paramètres" → "Auth" ou le bouton "Auth".'
+                        });
+                    } else if (isNotRegistered) {
+                        setTestResult({
+                            success: false,
+                            message: result.message || 'Application non enregistrée. Veuillez enregistrer l\'application via l\'onglet "Paramètres" → "Auth" ou le bouton "Auth" dans la page Plugins.'
+                        });
+                    } else {
+                        setTestResult({
+                            success: result.connected,
+                            message: result.message || (result.connected
+                                ? 'Connexion réussie !'
+                                : 'Échec de la connexion. Vérifiez les logs backend.')
+                        });
+                    }
+                } else {
+                    setTestResult({
+                        success: false,
+                        message: 'Test de connexion impossible (voir logs backend)'
+                    });
+                }
+                await fetchPlugins();
+            } catch (error) {
+                setTestResult({
+                    success: false,
+                    message: error instanceof Error ? error.message : 'Erreur lors du test de connexion'
+                });
+            } finally {
+                setIsTesting(false);
+            }
+            return;
+        }
+
+        // For other plugins (UniFi, etc.), validate form first
         const validation = validateForm();
         if (!validation.valid) {
             setTestResult({
@@ -435,9 +489,16 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                 <AlertCircle size={20} className="text-blue-400 mt-0.5" />
                                 <div className="text-sm text-gray-300">
                                     <p className="font-medium mb-1">Configuration Freebox</p>
+                                    <p className="text-gray-400 mb-2">
+                                        Le plugin Freebox nécessite l'enregistrement de l'application sur votre Freebox.
+                                    </p>
                                     <p className="text-gray-400">
-                                        Le plugin Freebox utilise l'authentification Freebox existante.
-                                        Configurez la connexion via l'onglet "Paramètres" ou utilisez l'API Freebox directement.
+                                        <strong className="text-blue-300">Pour enregistrer :</strong> Cliquez sur le bouton "Tester" ci-dessous. 
+                                        Si l'application n'est pas encore enregistrée, vous devrez appuyer sur le bouton de validation 
+                                        sur l'écran LCD de votre Freebox.
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-2">
+                                        Vous pouvez aussi enregistrer via l'onglet "Paramètres" → "Auth" ou le bouton "Auth" dans la page Plugins.
                                     </p>
                                 </div>
                             </div>

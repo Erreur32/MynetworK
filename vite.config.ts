@@ -29,17 +29,55 @@ if (process.env.NODE_ENV !== 'production') {
 
 export default defineConfig({
   server: {
-    port: parseInt(process.env.VITE_PORT || '5173', 10),
+    port: parseInt(process.env.VITE_PORT || '3666', 10),
     host: '0.0.0.0',
     allowedHosts: ['mwk-dev.myoueb.fr'],
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
+        target: `http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3668'}`,
         changeOrigin: true,
         secure: false,
         timeout: 60000, // Increased timeout for long-running requests like ping
         proxyTimeout: 60000,
         configure: (proxy, _options) => {
+          // Set up headers forwarding for IP detection
+          // Use proxyReqWs for WebSocket and proxyReq for HTTP
+          const forwardClientIp = (proxyReq: any, req: any) => {
+            // Get client IP from the original request to Vite
+            // req.socket.remoteAddress contains the IP of the client connecting to Vite
+            let clientIp: string | undefined;
+            
+            // Check if X-Forwarded-For is already present (from another proxy)
+            if (req.headers['x-forwarded-for']) {
+              const forwarded = Array.isArray(req.headers['x-forwarded-for']) 
+                ? req.headers['x-forwarded-for'][0] 
+                : req.headers['x-forwarded-for'];
+              clientIp = forwarded.split(',')[0].trim();
+            } else {
+              // Get IP from socket (the client connecting to Vite)
+              clientIp = req.socket?.remoteAddress || req.connection?.remoteAddress;
+              
+              // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.150 -> 192.168.1.150)
+              if (clientIp && clientIp.startsWith('::ffff:')) {
+                clientIp = clientIp.substring(7);
+              }
+            }
+            
+            // Forward the client IP to backend
+            if (clientIp) {
+              // If X-Forwarded-For already exists, append to it, otherwise create new
+              const existingForwarded = proxyReq.getHeader('X-Forwarded-For');
+              if (existingForwarded) {
+                proxyReq.setHeader('X-Forwarded-For', `${clientIp}, ${existingForwarded}`);
+              } else {
+                proxyReq.setHeader('X-Forwarded-For', clientIp);
+              }
+              proxyReq.setHeader('X-Real-IP', clientIp);
+            }
+          };
+          
+          proxy.on('proxyReq', forwardClientIp);
+          proxy.on('proxyReqWs', forwardClientIp);
           proxy.on('error', (err, req, res) => {
             // Suppress ECONNREFUSED errors during backend restart - they are normal
             const errorMessage = err?.message || String(err || '');
@@ -71,7 +109,7 @@ export default defineConfig({
         }
       },
       '/ws': {
-        target: `ws://localhost:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
+        target: `ws://localhost:${process.env.SERVER_PORT || process.env.PORT || '3668'}`,
         ws: true,
         changeOrigin: true,
         secure: false,

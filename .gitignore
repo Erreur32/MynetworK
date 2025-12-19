@@ -57,6 +57,9 @@ config/*.conf
 .claude
 .reboot_schedule.json
 
+# Cursor AI rules (user-specific)
+.cursorrules
+
 # Development files and folders
 Doc_dev/
 Doc_Dev/

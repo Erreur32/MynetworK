@@ -71,11 +71,11 @@ const getTokenFilePath = (): string => {
 // Server configuration
 export const config = {
   // Server
-  // Default port: 3000 for production (Docker), 3003 for development
+  // Default port: 3000 for production (Docker), 3668 for development
   port: parseInt(
     process.env.PORT || 
     process.env.SERVER_PORT || 
-    (process.env.NODE_ENV === 'production' ? '3000' : '3003'), 
+    (process.env.NODE_ENV === 'production' ? '3000' : '3668'), 
     10
   ),
   // Public URL for frontend access (used in logs)
@@ -90,7 +90,9 @@ export const config = {
 
     // App registration details
     appId: process.env.FREEBOX_APP_ID || 'fr.mynetwork.dashboard',
-    appName: process.env.FREEBOX_APP_NAME || 'MynetworK Dashboard',
+    // Default app name: "MynetworK" (can be overridden via FREEBOX_APP_NAME env var)
+    // Docker Compose files set specific names per environment (Dev, Local, Production)
+    appName: process.env.FREEBOX_APP_NAME || 'MynetworK',
     appVersion: process.env.FREEBOX_APP_VERSION || '2.0.0',
     deviceName: process.env.FREEBOX_DEVICE_NAME || 'MynetworK Web App',
 

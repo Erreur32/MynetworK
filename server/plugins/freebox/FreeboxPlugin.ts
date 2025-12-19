@@ -60,8 +60,19 @@ export class FreeboxPlugin extends BasePlugin {
             
             if (!isLoggedIn) {
                 console.log('[FreeboxPlugin] Session not valid, attempting to login...');
-                await this.apiService.login();
-                console.log('[FreeboxPlugin] Login successful');
+                try {
+                    await this.apiService.login();
+                    console.log('[FreeboxPlugin] Login successful');
+                } catch (loginError) {
+                    const errorMessage = loginError instanceof Error ? loginError.message : 'Unknown error';
+                    // Check if error indicates token was deleted
+                    if (errorMessage.includes('TOKEN_DELETED') || errorMessage.includes('Réenregistrement nécessaire')) {
+                        console.warn('[FreeboxPlugin] Token has been deleted from Freebox. Re-registration required.');
+                        // Token has been reset by login() method, plugin will show as not registered
+                        return; // Exit early, user needs to re-register
+                    }
+                    throw loginError; // Re-throw other errors
+                }
             } else {
                 console.log('[FreeboxPlugin] Session is valid, maintaining connection');
             }
@@ -476,14 +487,25 @@ export class FreeboxPlugin extends BasePlugin {
                     await this.apiService.login();
                     console.log('[FreeboxPlugin] Reconnection successful in testConnection()');
                 } catch (error) {
-                    console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', error);
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                    // Check if error indicates token was deleted
+                    if (errorMessage.includes('TOKEN_DELETED') || errorMessage.includes('Réenregistrement nécessaire')) {
+                        console.warn('[FreeboxPlugin] Token has been deleted from Freebox during test. Re-registration required.');
+                        // Token has been reset, return false so frontend can prompt for re-registration
+                        return false;
+                    }
+                    console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', errorMessage);
                     return false;
                 }
             }
             
             const result = await this.apiService.getSystemInfo();
             return result.success;
-        } catch {
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            if (errorMessage.includes('TOKEN_DELETED')) {
+                console.warn('[FreeboxPlugin] Token deleted detected in testConnection()');
+            }
             return false;
         }
     }

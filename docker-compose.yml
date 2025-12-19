@@ -3,22 +3,28 @@ services:
     image: ghcr.io/erreur32/mynetwork:latest
     container_name: MynetworK
     restart: unless-stopped
+
     ports:
       - "${DASHBOARD_PORT:-7505}:3000"
+
     environment:
-      - NODE_ENV=production
-      - PORT=3000
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      # App name for Freebox API registration (visible in Freebox LCD/interface)
+      # Default: "MynetworK" (can be overridden via FREEBOX_APP_NAME env var)
+      # If not set, will use the default from config.ts: "MynetworK"
+      - FREEBOX_APP_NAME=${FREEBOX_APP_NAME:-MynetworK}
+      - FREEBOX_DEVICE_NAME=${FREEBOX_DEVICE_NAME:-MynetworK Production}
       - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
       - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+
     volumes:
       - mynetwork_data:/app/data
       - /:/host:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s

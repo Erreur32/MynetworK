@@ -255,6 +255,59 @@ function getNetworkIP(): string | null {
   return null;
 }
 
+// Get host machine IP when running in Docker
+function getHostMachineIP(): string | null {
+  try {
+    // Method 1: Try to read from /host/proc/net/route to find default gateway
+    const routePath = '/host/proc/net/route';
+    if (fsSync.existsSync(routePath)) {
+      const routeContent = fsSync.readFileSync(routePath, 'utf8');
+      const lines = routeContent.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('Iface') || !line.trim()) continue;
+        const parts = line.split(/\s+/);
+        // Default route has destination 00000000
+        if (parts.length >= 3 && parts[1] === '00000000') {
+          const gatewayHex = parts[2];
+          if (gatewayHex && gatewayHex !== '00000000' && gatewayHex.length === 8) {
+            // Convert hex to IP (little-endian format)
+            const ip = [
+              parseInt(gatewayHex.substring(6, 8), 16),
+              parseInt(gatewayHex.substring(4, 6), 16),
+              parseInt(gatewayHex.substring(2, 4), 16),
+              parseInt(gatewayHex.substring(0, 2), 16)
+            ].join('.');
+            // Gateway IP is usually the host IP in Docker bridge networks
+            return ip;
+          }
+        }
+      }
+    }
+    
+    // Method 2: Try to get gateway from network interfaces
+    // In Docker, the gateway is usually on the default route
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      // Look for eth0 or similar interface
+      if (name.includes('eth') || name.includes('ens')) {
+        for (const iface of interfaces[name] || []) {
+          if (iface.family === 'IPv4' && !iface.internal && iface.netmask) {
+            // Try to calculate gateway (usually .1 in the same subnet)
+            const ipParts = iface.address.split('.');
+            if (ipParts.length === 4) {
+              // Gateway is usually x.x.x.1 in Docker bridge networks
+              return `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.1`;
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // Fallback to regular network IP detection
+  }
+  return null;
+}
+
 // Check JWT secret on startup and notify if default
 const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
 if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
@@ -296,27 +349,83 @@ server.listen(port, host, () => {
   // Determine frontend URL to display based on environment
   const isProduction = process.env.NODE_ENV === 'production';
   const isDockerEnv = isDocker();
+  
+  // Get network IP (used for both frontend and backend URLs)
+  // Try to get host machine IP (not container IP) when in Docker
+  let networkIP: string | null = null;
+  if (isDockerEnv) {
+    // In Docker, get host machine IP from gateway
+    networkIP = getHostMachineIP();
+    // Fallback to container IP if host IP not found
+    if (!networkIP) {
+      networkIP = getNetworkIP();
+    }
+  } else if (!isProduction) {
+    // Development mode (not Docker): get local network IP
+    networkIP = getNetworkIP();
+  }
+  
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
   
   if (isProduction) {
-    // Production mode (Docker): use PUBLIC_URL or default to localhost with port mapping
-    frontendWebUrl = config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`;
-    frontendLocalUrl = frontendWebUrl;
+    // Production mode (Docker): use PUBLIC_URL, or detect host IP, or default to localhost
+    if (config.publicUrl) {
+      frontendWebUrl = config.publicUrl;
+      frontendLocalUrl = frontendWebUrl;
+    } else if (isDockerEnv && networkIP) {
+      // In Docker production, use detected host machine IP
+      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
+      frontendWebUrl = `http://${networkIP}:${dashboardPort}`;
+      frontendLocalUrl = frontendWebUrl;
+    } else {
+      // Fallback to localhost
+      frontendWebUrl = `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`;
+      frontendLocalUrl = frontendWebUrl;
+    }
   } else {
-    // Development mode: frontend is on Vite dev server (port 5173)
-    const vitePort = process.env.VITE_PORT || '5173';
-    const networkIP = getNetworkIP();
-    frontendLocalUrl = `http://localhost:${vitePort}`;
-    frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
+    // Development mode: frontend is on Vite dev server
+    const vitePort = process.env.VITE_PORT || '3666';
+    // In Docker, use host machine IP for local URL too (more useful than localhost)
+    if (isDockerEnv && networkIP) {
+      frontendLocalUrl = `http://${networkIP}:${vitePort}`;
+      frontendWebUrl = frontendLocalUrl;
+    } else {
+      frontendLocalUrl = `http://localhost:${vitePort}`;
+      frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
+    }
   }
   
-  const apiUrl = isProduction 
-    ? (config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`)
-    : `http://localhost:${port}`;
-  const wsUrl = isProduction
-    ? (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${port}/ws/connection`)
-    : `ws://localhost:${port}/ws/connection`;
+  // Determine API and WebSocket URLs
+  let apiUrl: string;
+  let wsUrl: string;
+  
+  if (isProduction) {
+    // Production: use PUBLIC_URL, or detect host IP, or default
+    if (config.publicUrl) {
+      apiUrl = config.publicUrl;
+      wsUrl = config.publicUrl.replace(/^http/, 'ws') + '/ws/connection';
+    } else if (isDockerEnv && networkIP) {
+      // In Docker production, use detected host machine IP
+      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
+      apiUrl = `http://${networkIP}:${dashboardPort}`;
+      wsUrl = `ws://${networkIP}:${dashboardPort}/ws/connection`;
+    } else {
+      // Fallback to localhost
+      const dashboardPort = process.env.DASHBOARD_PORT || '7505';
+      apiUrl = `http://localhost:${dashboardPort}`;
+      wsUrl = `ws://localhost:${dashboardPort}/ws/connection`;
+    }
+  } else {
+    // Development: use host machine IP if in Docker, otherwise localhost
+    if (isDockerEnv && networkIP) {
+      apiUrl = `http://${networkIP}:${port}`;
+      wsUrl = `ws://${networkIP}:${port}/ws/connection`;
+    } else {
+      apiUrl = `http://localhost:${port}`;
+      wsUrl = `ws://localhost:${port}/ws/connection`;
+    }
+  }
   
   // ANSI color codes for terminal output
   const colors = {
@@ -360,8 +469,31 @@ server.listen(port, host, () => {
   }
 
   // Calculate content widths for all lines
-  const title = 'MynetworK Backend Server';
+  const title = isProduction || isDockerEnv ? 'MynetworK Backend Server' : 'MynetworK Backend Server [DEV]';
   const subtitle = 'Multi-Source Network Dashboard';
+  
+  // Get container name if in Docker
+  let containerName: string | null = null;
+  if (isDockerEnv) {
+    try {
+      // Try to read container name from /etc/hostname or HOSTNAME env var
+      if (process.env.HOSTNAME) {
+        containerName = process.env.HOSTNAME;
+      } else {
+        try {
+          const hostnamePath = '/etc/hostname';
+          if (fsSync.existsSync(hostnamePath)) {
+            containerName = fsSync.readFileSync(hostnamePath, 'utf8').trim();
+          }
+        } catch {
+          // Fallback to os.hostname()
+          containerName = os.hostname();
+        }
+      }
+    } catch {
+      containerName = os.hostname();
+    }
+  }
   
   // Determine version label with app version
   const versionLabel = isProduction || isDockerEnv 
@@ -369,11 +501,12 @@ server.listen(port, host, () => {
     : `DEV v${appVersion}`;
   
   const contentLines = [
-    `  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
-    `  💻 Frontend Local:      ${frontendLocalUrl}`,
-    `  🔌 Backend API:         ${apiUrl}/api/health`,
-    `  🔗 WebSocket:           ${wsUrl}`,
-    `  📡 Freebox:             ${config.freebox.url}`,
+    ...(containerName ? [`  📦 Container:            ${containerName}`] : []),
+    `  🌐 Frontend WEB:    ${frontendWebUrl}`,
+    `  💻 Frontend Local:  ${frontendLocalUrl}`,
+    `  🔌 Backend API:     ${apiUrl}/api/health`,
+    `  🔗 WebSocket:       ${wsUrl}`,
+    `  📡 Freebox:         ${config.freebox.url}`,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
@@ -385,7 +518,8 @@ server.listen(port, host, () => {
     ...contentLines.map(line => visibleLength(line)),
     visibleLength(title),
     visibleLength(subtitle),
-    visibleLength(versionLabel)
+    visibleLength(versionLabel),
+    ...(containerName ? [visibleLength(`  📦 Container:            ${containerName}`)] : [])
   );
   
   // Calculate total width: content + minimal padding (4 chars)
@@ -414,6 +548,7 @@ ${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${col
 ${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${containerName ? `${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}📦${colors.reset} ${colors.bright}Container:${colors.reset}            ${colors.cyan}${containerName}${colors.reset}${colors.reset}` : ''}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
@@ -435,6 +570,7 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
     `║${' '.repeat(subtitlePadding)}${subtitle}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}`,
     `╠${'═'.repeat(width)}`,
     `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
+    ...(containerName ? [`║  📦 Container:            ${containerName}`] : []),
     `╠${'═'.repeat(width)}`,
     `║  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
     `║  💻 Frontend Local:      ${frontendLocalUrl}`,

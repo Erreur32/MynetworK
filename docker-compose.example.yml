@@ -7,7 +7,7 @@
 # For production use, copy this to docker-compose.yml and customize as needed.
 #
 # Production deployment using pre-built image from registry
-# For local development (building from source), use docker-compose.local.yml instead
+# For development with hot reload, use docker-compose.dev.yml instead
 #
 # Usage:
 #   docker-compose up -d
@@ -47,6 +47,13 @@ services:
       # Freebox configuration
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      # App name for Freebox API registration (visible in Freebox LCD/interface)
+      # This name will appear in the Freebox interface when the app is registered
+      # Default: "MynetworK" (can be customized to distinguish between environments)
+      # Example: "MynetworK Production", "MynetworK Dev", "MynetworK Local"
+      # If not set, will use the default from config.ts: "MynetworK"
+      - FREEBOX_APP_NAME=${FREEBOX_APP_NAME:-MynetworK}
+      - FREEBOX_DEVICE_NAME=${FREEBOX_DEVICE_NAME:-MynetworK Production}
       
       # ⚠️ SECURITE CRITIQUE : JWT_SECRET - Secret pour signer les tokens JWT
       # 
