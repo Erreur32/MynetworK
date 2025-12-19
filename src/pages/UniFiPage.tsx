@@ -961,8 +961,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                         }`}
                                                                         title={
                                                                             device.active !== false
-                                                                                ? 'Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)'
-                                                                                : 'Point d'accès hors ligne'
+                                                                                ? "Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
+                                                                                : "Point d'accès hors ligne"
                                                                         }
                                                                     />
                                                                 </div>
