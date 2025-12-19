@@ -83,4 +83,5 @@ commit-message.txt
 # Backup files
 *.backup
 *.bak
-*~
+*~.cursorrules
+commit-message.txt
