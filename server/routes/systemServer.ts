@@ -616,9 +616,9 @@ const getDockerStats = async (): Promise<{
   
   try {
     await fs.access(dockerSocket);
-    debugLog(`[SystemServer] Docker socket accessible at ${dockerSocket}`);
+    console.log(`[SystemServer] ✓ Docker socket accessible at ${dockerSocket}`);
   } catch (accessError) {
-    debugLog(`[SystemServer] Docker socket not accessible at ${dockerSocket}:`, accessError);
+    console.log(`[SystemServer] ⚠ Docker socket not accessible at ${dockerSocket}:`, accessError);
     return null;
   }
 
@@ -627,6 +627,9 @@ const getDockerStats = async (): Promise<{
     // Get Docker version
     const versionInfo = await queryDockerApi<{ Version: string }>('/version');
     const dockerVersion = versionInfo?.Version ? `Docker version ${versionInfo.Version}` : null;
+    if (!dockerVersion) {
+      console.log(`[SystemServer] ⚠ Could not get Docker version from API`);
+    }
     
     // Get containers stats
     const containers = await queryDockerApi<Array<{ State: string }>>('/containers/json?all=true');
@@ -636,18 +639,30 @@ const getDockerStats = async (): Promise<{
       stopped: containers.filter(c => c.State === 'exited').length,
       paused: containers.filter(c => c.State === 'paused').length
     } : { total: 0, running: 0, stopped: 0, paused: 0 };
+    if (!containers) {
+      console.log(`[SystemServer] ⚠ Could not get containers from API`);
+    }
     
     // Get images count
     const images = await queryDockerApi<Array<unknown>>('/images/json');
     const imagesCount = images ? images.length : 0;
+    if (!images) {
+      console.log(`[SystemServer] ⚠ Could not get images from API`);
+    }
     
     // Get volumes count
     const volumes = await queryDockerApi<{ Volumes?: Array<unknown> }>('/volumes');
     const volumesCount = volumes?.Volumes ? volumes.Volumes.length : 0;
+    if (!volumes) {
+      console.log(`[SystemServer] ⚠ Could not get volumes from API`);
+    }
     
     // Get networks count
     const networks = await queryDockerApi<Array<unknown>>('/networks');
     const networksCount = networks ? networks.length : 0;
+    if (!networks) {
+      console.log(`[SystemServer] ⚠ Could not get networks from API`);
+    }
     
     // Get disk usage (optional - may not be available on all Docker versions)
     let diskUsage: {
@@ -691,17 +706,29 @@ const getDockerStats = async (): Promise<{
       diskUsage
     };
     
-    debugLog(`[SystemServer] ✓ Docker stats retrieved:`, {
+    // Always log in production to help diagnose issues
+    const formatBytesForLog = (bytes: number): string => {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+    };
+    console.log(`[SystemServer] ✓ Docker stats retrieved:`, {
       version: dockerVersion,
       containers: `${containersStats.running}/${containersStats.total}`,
       images: imagesCount,
       volumes: volumesCount,
-      networks: networksCount
+      networks: networksCount,
+      diskUsage: diskUsage ? formatBytesForLog(diskUsage.total) : 'N/A'
     });
     
     return stats;
   } catch (error) {
     console.error(`[SystemServer] Error getting Docker stats:`, error);
+    // Log more details in production to help diagnose
+    console.error(`[SystemServer] Docker socket path: ${dockerSocket}`);
+    console.error(`[SystemServer] Docker socket accessible: ${fsSync.existsSync(dockerSocket)}`);
     return null;
   }
 };
@@ -816,6 +843,24 @@ router.get('/server', async (_req, res) => {
     const diskUsage = await getDiskUsage();
     const allDisks = await getAllDiskUsage();
     
+    // Log disk information for debugging (always log in production to help diagnose issues)
+    if (allDisks.length > 0) {
+      console.log(`[SystemServer] ✓ Found ${allDisks.length} disk(s):`, allDisks.map(d => `${d.mount} (${(d.total / (1024 * 1024 * 1024)).toFixed(2)} GB)`).join(', '));
+    } else {
+      console.log(`[SystemServer] ⚠ No disks found via getAllDiskUsage(), using fallback disk info`);
+    }
+    
+    // Get Docker stats (includes version)
+    const dockerStats = await getDockerStats();
+    
+    // Ensure Docker version is set (prefer dockerStats.version, then dockerVersion from getDockerVersion)
+    const finalDockerVersion = dockerStats?.version || dockerVersion || null;
+    if (finalDockerVersion) {
+      console.log(`[SystemServer] ✓ Docker version: ${finalDockerVersion}`);
+    } else if (isDocker()) {
+      console.log(`[SystemServer] ⚠ Running in Docker but could not detect version`);
+    }
+    
     const systemInfo = {
       platform: os.platform(),
       arch: os.arch(),
@@ -823,8 +868,8 @@ router.get('/server', async (_req, res) => {
       uptime,
       nodeVersion: process.version,
       docker: isDocker(),
-      dockerVersion: dockerVersion || null,
-      dockerStats: await getDockerStats(),
+      dockerVersion: finalDockerVersion,
+      dockerStats: dockerStats,
       cpu: {
         cores: os.cpus().length,
         model: os.cpus()[0]?.model || 'Unknown',

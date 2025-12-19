@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Development Docker files
+docker-compose.dev.yml
+docker-compose.local.yml
+Dockerfile.dev
+Dockerfile_orig
+Dockerfile_DHI
+Dockerfile_Hardened
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -49,11 +57,16 @@ config/*.conf
 .claude
 .reboot_schedule.json
 
-# Local comparison / archives that must never be committed
-# Private development folder (contains tokens, internal docs, secrets)
+# Development files and folders
 Doc_dev/
 Doc_Dev/
 Aide*
+Aide_*
+TODO.md
+MynetworK.code-workspace
+*.code-workspace
+img-capture/
+index.html
 
 # Scripts with hardcoded credentials (development only)
 # These scripts contain sensitive credentials and should not be committed

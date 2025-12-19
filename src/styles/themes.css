@@ -58,37 +58,56 @@
     --backdrop-blur: none;
 }
 
-/* Dark Theme - Grayed borders and dark input backgrounds */
+/* Dark Theme - Popular dark theme style (inspired by GitHub Dark, VS Code Dark+) */
+/* Clear color hierarchy: background < headers/footers < cards < card headers */
 [data-theme="dark"] {
     /* Accent Colors */
     --accent-unifi: #1fb0ec;
 
-    /* Border Colors - Grayed borders for better visibility (darker) */
-    --border-color: #383838;
-    --border-color-light: #424242;
-    --border-color-hover: #4d4d4d;
+    /* Background Colors - Clear hierarchy inspired by popular dark themes */
+    --bg-primary: #0d1117;        /* Main background (GitHub Dark style) */
+    --bg-header: #161b22;          /* Header/Footer (slightly lighter than background) */
+    --bg-footer: #161b22;          /* Footer same as header */
+    --bg-card: #161b22;            /* Card background (distinct from main background) */
+    --bg-secondary: #21262d;       /* Card headers, table headers, secondary elements */
+    --bg-tertiary: #30363d;        /* Hover states, tertiary elements */
 
-    /* Input/Textarea Colors - Keep dark backgrounds */
-    --input-bg: #1a1a1a;
-    --input-text: #e5e5e5;
-    --input-border: #383838;
-    --input-border-focus: #3b82f6;
-    --input-placeholder: #666666;
+    /* Border Colors - Visible but subtle */
+    --border-color: #30363d;        /* Main borders */
+    --border-color-light: #373e47;  /* Lighter borders */
+    --border-color-hover: #484f58;  /* Hover borders */
 
-    /* Card/Container Colors - Grayed borders */
-    --card-bg: #1a1a1a;
-    --card-border: #383838;
+    /* Input/Textarea Colors */
+    --input-bg: #0d1117;           /* Input background (same as main background) */
+    --input-text: #c9d1d9;        /* Input text (GitHub style) */
+    --input-border: #30363d;      /* Input border */
+    --input-border-focus: #1f6feb; /* Focus border (GitHub blue) */
+    --input-placeholder: #6e7681;  /* Placeholder text */
 
-    /* Header Colors - Solid dark background, not transparent */
-    --bg-header: #151515;
-    --header-border: #383838;
+    /* Card/Container Colors */
+    --card-bg: #161b22;            /* Card background */
+    --card-border: #30363d;        /* Card border */
 
-    /* Footer Colors - Solid dark background, not transparent */
-    --bg-footer: #151515;
-    --footer-border: #383838;
+    /* Header/Footer borders */
+    --header-border: #21262d;      /* Header border (slightly lighter) */
+    --footer-border: #21262d;      /* Footer border */
+
+    /* Text Colors */
+    --text-primary: #c9d1d9;       /* Primary text (GitHub style) */
+    --text-secondary: #8b949e;     /* Secondary text */
+    --text-tertiary: #6e7681;      /* Tertiary text */
+
+    /* Button Colors */
+    --button-bg: #21262d;          /* Button background */
+    --button-text: #c9d1d9;       /* Button text */
+    --button-hover-bg: #30363d;   /* Button hover */
+    --button-hover-text: #ffffff; /* Button hover text */
+    --button-active-bg: #1f6feb;  /* Button active */
+    --button-active-text: #ffffff; /* Button active text */
+    --button-border: #30363d;     /* Button border */
 
     /* UniFi Card Background */
-    --bg-unifi-card: #1a1a1a;
+    --bg-unifi-card: #161b22;     /* Same as card background */
 
     /* Effects */
     --backdrop-blur: none;
@@ -917,7 +936,14 @@ a:hover:focus,
 
 /* Card and container backgrounds */
 [data-theme="dark"] [class*="bg-[#1a1a1a]"] {
-    background-color: var(--card-bg) !important;
+    background-color: var(--bg-card) !important;  /* #161b22 - cartes */
+}
+
+/* Card headers in modals and components - use bg-secondary for differentiation */
+[data-theme="dark"] [class*="card"] [class*="bg-[#1a1a1a]"],
+[data-theme="dark"] [class*="modal"] [class*="bg-[#1a1a1a]"],
+[data-theme="dark"] [class*="border-b"][class*="bg-[#1a1a1a]"] {
+    background-color: var(--bg-secondary) !important;  /* #21262d - headers de cartes */
 }
 
 /* Rounded containers and cards - gray borders */
@@ -965,9 +991,37 @@ a:hover:focus,
 */
 
 /* Background colors - Replace hardcoded backgrounds */
-[data-theme] [class*="bg-[#1a1a1a]"],
-[data-theme] [class*="bg-[#181818]"],
-[data-theme] [class*="bg-[#1b1b1b]"] {
+/* Dark theme: clear hierarchy with popular dark theme colors */
+[data-theme="dark"] [class*="bg-[#1a1a1a]"],
+[data-theme="dark"] [class*="bg-[#1b1b1b]"],
+[data-theme="dark"] [class*="bg-[#161b22]"] {
+    background-color: var(--bg-card) !important;  /* Card background */
+}
+
+[data-theme="dark"] [class*="bg-[#181818]"],
+[data-theme="dark"] [class*="bg-[#21262d]"] {
+    background-color: var(--bg-secondary) !important;  /* Card headers, table headers */
+}
+
+[data-theme]:not([data-theme="dark"]) [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="dark"]) [class*="bg-[#181818]"],
+[data-theme]:not([data-theme="dark"]) [class*="bg-[#1b1b1b]"] {
+    background-color: var(--card-bg) !important;
+}
+
+/* Dark theme: better differentiation for modals and panels */
+[data-theme="dark"] [class*="bg-[#121212]"],
+[data-theme="dark"] [class*="bg-[#0d1117]"] {
+    background-color: var(--bg-primary) !important;  /* Main background #0d1117 */
+}
+
+[data-theme="dark"] [class*="bg-[#151515]"],
+[data-theme="dark"] [class*="bg-[#161b22]"] {
+    background-color: var(--bg-card) !important;  /* Card background #161b22 */
+}
+
+[data-theme]:not([data-theme="dark"]) [class*="bg-[#121212]"],
+[data-theme]:not([data-theme="dark"]) [class*="bg-[#151515]"] {
     background-color: var(--card-bg) !important;
 }
 
@@ -1418,9 +1472,21 @@ a:hover:focus,
 */
 
 /* Fonds de cartes principales - uniformisation (sauf Neon et Nightly qui ont leurs propres règles) */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#1a1a1a]"],
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#151515]"],
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#181818]"] {
+/* Dark theme: hiérarchie claire avec couleurs populaires (GitHub Dark style) */
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#1a1a1a]"],
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#151515]"],
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#161b22]"] {
+    background-color: var(--bg-card) !important;  /* #161b22 - cartes */
+}
+
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#181818]"],
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#21262d]"] {
+    background-color: var(--bg-secondary) !important;  /* #21262d - headers de cartes */
+}
+
+[data-theme]:not([data-theme="dark"]):not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="dark"]):not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#151515]"],
+[data-theme]:not([data-theme="dark"]):not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#181818]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
@@ -1449,7 +1515,12 @@ a:hover:focus,
 }
 
 /* Fond pour widgets et panneaux - sauf Neon et Nightly */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#111111]"] {
+/* Dark theme: widgets utilisent bg-card pour différenciation */
+[data-theme="dark"]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#111111]"] {
+    background-color: var(--bg-card) !important;  /* #161b22 - cartes */
+}
+
+[data-theme]:not([data-theme="dark"]):not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#111111]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
@@ -1484,7 +1555,14 @@ a:hover:focus,
 }
 
 /* Tables headers - uniformisation (sauf Neon) */
-[data-theme]:not([data-theme="neon"]) thead[class*="bg-[#181818]"] {
+/* Dark theme: headers de tableaux avec bg-secondary pour différenciation claire */
+[data-theme="dark"] thead[class*="bg-[#181818]"],
+[data-theme="dark"] thead[class*="bg-[#21262d]"],
+[data-theme="dark"] thead {
+    background-color: var(--bg-secondary) !important;  /* #21262d - distinct from cards */
+}
+
+[data-theme]:not([data-theme="neon"]):not([data-theme="dark"]) thead[class*="bg-[#181818]"] {
     background-color: var(--bg-secondary) !important;
 }
 
