@@ -8,7 +8,8 @@ const __dirname = path.dirname(__filename);
 // Determine token file path:
 // 1. Use FREEBOX_TOKEN_FILE env var if set (Docker/production) - highest priority
 // 2. If NODE_ENV=development, use data/freebox_token.json to share with Docker dev
-// 3. Otherwise use .freebox_token in project root (production or undefined)
+// 3. If running in Docker (/app directory), use /app/data/freebox_token.json as default
+// 4. Otherwise use .freebox_token in project root (production or undefined)
 const getTokenFilePath = (): string => {
   if (process.env.FREEBOX_TOKEN_FILE) {
     return process.env.FREEBOX_TOKEN_FILE;
@@ -39,6 +40,13 @@ const getTokenFilePath = (): string => {
     const tokenPath = path.resolve(projectRoot, 'data', 'freebox_token.json');
     console.log(`[Config] Development mode - Token path: ${tokenPath} (projectRoot: ${projectRoot})`);
     return tokenPath;
+  }
+  
+  // Check if running in Docker (working directory is /app)
+  const cwd = process.cwd();
+  if (cwd === '/app' || cwd.startsWith('/app/')) {
+    // Docker production: use /app/data/freebox_token.json as default
+    return '/app/data/freebox_token.json';
   }
   
   // Production: use .freebox_token in project root

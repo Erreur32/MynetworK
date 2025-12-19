@@ -43,8 +43,8 @@ COPY --chown=node:node --from=builder /app/tsconfig.json ./
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
-ENV FREEBOX_HOST=mafreebox.freebox.fr
+# FREEBOX_TOKEN_FILE and FREEBOX_HOST should be set at runtime via docker-compose or environment variables
+# This avoids security warnings about sensitive data in Dockerfile
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
  CMD wget -q --spider http://127.0.0.1:${PORT}/api/health || exit 1

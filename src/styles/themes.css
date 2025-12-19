@@ -419,8 +419,8 @@
 }
 
 /* Override hardcoded input backgrounds to use CSS variables */
-[data-theme="dark"] input.bg-\[#1a1a1a\],
-[data-theme="dark"] textarea.bg-\[#1a1a1a\] {
+[data-theme="dark"] input[class*="bg-[#1a1a1a]"],
+[data-theme="dark"] textarea[class*="bg-[#1a1a1a]"] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -461,8 +461,8 @@
 }
 
 /* Override hardcoded input backgrounds for Glass theme */
-[data-theme="glass"] input.bg-\[#1a1a1a\],
-[data-theme="glass"] textarea.bg-\[#1a1a1a\] {
+[data-theme="glass"] input[class*="bg-[#1a1a1a]"],
+[data-theme="glass"] textarea[class*="bg-[#1a1a1a]"] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -597,8 +597,8 @@
 }
 
 /* Override hardcoded input backgrounds for Modern theme */
-[data-theme="modern"] input.bg-\[#1a1a1a\],
-[data-theme="modern"] textarea.bg-\[#1a1a1a\] {
+[data-theme="modern"] input[class*="bg-[#1a1a1a]"],
+[data-theme="modern"] textarea[class*="bg-[#1a1a1a]"] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -787,8 +787,8 @@
 }
 
 /* Override hardcoded input backgrounds for Nightly theme */
-[data-theme="nightly"] input.bg-\[#1a1a1a\],
-[data-theme="nightly"] textarea.bg-\[#1a1a1a\] {
+[data-theme="nightly"] input[class*="bg-[#1a1a1a]"],
+[data-theme="nightly"] textarea[class*="bg-[#1a1a1a]"] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -848,8 +848,8 @@ a:hover:focus,
     box-shadow: none !important;
 }
 
-[data-theme="neon"] input.bg-\[#1a1a1a\],
-[data-theme="neon"] textarea.bg-\[#1a1a1a\] {
+[data-theme="neon"] input[class*="bg-[#1a1a1a]"],
+[data-theme="neon"] textarea[class*="bg-[#1a1a1a]"] {
     background-color: var(--input-bg) !important;
     border-color: var(--input-border) !important;
 }
@@ -916,7 +916,7 @@ a:hover:focus,
 }
 
 /* Card and container backgrounds */
-[data-theme="dark"] .bg-\[#1a1a1a\] {
+[data-theme="dark"] [class*="bg-[#1a1a1a]"] {
     background-color: var(--card-bg) !important;
 }
 
@@ -965,18 +965,18 @@ a:hover:focus,
 */
 
 /* Background colors - Replace hardcoded backgrounds */
-[data-theme] .bg-\[#1a1a1a\],
-[data-theme] .bg-\[#181818\],
-[data-theme] .bg-\[#1b1b1b\] {
+[data-theme] [class*="bg-[#1a1a1a]"],
+[data-theme] [class*="bg-[#181818]"],
+[data-theme] [class*="bg-[#1b1b1b]"] {
     background-color: var(--card-bg) !important;
 }
 
-[data-theme] .bg-\[#101010\],
-[data-theme] .bg-\[#141414\] {
+[data-theme] [class*="bg-[#101010]"],
+[data-theme] [class*="bg-[#141414]"] {
     background-color: var(--bg-tertiary) !important;
 }
 
-[data-theme] .bg-\[#252525\] {
+[data-theme] [class*="bg-[#252525]"] {
     background-color: var(--bg-tertiary) !important;
 }
 
@@ -1004,7 +1004,7 @@ a:hover:focus,
 }
 
 /* Hover states */
-[data-theme] .hover\:bg-\[#252525\]:hover {
+[data-theme] [class*="hover:bg-[#252525]"]:hover {
     background-color: var(--bg-tertiary) !important;
 }
 
@@ -1024,22 +1024,22 @@ a:hover:focus,
 [data-theme="glass"] .border-theme { border-color: var(--border-color) !important; }
 
 /* Glass theme - Card and container backgrounds */
-[data-theme="glass"] .bg-\[#1a1a1a\],
-[data-theme="glass"] .bg-\[#181818\],
-[data-theme="glass"] .bg-\[#1b1b1b\] {
+[data-theme="glass"] [class*="bg-[#1a1a1a]"],
+[data-theme="glass"] [class*="bg-[#181818]"],
+[data-theme="glass"] [class*="bg-[#1b1b1b]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
-[data-theme="glass"] .bg-\[#101010\],
-[data-theme="glass"] .bg-\[#141414\] {
+[data-theme="glass"] [class*="bg-[#101010]"],
+[data-theme="glass"] [class*="bg-[#141414]"] {
     background-color: var(--bg-tertiary) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
 }
 
-[data-theme="glass"] .bg-\[#252525\] {
+[data-theme="glass"] [class*="bg-[#252525]"] {
     background-color: var(--bg-tertiary) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
@@ -1077,22 +1077,22 @@ a:hover:focus,
 [data-theme="modern"] .border-theme { border-color: var(--border-color) !important; }
 
 /* Modern theme - Card and container backgrounds with glass effect */
-[data-theme="modern"] .bg-\[#1a1a1a\],
-[data-theme="modern"] .bg-\[#181818\],
-[data-theme="modern"] .bg-\[#1b1b1b\] {
+[data-theme="modern"] [class*="bg-[#1a1a1a]"],
+[data-theme="modern"] [class*="bg-[#181818]"],
+[data-theme="modern"] [class*="bg-[#1b1b1b]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
-[data-theme="modern"] .bg-\[#101010\],
-[data-theme="modern"] .bg-\[#141414\] {
+[data-theme="modern"] [class*="bg-[#101010]"],
+[data-theme="modern"] [class*="bg-[#141414]"] {
     background-color: var(--bg-tertiary) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
 }
 
-[data-theme="modern"] .bg-\[#252525\] {
+[data-theme="modern"] [class*="bg-[#252525]"] {
     background-color: var(--bg-tertiary) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
@@ -1183,18 +1183,18 @@ a:hover:focus,
 [data-theme="neon"] .border-theme { border-color: var(--border-color) !important; }
 
 /* Nightly theme - Card and container backgrounds */
-[data-theme="nightly"] .bg-\[#1a1a1a\],
-[data-theme="nightly"] .bg-\[#181818\],
-[data-theme="nightly"] .bg-\[#1b1b1b\] {
+[data-theme="nightly"] [class*="bg-[#1a1a1a]"],
+[data-theme="nightly"] [class*="bg-[#181818]"],
+[data-theme="nightly"] [class*="bg-[#1b1b1b]"] {
     background-color: var(--card-bg) !important;
 }
 
-[data-theme="nightly"] .bg-\[#101010\],
-[data-theme="nightly"] .bg-\[#141414\] {
+[data-theme="nightly"] [class*="bg-[#101010]"],
+[data-theme="nightly"] [class*="bg-[#141414]"] {
     background-color: var(--bg-tertiary) !important;
 }
 
-[data-theme="nightly"] .bg-\[#252525\] {
+[data-theme="nightly"] [class*="bg-[#252525]"] {
     background-color: var(--bg-tertiary) !important;
 }
 
@@ -1340,8 +1340,8 @@ a:hover:focus,
 
 /* Neon theme - Transparent backgrounds for table rows (alternating) */
 [data-theme="neon"] tbody tr:nth-child(even),
-[data-theme="neon"] tbody tr.bg-\[#101010\],
-[data-theme="neon"] tbody tr.bg-\[#141414\] {
+[data-theme="neon"] tbody tr[class*="bg-[#101010]"],
+[data-theme="neon"] tbody tr[class*="bg-[#141414]"] {
     background-color: rgba(45, 35, 65, 0.2) !important;
 }
 
@@ -1350,16 +1350,16 @@ a:hover:focus,
 }
 
 /* Neon theme - Transparent backgrounds for table headers */
-[data-theme="neon"] thead.bg-\[#181818\],
+[data-theme="neon"] thead[class*="bg-[#181818]"],
 [data-theme="neon"] thead tr {
     background-color: rgba(30, 25, 45, 0.3) !important;
 }
 
 /* Neon theme - Transparent backgrounds for internal card sections */
 /* Ces règles doivent venir APRÈS les règles générales pour avoir priorité */
-[data-theme="neon"] .bg-\[#1a1a1a\],
-[data-theme="neon"] .bg-\[#151515\],
-[data-theme="neon"] .bg-\[#181818\] {
+[data-theme="neon"] [class*="bg-[#1a1a1a]"],
+[data-theme="neon"] [class*="bg-[#151515]"],
+[data-theme="neon"] [class*="bg-[#181818]"] {
     background-color: rgba(40, 30, 60, 0.3) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
@@ -1372,7 +1372,7 @@ a:hover:focus,
 */
 
 /* Additional background colors for Freebox/UniFi pages */
-[data-theme] .bg-\[#050b14\] {
+[data-theme] [class*="bg-[#050b14]"] {
     background-color: var(--bg-card) !important;
 }
 
@@ -1390,48 +1390,48 @@ a:hover:focus,
 */
 
 /* Fonds de cartes principales - uniformisation (sauf Neon et Nightly qui ont leurs propres règles) */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#151515\],
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#181818\] {
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#151515]"],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#181818]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
 /* Nightly theme - Pas de transparence sur les blocs */
-[data-theme="nightly"] .bg-\[#1a1a1a\],
-[data-theme="nightly"] .bg-\[#151515\],
-[data-theme="nightly"] .bg-\[#181818\] {
+[data-theme="nightly"] [class*="bg-[#1a1a1a]"],
+[data-theme="nightly"] [class*="bg-[#151515]"],
+[data-theme="nightly"] [class*="bg-[#181818]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
 
 /* Fonds alternatifs pour tableaux (lignes paires/impaires) - sauf Neon et Nightly */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#101010\],
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#141414\] {
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#101010]"],
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#141414]"] {
     background-color: var(--bg-tertiary) !important;
 }
 
 /* Fond pour sections spéciales (Docker, info système, etc.) - sauf Neon et Nightly */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#05151a\] {
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#05151a]"] {
     background-color: var(--bg-secondary) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
 /* Fond pour widgets et panneaux - sauf Neon et Nightly */
-[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) .bg-\[#111111\] {
+[data-theme]:not([data-theme="neon"]):not([data-theme="nightly"]) [class*="bg-[#111111]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
 /* Nightly theme - Pas de transparence sur les sections spéciales */
-[data-theme="nightly"] .bg-\[#101010\],
-[data-theme="nightly"] .bg-\[#141414\],
-[data-theme="nightly"] .bg-\[#05151a\],
-[data-theme="nightly"] .bg-\[#111111\] {
+[data-theme="nightly"] [class*="bg-[#101010]"],
+[data-theme="nightly"] [class*="bg-[#141414]"],
+[data-theme="nightly"] [class*="bg-[#05151a]"],
+[data-theme="nightly"] [class*="bg-[#111111]"] {
     background-color: var(--bg-secondary) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -1445,38 +1445,38 @@ a:hover:focus,
 }
 
 /* Hover states uniformisés */
-[data-theme] .hover\:bg-\[#1a1a1a\]:hover,
-[data-theme] .hover\:bg-\[#252525\]:hover {
+[data-theme] [class*="hover:bg-[#1a1a1a]"]:hover,
+[data-theme] [class*="hover:bg-[#252525]"]:hover {
     background-color: var(--bg-tertiary) !important;
 }
 
 /* Progress bars backgrounds - uniformisation */
-[data-theme] .bg-\[#1a1a1a\].rounded-full {
+[data-theme] [class*="bg-[#1a1a1a]"][class*="rounded-full"] {
     background-color: var(--bg-tertiary) !important;
 }
 
 /* Tables headers - uniformisation (sauf Neon) */
-[data-theme]:not([data-theme="neon"]) thead.bg-\[#181818\] {
+[data-theme]:not([data-theme="neon"]) thead[class*="bg-[#181818]"] {
     background-color: var(--bg-secondary) !important;
 }
 
 /* Freebox et UniFi cards - fonds uniformisés (sauf Neon) */
-[data-theme]:not([data-theme="neon"]) [class*="plugin"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="Plugin"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="freebox"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="Freebox"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="unifi"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="UniFi"] .bg-\[#1a1a1a\] {
+[data-theme]:not([data-theme="neon"]) [class*="plugin"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="Plugin"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="freebox"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="Freebox"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="unifi"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="UniFi"] [class*="bg-[#1a1a1a]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
 }
 
 /* System server widget - fond uniformisé (sauf Neon) */
-[data-theme]:not([data-theme="neon"]) [class*="System"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="system"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="Server"] .bg-\[#1a1a1a\],
-[data-theme]:not([data-theme="neon"]) [class*="server"] .bg-\[#1a1a1a\] {
+[data-theme]:not([data-theme="neon"]) [class*="System"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="system"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="Server"] [class*="bg-[#1a1a1a]"],
+[data-theme]:not([data-theme="neon"]) [class*="server"] [class*="bg-[#1a1a1a]"] {
     background-color: var(--card-bg) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
