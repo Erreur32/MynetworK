@@ -1169,7 +1169,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                     placeholder="Rechercher..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500 w-40"
+                    className="pl-8 pr-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:outline-none w-40"
                   />
                 </div>
                 <button
@@ -1530,7 +1530,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
-                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:outline-none"
                 autoFocus
               />
               <div className="flex justify-end gap-2 mt-4">
@@ -1567,7 +1567,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:outline-none"
                 autoFocus
               />
               <div className="flex justify-end gap-2 mt-4">
@@ -1902,7 +1902,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                         }}
                         onKeyDown={(e) => e.key === 'Enter' && (downloadUrl.trim() || torrentFile) && handleAddDownload()}
                         disabled={!!torrentFile}
-                        className="w-full pl-10 pr-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                        className="w-full pl-10 pr-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:outline-none disabled:opacity-50"
                         autoFocus
                       />
                     </div>

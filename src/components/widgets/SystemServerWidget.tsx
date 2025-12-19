@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
-import { Cpu, HardDrive, MemoryStick, Server, RefreshCw, CheckCircle, XCircle, Activity } from 'lucide-react';
+import { Cpu, HardDrive, MemoryStick, Server, CheckCircle, XCircle, Activity, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
@@ -35,6 +35,26 @@ interface SystemNetworkData {
     history: NetworkStat[];
 }
 
+interface DockerStats {
+    version: string | null;
+    containers: {
+        total: number;
+        running: number;
+        stopped: number;
+        paused: number;
+    };
+    images: number;
+    volumes: number;
+    networks: number;
+    diskUsage: {
+        images: number;
+        containers: number;
+        volumes: number;
+        buildCache: number;
+        total: number;
+    } | null;
+}
+
 interface SystemInfo {
     platform: string;
     arch: string;
@@ -43,6 +63,7 @@ interface SystemInfo {
     nodeVersion: string;
     docker: boolean;
     dockerVersion?: string | null;
+    dockerStats?: DockerStats | null;
     cpu: {
         cores: number;
         model: string;
@@ -69,7 +90,6 @@ export const SystemServerWidget: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isNetworkLoading, setIsNetworkLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
 
     const fetchSystemInfo = async () => {
         try {
@@ -78,6 +98,14 @@ export const SystemServerWidget: React.FC = () => {
             const response = await api.get<SystemInfo>('/api/system/server');
             if (response.success && response.result) {
                 setSystemInfo(response.result);
+                // Debug: Log Docker stats to console
+                if (response.result.docker) {
+                    console.log('[SystemServerWidget] Docker detected:', {
+                        docker: response.result.docker,
+                        dockerVersion: response.result.dockerVersion,
+                        dockerStats: response.result.dockerStats
+                    });
+                }
             } else {
                 setError('Failed to fetch system info');
             }
@@ -97,14 +125,6 @@ export const SystemServerWidget: React.FC = () => {
     useEffect(() => {
         fetchSystemInfo();
         fetchNetworkData();
-    }, []);
-
-    // Update date/time every second
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setCurrentDateTime(new Date());
-        }, 1000);
-        return () => clearInterval(interval);
     }, []);
 
     // Poll every 30 seconds
@@ -141,7 +161,7 @@ export const SystemServerWidget: React.FC = () => {
         return (
             <Card title="Système Serveur">
                 <div className="text-center py-8 text-gray-500">
-                    <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
+                    <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
                     <p className="text-sm">Chargement...</p>
                 </div>
             </Card>
@@ -164,43 +184,8 @@ export const SystemServerWidget: React.FC = () => {
     return (
         <Card
             title="Système Serveur"
-            actions={
-                <button
-                    onClick={fetchSystemInfo}
-                    className="p-1 hover:bg-[#1a1a1a] rounded transition-colors"
-                    title="Actualiser"
-                >
-                    <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-                </button>
-            }
         >
             <div className="space-y-4">
-                {/* Docker Status */}
-                {systemInfo.docker && (
-                    <div className="flex items-center justify-between text-xs bg-[#05151a] px-3 py-2 rounded border border-cyan-900/60">
-                        <div className="flex items-center gap-2 text-cyan-400">
-                            <Server size={14} />
-                            <span className="font-semibold">Docker</span>
-                        </div>
-                        <div className="text-right text-gray-300 space-y-0.5">
-                            <div>
-                                <span className="text-[11px] text-gray-400">Mode:&nbsp;</span>
-                                <span className="text-[11px] text-cyan-300">
-                                    Container
-                                </span>
-                            </div>
-                            {systemInfo.dockerVersion && (
-                                <div>
-                                    <span className="text-[11px] text-gray-400">Version:&nbsp;</span>
-                                    <span className="text-[11px] text-cyan-300">
-                                        {systemInfo.dockerVersion.replace('Docker version ', '')}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
                 {/* CPU */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
@@ -214,12 +199,12 @@ export const SystemServerWidget: React.FC = () => {
                     <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                         <div
                             className="bg-blue-500 h-2 rounded-full transition-all"
-                            style={{ width: `${Math.min(systemInfo.cpu.usage, 100)}%` }}
+                            style={{ width: `${Math.min(systemInfo.cpu.usage ?? 0, 100)}%` }}
                         />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500">
                         <span>{systemInfo.cpu.model}</span>
-                        <span>{systemInfo.cpu.usage.toFixed(1)}%</span>
+                        <span>{(systemInfo.cpu.usage ?? 0).toFixed(1)}%</span>
                     </div>
                 </div>
 
@@ -236,12 +221,12 @@ export const SystemServerWidget: React.FC = () => {
                     <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                         <div
                             className="bg-green-500 h-2 rounded-full transition-all"
-                            style={{ width: `${Math.min(systemInfo.memory.percentage, 100)}%` }}
+                            style={{ width: `${Math.min(systemInfo.memory.percentage ?? 0, 100)}%` }}
                         />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500">
                         <span>Libre: {formatBytes(systemInfo.memory.free)}</span>
-                        <span>{systemInfo.memory.percentage.toFixed(1)}%</span>
+                        <span>{(systemInfo.memory.percentage ?? 0).toFixed(1)}%</span>
                     </div>
                 </div>
 
@@ -265,12 +250,12 @@ export const SystemServerWidget: React.FC = () => {
                                 <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                                     <div
                                         className="bg-fuchsia-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${Math.min(disk.percentage, 100)}%` }}
+                                        style={{ width: `${Math.min(disk.percentage ?? 0, 100)}%` }}
                                     />
                                 </div>
                                 <div className="flex justify-between text-xs text-gray-500">
                                     <span>Libre: {formatBytes(disk.free)}</span>
-                                    <span>{disk.percentage.toFixed(1)}%</span>
+                                    <span>{(disk.percentage ?? 0).toFixed(1)}%</span>
                                 </div>
                             </div>
                         ))}
@@ -288,38 +273,87 @@ export const SystemServerWidget: React.FC = () => {
                         <div className="w-full bg-[#1a1a1a] rounded-full h-2">
                             <div
                                 className="bg-fuchsia-500 h-2 rounded-full transition-all"
-                                style={{ width: `${Math.min(systemInfo.disk.percentage, 100)}%` }}
+                                style={{ width: `${Math.min(systemInfo.disk.percentage ?? 0, 100)}%` }}
                             />
                         </div>
                         <div className="flex justify-between text-xs text-gray-500">
                             <span>Libre: {formatBytes(systemInfo.disk.free)}</span>
-                            <span>{systemInfo.disk.percentage.toFixed(1)}%</span>
+                            <span>{(systemInfo.disk.percentage ?? 0).toFixed(1)}%</span>
                         </div>
+                    </div>
+                )}
+
+                {/* Docker Status */}
+                {(systemInfo.docker || systemInfo.dockerStats) && (
+                    <div className="space-y-2 bg-[#05151a] px-3 py-2 rounded border border-cyan-900/60">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 text-cyan-400">
+                                <Server size={14} />
+                                <span className="font-semibold text-sm">Docker</span>
+                            </div>
+                            {systemInfo.dockerVersion && (
+                                <div className="text-xs text-cyan-300">
+                                    v{systemInfo.dockerVersion.replace('Docker version ', '')}
+                                </div>
+                            )}
+                        </div>
+                        
+                        {systemInfo.dockerStats ? (
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-4 gap-2 text-xs">
+                                    {/* Containers */}
+                                    <div className="space-y-1">
+                                        <div className="text-gray-400 text-[10px]">Containers</div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                                <span className="text-gray-300">{systemInfo.dockerStats.containers.running}</span>
+                                            </div>
+                                            <span className="text-gray-500">/</span>
+                                            <span className="text-gray-400">{systemInfo.dockerStats.containers.total}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Images */}
+                                    <div className="space-y-1">
+                                        <div className="text-gray-400 text-[10px]">Images</div>
+                                        <div className="text-gray-300">{systemInfo.dockerStats.images}</div>
+                                    </div>
+                                    
+                                    {/* Volumes */}
+                                    <div className="space-y-1">
+                                        <div className="text-gray-400 text-[10px]">Volumes</div>
+                                        <div className="text-gray-300">{systemInfo.dockerStats.volumes}</div>
+                                    </div>
+                                    
+                                    {/* Networks */}
+                                    <div className="space-y-1">
+                                        <div className="text-gray-400 text-[10px]">Networks</div>
+                                        <div className="text-gray-300">{systemInfo.dockerStats.networks}</div>
+                                    </div>
+                                </div>
+                                
+                                {/* Disk Usage */}
+                                {systemInfo.dockerStats.diskUsage && systemInfo.dockerStats.diskUsage.total > 0 && (
+                                    <div className="space-y-1 pt-1 border-t border-cyan-900/40">
+                                        <div className="text-gray-400 text-[10px]">Disk Usage</div>
+                                        <div className="text-gray-300">{formatBytes(systemInfo.dockerStats.diskUsage.total)}</div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-gray-500 text-center py-2">
+                                Stats Docker non disponibles
+                                <div className="text-[10px] text-gray-600 mt-1">
+                                    Vérifiez que le socket Docker est monté
+                            </div>
+                        </div>
+                        )}
                     </div>
                 )}
 
                 {/* System Info */}
                 <div className="pt-4 border-t border-gray-700 space-y-2 text-xs">
-                    {/* Date and Time */}
-                    <div className="flex justify-between items-center bg-[#05151a] px-3 py-2 rounded border border-cyan-900/60 mb-2">
-                        <span className="text-gray-400">Date / Heure</span>
-                        <div className="text-right">
-                            <div className="text-cyan-300 font-mono font-semibold">
-                                {currentDateTime.toLocaleDateString('fr-FR', { 
-                                    day: '2-digit', 
-                                    month: '2-digit', 
-                                    year: 'numeric' 
-                                })}
-                            </div>
-                            <div className="text-cyan-300 font-mono font-semibold">
-                                {currentDateTime.toLocaleTimeString('fr-FR', { 
-                                    hour: '2-digit', 
-                                    minute: '2-digit', 
-                                    second: '2-digit' 
-                                })}
-                            </div>
-                        </div>
-                    </div>
                     <div className="flex justify-between">
                         <span className="text-gray-500">Uptime</span>
                         <span className="text-gray-300">{formatUptime(systemInfo.uptime)}</span>
@@ -337,6 +371,15 @@ export const SystemServerWidget: React.FC = () => {
                         <div className="flex justify-between">
                             <span className="text-gray-500">Node.js</span>
                             <span className="text-gray-300">{systemInfo.nodeVersion}</span>
+                        </div>
+                    )}
+                    {/* Show Docker version if available */}
+                    {(systemInfo.dockerVersion || systemInfo.dockerStats?.version) && (
+                        <div className="flex justify-between">
+                            <span className="text-gray-500">Docker</span>
+                            <span className="text-gray-300">
+                                {(systemInfo.dockerVersion || systemInfo.dockerStats?.version || '').replace('Docker version ', '')}
+                            </span>
                         </div>
                     )}
                 </div>

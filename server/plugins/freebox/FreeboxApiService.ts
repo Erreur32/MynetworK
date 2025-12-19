@@ -69,6 +69,11 @@ export class FreeboxApiService {
         return path.join(process.cwd(), tokenFile);
     }
 
+    // Public method to get token path (for logging/debugging)
+    getTokenFilePath(): string {
+        return this.getTokenPath();
+    }
+
     // Load app_token from file
     private loadToken() {
         const tokenPath = this.getTokenPath();
@@ -76,12 +81,20 @@ export class FreeboxApiService {
             try {
                 const data = JSON.parse(fs.readFileSync(tokenPath, 'utf-8')) as TokenData;
                 this.appToken = data.appToken;
-                // Token loaded silently - only log if debug enabled
-            } catch {
+                logger.debug('FreeboxAPI', `Token loaded from ${tokenPath}`);
+            } catch (error) {
+                logger.warn('FreeboxAPI', `Failed to load token file ${tokenPath}:`, error);
                 // Failed to load - will need registration
             }
+        } else {
+            logger.debug('FreeboxAPI', `No token file found at ${tokenPath} - registration will be required`);
         }
-        // No token file - registration will be required (logged when needed)
+    }
+
+    // Reload token from file (useful after Docker restart or file changes)
+    reloadToken(): void {
+        logger.debug('FreeboxAPI', 'Reloading token from file...');
+        this.loadToken();
     }
 
     // Save app_token to file

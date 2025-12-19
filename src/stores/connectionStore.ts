@@ -69,11 +69,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const now = Math.floor(Date.now() / 1000);
       const start = now - duration;
-      console.log('[ConnectionStore] Fetching history from', start, 'to', now);
+      // console.log('[ConnectionStore] Fetching history from', start, 'to', now); // Debug only
       const response = await api.get<RrdResponse>(
         `${API_ROUTES.CONNECTION_HISTORY}?start=${start}&end=${now}`
       );
-      console.log('[ConnectionStore] History response:', response);
+      // console.log('[ConnectionStore] History response:', response); // Debug only
 
       // Check for permission denied error
       if (!response.success) {
@@ -83,7 +83,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           missing_right?: string;
           error?: { code?: string; message?: string };
         };
-        console.log('[ConnectionStore] Error response:', resp);
+        // console.log('[ConnectionStore] Error response:', resp); // Debug only
 
         const isPermissionDenied =
           resp.error?.code === 'INSUFFICIENT_RIGHTS' ||
@@ -93,7 +93,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           (resp.error?.message && resp.error.message.includes('autorisée'));
 
         if (isPermissionDenied) {
-          console.log('[ConnectionStore] RRD permission denied detected');
+          // console.log('[ConnectionStore] RRD permission denied detected'); // Debug only
           set({ extendedHistory: [], isLoading: false, rrdPermissionDenied: true });
           return;
         }
@@ -101,7 +101,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
       if (response.success && response.result && response.result.data) {
         const data = response.result.data;
-        console.log('[ConnectionStore] Raw data points:', data.length, 'first:', JSON.stringify(data[0]));
+        // console.log('[ConnectionStore] Raw data points:', data.length, 'first:', JSON.stringify(data[0])); // Debug only
 
         // RRD 'net' database field names vary by API version and model:
         // API v4+: rate_down, rate_up (bytes/s)
@@ -127,12 +127,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
             upload: Math.round(upload / 1024)
           };
         });
-        console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points');
-        console.log('[ConnectionStore] First 3 data points:', extendedHistory.slice(0, 3));
-        console.log('[ConnectionStore] Stats - avgDown:', Math.round(extendedHistory.reduce((sum, p) => sum + p.download, 0) / extendedHistory.length), 'KB/s');
+        // console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points'); // Debug only
+        // console.log('[ConnectionStore] First 3 data points:', extendedHistory.slice(0, 3)); // Debug only
+        // console.log('[ConnectionStore] Stats - avgDown:', Math.round(extendedHistory.reduce((sum, p) => sum + p.download, 0) / extendedHistory.length), 'KB/s'); // Debug only
         set({ extendedHistory, isLoading: false, rrdPermissionDenied: false });
       } else {
-        console.log('[ConnectionStore] No data in response, success:', response.success, 'result:', response.result);
+        // console.log('[ConnectionStore] No data in response, success:', response.success, 'result:', response.result); // Debug only
         set({ extendedHistory: [], isLoading: false });
       }
     } catch (err) {
@@ -156,14 +156,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     try {
       const now = Math.floor(Date.now() / 1000);
       const start = now - duration;
-      console.log('[ConnectionStore] Fetching temperature history from', start, 'to', now);
+      // console.log('[ConnectionStore] Fetching temperature history from', start, 'to', now); // Debug only
       const response = await api.get<RrdResponse>(
         `${API_ROUTES.CONNECTION_TEMP_HISTORY}?start=${start}&end=${now}`
       );
-      console.log('[ConnectionStore] Temperature response:', response);
+      // console.log('[ConnectionStore] Temperature response:', response); // Debug only
 
       if (response.success && response.result && response.result.data) {
-        console.log('[ConnectionStore] Temperature data points:', response.result.data.length, 'first:', JSON.stringify(response.result.data[0]));
+        // console.log('[ConnectionStore] Temperature data points:', response.result.data.length, 'first:', JSON.stringify(response.result.data[0])); // Debug only
         // RRD temp database fields vary by model:
         // Ultra v9: temp_cpu0, temp_cpu1, temp_cpu2, temp_cpu3
         // Delta: cpum, cpub, sw, fan_speed
@@ -210,10 +210,10 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
             sw     // Switch (Delta/Revolution) or secondary temp (Pop)
           };
         });
-        console.log('[ConnectionStore] Processed temperature:', temperatureHistory.length, 'points, sample:', temperatureHistory[0]);
+        // console.log('[ConnectionStore] Processed temperature:', temperatureHistory.length, 'points, sample:', temperatureHistory[0]); // Debug only
         set({ temperatureHistory });
       } else {
-        console.log('[ConnectionStore] No temperature data, success:', response.success, 'result:', response.result);
+        // console.log('[ConnectionStore] No temperature data, success:', response.success, 'result:', response.result); // Debug only
       }
     } catch (err) {
       console.error('[ConnectionStore] Temperature fetch error:', err);

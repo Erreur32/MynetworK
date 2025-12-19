@@ -84,7 +84,8 @@ export class UniFiPlugin extends BasePlugin {
                 if (!loggedIn) {
                     throw new Error('Failed to authenticate with UniFi controller');
                 }
-                logger.success('UniFiPlugin', 'Successfully connected to UniFi controller');
+                // Connection successful - no need to log every time
+                // logger.success('UniFiPlugin', 'Successfully connected to UniFi controller');
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 
@@ -182,11 +183,12 @@ export class UniFiPlugin extends BasePlugin {
         }
 
         try {
-            const [devices, clients, stats, sysinfo] = await Promise.all([
+            const [devices, clients, stats, sysinfo, wlans] = await Promise.all([
                 this.apiService.getDevices(),
                 this.apiService.getClients(),
                 this.apiService.getNetworkStats(),
-                this.apiService.getSystemInfo()
+                this.apiService.getSystemInfo(),
+                this.apiService.getWlans().catch(() => []) // Get WLANs, but don't fail if unavailable
             ]);
 
             // Log summary only if debug is enabled
@@ -321,7 +323,8 @@ export class UniFiPlugin extends BasePlugin {
                 devices: allDevices,
                 network: networkStats,
                 system: systemStats,
-                sites
+                sites,
+                wlans: wlans // Add WiFi networks (SSIDs)
             };
         } catch (error) {
             logger.error('UniFiPlugin', 'Failed to get stats:', error);

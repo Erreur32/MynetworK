@@ -349,7 +349,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     value={formData.url}
                                     onChange={(e) => handleInputChange('url', e.target.value)}
                                     placeholder="https://unifi.example.com:8443"
-                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                     required
                                     pattern="https?://.+"
                                 />
@@ -380,7 +380,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     value={formData.username}
                                     onChange={(e) => handleInputChange('username', e.target.value)}
                                     placeholder="admin"
-                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                     required
                                 />
                             </div>
@@ -396,7 +396,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                         value={formData.password}
                                         onChange={(e) => handleInputChange('password', e.target.value)}
                                         placeholder="••••••••"
-                                        className="w-full px-3 py-2 pr-10 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                        className="w-full px-3 py-2 pr-10 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                         required
                                     />
                                     <button
@@ -419,7 +419,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     value={formData.site}
                                     onChange={(e) => handleInputChange('site', e.target.value)}
                                     placeholder="default"
-                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                    className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
                                     Nom du site UniFi (généralement "default")

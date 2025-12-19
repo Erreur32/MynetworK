@@ -202,7 +202,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
                 value={localIp}
                 onChange={(e) => setLocalIp(e.target.value)}
                 placeholder="192.168.1.254"
-                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
               />
             ) : (
               <input
@@ -210,7 +210,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="https://mafreebox.freebox.fr"
-                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
               />
             )}
           </div>

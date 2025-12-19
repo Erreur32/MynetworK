@@ -251,7 +251,7 @@ const CreateVmModal: React.FC<{
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ma VM"
-              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:outline-none"
               autoFocus
             />
           </div>
@@ -261,7 +261,7 @@ const CreateVmModal: React.FC<{
             <select
               value={os}
               onChange={(e) => setOs(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+              className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:outline-none"
             >
               <option value="debian">Debian</option>
               <option value="ubuntu">Ubuntu</option>
@@ -280,7 +280,7 @@ const CreateVmModal: React.FC<{
                 <select
                   value={vcpus}
                   onChange={(e) => setVcpus(Number(e.target.value))}
-                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:outline-none"
                 >
                   {[1, 2, 4, 8].map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -296,7 +296,7 @@ const CreateVmModal: React.FC<{
                 <select
                   value={memory}
                   onChange={(e) => setMemory(Number(e.target.value))}
-                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:outline-none"
                 >
                   {[1, 2, 4, 8, 16].map((n) => (
                     <option key={n} value={n}>{n}</option>
@@ -312,7 +312,7 @@ const CreateVmModal: React.FC<{
                 <select
                   value={diskSize}
                   onChange={(e) => setDiskSize(Number(e.target.value))}
-                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:outline-none"
                 >
                   {[10, 20, 50, 100, 200].map((n) => (
                     <option key={n} value={n}>{n}</option>

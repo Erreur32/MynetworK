@@ -23,6 +23,15 @@ function getWifiQuality(rssi?: number): string {
     return 'Faible';
 }
 
+// Helper to get color class for Wi‑Fi signal quality indicator
+function getWifiQualityColor(rssi?: number): string {
+    if (typeof rssi !== 'number') return 'bg-gray-500';
+    if (rssi >= -60) return 'bg-green-500';      // Excellent - green
+    if (rssi >= -70) return 'bg-yellow-500';     // Bon - yellow
+    if (rssi >= -80) return 'bg-orange-500';     // Moyen - orange
+    return 'bg-red-500';                         // Faible - red
+}
+
 // Helper to pick a deterministic color class per SSID
 function getSsidColorClass(ssid?: string): string {
     if (!ssid) return 'text-gray-500';
@@ -123,9 +132,10 @@ export const NetworkEventsWidget: React.FC = () => {
                             <table className="w-full text-[11px] text-gray-300">
                                 <thead className="bg-[#181818] text-gray-400">
                                     <tr>
-                                        <th className="px-2 py-1 text-left w-2/5">Client</th>
-                                        <th className="px-2 py-1 text-left w-2/5">IP / SSID</th>
-                                        <th className="px-2 py-1 text-right w-1/5">Up</th>
+                                        <th className="px-2 py-1 text-left w-1/4">Client</th>
+                                        <th className="px-2 py-1 text-left w-1/4">IP</th>
+                                        <th className="px-2 py-1 text-left w-1/4">SSID</th>
+                                        <th className="px-2 py-1 text-right w-1/4">Up</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -134,10 +144,14 @@ export const NetworkEventsWidget: React.FC = () => {
                                             <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                             <td className="px-2 py-1 text-gray-400 truncate">
                                                 {c.ip || '-'}
-                                                {c.ssid && (
-                                                    <span className={`text-[10px] ml-1 ${getSsidColorClass(c.ssid)}`}>
-                                                        • {c.ssid}
+                                            </td>
+                                            <td className="px-2 py-1 truncate">
+                                                {c.ssid ? (
+                                                    <span className={`text-[10px] ${getSsidColorClass(c.ssid)}`}>
+                                                        {c.ssid}
                                                     </span>
+                                                ) : (
+                                                    <span className="text-gray-500">-</span>
                                                 )}
                                             </td>
                                             <td className="px-2 py-1 text-right text-emerald-300 font-semibold">
@@ -159,9 +173,10 @@ export const NetworkEventsWidget: React.FC = () => {
                             <table className="w-full text-[11px] text-gray-300">
                                 <thead className="bg-[#181818] text-gray-400">
                                     <tr>
-                                        <th className="px-2 py-1 text-left w-2/5">Client</th>
-                                        <th className="px-2 py-1 text-left w-2/5">IP / SSID</th>
-                                        <th className="px-2 py-1 text-right w-1/5">Down</th>
+                                        <th className="px-2 py-1 text-left w-1/4">Client</th>
+                                        <th className="px-2 py-1 text-left w-1/4">IP</th>
+                                        <th className="px-2 py-1 text-left w-1/4">SSID</th>
+                                        <th className="px-2 py-1 text-right w-1/4">Down</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -170,10 +185,14 @@ export const NetworkEventsWidget: React.FC = () => {
                                             <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                             <td className="px-2 py-1 text-gray-400 truncate">
                                                 {c.ip || '-'}
-                                                {c.ssid && (
-                                                    <span className={`text-[10px] ml-1 ${getSsidColorClass(c.ssid)}`}>
-                                                        • {c.ssid}
+                                            </td>
+                                            <td className="px-2 py-1 truncate">
+                                                {c.ssid ? (
+                                                    <span className={`text-[10px] ${getSsidColorClass(c.ssid)}`}>
+                                                        {c.ssid}
                                                     </span>
+                                                ) : (
+                                                    <span className="text-gray-500">-</span>
                                                 )}
                                             </td>
                                             <td className="px-2 py-1 text-right text-sky-300 font-semibold">
@@ -195,10 +214,11 @@ export const NetworkEventsWidget: React.FC = () => {
                             <table className="w-full text-[11px] text-gray-300">
                                 <thead className="bg-[#181818] text-gray-400">
                                     <tr>
-                                        <th className="px-2 py-1 text-left w-2/5">Client</th>
-                                        <th className="px-2 py-1 text-left w-2/5">IP / SSID</th>
-                                        <th className="px-2 py-1 text-right w-1/5">RSSI</th>
-                                        <th className="px-2 py-1 text-right w-1/5">Qualité</th>
+                                        <th className="px-2 py-1 text-left w-1/4">Client</th>
+                                        <th className="px-2 py-1 text-left w-1/4">IP</th>
+                                        <th className="px-2 py-1 text-left w-1/4">SSID</th>
+                                        <th className="px-2 py-1 text-right w-1/6">RSSI</th>
+                                        <th className="px-2 py-1 text-right w-1/6">Qualité</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -207,16 +227,20 @@ export const NetworkEventsWidget: React.FC = () => {
                                             <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                             <td className="px-2 py-1 text-gray-400 truncate">
                                                 {c.ip || '-'}
-                                                {c.ssid && (
-                                                    <span className={`text-[10px] ml-1 ${getSsidColorClass(c.ssid)}`}>
-                                                        • {c.ssid}
+                                            </td>
+                                            <td className="px-2 py-1 truncate">
+                                                {c.ssid ? (
+                                                    <span className={`text-[10px] ${getSsidColorClass(c.ssid)}`}>
+                                                        {c.ssid}
                                                     </span>
+                                                ) : (
+                                                    <span className="text-gray-500">-</span>
                                                 )}
                                             </td>
                                             <td className="px-2 py-1 text-right whitespace-nowrap">
                                                 {typeof c.rssi === 'number' ? (
                                                     <span className="inline-flex items-center justify-end gap-1 text-[10px]">
-                                                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                                                        <span className={`w-2 h-2 rounded-full ${getWifiQualityColor(c.rssi)}`} />
                                                         <span className="text-gray-200 font-medium">
                                                             {c.rssi} dBm
                                                         </span>

@@ -147,7 +147,7 @@ export const SecuritySection: React.FC = () => {
                                         max="10"
                                         value={maxLoginAttempts}
                                         onChange={(e) => setMaxLoginAttempts(parseInt(e.target.value) || 5)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                                     />
                                     <span className="text-sm text-gray-400">tentatives</span>
                                 </div>
@@ -164,7 +164,7 @@ export const SecuritySection: React.FC = () => {
                                         max="60"
                                         value={lockoutDuration}
                                         onChange={(e) => setLockoutDuration(parseInt(e.target.value) || 15)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                                     />
                                     <span className="text-sm text-gray-400">minutes</span>
                                 </div>
@@ -182,7 +182,7 @@ export const SecuritySection: React.FC = () => {
                                         value={trackingWindow}
                                         onChange={(e) => setTrackingWindow(parseInt(e.target.value) || 30)}
                                         disabled
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 opacity-50 cursor-not-allowed"
+                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none opacity-50 cursor-not-allowed"
                                     />
                                     <span className="text-sm text-gray-400">minutes</span>
                                     <span className="text-xs text-gray-500">(lecture seule)</span>
@@ -220,7 +220,7 @@ export const SecuritySection: React.FC = () => {
                                         max="168"
                                         value={sessionTimeoutHours}
                                         onChange={(e) => handleSessionTimeoutChange(parseInt(e.target.value) || 168)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                                     />
                                     <span className="text-sm text-gray-400">heures</span>
                                     {sessionTimeoutHours >= 24 && (

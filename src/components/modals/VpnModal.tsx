@@ -436,7 +436,7 @@ export const VpnModal: React.FC<VpnModalProps> = ({ isOpen, onClose }) => {
                           value={newUser.login}
                           onChange={(e) => setNewUser({ ...newUser, login: e.target.value })}
                           placeholder="nom_utilisateur"
-                          className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                          className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:outline-none"
                         />
                       </div>
                       <div>
@@ -447,7 +447,7 @@ export const VpnModal: React.FC<VpnModalProps> = ({ isOpen, onClose }) => {
                             value={newUser.password}
                             onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                             placeholder="••••••••"
-                            className="w-full px-3 py-2 pr-10 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                            className="w-full px-3 py-2 pr-10 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:outline-none"
                           />
                           <button
                             type="button"
@@ -467,7 +467,7 @@ export const VpnModal: React.FC<VpnModalProps> = ({ isOpen, onClose }) => {
                         value={newUser.ip_reservation}
                         onChange={(e) => setNewUser({ ...newUser, ip_reservation: e.target.value })}
                         placeholder="ex: 192.168.27.10"
-                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm font-mono placeholder-gray-600 focus:outline-none focus:outline-none"
                       />
                     </div>
 

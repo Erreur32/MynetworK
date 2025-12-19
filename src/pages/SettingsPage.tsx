@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Settings,
   Wifi,
@@ -167,24 +167,13 @@ const AppLogsSection: React.FC = () => {
     args?: any[];
   }>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [liveMode, setLiveMode] = useState(false);
+  const [liveMode] = useState(false); // Live mode disabled - button removed
   const [filter, setFilter] = useState<'all' | 'error' | 'warn' | 'info' | 'debug' | 'verbose'>('all');
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [totalLogs, setTotalLogs] = useState(0);
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll to bottom when new logs arrive (only in live mode)
-  useEffect(() => {
-    if (liveMode && logsEndRef.current) {
-      // Small delay to ensure DOM is updated
-      setTimeout(() => {
-        if (logsEndRef.current) {
-          logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-    }
-  }, [logs, liveMode]);
+  // Auto-scroll removed (live mode disabled)
 
   // Load initial logs when component mounts or filter changes
   useEffect(() => {
@@ -192,58 +181,18 @@ const AppLogsSection: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, showAllLogs]);
 
-  // Auto-refresh logs when live mode is enabled (polling every 2 seconds)
-  // In live mode, always load only the last 500 logs for performance
+  // Scroll to bottom when logs are updated
   useEffect(() => {
-    if (liveMode) {
-      // Temporarily disable showAllLogs for live mode to avoid performance issues
-      const loadRecentLogs = async () => {
-        setIsLoading(true);
-        try {
-          const params = new URLSearchParams({ limit: '500' });
-          if (filter !== 'all') {
-            params.append('level', filter);
-          }
-          const response = await api.get<{ logs: any[]; total: number }>(`/api/debug/logs?${params}`);
-          if (response.success && response.result) {
-            setLogs(response.result.logs);
-            setTotalLogs(response.result.total || 0);
-            // Scroll to bottom in live mode
+    if (logs.length > 0 && logsContainerRef.current) {
             setTimeout(() => {
-              if (logsEndRef.current) {
-                logsEndRef.current.scrollIntoView({ behavior: 'auto' });
-              }
-            }, 150);
-          }
-        } catch (error) {
-          console.error('[AppLogsSection] Error loading logs:', error);
-        } finally {
-          setIsLoading(false);
+        if (logsContainerRef.current) {
+          logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
         }
-      };
-      
-      // Load logs immediately when live mode is enabled
-      loadRecentLogs();
-      
-      // Set up interval to refresh logs every 2 seconds
-      refreshIntervalRef.current = setInterval(() => {
-        loadRecentLogs();
-      }, 2000);
-    } else {
-      // Clear interval when live mode is disabled
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
+      }, 100);
     }
+  }, [logs]);
 
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-    };
-  }, [liveMode, filter]);
+  // Live mode removed - no auto-refresh polling
 
   const loadLogs = async () => {
     setIsLoading(true);
@@ -258,14 +207,12 @@ const AppLogsSection: React.FC = () => {
       if (response.success && response.result) {
         setLogs(response.result.logs);
         setTotalLogs(response.result.total || 0);
-        // Scroll to bottom only if live mode is enabled
-        if (liveMode) {
+        // Scroll to bottom after logs are loaded
           setTimeout(() => {
-            if (logsEndRef.current) {
-              logsEndRef.current.scrollIntoView({ behavior: 'auto' });
+          if (logsContainerRef.current) {
+            logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
             }
-          }, 150);
-        }
+        }, 100);
       }
     } catch (error) {
       console.error('[AppLogsSection] Error loading logs:', error);
@@ -398,49 +345,19 @@ const AppLogsSection: React.FC = () => {
             onClick={() => {
               const newShowAll = !showAllLogs;
               setShowAllLogs(newShowAll);
-              // Disable live mode when enabling "show all" for performance
-              if (newShowAll && liveMode) {
-                setLiveMode(false);
-              }
             }}
-            disabled={liveMode}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
               showAllLogs
                 ? 'bg-purple-600 hover:bg-purple-500 text-white'
                 : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            } ${liveMode ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title={liveMode 
-              ? 'Désactivez le mode Live pour afficher tous les logs' 
-              : showAllLogs 
+            }`}
+            title={showAllLogs 
                 ? 'Afficher les 500 derniers logs' 
                 : `Afficher tous les logs (${totalLogs} au total)`
             }
           >
             <FileText size={14} />
             <span>{showAllLogs ? '500 derniers' : 'Voir tout'}</span>
-          </button>
-          <button
-            onClick={() => {
-              const newLiveMode = !liveMode;
-              setLiveMode(newLiveMode);
-              // Disable "show all" when enabling live mode for performance
-              if (newLiveMode && showAllLogs) {
-                setShowAllLogs(false);
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              liveMode
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
-            title={liveMode ? 'Rafraîchissement automatique activé (toutes les 2 secondes)' : 'Activer le rafraîchissement automatique'}
-          >
-            <div className={`w-2 h-2 rounded-full ${
-              liveMode 
-                ? 'bg-white animate-pulse'
-                : 'bg-gray-400'
-            }`} />
-            <span>Live</span>
           </button>
           <button
             onClick={loadLogs}
@@ -473,17 +390,12 @@ const AppLogsSection: React.FC = () => {
         </div>
       )}
       <div className="bg-[#0a0a0a] border border-gray-800 rounded-lg overflow-hidden mt-2">
-        <div className="h-96 overflow-y-auto p-4 font-mono text-xs">
+        <div ref={logsContainerRef} className="h-96 overflow-y-auto p-4 font-mono text-xs">
           {filteredLogs.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <FileText size={32} className="mx-auto mb-2 opacity-50" />
               <p>Aucun log disponible</p>
-              {liveMode && (
-                <p className="text-xs text-gray-400 mt-2">Rafraîchissement automatique activé (toutes les 2 secondes)</p>
-              )}
-              {!liveMode && (
-                <p className="text-xs text-gray-400 mt-2">Activez le mode Live pour un rafraîchissement automatique</p>
-              )}
+              <p className="text-xs text-gray-400 mt-2">Utilisez le bouton "Rafraîchir" pour charger les logs</p>
             </div>
           ) : (
             <>
@@ -502,7 +414,6 @@ const AppLogsSection: React.FC = () => {
                   )}
                 </div>
               ))}
-              <div ref={logsEndRef} />
             </>
           )}
         </div>
@@ -665,12 +576,17 @@ const UpdateCheckSection: React.FC = () => {
                 <p className="text-xs text-red-400">Erreur lors de la vérification : {updateInfo.error}</p>
               </div>
             )}
+            <div className="mt-3 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
+              <p className="text-xs text-gray-400">
+                La vérification manuelle des mises à jour est temporairement désactivée.
+              </p>
+            </div>
             <button
-              onClick={checkForUpdates}
-              disabled={isLoading}
-              className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {}}
+              disabled={true}
+              className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-gray-600 text-gray-400 text-sm rounded-lg transition-colors opacity-50 cursor-not-allowed"
             >
-              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={14} />
               Vérifier maintenant
             </button>
           </div>
@@ -1023,7 +939,7 @@ const UserProfileSection: React.FC = () => {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none transition-colors"
             placeholder="Nom d'utilisateur"
           />
         </div>
@@ -2263,7 +2179,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="number"
                   value={connectionConfig.remote_access_port}
                   onChange={(e) => setConnectionConfig({ ...connectionConfig, remote_access_port: parseInt(e.target.value) })}
-                  className="w-24 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-24 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 />
               </SettingRow>
             </Section>
@@ -2367,7 +2283,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="text"
                   value={dhcpConfig.ip_range_start}
                   onChange={(e) => setDhcpConfig({ ...dhcpConfig, ip_range_start: e.target.value })}
-                  className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                  className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:outline-none"
                 />
               </SettingRow>
               <SettingRow label="Fin de plage IP">
@@ -2375,7 +2291,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="text"
                   value={dhcpConfig.ip_range_end}
                   onChange={(e) => setDhcpConfig({ ...dhcpConfig, ip_range_end: e.target.value })}
-                  className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                  className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:outline-none"
                 />
               </SettingRow>
               <SettingRow
@@ -2394,7 +2310,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                           setDhcpConfig({ ...dhcpConfig, dns: newDns });
                         }}
                         placeholder="192.168.1.254"
-                        className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                        className="w-40 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:outline-none"
                       />
                       <button
                         onClick={() => {
@@ -2544,7 +2460,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   type="number"
                   value={ftpConfig.port_ctrl}
                   onChange={(e) => setFtpConfig({ ...ftpConfig, port_ctrl: parseInt(e.target.value) })}
-                  className="w-24 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-24 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 />
               </SettingRow>
             </Section>
@@ -2720,7 +2636,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <select
                   value={lcdConfig.orientation}
                   onChange={(e) => setLcdConfig({ ...lcdConfig, orientation: parseInt(e.target.value) })}
-                  className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 >
                   <option value={0}>Normal</option>
                   <option value={90}>90°</option>
@@ -2770,7 +2686,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       <select
                         value={lcdConfig.led_strip_animation ?? 'breathing'}
                         onChange={(e) => setLcdConfig({ ...lcdConfig, led_strip_animation: e.target.value })}
-                        className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                       >
                         {(lcdConfig.available_led_strip_animations || ['organic', 'static', 'breathing', 'rain', 'trail', 'wave']).map((anim) => (
                           <option key={anim} value={anim}>
@@ -2919,7 +2835,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   value={editingLease.mac}
                   onChange={(e) => setEditingLease({ ...editingLease, mac: e.target.value })}
                   placeholder="AA:BB:CC:DD:EE:FF"
-                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Format: XX:XX:XX:XX:XX:XX</p>
               </div>
@@ -2933,7 +2849,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   value={editingLease.ip}
                   onChange={(e) => setEditingLease({ ...editingLease, ip: e.target.value })}
                   placeholder="192.168.1.100"
-                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:outline-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">Doit être dans la plage DHCP</p>
               </div>
@@ -2947,7 +2863,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   value={editingLease.comment}
                   onChange={(e) => setEditingLease({ ...editingLease, comment: e.target.value })}
                   placeholder="Ex: PC Bureau, NAS, Imprimante..."
-                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 />
               </div>
             </div>

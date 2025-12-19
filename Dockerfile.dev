@@ -15,7 +15,9 @@ RUN npm ci
 # No COPY of source code here
 
 # Vite dev server + API server ports
-EXPOSE 5173 3000
+# Frontend (Vite): 5173 or VITE_PORT (default 3000 in docker-compose)
+# Backend (API): 3003 (SERVER_PORT)
+EXPOSE 5173 3003
 
 # Start dev server with hot reload
 CMD ["npm", "run", "dev"]

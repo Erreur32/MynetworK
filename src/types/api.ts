@@ -5,6 +5,7 @@ export interface ApiResponse<T = unknown> {
   error?: {
     code: string;
     message: string;
+    temporary?: boolean; // Indicates if the error is temporary (e.g., backend restarting)
   };
 }
 

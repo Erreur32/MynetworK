@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { loggingService } from '../services/loggingService.js';
 import type { AuthenticatedRequest } from './authMiddleware.js';
+import { getClientIp } from '../utils/getClientIp.js';
 
 /**
  * Create middleware to automatically log an action
@@ -34,7 +35,7 @@ export const autoLog = (
                     resource,
                     {
                         resourceId,
-                        ipAddress: req.ip || req.socket.remoteAddress,
+                        ipAddress: getClientIp(req),
                         userAgent: req.get('user-agent') || undefined,
                         level: res.statusCode >= 400 ? 'error' : 'info'
                     }
@@ -69,7 +70,7 @@ export const logAllRequests = (
             action,
             resource,
             {
-                ipAddress: req.ip || req.socket.remoteAddress,
+                ipAddress: getClientIp(req),
                 userAgent: req.get('user-agent') || undefined,
                 level: 'info'
             }

@@ -245,7 +245,7 @@ export const RebootScheduleModal: React.FC<RebootScheduleModalProps> = ({
                       type="time"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
-                      className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-800 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-800 rounded-xl text-white focus:outline-none focus:outline-none transition-colors"
                     />
                   </div>
 
@@ -305,7 +305,7 @@ export const RebootScheduleModal: React.FC<RebootScheduleModalProps> = ({
                           value={dayTime}
                           disabled={!dayEnabled}
                           onChange={(e) => updateMappingDay(day.value, e.target.value)}
-                          className={`px-3 py-1.5 bg-[#252525] border border-gray-700 rounded-lg text-sm transition-colors focus:outline-none focus:border-blue-500 ${
+                          className={`px-3 py-1.5 bg-[#252525] border border-gray-700 rounded-lg text-sm transition-colors focus:outline-none focus:outline-none ${
                             dayEnabled ? 'text-white' : 'text-gray-600 opacity-50'
                           }`}
                         />

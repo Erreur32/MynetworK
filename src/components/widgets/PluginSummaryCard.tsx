@@ -7,21 +7,77 @@
 import React from 'react';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
+import { StatusBadge } from '../ui';
 import { usePluginStore } from '../../stores/pluginStore';
 import { useConnectionStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
-import { formatSpeed } from '../../utils/constants';
-import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useSystemStore } from '../../stores/systemStore';
+import { formatSpeed, formatTemperature } from '../../utils/constants';
+import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, ArrowDown, ArrowUp } from 'lucide-react';
+import type { SystemSensor, SystemFan } from '../../types/api';
 
 interface PluginSummaryCardProps {
     pluginId: string;
     onViewDetails?: () => void;
 }
 
+// Helper functions for Freebox stats (copied from Header.tsx)
+const getCpuSensors = (info: any): SystemSensor[] => {
+    if (!info) return [];
+    if (info.sensors && Array.isArray(info.sensors)) {
+        return info.sensors
+            .filter((s: any) => s.id.startsWith('temp_cpu'))
+            .sort((a: any, b: any) => a.id.localeCompare(b.id));
+    }
+    const sensors: SystemSensor[] = [];
+    if (info.temp_cpu0 != null) sensors.push({ id: 'temp_cpu0', name: 'CPU 0', value: info.temp_cpu0 });
+    if (info.temp_cpu1 != null) sensors.push({ id: 'temp_cpu1', name: 'CPU 1', value: info.temp_cpu1 });
+    if (info.temp_cpu2 != null) sensors.push({ id: 'temp_cpu2', name: 'CPU 2', value: info.temp_cpu2 });
+    if (info.temp_cpu3 != null) sensors.push({ id: 'temp_cpu3', name: 'CPU 3', value: info.temp_cpu3 });
+    if (info.temp_cpum != null) sensors.push({ id: 'temp_cpum', name: 'CPU Main', value: info.temp_cpum });
+    if (info.temp_cpub != null) sensors.push({ id: 'temp_cpub', name: 'CPU Box', value: info.temp_cpub });
+    if (info.temp_sw != null) sensors.push({ id: 'temp_sw', name: 'Switch', value: info.temp_sw });
+    return sensors.sort((a, b) => a.id.localeCompare(b.id));
+};
+
+const getHddSensors = (info: any): SystemSensor[] => {
+    if (!info) return [];
+    if (info.sensors && Array.isArray(info.sensors)) {
+        return info.sensors
+            .filter((s: any) => s.id.startsWith('temp_hdd') || s.id.includes('disk'))
+            .sort((a: any, b: any) => a.id.localeCompare(b.id));
+    }
+    return [];
+};
+
+const getAvgTemp = (sensors: SystemSensor[]): number | null => {
+    if (sensors.length === 0) return null;
+    const avg = sensors.reduce((sum, s) => sum + s.value, 0) / sensors.length;
+    return Math.round(avg);
+};
+
+const getFans = (info: any): SystemFan[] => {
+    if (!info) return [];
+    if (info.fans && Array.isArray(info.fans)) {
+        return info.fans.sort((a: any, b: any) => a.name.localeCompare(b.name));
+    }
+    if (info.fan_rpm != null) {
+        return [{ id: 'fan_rpm', name: 'Ventilateur', value: info.fan_rpm }];
+    }
+    return [];
+};
+
+const getAvgFanRpm = (fans: SystemFan[]): number | null => {
+    if (fans.length === 0) return null;
+    const avg = fans.reduce((sum, f) => sum + f.value, 0) / fans.length;
+    return Math.round(avg);
+};
+
 export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails }) => {
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { login: loginFreebox, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
+    const { info: systemInfo } = useSystemStore();
     
     const plugin = plugins.find(p => p.id === pluginId);
     const stats = pluginStats[pluginId];
@@ -53,17 +109,22 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     let unifiControllerVersion: string | undefined;
     let unifiControllerUpdateAvailable: boolean | undefined;
     let unifiControllerIp: string | undefined;
+    let unifiWlans: Array<{ name: string; enabled: boolean; ssid?: string }> = [];
 
     // Helpers for Freebox plugin: firmware / update status when exposed by backend
     let freeboxVersion: string | undefined;
     let freeboxPlayerVersion: string | undefined;
     let freeboxUpdateAvailable: boolean | undefined;
+    let freeboxWifiNetworks: Array<{ ssid: string; band: string; enabled: boolean }> = [];
 
     if (pluginId === 'unifi' && stats) {
         const devices = (stats.devices || []) as Array<any>;
         const clients = devices.filter((d) => d.type === 'client');
         unifiClientsTotal = clients.length;
         unifiClientsConnected = clients.filter((c) => c.active !== false).length;
+        
+        // Get WiFi networks (SSIDs) from stats
+        unifiWlans = (stats.wlans || []) as Array<{ name: string; enabled: boolean; ssid?: string }>;
 
         // Build rows for APs (bornes Wi‑Fi)
         unifiApRows = devices
@@ -114,9 +175,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 const ports = Array.isArray(rawPorts) ? (rawPorts as any[]) : [];
 
                 // Total number of ports: prefer explicit array length, then fallback to numeric hint (num_port)
-                const totalPorts =
-                    (ports.length > 0 ? ports.length : 0) ||
-                    (typeof (d as any).num_port === 'number' ? (d as any).num_port as number : 0);
+                let totalPorts = 0;
+                if (ports.length > 0) {
+                    totalPorts = ports.length;
+                } else if (typeof (d as any).num_port === 'number' && (d as any).num_port > 0) {
+                    totalPorts = (d as any).num_port as number;
+                }
 
                 // Active ports: consider several flags commonly used by UniFi
                 const activePorts = ports.filter((p) => {
@@ -254,10 +318,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 {/* Status */}
                 <div className="flex items-center gap-2">
                     {isActive ? (
-                        <div className="flex items-center gap-1.5 text-green-400 text-xs">
-                            <CheckCircle size={14} />
-                            <span>Actif</span>
-                        </div>
+                         <div className="flex items-center gap-1.5 text-green-400 text-xs">
+                    
+                     </div> 
                     ) : plugin.enabled ? (
                         <div className="flex items-center gap-1.5 text-yellow-400 text-xs">
                             <AlertCircle size={14} />
@@ -294,32 +357,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 {/* Stats / résumé */}
                 {hasStats && isActive && stats ? (
                     <div className="space-y-3">
-                        {/* Freebox state graph (only for Freebox plugin, on all dashboards) */}
-                        {pluginId === 'freebox' && connectionStatus && networkHistory && networkHistory.length > 0 && (
-                            <div className="space-y-3">
-                                <div className="space-y-3">
-                                    <BarChart
-                                        data={networkHistory}
-                                        dataKey="download"
-                                        color="#3b82f6"
-                                        title="Descendant en temps réel"
-                                        currentValue={currentDownload.split(' ')[0]}
-                                        unit={currentDownload.split(' ')[1] || 'kb/s'}
-                                        trend="down"
-                                    />
-                                    <BarChart
-                                        data={networkHistory}
-                                        dataKey="upload"
-                                        color="#10b981"
-                                        title="Montant en temps réel"
-                                        currentValue={currentUpload.split(' ')[0]}
-                                        unit={currentUpload.split(' ')[1] || 'kb/s'}
-                                        trend="up"
-                                    />
-                                </div>
-                            </div>
-                        )}
-
                         {/* Network Stats (plugin-level, all plugins) */}
                         {pluginId !== 'freebox' && stats.network && (stats.network.download > 0 || stats.network.upload > 0) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2">
@@ -483,33 +520,91 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                 )}
 
+                                {/* WiFi Networks (SSIDs) */}
+                                {unifiWlans.length > 0 && (
+                                    <div className="space-y-2 pt-2 border-t border-gray-800 mt-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-gray-400">Réseaux Wi‑Fi (SSID)</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {unifiWlans
+                                                .filter(wlan => wlan.enabled)
+                                                .map((wlan, index) => (
+                                                    <span
+                                                        key={`wlan-${wlan.name}-${index}`}
+                                                        className="px-2 py-1 rounded-full bg-blue-900/40 border border-blue-700 text-blue-300 text-[11px] font-medium"
+                                                    >
+                                                        {wlan.ssid || wlan.name}
+                                                    </span>
+                                                ))}
+                                        </div>
+                                    </div>
+                                )}
+
                             </div>
                         )}
 
                         {/* Freebox controller / firmware / WAN IP / DHCP & Port forwarding summary */}
                         {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding))) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
-                                <div className="flex items-start justify-between gap-4">
+                                {/* Freebox, Firmware and LAN Network - Labels on first line, data on second line */}
+                                <div className="space-y-1">
+                                    {/* First line: Labels */}
+                                    <div className="grid grid-cols-4 gap-4 items-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-400 text-[10px]">Freebox</span>
+                                        </div>
+                                        {(freeboxVersion || freeboxPlayerVersion) ? (
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-gray-500 uppercase tracking-wide">Firmware</span>
+                                            </div>
+                                        ) : <div></div>}
+                                        {(() => {
+                                            // Extract LAN network from device IPs
+                                            let lanNetwork: string | undefined;
+                                            if (stats?.devices && Array.isArray(stats.devices)) {
+                                                const deviceIps = stats.devices
+                                                    .map((d: any) => d.ip || d.l3connectivities?.[0]?.addr)
+                                                    .filter((ip: any) => ip && typeof ip === 'string' && /^\d+\.\d+\.\d+\.\d+$/.test(ip));
+                                                
+                                                if (deviceIps.length > 0) {
+                                                    const firstIp = deviceIps[0];
+                                                    const parts = firstIp.split('.');
+                                                    if (parts.length === 4) {
+                                                        lanNetwork = `${parts[0]}.${parts[1]}.${parts[2]}`;
+                                                    }
+                                                }
+                                            }
+                                            return lanNetwork ? (
                                     <div className="flex flex-col">
-                                        <span className="text-gray-400">Freebox</span>
-                                        {connectionStatus && (
-                                            <span className="mt-1 text-[10px] text-gray-400">
-                                                IP Public&nbsp;
-                                                <span className="text-sky-300 font-medium">
-                                                    {connectionStatus.ipv4 || 'n/a'}
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Réseau LAN</span>
+                                                </div>
+                                            ) : <div></div>;
+                                        })()}
+                                        <div className="flex items-center justify-end gap-2">
+                                            {freeboxUpdateAvailable && (
+                                                <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
+                                                    Mise à jour dispo
                                                 </span>
-                                            </span>
+                                            )}
+                                            {connectionStatus && connectionStatus.ipv4 && (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] text-gray-400">IP Public</span>
+                                                </div>
                                         )}
+                                        </div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-1 text-gray-200">
-                                        {(freeboxVersion || freeboxPlayerVersion) && (
-                                            <div className="text-right">
-                                                <span className="block text-[10px] text-gray-400 uppercase tracking-wide">
-                                                    Firmware
-                                                </span>
-                                                <div className="mt-0.5 space-y-0.5">
+                                    
+                                    {/* Second line: Data */}
+                                    <div className="grid grid-cols-4 gap-4 items-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-400 text-xs">Freebox</span>
+                                        </div>
+                                        {(freeboxVersion || freeboxPlayerVersion) ? (
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-2">
                                                     {freeboxVersion && (
-                                                        <div className="flex items-center justify-end gap-1 text-sm text-gray-100">
+                                                        <div className="flex items-center gap-1 text-sm text-gray-100">
                                                             <span className="text-[11px] text-gray-400">Box</span>
                                                             <span className="font-semibold">
                                                                 v{freeboxVersion}
@@ -517,7 +612,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                         </div>
                                                     )}
                                                     {freeboxPlayerVersion && (
-                                                        <div className="flex items-center justify-end gap-1 text-sm text-gray-100">
+                                                        <div className="flex items-center gap-1 text-sm text-gray-100">
                                                             <span className="text-[11px] text-gray-400">Player</span>
                                                             <span className="font-semibold">
                                                                 v{freeboxPlayerVersion}
@@ -526,98 +621,241 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                     )}
                                                 </div>
                                             </div>
-                                        )}
-                                        {freeboxUpdateAvailable && (
-                                            <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px] mt-0.5">
-                                                Mise à jour dispo
+                                        ) : <div></div>}
+                                        {(() => {
+                                            // Extract LAN network from device IPs
+                                            let lanNetwork: string | undefined;
+                                            if (stats?.devices && Array.isArray(stats.devices)) {
+                                                const deviceIps = stats.devices
+                                                    .map((d: any) => d.ip || d.l3connectivities?.[0]?.addr)
+                                                    .filter((ip: any) => ip && typeof ip === 'string' && /^\d+\.\d+\.\d+\.\d+$/.test(ip));
+                                                
+                                                if (deviceIps.length > 0) {
+                                                    const firstIp = deviceIps[0];
+                                                    const parts = firstIp.split('.');
+                                                    if (parts.length === 4) {
+                                                        lanNetwork = `${parts[0]}.${parts[1]}.${parts[2]}`;
+                                                    }
+                                                }
+                                            }
+                                            
+                                            return lanNetwork ? (
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-mono text-gray-300 font-semibold">
+                                                        {lanNetwork}.x
+                                                    </span>
+                                                </div>
+                                            ) : <div></div>;
+                                        })()}
+                                        <div className="flex items-center justify-end gap-2">
+                                            {connectionStatus && connectionStatus.ipv4 && (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-sky-300 font-medium text-xs">
+                                                        {connectionStatus.ipv4}
                                             </span>
+                                                </div>
                                         )}
+                                        </div>
                                     </div>
                                 </div>
-                                {/* DHCP summary if backend exposes it on stats.system.dhcp */}
-                                {stats.system && (stats.system as any).dhcp && (
-                                    <div className="pt-1 border-t border-gray-800 mt-1 space-y-1">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-gray-400">DHCP</span>
-                                            <span
-                                                className={
-                                                    (stats.system as any).dhcp.enabled
-                                                        ? 'text-green-400 text-[11px]'
-                                                        : 'text-red-400 text-[11px]'
-                                                }
-                                            >
-                                                {(stats.system as any).dhcp.enabled ? 'Actif' : 'Désactivé'}
-                                            </span>
-                                        </div>
-                                        {((stats.system as any).dhcp.activeLeases != null ||
-                                            (stats.system as any).dhcp.totalConfigured != null) && (
-                                            <div className="rounded border border-gray-800 overflow-hidden">
-                                                <table className="w-full text-[11px] text-gray-300 table-fixed">
-                                                    <thead className="bg-[#181818] text-gray-400">
-                                                        <tr>
-                                                            <th className="px-2 py-1 text-right w-1/3">Actifs</th>
-                                                            <th className="px-2 py-1 text-right w-1/3">Non actifs</th>
-                                                            <th className="px-2 py-1 text-right w-1/3">Total configurés</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <tr className="bg-[#101010]">
-                                                            <td className="px-2 py-1 text-right text-gray-200">
+                                {/* DHCP and NAT summary - two columns layout */}
+                                {/* Only show DHCP and NAT data if plugin is active (authenticated) */}
+                                {(isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding)) && (
+                                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-800 mt-1 text-[11px]">
+                                        {/* DHCP column */}
+                                        {isActive && stats.system && (stats.system as any).dhcp && (
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-400">DHCP</span>
+                                                    <span
+                                                        className={
+                                                            (stats.system as any).dhcp.enabled
+                                                                ? 'inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold'
+                                                                : 'inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-red-900/40 border border-red-700 text-red-300 font-semibold'
+                                                        }
+                                                    >
+                                                        {(stats.system as any).dhcp.enabled ? 'Actif' : 'Désactivé'}
+                                                    </span>
+                                                </div>
+                                                {((stats.system as any).dhcp.activeLeases != null ||
+                                                    (stats.system as any).dhcp.totalConfigured != null) && (
+                                                    <>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-gray-400">Actifs</span>
+                                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
                                                                 {(stats.system as any).dhcp.activeLeases ?? 0}
-                                                            </td>
-                                                            <td className="px-2 py-1 text-right text-gray-200">
-                                                                {Math.max(
-                                                                    ((stats.system as any).dhcp.totalConfigured ?? 0) -
-                                                                        ((stats.system as any).dhcp.activeLeases ?? 0),
-                                                                    0
-                                                                )}
-                                                            </td>
-                                                            <td className="px-2 py-1 text-right text-gray-200">
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-gray-400">Total</span>
+                                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
                                                                 {(stats.system as any).dhcp.totalConfigured ?? 0}
-                                                            </td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
+                                                            </span>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                        {/* NAT column (renamed from Port Forwarding) */}
+                                        {isActive && stats.system && (stats.system as any).portForwarding && (
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-400">NAT</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-400">Actives</span>
+                                                    <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
+                                                        {(stats.system as any).portForwarding.enabledRules ?? 0}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-400">Total</span>
+                                                    <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
+                                                        {(stats.system as any).portForwarding.totalRules ?? 0}
+                                                    </span>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
                                 )}
-                                {/* Port forwarding summary if backend exposes it on stats.system.portForwarding */}
-                                {stats.system && (stats.system as any).portForwarding && (
-                                    <div className="pt-1 border-t border-gray-800 mt-1 space-y-1">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-gray-400">Redirections de port</span>
-                                        </div>
-                                        <div className="rounded border border-gray-800 overflow-hidden">
-                                            <table className="w-full text-[11px] text-gray-300 table-fixed">
-                                                <thead className="bg-[#181818] text-gray-400">
-                                                    <tr>
-                                                        <th className="px-2 py-1 text-right w-1/3">Actives</th>
-                                                        <th className="px-2 py-1 text-right w-1/3">Désactivées</th>
-                                                        <th className="px-2 py-1 text-right w-1/3">Total</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr className="bg-[#101010]">
-                                                        <td className="px-2 py-1 text-right text-gray-200">
-                                                            {(stats.system as any).portForwarding.enabledRules ?? 0}
-                                                        </td>
-                                                        <td className="px-2 py-1 text-right text-gray-200">
-                                                            {Math.max(
-                                                                ((stats.system as any).portForwarding.totalRules ?? 0) -
-                                                                    ((stats.system as any).portForwarding.enabledRules ?? 0),
-                                                                0
-                                                            )}
-                                                        </td>
-                                                        <td className="px-2 py-1 text-right text-gray-200">
-                                                            {(stats.system as any).portForwarding.totalRules ?? 0}
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                )}
+                            </div>
+                        )}
+
+                        {/* Freebox state graph (only for Freebox plugin, on all dashboards) */}
+                        {pluginId === 'freebox' && connectionStatus && networkHistory && networkHistory.length > 0 && (
+                            <div className="space-y-3">
+                                <div className="space-y-3">
+                                    <BarChart
+                                        data={networkHistory}
+                                        dataKey="download"
+                                        color="#3b82f6"
+                                        title="Descendant en temps réel"
+                                        currentValue={currentDownload.split(' ')[0]}
+                                        unit={currentDownload.split(' ')[1] || 'kb/s'}
+                                        trend="down"
+                                    />
+                                    <BarChart
+                                        data={networkHistory}
+                                        dataKey="upload"
+                                        color="#10b981"
+                                        title="Montant en temps réel"
+                                        currentValue={currentUpload.split(' ')[0]}
+                                        unit={currentUpload.split(' ')[1] || 'kb/s'}
+                                        trend="up"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Freebox badges and stats (copied from header) */}
+                        {pluginId === 'freebox' && connectionStatus && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
+                                <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">État système</div>
+                                
+ 
+
+                                {/* System badges */}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {/* CPU Temperature */}
+                                    {systemInfo && (() => {
+                                        const cpuSensors = getCpuSensors(systemInfo);
+                                        const cpuAvgTemp = getAvgTemp(cpuSensors);
+                                        const cpuTemp = cpuAvgTemp != null ? formatTemperature(cpuAvgTemp) : '--';
+                                        return cpuTemp !== '--' ? (
+                                            <StatusBadge
+                                                icon={<Cpu size={14} />}
+                                                value={cpuTemp}
+                                                color="text-emerald-400"
+                                            />
+                                        ) : null;
+                                    })()}
+
+                                    {/* HDD Temperature */}
+                                    {systemInfo && (() => {
+                                        const hddSensors = getHddSensors(systemInfo);
+                                        const hddAvgTemp = getAvgTemp(hddSensors);
+                                        const hddTemp = hddAvgTemp != null ? formatTemperature(hddAvgTemp) : '--';
+                                        return hddTemp !== '--' ? (
+                                            <StatusBadge
+                                                icon={<HardDrive size={14} />}
+                                                value={hddTemp}
+                                                color="text-blue-400"
+                                            />
+                                        ) : null;
+                                    })()}
+
+                                    {/* Fan */}
+                                    {systemInfo && (() => {
+                                        const fans = getFans(systemInfo);
+                                        const fanAvgRpm = getAvgFanRpm(fans);
+                                        const fanDisplay = fanAvgRpm != null ? `${fanAvgRpm} T/min` : '--';
+                                        return fanDisplay !== '--' ? (
+                                            <StatusBadge
+                                                icon={<Fan size={14} />}
+                                                value={fanDisplay}
+                                                color="text-orange-400"
+                                            />
+                                        ) : null;
+                                    })()}
+
+                                    {/* Wifi Status */}
+                                    <StatusBadge
+                                        icon={<Wifi size={14} />}
+                                        value="OK"
+                                        color="text-green-400"
+                                    />
+
+                                    {/* Phone Status */}
+                                    <StatusBadge
+                                        icon={<Phone size={14} />}
+                                        value="OK"
+                                        color="text-green-400"
+                                    />
+
+                                    {/* Connection State */}
+                                    <StatusBadge
+                                        icon={<Activity size={14} />}
+                                        value={connectionStatus.state === 'up' ? 'UP' : 'DOWN'}
+                                        color={connectionStatus.state === 'up' ? 'text-green-400' : 'text-red-400'}
+                                    />
+
+                                    {/* Freebox Session */}
+                                    <StatusBadge
+                                        icon={<Wifi size={14} />}
+                                        value={isFreeboxLoggedIn ? 'Session OK' : 'Session expirée'}
+                                        color={isFreeboxLoggedIn ? 'text-emerald-400' : 'text-red-400'}
+                                    />
+
+                                    {/* WiFi Networks (SSIDs) with frequency bands */}
+                                    {(() => {
+                                        // Get WiFi networks from system stats
+                                        const wifiNetworks = (stats?.system as any)?.wifiNetworks || [];
+                                        if (wifiNetworks.length === 0) {
+                                            return null;
+                                        }
+                                        // Filter: only enabled networks with valid SSID (not MAC addresses)
+                                        const validNetworks = wifiNetworks.filter((wlan: { enabled: boolean; ssid: string }) => {
+                                            if (wlan.enabled === false) return false;
+                                            if (!wlan.ssid || wlan.ssid.trim() === '') return false;
+                                            // Skip if SSID looks like a MAC address
+                                            const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
+                                            return !macPattern.test(wlan.ssid);
+                                        });
+                                        
+                                        if (validNetworks.length === 0) {
+                                            return null;
+                                        }
+                                        
+                                        return validNetworks.map((wlan: { ssid: string; band: string }, index: number) => (
+                                            <StatusBadge
+                                                key={`wifi-${wlan.ssid}-${index}`}
+                                                icon={<Wifi size={14} />}
+                                                value={`${wlan.ssid} (${wlan.band})`}
+                                                color="text-cyan-400"
+                                            />
+                                        ));
+                                    })()}
+                                </div>
                             </div>
                         )}
 

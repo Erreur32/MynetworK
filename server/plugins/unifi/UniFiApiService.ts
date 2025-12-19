@@ -137,7 +137,8 @@ export class UniFiApiService {
                     // Controller API (local) using HTTP + session cookie (curl-like)
                     await this.rawControllerLogin();
                     this.isAuthenticated = true;
-                    logger.success('UniFi', 'Controller API authenticated via HTTP session cookie');
+                    // Authentication successful - no need to log every time (logged at plugin level if needed)
+                    // logger.success('UniFi', 'Controller API authenticated via HTTP session cookie');
                     return true;
                 }
             } catch (error) {
@@ -474,6 +475,53 @@ export class UniFiApiService {
     }
 
     /**
+     * Get WiFi networks (WLANs/SSIDs)
+     */
+    async getWlans(): Promise<Array<{ name: string; enabled: boolean; ssid?: string }>> {
+        await this.ensureLoggedIn();
+
+        try {
+            if (this.apiMode === 'site-manager') {
+                // Site Manager API: Get WLANs from all sites
+                const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+                const allWlans: Array<{ name: string; enabled: boolean; ssid?: string }> = [];
+
+                for (const site of sites) {
+                    try {
+                        const wlans = await this.siteManagerRequest<Array<any>>(`/sites/${site.id}/wlans`);
+                        if (Array.isArray(wlans)) {
+                            allWlans.push(...wlans.map((w: any) => ({
+                                name: w.name || w.ssid || 'Unknown',
+                                enabled: w.enabled !== false,
+                                ssid: w.ssid || w.name
+                            })));
+                        }
+                    } catch (error) {
+                        logger.debug('UniFi', `Failed to get WLANs for site ${site.name}:`, error);
+                    }
+                }
+
+                return allWlans;
+            } else {
+                // Controller API (local) - HTTP + cookie: /api/s/<site>/rest/wlanconf
+                const encodedSite = encodeURIComponent(this.site);
+                logger.debug('UniFi', `Getting WLANs for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
+                const wlans = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/rest/wlanconf`);
+
+                return wlans.map((w: any) => ({
+                    name: w.name || w.ssid || 'Unknown',
+                    enabled: w.enabled !== false,
+                    ssid: w.ssid || w.name
+                }));
+            }
+        } catch (error) {
+            logger.error('UniFi', 'Failed to get WLANs:', error);
+            // Return empty array instead of throwing to avoid breaking the stats
+            return [];
+        }
+    }
+
+    /**
      * Get network statistics
      */
     async getNetworkStats(): Promise<UniFiStats> {
@@ -692,7 +740,8 @@ export class UniFiApiService {
                         await this.logout();
                         throw new Error(errorMsg);
                     }
-                    logger.success('UniFi', `Test connection successful: Controller API - Found ${devices.length} device(s) on site "${this.site}"`);
+                    // Test connection successful - no need to log every time (too verbose)
+                    // logger.success('UniFi', `Test connection successful: Controller API - Found ${devices.length} device(s) on site "${this.site}"`);
                     await this.logout();
                     return true;
                 } catch (dataError) {

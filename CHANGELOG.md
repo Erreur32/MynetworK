@@ -2,6 +2,75 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.1] - 2025-12-18
+
+### 🐛 Corrigé
+
+**Plugin Freebox - Persistance de Session**
+- ✅ Correction de la perte de session Freebox après redémarrage Docker en mode développement
+- ✅ Correction du chemin du token Freebox en mode `npm run dev` (recherche automatique de `package.json` pour trouver la racine du projet)
+- ✅ Unification de l'instance `FreeboxApiService` : le plugin utilise maintenant le singleton `freeboxApi` partagé avec les routes API, garantissant la cohérence de la session
+- ✅ Amélioration de la restauration automatique de session au démarrage du plugin
+
+**Interface Utilisateur**
+- ✅ Correction de l'affichage conditionnel : le graphique de bande passante Freebox et les données DHCP/NAT ne s'affichent que si le plugin est authentifié et connecté
+- ✅ Correction du message "Configuration requise" qui apparaissait incorrectement en mode `npm run dev`
+
+### ✨ Ajouté
+
+**Interface Utilisateur - Tooltips**
+- 🏷️ Ajout d'un badge ovale coloré affichant le nom du plugin dans les tooltips des badges de température (CPU, HDD, Fan) du header
+- 🎨 Couleurs automatiques selon le plugin :
+  - **Freebox** : Rouge atténué (couleur du logo Freebox)
+  - **UniFi** : Bleu (couleur Ubiquiti/UniFi)
+- 📍 Le badge apparaît en haut du tooltip, au-dessus du titre de la section
+
+**Carte Plugin Freebox**
+- 📊 Réorganisation de l'affichage DHCP et NAT en deux colonnes côte à côte
+- 🔄 Renommage de "Redirections de port" en "NAT" pour plus de clarté
+- 🎯 Amélioration de la lisibilité avec un layout en grille à deux colonnes
+
+### 🔧 Modifié
+
+**Backend - Gestion des Tokens**
+- `server/config.ts` : Amélioration de la résolution du chemin du token en mode développement avec recherche automatique de la racine du projet via `package.json`
+- `server/services/freeboxApi.ts` : Amélioration de la méthode `getTokenPath()` pour gérer correctement les chemins relatifs et absolus
+- `server/plugins/freebox/FreeboxPlugin.ts` : 
+  - Utilisation du singleton `freeboxApi` au lieu d'une instance séparée pour garantir le partage de la session
+  - Ajout du rechargement du token au démarrage pour gérer les redémarrages Docker
+  - Simplification de la logique de login pour correspondre au comportement du bouton "Auth"
+
+**Frontend - Header**
+- `src/components/layout/Header.tsx` : 
+  - Ajout du composant Tooltip avec support du nom du plugin
+  - Badge ovale coloré pour identifier la source des données
+  - Application des couleurs selon le plugin (rouge pour Freebox, bleu pour UniFi)
+
+**Frontend - Carte Plugin**
+- `src/components/widgets/PluginSummaryCard.tsx` : 
+  - Réorganisation de DHCP et NAT en deux colonnes avec `grid grid-cols-2`
+  - Renommage "Redirections de port" → "NAT"
+  - Amélioration de la structure conditionnelle pour n'afficher que si le plugin est actif
+
+**Frontend - Dashboard**
+- `src/pages/UnifiedDashboardPage.tsx` : Amélioration de la condition d'affichage du graphique de bande passante (uniquement si Freebox est configuré ET connecté)
+
+### 🔒 Sécurité
+
+**Vérifications Effectuées**
+- ✅ Aucun token ou mot de passe en clair dans le code source
+- ✅ Tous les tokens Freebox sont stockés dans des fichiers ignorés par Git (`.gitignore`)
+- ✅ Les mots de passe utilisateurs sont hashés avec bcrypt
+- ✅ Les secrets JWT sont gérés via variables d'environnement
+- ✅ Les fichiers de configuration sensibles sont dans `.gitignore`
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.1.1
+- `Docs/CONNEXION_FREEBOX.md` - Documentation existante sur la gestion des sessions Freebox
+
+---
+
 ## [0.1.0] - 2025-12-17
 
 ### 🐛 Corrigé

@@ -66,7 +66,7 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:outline-none"
                             required
                             autoFocus
                         />
@@ -80,7 +80,7 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:outline-none"
                             required
                         />
                     </div>

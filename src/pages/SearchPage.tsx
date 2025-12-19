@@ -410,7 +410,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         }
                                     }}
                                     placeholder="Rechercher (nom, MAC, IP, port, hostname...)"
-                                    className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none focus:border-accent-primary focus:ring-2 focus:ring-accent-primary/20 transition-all"
+                                    className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
                                 />
                             </div>
                             <button

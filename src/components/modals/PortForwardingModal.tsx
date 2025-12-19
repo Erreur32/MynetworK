@@ -342,7 +342,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                       <select
                         value={newRule.ip_proto}
                         onChange={(e) => setNewRule({ ...newRule, ip_proto: e.target.value as 'tcp' | 'udp' | 'tcp_udp' })}
-                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                       >
                         <option value="tcp">TCP</option>
                         <option value="udp">UDP</option>
@@ -360,7 +360,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                         placeholder="Ex: 8080"
                         min="1"
                         max="65535"
-                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                       />
                     </div>
 
@@ -370,7 +370,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                       <select
                         value={newRule.lan_ip}
                         onChange={(e) => setNewRule({ ...newRule, lan_ip: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                       >
                         <option value="">Sélectionner un appareil...</option>
                         {devices.filter(d => d.ip).map((device) => (
@@ -391,7 +391,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                         placeholder="Ex: 80"
                         min="1"
                         max="65535"
-                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                       />
                     </div>
                   </div>
@@ -404,7 +404,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                       value={newRule.comment || ''}
                       onChange={(e) => setNewRule({ ...newRule, comment: e.target.value })}
                       placeholder="Ex: Serveur web"
-                      className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                     />
                   </div>
 
@@ -414,7 +414,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                       type="checkbox"
                       checked={newRule.enabled}
                       onChange={(e) => setNewRule({ ...newRule, enabled: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                      className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-0 focus:outline-none"
                     />
                     <span className="text-sm text-white">Activer immédiatement</span>
                   </label>
@@ -622,7 +622,7 @@ export const PortForwardingModal: React.FC<PortForwardingModalProps> = ({
                         value={dmzConfig.ip}
                         onChange={(e) => setDmzConfig({ ...dmzConfig, ip: e.target.value })}
                         disabled={!dmzConfig.enabled}
-                        className={`w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 ${
+                        className={`w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none ${
                           !dmzConfig.enabled ? 'opacity-50' : ''
                         }`}
                       >

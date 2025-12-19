@@ -39,14 +39,14 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     const buttonRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Debug: log user to console
-    React.useEffect(() => {
-        if (user) {
-            console.log('[UserMenu] User received:', user);
-        } else {
-            console.log('[UserMenu] No user provided');
-        }
-    }, [user]);
+    // Debug: log user to console (disabled to reduce console spam)
+    // React.useEffect(() => {
+    //     if (user) {
+    //         console.log('[UserMenu] User received:', user);
+    //     } else {
+    //         console.log('[UserMenu] No user provided');
+    //     }
+    // }, [user]);
 
     // Calculate menu position when opened
     useEffect(() => {

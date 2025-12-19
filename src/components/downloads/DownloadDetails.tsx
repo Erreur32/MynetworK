@@ -319,7 +319,7 @@ export const DownloadDetails: React.FC<DownloadDetailsProps> = ({ task, onClose 
                             <select
                               value={file.priority}
                               onChange={(e) => handlePriorityChange(file.id, e.target.value)}
-                              className="appearance-none bg-[#0a0a0a] border border-gray-700 rounded px-2 py-1 pr-6 text-xs text-gray-300 focus:outline-none focus:border-blue-500"
+                              className="appearance-none bg-[#0a0a0a] border border-gray-700 rounded px-2 py-1 pr-6 text-xs text-gray-300 focus:outline-none focus:outline-none"
                             >
                               <option value="no_dl">Ne pas télécharger</option>
                               <option value="low">Basse</option>

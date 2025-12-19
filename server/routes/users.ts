@@ -13,6 +13,7 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
+import { getClientIp } from '../utils/getClientIp.js';
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.post('/register', asyncHandler(async (req, res) => {
         resource: 'user',
         resourceId: user.id.toString(),
         username: user.username,
-        ipAddress: req.ip || req.socket.remoteAddress,
+        ipAddress: getClientIp(req),
         userAgent: req.get('user-agent') || undefined,
         level: 'info'
     });
@@ -67,8 +68,8 @@ router.post('/login', asyncHandler(async (req, res) => {
         throw createError('Username and password are required', 400, 'MISSING_CREDENTIALS');
     }
 
-    // Get client IP address
-    const clientIp = req.ip || req.socket.remoteAddress || req.headers['x-forwarded-for']?.toString().split(',')[0] || undefined;
+    // Get client IP address (handles Docker/proxy headers)
+    const clientIp = getClientIp(req);
 
     // Check brute force protection for username
     if (bruteForceProtection.isBlocked(username)) {

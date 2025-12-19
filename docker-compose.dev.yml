@@ -9,6 +9,12 @@
 # Usage:
 #   docker compose -f docker-compose.dev.yml up --build
 #
+# IMPORTANT: Pour éviter d'arrêter le Docker prod, utilisez un nom de projet différent :
+#   docker compose -f docker-compose.dev.yml -p mynetwork-dev up --build
+#
+# Ou en mode détaché (background) :
+#   docker compose -f docker-compose.dev.yml -p mynetwork-dev up -d --build
+#
 # Environment variables:
 #   DASHBOARD_PORT - Vite dev server port (default: 3000)
 #   SERVER_PORT    - Backend API port (default: 3003)
@@ -23,11 +29,16 @@ services:
     container_name: Mynetwork-dev
     ports:
       - "${DASHBOARD_PORT:-3000}:${DASHBOARD_PORT:-3000}"  # Vite dev server (frontend)
-      - "${SERVER_PORT:-3001}:${SERVER_PORT:-3001}"        # API server (backend)
+      - "${SERVER_PORT:-3003}:${SERVER_PORT:-3003}"        # API server (backend)
     environment:
       - NODE_ENV=development
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
+      # Use local token file (shared with npm run dev)
+      # In dev mode, npm uses .freebox_token-dev, but Docker will use data/freebox_token.json
+      # To share the same token, we mount ./data and use the same file
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      # Use local database (shared with npm run dev)
+      - DATABASE_PATH=/app/data/dashboard.db
       # ⚠️ SECURITE CRITIQUE : JWT_SECRET - Secret pour signer les tokens JWT
       # 
       # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
@@ -53,18 +64,35 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev_secret_change_in_production}
       - VITE_PORT=${DASHBOARD_PORT:-3000}
       - PORT=${SERVER_PORT:-3003}
+      - SERVER_PORT=${SERVER_PORT:-3003}
+      # Host root path used to read real host metrics when running in Docker
+      # The corresponding filesystem mount is configured in the volumes section below.
+      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
     volumes:
       # Mount source code for hot reload
       - .:/app
       # Preserve container's node_modules (avoid overwriting with host's)
       - /app/node_modules
-      # Persistent storage for Freebox authentication token and database
-      - mynetwork_data_dev:/app/data
+      # Mount local data directory to share token and database with npm run dev
+      # This allows using the same Freebox token and UniFi configs between dev modes
+      - ./data:/app/data
+      # Mount host filesystem (read-only) to access real host metrics
+      # This allows the app to read hostname, disk usage, and other system info from the host
+      - /:/host:ro
+      # Mount host /proc and /sys separately for better compatibility
+      # These are used to read CPU, memory, network stats, and hostname
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
+      # Mount Docker socket to enable Docker version detection and stats
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      
     restart: unless-stopped
 
-volumes:
-  mynetwork_data_dev:
-    name: mynetwork_data_dev
+# Note: Using local ./data directory mount instead of Docker volume
+# to share token and database with npm run dev mode
+# volumes:
+#   mynetwork_data_dev:
+#     name: mynetwork_data_dev

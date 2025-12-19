@@ -36,6 +36,9 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
 
     const activePlugins = plugins.filter(p => p.enabled && p.connectionStatus);
     const hasUniFi = activePlugins.some(p => p.id === 'unifi');
+    // Freebox is available only if it's enabled AND connected (same condition as the Freebox card)
+    const hasFreebox = activePlugins.some(p => p.id === 'freebox');
+    const hasAnyPlugin = plugins.some(p => p.configured);
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -48,10 +51,21 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
 
             {/* Colonnes 2-3-4 - bande passante en haut, cartes Freebox / UniFi + évènements réseau en dessous */}
             <div className="md:col-span-1 xl:col-span-3 flex flex-col gap-6">
-                {/* Bande passante (ligne du haut, large) */}
-                <BandwidthHistoryWidget />
+                {/* Bande passante (ligne du haut, large) - uniquement si Freebox est actif et connecté (même condition que la carte Freebox) */}
+                {hasFreebox && <BandwidthHistoryWidget />}
+
+                {/* Message si aucun plugin configuré */}
+                {!hasAnyPlugin && (
+                    <div className="bg-[#1a1a1a] rounded-lg p-8 border border-gray-800 text-center">
+                        <p className="text-gray-400 text-lg">Aucun plugin configuré</p>
+                        <p className="text-gray-500 text-sm mt-2">
+                            Configurez un plugin dans les paramètres pour afficher les données
+                        </p>
+                    </div>
+                )}
 
                 {/* Ligne du dessous: cartes Freebox / UniFi + évènements réseau alignés sous la bande passante */}
+                {hasAnyPlugin && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {activePlugins.find(p => p.id === 'freebox') && (
                         <PluginSummaryCard 
@@ -69,6 +83,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                         <NetworkEventsWidget />
                     )}
                 </div>
+                )}
             </div>
         </div>
     );

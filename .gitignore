@@ -26,6 +26,7 @@ dist-ssr
 # Freebox tokens (sensitive)
 .freebox_token
 .freebox_token-dev
+data/freebox_token.json
 
 # Database files (contains sensitive data: users, passwords, tokens, configs)
 data/

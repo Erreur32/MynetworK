@@ -19,6 +19,18 @@ const __dirname = dirname(__filename);
 // This allows the application to read real host metrics (disks, uptime, hostname)
 const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
 
+// Debug mode - enable verbose logging for Docker operations
+const DEBUG_MODE = process.env.DEBUG === 'true' || process.env.DEBUG_VERBOSE === 'true' || process.env.DEBUG_SYSTEM === 'true';
+
+/**
+ * Debug logger - only logs if DEBUG mode is enabled
+ */
+const debugLog = (...args: any[]) => {
+  if (DEBUG_MODE) {
+    console.log(...args);
+  }
+};
+
 const router = express.Router();
 
 /**
@@ -133,7 +145,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         const { stdout, stderr } = await execAsync(chrootDfCommand, { timeout: 5000 });
         
         if (stderr && !stderr.includes('df:')) {
-          console.log(`[SystemServer] chroot df stderr: ${stderr}`);
+          debugLog(`[SystemServer] chroot df stderr: ${stderr}`);
         }
         
         const lines = stdout.trim().split('\n').filter(line => line.trim());
@@ -183,13 +195,13 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
         }
         
         if (disks.length > 0) {
-          console.log(`[SystemServer] ✓ Found ${disks.length} disk(s) using chroot method`);
+          debugLog(`[SystemServer] ✓ Found ${disks.length} disk(s) using chroot method`);
           return disks;
         } else {
-          console.log(`[SystemServer] chroot df returned no valid disks (${lines.length} lines parsed)`);
+          debugLog(`[SystemServer] chroot df returned no valid disks (${lines.length} lines parsed)`);
         }
       } catch (error) {
-        console.log(`[SystemServer] chroot df command failed: ${error}`);
+        debugLog(`[SystemServer] chroot df command failed: ${error}`);
       }
       
       // Method 2: Use df directly on host filesystem via mounted path
@@ -272,12 +284,12 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
           }
           
           if (disks.length > 0) {
-            console.log(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method`);
+            debugLog(`[SystemServer] ✓ Found ${disks.length} disk(s) using /proc/mounts + df method`);
             return disks;
           }
         }
       } catch (error) {
-        console.log(`[SystemServer] /proc/mounts + df method failed: ${error}`);
+        debugLog(`[SystemServer] /proc/mounts + df method failed: ${error}`);
       }
       
       // Method 3: Fallback - query host root mount directly (single disk)
@@ -294,7 +306,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
           const percentage = parseFloat(parts[4].replace('%', ''));
 
           if (!Number.isNaN(total) && total > 0) {
-            console.log(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
+            debugLog(`[SystemServer] ✓ Found disk using direct df method (fallback)`);
             return [
               {
                 mount: '/',
@@ -307,7 +319,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
           }
         }
       } catch (error) {
-        console.log(`[SystemServer] Direct df command failed: ${error}`);
+        debugLog(`[SystemServer] Direct df command failed: ${error}`);
       }
     }
 
@@ -339,10 +351,10 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
 
       return disks;
     } catch (error) {
-      console.log(`[SystemServer] Standard df command failed: ${error}`);
+      debugLog(`[SystemServer] Standard df command failed: ${error}`);
     }
   } catch (error) {
-    console.log(`[SystemServer] getAllDiskUsage error: ${error}`);
+    debugLog(`[SystemServer] getAllDiskUsage error: ${error}`);
   }
 
   return [];
@@ -376,7 +388,7 @@ const getDockerVersion = async (): Promise<string | null> => {
         // Try to execute docker --version via the host path
         const { stdout } = await execAsync(`"${hostDockerPath}" --version 2>/dev/null`, { timeout: 2000 });
         if (stdout && stdout.trim()) {
-          console.log(`[SystemServer] ✓ Docker version found via ${hostDockerPath}`);
+          debugLog(`[SystemServer] ✓ Docker version found via ${hostDockerPath}`);
           return stdout.trim();
         }
       } catch (error) {
@@ -389,7 +401,7 @@ const getDockerVersion = async (): Promise<string | null> => {
     try {
       const { stdout } = await execAsync(`chroot ${HOST_ROOT_PATH} docker --version 2>/dev/null`, { timeout: 2000 });
       if (stdout && stdout.trim()) {
-        console.log(`[SystemServer] ✓ Docker version found via chroot`);
+        debugLog(`[SystemServer] ✓ Docker version found via chroot`);
         return stdout.trim();
       }
     } catch {
@@ -402,7 +414,7 @@ const getDockerVersion = async (): Promise<string | null> => {
       const dockerSocket = '/var/run/docker.sock';
       try {
         await fs.access(dockerSocket);
-        console.log(`[SystemServer] Docker socket found at ${dockerSocket}, querying Docker API`);
+        debugLog(`[SystemServer] Docker socket found at ${dockerSocket}, querying Docker API`);
         
         // Try Method 3a: Use curl to query Docker API via Unix socket
         try {
@@ -415,7 +427,7 @@ const getDockerVersion = async (): Promise<string | null> => {
               // Docker API returns: {"Version": "24.0.7", "ApiVersion": "1.43", ...}
               if (versionInfo.Version) {
                 const versionString = `Docker version ${versionInfo.Version}`;
-                console.log(`[SystemServer] ✓ Docker version found via API (curl): ${versionString}`);
+                debugLog(`[SystemServer] ✓ Docker version found via API (curl): ${versionString}`);
                 return versionString;
               }
             } catch (parseError) {
@@ -423,14 +435,14 @@ const getDockerVersion = async (): Promise<string | null> => {
               const versionMatch = stdout.match(/"Version"\s*:\s*"([^"]+)"/);
               if (versionMatch && versionMatch[1]) {
                 const versionString = `Docker version ${versionMatch[1]}`;
-                console.log(`[SystemServer] ✓ Docker version found via API (curl, parsed): ${versionString}`);
+                debugLog(`[SystemServer] ✓ Docker version found via API (curl, parsed): ${versionString}`);
                 return versionString;
               }
             }
           }
         } catch (curlError) {
           // curl not available or failed, try Node.js HTTP
-          console.log(`[SystemServer] curl method failed, trying Node.js HTTP: ${curlError}`);
+          debugLog(`[SystemServer] curl method failed, trying Node.js HTTP: ${curlError}`);
         }
         
         // Method 3b: Use Node.js HTTP to query Docker API via Unix socket
@@ -465,11 +477,11 @@ const getDockerVersion = async (): Promise<string | null> => {
           
           if (versionInfo && versionInfo.Version) {
             const versionString = `Docker version ${versionInfo.Version}`;
-            console.log(`[SystemServer] ✓ Docker version found via API (HTTP): ${versionString}`);
+            debugLog(`[SystemServer] ✓ Docker version found via API (HTTP): ${versionString}`);
             return versionString;
           }
         } catch (httpError) {
-          console.log(`[SystemServer] HTTP method failed: ${httpError}`);
+          debugLog(`[SystemServer] HTTP method failed: ${httpError}`);
         }
         
         // Fallback: Try docker command if available
@@ -479,7 +491,7 @@ const getDockerVersion = async (): Promise<string | null> => {
             await fs.access(dockerPath);
             const { stdout: cmdStdout } = await execAsync(`"${dockerPath}" --version 2>&1`, { timeout: 2000 });
             if (cmdStdout && cmdStdout.trim() && !cmdStdout.includes('command not found')) {
-              console.log(`[SystemServer] ✓ Docker version found via ${dockerPath}: ${cmdStdout.trim()}`);
+              debugLog(`[SystemServer] ✓ Docker version found via ${dockerPath}: ${cmdStdout.trim()}`);
               return cmdStdout.trim();
             }
           } catch {
@@ -491,19 +503,19 @@ const getDockerVersion = async (): Promise<string | null> => {
         try {
           const { stdout: cmdStdout } = await execAsync(`docker --version 2>&1`, { timeout: 2000 });
           if (cmdStdout && cmdStdout.trim() && !cmdStdout.includes('command not found')) {
-            console.log(`[SystemServer] ✓ Docker version found via docker command: ${cmdStdout.trim()}`);
+            debugLog(`[SystemServer] ✓ Docker version found via docker command: ${cmdStdout.trim()}`);
             return cmdStdout.trim();
           }
         } catch {
           // Ignore
         }
         
-        console.log(`[SystemServer] Docker socket exists but could not get version`);
+        debugLog(`[SystemServer] Docker socket exists but could not get version`);
       } catch (error) {
-        console.log(`[SystemServer] Docker socket exists but API query failed: ${error}`);
+        debugLog(`[SystemServer] Docker socket exists but API query failed: ${error}`);
       }
     } catch (error) {
-      console.log(`[SystemServer] Docker socket check failed: ${error}`);
+      debugLog(`[SystemServer] Docker socket check failed: ${error}`);
     }
     
     // Method 4: Try to read Docker version from host /usr/libexec/docker or similar
@@ -519,7 +531,7 @@ const getDockerVersion = async (): Promise<string | null> => {
         await fs.access(hostDockerPath);
         const { stdout } = await execAsync(`"${hostDockerPath}" --version 2>/dev/null`, { timeout: 2000 });
         if (stdout && stdout.trim()) {
-          console.log(`[SystemServer] ✓ Docker version found via ${hostDockerPath}`);
+          debugLog(`[SystemServer] ✓ Docker version found via ${hostDockerPath}`);
           return stdout.trim();
         }
       } catch {
@@ -527,12 +539,171 @@ const getDockerVersion = async (): Promise<string | null> => {
       }
     }
     
-    console.log(`[SystemServer] ⚠ Could not find Docker version using any method`);
+    debugLog(`[SystemServer] ⚠ Could not find Docker version using any method`);
   } catch (error) {
-    console.log(`[SystemServer] Error getting Docker version: ${error}`);
+    debugLog(`[SystemServer] Error getting Docker version: ${error}`);
   }
   
   return null;
+};
+
+/**
+ * Query Docker API via Unix socket
+ */
+const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
+  try {
+    const dockerSocket = '/var/run/docker.sock';
+    await fs.access(dockerSocket);
+    
+    const http = await import('http');
+    return await new Promise<T | null>((resolve, reject) => {
+      const options = {
+        socketPath: dockerSocket,
+        path,
+        method: 'GET'
+      };
+      
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data) as T);
+          } catch {
+            reject(new Error('Failed to parse Docker API response'));
+          }
+        });
+      });
+      
+      req.on('error', reject);
+      req.setTimeout(3000, () => {
+        req.destroy();
+        reject(new Error('Docker API request timeout'));
+      });
+      req.end();
+    });
+  } catch (error) {
+    debugLog(`[SystemServer] Docker API query failed for ${path}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Get Docker statistics (containers, images, volumes, etc.)
+ */
+const getDockerStats = async (): Promise<{
+  version: string | null;
+  containers: {
+    total: number;
+    running: number;
+    stopped: number;
+    paused: number;
+  };
+  images: number;
+  volumes: number;
+  networks: number;
+  diskUsage: {
+    images: number;
+    containers: number;
+    volumes: number;
+    buildCache: number;
+    total: number;
+  } | null;
+} | null> => {
+  // Try to access Docker socket even if not running in Docker
+  // This allows getting Docker stats when running locally (npm run dev) with Docker installed
+  const dockerSocket = '/var/run/docker.sock';
+  
+  try {
+    await fs.access(dockerSocket);
+    debugLog(`[SystemServer] Docker socket accessible at ${dockerSocket}`);
+  } catch (accessError) {
+    debugLog(`[SystemServer] Docker socket not accessible at ${dockerSocket}:`, accessError);
+    return null;
+  }
+
+  try {
+    
+    // Get Docker version
+    const versionInfo = await queryDockerApi<{ Version: string }>('/version');
+    const dockerVersion = versionInfo?.Version ? `Docker version ${versionInfo.Version}` : null;
+    
+    // Get containers stats
+    const containers = await queryDockerApi<Array<{ State: string }>>('/containers/json?all=true');
+    const containersStats = containers ? {
+      total: containers.length,
+      running: containers.filter(c => c.State === 'running').length,
+      stopped: containers.filter(c => c.State === 'exited').length,
+      paused: containers.filter(c => c.State === 'paused').length
+    } : { total: 0, running: 0, stopped: 0, paused: 0 };
+    
+    // Get images count
+    const images = await queryDockerApi<Array<unknown>>('/images/json');
+    const imagesCount = images ? images.length : 0;
+    
+    // Get volumes count
+    const volumes = await queryDockerApi<{ Volumes?: Array<unknown> }>('/volumes');
+    const volumesCount = volumes?.Volumes ? volumes.Volumes.length : 0;
+    
+    // Get networks count
+    const networks = await queryDockerApi<Array<unknown>>('/networks');
+    const networksCount = networks ? networks.length : 0;
+    
+    // Get disk usage (optional - may not be available on all Docker versions)
+    let diskUsage: {
+      images: number;
+      containers: number;
+      volumes: number;
+      buildCache: number;
+      total: number;
+    } | null = null;
+    
+    try {
+      const systemInfo = await queryDockerApi<{
+        ImagesSize?: number;
+        ContainersSize?: number;
+        VolumesSize?: number;
+        BuildCacheSize?: number;
+      }>('/system/df');
+      
+      if (systemInfo) {
+        diskUsage = {
+          images: systemInfo.ImagesSize || 0,
+          containers: systemInfo.ContainersSize || 0,
+          volumes: systemInfo.VolumesSize || 0,
+          buildCache: systemInfo.BuildCacheSize || 0,
+          total: (systemInfo.ImagesSize || 0) + 
+                 (systemInfo.ContainersSize || 0) + 
+                 (systemInfo.VolumesSize || 0) + 
+                 (systemInfo.BuildCacheSize || 0)
+        };
+      }
+    } catch {
+      // Disk usage not available, continue without it
+    }
+    
+    const stats = {
+      version: dockerVersion,
+      containers: containersStats,
+      images: imagesCount,
+      volumes: volumesCount,
+      networks: networksCount,
+      diskUsage
+    };
+    
+    debugLog(`[SystemServer] ✓ Docker stats retrieved:`, {
+      version: dockerVersion,
+      containers: `${containersStats.running}/${containersStats.total}`,
+      images: imagesCount,
+      volumes: volumesCount,
+      networks: networksCount
+    });
+    
+    return stats;
+  } catch (error) {
+    console.error(`[SystemServer] Error getting Docker stats:`, error);
+    return null;
+  }
 };
 
 /**
@@ -597,21 +768,21 @@ router.get('/server', async (_req, res) => {
             // Only use if it's not a container ID (container IDs are usually 12 hex chars)
             if (trimmedHostname.length > 12 || !/^[a-f0-9]+$/.test(trimmedHostname)) {
               hostname = trimmedHostname;
-              console.log(`[SystemServer] ✓ Read host hostname from ${hostnamePath}: ${hostname}`);
+              debugLog(`[SystemServer] ✓ Read host hostname from ${hostnamePath}: ${hostname}`);
               break;
             } else {
-              console.log(`[SystemServer] Hostname from ${hostnamePath} looks like container ID, trying next method`);
+              debugLog(`[SystemServer] Hostname from ${hostnamePath} looks like container ID, trying next method`);
             }
           }
         } catch (error) {
-          console.log(`[SystemServer] Cannot read hostname from ${hostnamePath}: ${error}`);
+          debugLog(`[SystemServer] Cannot read hostname from ${hostnamePath}: ${error}`);
           // Try next method
           continue;
         }
       }
       
       if (hostname === os.hostname() && hostname.length === 12 && /^[a-f0-9]+$/.test(hostname)) {
-        console.log(`[SystemServer] ⚠ Hostname appears to be container ID (${hostname}), but could not read host hostname`);
+        debugLog(`[SystemServer] ⚠ Hostname appears to be container ID (${hostname}), but could not read host hostname`);
       }
 
       // Try to read host uptime
@@ -624,21 +795,21 @@ router.get('/server', async (_req, res) => {
           const hostUptimeSeconds = parseFloat(firstField);
           if (!Number.isNaN(hostUptimeSeconds) && hostUptimeSeconds > 0) {
             uptime = hostUptimeSeconds;
-            console.log(`[SystemServer] Read host uptime from ${hostUptimePath}: ${Math.floor(uptime / 3600)}h`);
+            debugLog(`[SystemServer] Read host uptime from ${hostUptimePath}: ${Math.floor(uptime / 3600)}h`);
           }
         } catch (accessError) {
-          console.log(`[SystemServer] Cannot access host uptime file at ${hostUptimePath}`);
+          debugLog(`[SystemServer] Cannot access host uptime file at ${hostUptimePath}`);
         }
       } catch (error) {
-        console.log(`[SystemServer] Error reading host uptime: ${error}`);
+        debugLog(`[SystemServer] Error reading host uptime: ${error}`);
       }
 
       // Try to get Docker version from host
       dockerVersion = await getDockerVersion();
       if (dockerVersion) {
-        console.log(`[SystemServer] ✓ Found Docker version: ${dockerVersion}`);
+        debugLog(`[SystemServer] ✓ Found Docker version: ${dockerVersion}`);
       } else {
-        console.log(`[SystemServer] ⚠ Could not detect Docker version from host`);
+        debugLog(`[SystemServer] ⚠ Could not detect Docker version from host`);
       }
     }
     
@@ -653,6 +824,7 @@ router.get('/server', async (_req, res) => {
       nodeVersion: process.version,
       docker: isDocker(),
       dockerVersion: dockerVersion || null,
+      dockerStats: await getDockerStats(),
       cpu: {
         cores: os.cpus().length,
         model: os.cpus()[0]?.model || 'Unknown',
@@ -909,7 +1081,7 @@ router.get('/network', async (_req, res) => {
 
 /**
  * GET /api/system/server/docker
- * Get Docker-specific information
+ * Get Docker-specific information and statistics
  */
 router.get('/server/docker', async (_req, res) => {
   try {
@@ -917,7 +1089,8 @@ router.get('/server/docker', async (_req, res) => {
       isDocker: isDocker(),
       containerId: null as string | null,
       image: null as string | null,
-      version: null as string | null
+      version: null as string | null,
+      stats: null as Awaited<ReturnType<typeof getDockerStats>> | null
     };
     
     if (dockerInfo.isDocker) {
@@ -928,10 +1101,19 @@ router.get('/server/docker', async (_req, res) => {
         // Try to get image from environment
         dockerInfo.image = process.env.DOCKER_IMAGE || null;
         
-        // Get Docker version from host
+        // Get Docker stats (includes version and detailed stats)
+        dockerInfo.stats = await getDockerStats();
+        
+        // Fallback to getDockerVersion if stats didn't provide version
+        if (!dockerInfo.stats?.version) {
         dockerInfo.version = await getDockerVersion();
-      } catch {
-        // Ignore errors
+        } else {
+          dockerInfo.version = dockerInfo.stats.version;
+        }
+      } catch (error) {
+        console.error('[SystemServer] Error getting Docker info:', error);
+        // Try fallback version detection
+        dockerInfo.version = await getDockerVersion();
       }
     }
     

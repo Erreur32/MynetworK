@@ -1,23 +1,63 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Determine token file path:
 // 1. Use FREEBOX_TOKEN_FILE env var if set (Docker/production) - highest priority
-// 2. If NODE_ENV=development, use .freebox_token-dev to separate dev/prod tokens
+// 2. If NODE_ENV=development, use data/freebox_token.json to share with Docker dev
 // 3. Otherwise use .freebox_token in project root (production or undefined)
 const getTokenFilePath = (): string => {
   if (process.env.FREEBOX_TOKEN_FILE) {
     return process.env.FREEBOX_TOKEN_FILE;
   }
   
-  // Separate token files for dev and prod to avoid conflicts
+  // In development (npm run dev), use data/freebox_token.json to share with Docker dev
+  // This allows using the same token between npm run dev and docker-compose dev
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const tokenFileName = isDevelopment ? '.freebox_token-dev' : '.freebox_token';
+  if (isDevelopment) {
+    // Find project root by looking for package.json (more reliable than __dirname)
+    // This ensures the path is correct even when running with tsx watch
+    let projectRoot = process.cwd();
+    let currentDir = process.cwd();
+    const maxDepth = 10;
+    let depth = 0;
+    
+    // Find project root by looking for package.json
+    while (depth < maxDepth && currentDir !== path.dirname(currentDir)) {
+      if (fs.existsSync(path.join(currentDir, 'package.json'))) {
+        projectRoot = currentDir;
+        break;
+      }
+      currentDir = path.dirname(currentDir);
+      depth++;
+    }
+    
+    // Force absolute path from project root
+    const tokenPath = path.resolve(projectRoot, 'data', 'freebox_token.json');
+    console.log(`[Config] Development mode - Token path: ${tokenPath} (projectRoot: ${projectRoot})`);
+    return tokenPath;
+  }
   
-  return path.join(__dirname, '..', tokenFileName);
+  // Production: use .freebox_token in project root
+  // Also find project root for consistency
+  let projectRootProd = process.cwd();
+  let currentDirProd = process.cwd();
+  const maxDepthProd = 10;
+  let depthProd = 0;
+  
+  while (depthProd < maxDepthProd && currentDirProd !== path.dirname(currentDirProd)) {
+    if (fs.existsSync(path.join(currentDirProd, 'package.json'))) {
+      projectRootProd = currentDirProd;
+      break;
+    }
+    currentDirProd = path.dirname(currentDirProd);
+    depthProd++;
+  }
+  
+  return path.resolve(projectRootProd, '.freebox_token');
 };
 
 // Server configuration

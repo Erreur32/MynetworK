@@ -786,7 +786,7 @@ export const WifiSettingsModal: React.FC<WifiSettingsModalProps> = ({
                         placeholder="Adresse MAC (ex: AA:BB:CC:DD:EE:FF)"
                         value={newMacAddress}
                         onChange={(e) => setNewMacAddress(e.target.value.toUpperCase())}
-                        className="flex-1 px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                        className="flex-1 px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm font-mono placeholder-gray-600 focus:outline-none focus:outline-none"
                       />
                     </div>
                     <div className="flex gap-2">
@@ -795,7 +795,7 @@ export const WifiSettingsModal: React.FC<WifiSettingsModalProps> = ({
                         placeholder="Commentaire (optionnel)"
                         value={newMacComment}
                         onChange={(e) => setNewMacComment(e.target.value)}
-                        className="flex-1 px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                        className="flex-1 px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-600 focus:outline-none focus:outline-none"
                       />
                       <button
                         onClick={() => {

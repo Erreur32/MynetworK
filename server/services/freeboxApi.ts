@@ -63,29 +63,67 @@ class FreeboxApiService {
     // Get token file path (handles both relative and absolute paths)
     private getTokenPath(): string {
         const tokenFile = config.freebox.tokenFile;
-        // If it's already an absolute path, use it directly
+        
+        // config.freebox.tokenFile should already be an absolute path from config.ts
+        // But if it's relative, resolve it properly
         if (path.isAbsolute(tokenFile)) {
             return tokenFile;
         }
-        // Otherwise, resolve relative to cwd
-        return path.join(process.cwd(), tokenFile);
+        
+        // If relative, resolve from project root (where package.json is)
+        // This handles cases where process.cwd() might not be the project root
+        let projectRoot = process.cwd();
+        let currentDir = process.cwd();
+        const maxDepth = 10;
+        let depth = 0;
+        
+        // Find project root by looking for package.json
+        while (depth < maxDepth && currentDir !== path.dirname(currentDir)) {
+            if (fs.existsSync(path.join(currentDir, 'package.json'))) {
+                projectRoot = currentDir;
+                break;
+            }
+            currentDir = path.dirname(currentDir);
+            depth++;
+        }
+        
+        const resolvedPath = path.resolve(projectRoot, tokenFile);
+        return resolvedPath;
     }
 
     // Load app_token from file
     private loadToken() {
         const tokenPath = this.getTokenPath();
         console.log(`[FreeboxAPI] Token file path: ${tokenPath}`);
+        console.log(`[FreeboxAPI] File exists: ${fs.existsSync(tokenPath)}`);
+        
         if (fs.existsSync(tokenPath)) {
             try {
-                const data = JSON.parse(fs.readFileSync(tokenPath, 'utf-8')) as TokenData;
+                const fileContent = fs.readFileSync(tokenPath, 'utf-8');
+                console.log(`[FreeboxAPI] File content length: ${fileContent.length} bytes`);
+                const data = JSON.parse(fileContent) as TokenData;
                 this.appToken = data.appToken;
                 console.log('[FreeboxAPI] Loaded app_token from file');
-            } catch {
-                console.log('[FreeboxAPI] Failed to load token file');
+            } catch (error) {
+                console.log('[FreeboxAPI] Failed to load token file:', error);
             }
         } else {
             console.log('[FreeboxAPI] No token file found - registration required');
+            // List directory to help debug
+            const dir = path.dirname(tokenPath);
+            if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                console.log(`[FreeboxAPI] Files in ${dir}:`, files);
+            } else {
+                console.log(`[FreeboxAPI] Directory ${dir} does not exist`);
+            }
         }
+    }
+
+    // Reload token from file (useful after Docker restart or file changes)
+    reloadToken(): void {
+        console.log('[FreeboxAPI] Reloading token from file...');
+        this.loadToken();
     }
 
     // Save app_token to file

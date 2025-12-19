@@ -558,7 +558,7 @@ export const ParentalControlModal: React.FC<ParentalControlModalProps> = ({
                     value={newProfileName}
                     onChange={(e) => setNewProfileName(e.target.value)}
                     placeholder="Nom du profil (ex: Enfants)"
-                    className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-[#252525] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                   />
                   <div className="flex gap-2">
                     <button
@@ -770,7 +770,7 @@ export const ParentalControlModal: React.FC<ParentalControlModalProps> = ({
                             type="checkbox"
                             checked={selectedMacs.includes(device.mac!)}
                             onChange={() => toggleDeviceMac(device.mac!)}
-                            className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-0 focus:outline-none"
                           />
                           <Laptop size={14} className="text-gray-400" />
                           <span className="text-sm text-white">{device.name}</span>
@@ -826,7 +826,7 @@ export const ParentalControlModal: React.FC<ParentalControlModalProps> = ({
                       setSelectedProfileRules([]);
                     }
                   }}
-                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 >
                   <option value="">Sélectionner...</option>
                   {profiles.map((profile) => (

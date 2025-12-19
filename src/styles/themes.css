@@ -394,18 +394,18 @@
     box-shadow: 0 0 0 1px var(--input-border-focus) !important;
 }
 
-/* Dark theme - Reduce shadows on selected/focused elements */
-[data-theme="dark"] *:focus,
-[data-theme="dark"] *:focus-visible {
-    box-shadow: 0 0 0 1px var(--input-border-focus, var(--border-color)) !important;
+/* Dark theme - Remove focus outline on all elements except inputs */
+[data-theme="dark"] *:focus:not(input):not(textarea):not(select):not(button):not(a):not([role="button"]),
+[data-theme="dark"] *:focus-visible:not(input):not(textarea):not(select):not(button):not(a):not([role="button"]) {
+    box-shadow: none !important;
     outline: none !important;
 }
 
-/* Dark theme - Remove or reduce shadows on interactive elements */
+/* Dark theme - Remove focus outline on buttons */
 [data-theme="dark"] button:focus,
 [data-theme="dark"] a:focus,
 [data-theme="dark"] [role="button"]:focus {
-    box-shadow: 0 0 0 1px var(--input-border-focus, var(--border-color)) !important;
+    box-shadow: none !important;
     outline: none !important;
 }
 
@@ -450,6 +450,14 @@
 [data-theme="glass"] select:focus {
     border-color: var(--input-border-focus) !important;
     outline: none;
+}
+
+/* Glass theme - Remove focus outline on buttons */
+[data-theme="glass"] button:focus,
+[data-theme="glass"] a:focus,
+[data-theme="glass"] [role="button"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
 }
 
 /* Override hardcoded input backgrounds for Glass theme */
@@ -578,6 +586,14 @@
 [data-theme="modern"] select:focus {
     border-color: var(--input-border-focus) !important;
     outline: none;
+}
+
+/* Modern theme - Remove focus outline on buttons */
+[data-theme="modern"] button:focus,
+[data-theme="modern"] a:focus,
+[data-theme="modern"] [role="button"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
 }
 
 /* Override hardcoded input backgrounds for Modern theme */
@@ -762,6 +778,14 @@
     outline: none;
 }
 
+/* Nightly theme - Remove focus outline on buttons */
+[data-theme="nightly"] button:focus,
+[data-theme="nightly"] a:focus,
+[data-theme="nightly"] [role="button"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
 /* Override hardcoded input backgrounds for Nightly theme */
 [data-theme="nightly"] input.bg-\[#1a1a1a\],
 [data-theme="nightly"] textarea.bg-\[#1a1a1a\] {
@@ -795,6 +819,33 @@
     border-color: var(--input-border-focus) !important;
     box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.2) !important;
     outline: none;
+}
+
+/* Neon theme - Remove focus outline on buttons */
+[data-theme="neon"] button:focus,
+[data-theme="neon"] a:focus,
+[data-theme="neon"] [role="button"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* ============================================
+   GLOBAL - Remove focus outline on all interactive elements
+   ============================================
+   Remove blue focus outline on buttons, links, and interactive elements
+   across all themes
+*/
+button:focus,
+button:focus-visible,
+a:focus,
+a:focus-visible,
+[role="button"]:focus,
+[role="button"]:focus-visible,
+button:hover:focus,
+a:hover:focus,
+[role="button"]:hover:focus {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 [data-theme="neon"] input.bg-\[#1a1a1a\],

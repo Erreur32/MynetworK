@@ -302,7 +302,7 @@ const ContactFormModal: React.FC<{
                 type="text"
                 value={formData.first_name}
                 onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 placeholder="Jean"
               />
             </div>
@@ -312,7 +312,7 @@ const ContactFormModal: React.FC<{
                 type="text"
                 value={formData.last_name}
                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                 placeholder="Dupont"
               />
             </div>
@@ -324,7 +324,7 @@ const ContactFormModal: React.FC<{
               type="text"
               value={formData.company}
               onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-              className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
               placeholder="Optionnel"
             />
           </div>
@@ -346,13 +346,13 @@ const ContactFormModal: React.FC<{
                     type="tel"
                     value={num.number}
                     onChange={(e) => handleNumberChange(i, 'number', e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                     placeholder="06 12 34 56 78"
                   />
                   <select
                     value={num.type}
                     onChange={(e) => handleNumberChange(i, 'type', e.target.value)}
-                    className="px-2 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                    className="px-2 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                   >
                     <option value="mobile">Mobile</option>
                     <option value="home">Domicile</option>

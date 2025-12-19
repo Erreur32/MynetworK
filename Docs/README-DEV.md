@@ -24,24 +24,107 @@ cp .env.example .env   # si présent
 
 ### Variables d'environnement
 
-Variables minimales (voir `DOCUMENTATION_STOCKAGE.md`) :
-- `PORT` (backend, ex : 3003)
-- `DASHBOARD_PORT` (port exposé par Docker)
-- `JWT_SECRET` (minimum 32 caractères en prod)
-- `DEFAULT_ADMIN_USERNAME`, `DEFAULT_ADMIN_PASSWORD`
+**Fichier `.env` (optionnel, créé à la racine du projet)**
+
+Variables minimales pour le développement (voir `DOCUMENTATION_STOCKAGE.md` pour plus de détails) :
+
+**Pour `npm run dev` (développement local)** :
+```bash
+PORT=3003              # Port du backend
+SERVER_PORT=3003       # Port du backend (alias)
+VITE_PORT=5173         # Port du frontend Vite
+JWT_SECRET=dev_secret_change_me
+FREEBOX_HOST=mafreebox.freebox.fr
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=admin123
+```
+
+**Pour `docker-compose -f docker-compose.dev.yml` (développement Docker)** :
+```bash
+DASHBOARD_PORT=3000    # Port du frontend (mappé depuis le conteneur)
+SERVER_PORT=3003       # Port du backend (mappé depuis le conteneur)
+JWT_SECRET=dev_secret_change_me
+FREEBOX_HOST=mafreebox.freebox.fr
+```
+
+> ⚠️ **Important** : Le fichier `.env` ne doit **JAMAIS** être commité dans Git (déjà dans `.gitignore`).  
+> Pour plus de détails sur les variables d'environnement, voir `Docs/VARIABLES_ENVIRONNEMENT.md`.
 
 ---
 
 ## 🏃 Lancer en Développement
 
-```bash
-# Backend + frontend ensemble
-npm run dev
+### Méthode 1 : Développement Local (SANS Docker) - Recommandé
 
-# OU séparément
+**Option A : Une seule commande (tout ensemble)**
+```bash
+npm run dev
+```
+Cette commande lance automatiquement le backend ET le frontend en parallèle dans un seul terminal.
+
+**Option B : Deux terminaux séparés (plus de contrôle)**
+```bash
+# Terminal 1 - Backend
 npm run dev:server   # backend sur http://localhost:3003
+
+# Terminal 2 - Frontend  
 npm run dev:client   # frontend sur http://localhost:5173
 ```
+
+**Ports par défaut** :
+- Frontend (Vite) : `http://localhost:5173`
+- Backend API : `http://localhost:3003`
+- Le proxy Vite redirige automatiquement `/api/*` vers le backend
+
+**Variables d'environnement** :
+- Créez un fichier `.env` à la racine (optionnel) :
+  ```bash
+  PORT=3003
+  SERVER_PORT=3003
+  VITE_PORT=5173
+  JWT_SECRET=dev_secret_change_me
+  FREEBOX_HOST=mafreebox.freebox.fr
+  ```
+- Le fichier `.env` est lu automatiquement par le backend (via `dotenv/config`)
+
+---
+
+### Méthode 2 : Développement avec Docker (Optionnel)
+
+Pour tester dans un environnement isolé similaire à la production :
+
+```bash
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+**Ports par défaut** :
+- Frontend (Vite) : `http://localhost:3000`
+- Backend API : `http://localhost:3003`
+
+**Variables d'environnement** :
+- Créez un fichier `.env` à la racine (optionnel) :
+  ```bash
+  DASHBOARD_PORT=3000
+  SERVER_PORT=3003
+  JWT_SECRET=dev_secret_change_me
+  FREEBOX_HOST=mafreebox.freebox.fr
+  ```
+- Docker Compose lit automatiquement le fichier `.env`
+
+**Note** : Le mode Docker monte le code source en volume, donc le hot reload fonctionne aussi.
+
+---
+
+### Quelle méthode choisir ?
+
+| Critère | `npm run dev` (Local) | Docker Dev |
+|---------|----------------------|------------|
+| **Vitesse de démarrage** | ⚡ Plus rapide | 🐢 Plus lent |
+| **Isolation** | ❌ Utilise node_modules local | ✅ Environnement isolé |
+| **Simplicité** | ✅ Plus simple | ⚠️ Nécessite Docker |
+| **Recommandé pour** | Développement quotidien | Tests d'intégration, debug Docker |
+
+**Recommandation** : Utilisez `npm run dev` pour le développement quotidien, et Docker dev uniquement pour tester des problèmes spécifiques à Docker.
 
 ---
 

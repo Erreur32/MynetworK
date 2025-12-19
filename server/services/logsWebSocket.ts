@@ -36,15 +36,29 @@ class LogsWebSocketService {
       logger.debug('LogsWS', `Connection URL: ${req.url}, Headers:`, req.headers);
       ws.isAlive = true;
 
-      // Send recent logs immediately
-      const recentLogs = logBuffer.getRecent(100);
+      // Send recent logs immediately (limited to 50 to prevent memory issues)
+      const recentLogs = logBuffer.getRecent(50);
       logger.debug('LogsWS', `Sending ${recentLogs.length} recent logs to client`);
       
       try {
-        ws.send(JSON.stringify({
+        const message = JSON.stringify({
           type: 'logs',
           data: recentLogs
-        }));
+        });
+        
+        // Check message size (max 1MB to prevent memory issues)
+        const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB
+        if (message.length > MAX_MESSAGE_SIZE) {
+          logger.warn('LogsWS', `Message too large (${message.length} bytes), truncating logs`);
+          // Send only the most recent logs that fit
+          const truncatedLogs = recentLogs.slice(-20);
+          ws.send(JSON.stringify({
+            type: 'logs',
+            data: truncatedLogs
+          }));
+        } else {
+          ws.send(message);
+        }
         logger.debug('LogsWS', 'Initial logs sent successfully');
       } catch (error) {
         logger.error('LogsWS', 'Error sending initial logs:', error);
@@ -105,10 +119,18 @@ class LogsWebSocketService {
     this.unsubscribeLogs = logBuffer.subscribe((logEntry) => {
       // Broadcast new log to all connected clients
       if (this.wss && this.wss.clients.size > 0) {
+        try {
         const message = JSON.stringify({
           type: 'log',
           data: logEntry
         });
+
+          // Check message size (max 100KB per log entry to prevent memory issues)
+          const MAX_LOG_MESSAGE_SIZE = 100 * 1024; // 100KB
+          if (message.length > MAX_LOG_MESSAGE_SIZE) {
+            logger.warn('LogsWS', `Log entry too large (${message.length} bytes), skipping broadcast`);
+            return;
+          }
 
         let sentCount = 0;
         this.wss.clients.forEach((client) => {
@@ -122,6 +144,9 @@ class LogsWebSocketService {
           }
         });
         logger.debug('LogsWS', `Broadcasted log to ${sentCount} client(s)`, logEntry.prefix, logEntry.message?.substring(0, 50));
+        } catch (error) {
+          logger.error('LogsWS', 'Error serializing log entry:', error);
+        }
       }
     });
   }

@@ -203,7 +203,7 @@ export const ExporterSection: React.FC = () => {
                                 ...config,
                                 prometheus: { ...config.prometheus, enabled: e.target.checked }
                             })}
-                            className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500"
+                            className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-0"
                         />
                         <span className="text-sm text-gray-400">
                             {config.prometheus.enabled ? (
@@ -237,7 +237,7 @@ export const ExporterSection: React.FC = () => {
                                             prometheus: { ...config.prometheus, port }
                                         });
                                     }}
-                                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                                 />
                                 <span className="text-sm text-gray-400">port</span>
                             </div>
@@ -255,7 +255,7 @@ export const ExporterSection: React.FC = () => {
                                         ...config,
                                         prometheus: { ...config.prometheus, path: e.target.value }
                                     })}
-                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                                     placeholder="/metrics"
                                 />
                             </div>
@@ -317,7 +317,7 @@ export const ExporterSection: React.FC = () => {
                                 ...config,
                                 influxdb: { ...config.influxdb, enabled: e.target.checked }
                             })}
-                            className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500"
+                            className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-0"
                         />
                         <span className="text-sm text-gray-400">
                             {config.influxdb.enabled ? (
@@ -346,7 +346,7 @@ export const ExporterSection: React.FC = () => {
                                     influxdb: { ...config.influxdb, url: e.target.value }
                                 })}
                                 placeholder="http://localhost:8086"
-                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                             />
                         </SettingRow>
 
@@ -362,7 +362,7 @@ export const ExporterSection: React.FC = () => {
                                     influxdb: { ...config.influxdb, database: e.target.value }
                                 })}
                                 placeholder="mynetwork"
-                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                             />
                         </SettingRow>
 
@@ -378,7 +378,7 @@ export const ExporterSection: React.FC = () => {
                                     influxdb: { ...config.influxdb, username: e.target.value }
                                 })}
                                 placeholder="admin"
-                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                             />
                         </SettingRow>
 
@@ -394,7 +394,7 @@ export const ExporterSection: React.FC = () => {
                                     influxdb: { ...config.influxdb, password: e.target.value }
                                 })}
                                 placeholder="••••••••"
-                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                             />
                         </SettingRow>
 
@@ -410,7 +410,7 @@ export const ExporterSection: React.FC = () => {
                                     influxdb: { ...config.influxdb, retention: e.target.value }
                                 })}
                                 placeholder="30d"
-                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+                                className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                             />
                         </SettingRow>
 

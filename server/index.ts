@@ -1,9 +1,46 @@
+// Suppress Node.js warning about NODE_TLS_REJECT_UNAUTHORIZED in dev mode
+// This is intentionally set to '0' for Freebox/UniFi self-signed certificates
+// Only suppress in dev mode, keep warning visible in production for security awareness
+if (process.env.NODE_ENV !== 'production') {
+  // Intercept warnings via process.on('warning') event
+  process.on('warning', (warning) => {
+    // Suppress only the NODE_TLS_REJECT_UNAUTHORIZED warning
+    if (warning.message && warning.message.includes('NODE_TLS_REJECT_UNAUTHORIZED')) {
+      // Suppress this warning silently
+      return;
+    }
+    // Emit all other warnings normally
+    console.warn(warning.name, warning.message);
+  });
+  
+  // Also intercept via emitWarning for compatibility
+  const originalEmitWarning = process.emitWarning.bind(process);
+  process.emitWarning = ((warning: string | Error, typeOrCtor?: string | Function, code?: string, ctor?: Function) => {
+    // Suppress only the NODE_TLS_REJECT_UNAUTHORIZED warning
+    const warningMessage = typeof warning === 'string' ? warning : warning.message;
+    if (warningMessage.includes('NODE_TLS_REJECT_UNAUTHORIZED')) {
+      return;
+    }
+    // Emit all other warnings normally
+    if (typeof typeOrCtor === 'function') {
+      return originalEmitWarning(warning, typeOrCtor);
+    } else if (code) {
+      return originalEmitWarning(warning, typeOrCtor as string, code, ctor);
+    } else if (typeOrCtor) {
+      return originalEmitWarning(warning, typeOrCtor as string);
+    } else {
+      return originalEmitWarning(warning);
+    }
+  }) as typeof process.emitWarning;
+}
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import http from 'http';
 import os from 'os';
+import fsSync from 'fs';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -49,6 +86,7 @@ import apiDocsRoutes from './routes/api-docs.js';
 import securityRoutes from './routes/security.js';
 import { securityNotificationService } from './services/securityNotificationService.js';
 import { logger } from './utils/logger.js';
+import { logBuffer } from './utils/logBuffer.js';
 
 // Initialize database
 logger.info('Server', 'Initializing database...');
@@ -97,6 +135,10 @@ async function initializePlugins() {
 initializePlugins();
 
 const app = express();
+
+// Trust proxy - Required for correct IP detection in Docker/reverse proxy environments
+// This allows Express to use X-Forwarded-For and X-Real-IP headers
+app.set('trust proxy', true);
 
 // Middleware
 // In production (Docker), allow all origins since frontend is served from same server
@@ -188,10 +230,12 @@ app.use(errorHandler);
 // Create HTTP server (needed for WebSocket)
 const server = http.createServer(app);
 
-// Log upgrade requests for debugging
+// Log upgrade requests for debugging (only in verbose mode to reduce noise)
+if (process.env.DEBUG_UPGRADE === 'true') {
 server.on('upgrade', (request, socket, head) => {
   console.log('[HTTP] Upgrade request received:', request.url);
 });
+}
 
 // Initialize WebSocket servers
 connectionWebSocket.init(server);
@@ -219,12 +263,39 @@ if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
   });
 }
 
+// Helper function to detect if running in Docker
+const isDocker = (): boolean => {
+  try {
+    // Check /proc/self/cgroup (Linux)
+    const cgroup = fsSync.readFileSync('/proc/self/cgroup', 'utf8');
+    if (cgroup.includes('docker') || cgroup.includes('containerd')) {
+      return true;
+    }
+  } catch {
+    // Not Linux or file doesn't exist
+  }
+  
+  // Check environment variable
+  if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
+    return true;
+  }
+  
+  // Check for .dockerenv file
+  try {
+    fsSync.accessSync('/.dockerenv');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // Start server
 const port = config.port;
 const host = '0.0.0.0'; // Bind to all interfaces for Docker compatibility
 server.listen(port, host, () => {
   // Determine frontend URL to display based on environment
   const isProduction = process.env.NODE_ENV === 'production';
+  const isDockerEnv = isDocker();
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
   
@@ -277,9 +348,25 @@ server.listen(port, host, () => {
     return withoutEmojis.length + (emojiCount * 2);
   };
 
+  // Read app version from package.json
+  let appVersion = '0.1.0'; // Default fallback
+  try {
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+    appVersion = packageJson.version || appVersion;
+  } catch (error) {
+    // If package.json can't be read, use default version
+    console.warn('[Server] Could not read package.json version, using default');
+  }
+
   // Calculate content widths for all lines
   const title = 'MynetworK Backend Server';
   const subtitle = 'Multi-Source Network Dashboard';
+  
+  // Determine version label with app version
+  const versionLabel = isProduction || isDockerEnv 
+    ? `Version DOCKER v${appVersion}`
+    : `DEV v${appVersion}`;
   
   const contentLines = [
     `  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
@@ -289,7 +376,7 @@ server.listen(port, host, () => {
     `  📡 Freebox:             ${config.freebox.url}`,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
-    `  ✓ Plugin System (Freebox, UniFi, ...)`,
+    `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
     `  ✓ Activity Logging`
   ];
   
@@ -297,17 +384,19 @@ server.listen(port, host, () => {
   const maxContentWidth = Math.max(
     ...contentLines.map(line => visibleLength(line)),
     visibleLength(title),
-    visibleLength(subtitle)
+    visibleLength(subtitle),
+    visibleLength(versionLabel)
   );
   
-  // Calculate total width: content + borders (2 chars) + minimal padding (4 chars)
+  // Calculate total width: content + minimal padding (4 chars)
   // Minimum width of 60 for readability
   const width = Math.max(maxContentWidth + 4, 60);
   const minPadding = 2;
   
-  // Calculate padding for centered titles
-  const titlePadding = Math.max(Math.floor((width - visibleLength(title) - 2) / 2), minPadding);
-  const subtitlePadding = Math.max(Math.floor((width - visibleLength(subtitle) - 2) / 2), minPadding);
+  // Calculate padding for centered titles (no border on right, so no -2)
+  const titlePadding = Math.max(Math.floor((width - visibleLength(title)) / 2), minPadding);
+  const subtitlePadding = Math.max(Math.floor((width - visibleLength(subtitle)) / 2), minPadding);
+  const versionPadding = Math.max(Math.floor((width - visibleLength(versionLabel)) / 2), minPadding);
   
   // Helper to pad content lines
   const padLine = (line: string, label: string, value: string): string => {
@@ -318,23 +407,52 @@ server.listen(port, host, () => {
     return line + ' '.repeat(padding);
   };
 
+  // Display header in console (with colors)
   console.log(`
-${colors.bright}${colors.cyan}╔${'═'.repeat(width)}╗${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${colors.cyan}${' '.repeat(width - titlePadding - visibleLength(title) - 2)}║${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${colors.cyan}${' '.repeat(width - subtitlePadding - visibleLength(subtitle) - 2)}║${colors.reset}
-${colors.bright}${colors.cyan}╠${'═'.repeat(width)}╣${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🌐 Frontend WEB (Users): ${frontendWebUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  💻 Frontend Local:      ${frontendLocalUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🔌 Backend API:         ${apiUrl}/api/health`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  🔗 WebSocket:           ${wsUrl}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${' '.repeat(Math.max(width - visibleLength(`  📡 Freebox:             ${config.freebox.url}`) - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}${' '.repeat(width)}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${' '.repeat(Math.max(width - visibleLength('  Features:') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ User Authentication (JWT)') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Plugin System (Freebox, UniFi, ...)${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ Plugin System (Freebox, UniFi, ...)') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Activity Logging${colors.reset}${' '.repeat(Math.max(width - visibleLength('  ✓ Activity Logging') - 2, 0))}${colors.bright}${colors.cyan}║${colors.reset}
-${colors.bright}${colors.cyan}╚${'═'.repeat(width)}╝${colors.reset}
+${colors.bright}${colors.cyan}╔${'═'.repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${' '.repeat(width - titlePadding - visibleLength(title))}${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
+${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Plugin System (Freebox, UniFi, Search devices, Scan network...)${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Activity Logging${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
   `);
+  
+  // Add header to log buffer (without ANSI codes for cleaner display in logs)
+  const headerLines = [
+    `╔${'═'.repeat(width)}`,
+    `║${' '.repeat(titlePadding)}${title}${' '.repeat(width - titlePadding - visibleLength(title))}`,
+    `║${' '.repeat(subtitlePadding)}${subtitle}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}`,
+    `╠${'═'.repeat(width)}`,
+    `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
+    `╠${'═'.repeat(width)}`,
+    `║  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
+    `║  💻 Frontend Local:      ${frontendLocalUrl}`,
+    `║  🔌 Backend API:         ${apiUrl}/api/health`,
+    `║  🔗 WebSocket:           ${wsUrl}`,
+    `║  📡 Freebox:             ${config.freebox.url}`,
+    `║`,
+    `║  Features:`,
+    `║  ✓ User Authentication (JWT)`,
+    `║  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
+    `║  ✓ Activity Logging`,
+    `╚${'═'.repeat(width)}`
+  ];
+  
+  // Add each line of the header to the log buffer
+  headerLines.forEach(line => {
+    logBuffer.add('info', 'Server', line.trim());
+  });
 });
 
 // Graceful shutdown

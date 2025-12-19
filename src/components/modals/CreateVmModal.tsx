@@ -119,7 +119,7 @@ export const CreateVmModal: React.FC<CreateVmModalProps> = ({ isOpen, onClose })
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="ma-vm"
-              className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-600 focus:outline-none focus:outline-none transition-colors"
               disabled={isLoading}
             />
           </div>

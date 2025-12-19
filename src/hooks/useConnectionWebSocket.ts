@@ -71,12 +71,12 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/connection`;
 
-    console.log('[WS Client] Connecting to:', wsUrl);
+    // console.log('[WS Client] Connecting to:', wsUrl); // Debug only
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[WS Client] Connected');
+      // console.log('[WS Client] Connected'); // Debug only
       setIsConnected(true);
       // Do an initial fetch to get current state immediately
       fetchConnectionStatus();
@@ -159,7 +159,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
           });
         } else if (message.type === 'freebox_event' && message.eventType && message.data) {
           // Native Freebox WebSocket event (lan_host, vm_state, etc.)
-          console.log('[WS Client] Freebox event:', message.eventType, message.data);
+          // console.log('[WS Client] Freebox event:', message.eventType, message.data); // Debug only
           if (onFreeboxEvent) {
             onFreeboxEvent(message.eventType, message.data as LanHostEventData | VmEventData);
           }
@@ -170,20 +170,43 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onclose = (event) => {
-      console.log('[WS Client] Disconnected:', event.code, event.reason);
+      // Only log disconnections with error codes (not normal closures)
+      if (event.code !== 1000 && event.code !== 1001) {
+        console.warn('[WS Client] Disconnected:', event.code, event.reason);
+      }
       setIsConnected(false);
       wsRef.current = null;
 
       // Reconnect after delay if still enabled
       if (enabled) {
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[WS Client] Attempting reconnect...');
+          // console.log('[WS Client] Attempting reconnect...'); // Debug only
           connect();
         }, 3000);
       }
     };
 
     ws.onerror = (error) => {
+      // Suppress "Invalid frame header" errors in development - they are normal
+      // when the proxy Vite is handling WebSocket connections
+      // These errors are expected in dev mode and don't need to be logged
+      // Note: error is an Event, not an Error object
+      // In dev mode, silently ignore these proxy-related errors
+      if (!import.meta.env.PROD) {
+        // In development, ignore "Invalid frame header" errors (Vite proxy issue)
+        return;
+      }
+      // In production, log actual connection errors
+      const errorMessage = (error.target as WebSocket)?.url 
+        ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
+        : String(error.type || 'error');
+      if (
+        errorMessage.includes('Invalid frame header') ||
+        errorMessage.includes('WebSocket connection failed')
+      ) {
+        // Silently ignore - the onclose handler will handle reconnection
+        return;
+      }
       console.error('[WS Client] Error:', error);
     };
   }, [enabled, fetchConnectionStatus, onFreeboxEvent]);

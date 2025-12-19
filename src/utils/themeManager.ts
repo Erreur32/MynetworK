@@ -34,8 +34,8 @@ export const applyTheme = (theme: Theme): void => {
     console.warn('Failed to save theme to localStorage:', error);
   }
   
-  // Debug log
-  console.log(`[Theme] Applied theme: ${theme}`);
+  // Debug log (disabled to reduce console spam)
+  // console.log(`[Theme] Applied theme: ${theme}`);
 };
 
 /**
@@ -73,6 +73,7 @@ export const initTheme = async (): Promise<void> => {
   // Try to load custom colors from server
   try {
     const response = await fetch('/api/settings/theme');
+    // 401 is expected if user is not authenticated yet - don't log as error
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.result?.customColors) {

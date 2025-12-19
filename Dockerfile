@@ -1,5 +1,5 @@
 # ===========================================
-# MynetworK - Node 22 Alpine - TS -> JS
+# MynetworK - Node 22 Alpine (STABLE & SECURE)
 # ===========================================
 
 # ---------- Stage 1 : Build ----------
@@ -7,15 +7,14 @@ FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
-# deps complètes
+# 🔴 OBLIGATOIRE pour better-sqlite3
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
 RUN npm ci
 
 COPY . .
-
-# build frontend + backend
-RUN npm run build \
- && npx tsc --project tsconfig.json
+RUN npm run build
 
 
 # ---------- Stage 2 : Production ----------
@@ -23,26 +22,24 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# outils runtime nécessaires
-RUN apk add --no-cache wget
-
-# user non-root
-RUN addgroup -S nodejs && adduser -S node -G nodejs
+# outils nécessaires pour modules natifs (COMME AVANT)
+RUN apk add --no-cache python3 make g++ wget
 
 # data
 RUN mkdir -p /app/data && chown -R node:node /app
 
 USER node
 
-# deps prod
+# deps prod (COMME AVANT)
 COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # frontend
 COPY --chown=node:node --from=builder /app/dist ./dist
 
-# backend JS
+# backend TS exécuté par tsx (COMME AVANT)
 COPY --chown=node:node --from=builder /app/server ./server
+COPY --chown=node:node --from=builder /app/tsconfig.json ./
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -54,4 +51,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 EXPOSE 3000
 
-CMD ["node", "server/index.js"]
+# TS runtime (COMME AVANT)
+CMD ["node_modules/.bin/tsx", "server/index.ts"]

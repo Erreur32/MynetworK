@@ -46,7 +46,7 @@ class ApiClient {
     try {
       // Log request for debugging (only in development)
       if (import.meta.env.DEV) {
-        console.log(`[API] ${method} ${url}`, { body: body ? JSON.stringify(body).substring(0, 100) : 'none', hasToken: !!token });
+        // console.log(`[API] ${method} ${url}`, { body: body ? JSON.stringify(body).substring(0, 100) : 'none', hasToken: !!token }); // Debug only
       }
       
       const response = await fetch(url, options);
@@ -164,27 +164,45 @@ class ApiClient {
 
       return data as ApiResponse<T>;
     } catch (error: any) {
+      // In development, only log non-connection-refused errors to reduce noise
+      const errorMessage = error?.message || String(error || '');
+      const isConnectionRefused = 
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('Failed to fetch') ||
+        (error instanceof TypeError && errorMessage.includes('fetch'));
+      
+      if (!isConnectionRefused || !import.meta.env.DEV) {
       console.error(`[API] ${method} ${endpoint} failed:`, error);
+      }
       
       // Provide more detailed error messages
-      let errorMessage = 'Erreur réseau';
+      let userErrorMessage = 'Erreur réseau';
       let errorCode = 'NETWORK_ERROR';
+      let isTemporary = false;
       
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        errorMessage = 'Impossible de contacter le serveur. Vérifiez que le serveur est démarré et accessible.';
+      if (isConnectionRefused) {
+        // Backend is not available (restarting, not started, etc.)
+        errorCode = 'CONNECTION_REFUSED';
+        userErrorMessage = 'Le serveur n\'est pas disponible. Reconnexion en cours...';
+        isTemporary = true;
+      } else if (error instanceof TypeError && errorMessage.includes('fetch')) {
+        userErrorMessage = 'Impossible de contacter le serveur. Vérifiez que le serveur est démarré et accessible.';
+        isTemporary = true;
       } else if (error instanceof Error) {
-        errorMessage = error.message;
+        userErrorMessage = errorMessage;
         
         // Handle socket errors specifically
-        if (error.message.includes('socket') || error.message.includes('ended') || error.message.includes('ECONNRESET')) {
+        if (errorMessage.includes('socket') || errorMessage.includes('ended') || errorMessage.includes('ECONNRESET')) {
           errorCode = 'SOCKET_ERROR';
-          errorMessage = 'Connexion interrompue. Veuillez réessayer.';
-        } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+          userErrorMessage = 'Connexion interrompue. Veuillez réessayer.';
+          isTemporary = true;
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')) {
           errorCode = 'TIMEOUT_ERROR';
-          errorMessage = 'La requête a expiré. Veuillez réessayer.';
-        } else if (error.message.includes('aborted') || error.message.includes('ABORTED')) {
+          userErrorMessage = 'La requête a expiré. Veuillez réessayer.';
+          isTemporary = true;
+        } else if (errorMessage.includes('aborted') || errorMessage.includes('ABORTED')) {
           errorCode = 'ABORTED_ERROR';
-          errorMessage = 'Requête annulée.';
+          userErrorMessage = 'Requête annulée.';
         }
       }
       
@@ -192,7 +210,8 @@ class ApiClient {
         success: false,
         error: {
           code: errorCode,
-          message: errorMessage
+          message: userErrorMessage,
+          temporary: isTemporary
         }
       };
     }
