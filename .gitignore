@@ -85,3 +85,4 @@ commit-message.txt
 *.bak
 *~.cursorrules
 commit-message.txt
+.cursorrules
