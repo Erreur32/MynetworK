@@ -236,6 +236,7 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
             const fstype = parts[2];
             
             // Only include real block devices (not loop, tmpfs, proc, sys, etc.)
+            // Exclude Docker bind mounts like /etc/resolv.conf, /etc/hostname, /etc/hosts
             if (device.startsWith('/dev/') && 
                 !device.includes('/dev/loop') &&
                 !device.includes('/dev/shm') &&
@@ -249,7 +250,14 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
                 !mountpoint.includes('/dev/') &&
                 !mountpoint.includes('/run') &&
                 !mountpoint.includes('/tmp') &&
-                !mountpoint.startsWith('/host')) {
+                !mountpoint.startsWith('/host') &&
+                !mountpoint.startsWith('/etc/resolv.conf') &&
+                !mountpoint.startsWith('/etc/hostname') &&
+                !mountpoint.startsWith('/etc/hosts') &&
+                mountpoint !== '/etc/resolv.conf' &&
+                mountpoint !== '/etc/hostname' &&
+                mountpoint !== '/etc/hosts' &&
+                !mountpoint.startsWith('/app')) {
               realMounts.add(mountpoint);
             }
           }
@@ -559,6 +567,7 @@ const getDockerVersion = async (): Promise<string | null> => {
  */
 const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
   try {
+    const http = await import('http');
     const dockerSocket = '/var/run/docker.sock';
     await fs.access(dockerSocket);
     
@@ -864,9 +873,19 @@ router.get('/server', async (_req, res) => {
     const diskUsage = await getDiskUsage();
     const allDisks = await getAllDiskUsage();
     
+    // Filter out fake disks (Docker bind mounts, container paths, etc.)
+    const realDisks = allDisks.filter(d => 
+      d.mount !== '/etc/resolv.conf' &&
+      d.mount !== '/etc/hostname' &&
+      d.mount !== '/etc/hosts' &&
+      !d.mount.startsWith('/app') &&
+      !d.mount.startsWith('/host') &&
+      d.total > 100 * 1024 * 1024 // Only disks > 100MB
+    );
+    
     // Log disk information for debugging (always log in production to help diagnose issues)
-    if (allDisks.length > 0) {
-      console.log(`[SystemServer] ✓ Found ${allDisks.length} disk(s):`, allDisks.map(d => `${d.mount} (${(d.total / (1024 * 1024 * 1024)).toFixed(2)} GB)`).join(', '));
+    if (realDisks.length > 0) {
+      console.log(`[SystemServer] ✓ Found ${realDisks.length} disk(s):`, realDisks.map(d => `${d.mount} (${(d.total / (1024 * 1024 * 1024)).toFixed(2)} GB)`).join(', '));
     } else {
       console.log(`[SystemServer] ⚠ No disks found via getAllDiskUsage(), using fallback disk info`);
     }
@@ -908,7 +927,7 @@ router.get('/server', async (_req, res) => {
         used: diskUsage.used,
         percentage: Math.round(diskUsage.percentage * 100) / 100
       },
-      disks: allDisks.map(d => ({
+      disks: realDisks.map(d => ({
         mount: d.mount,
         total: d.total,
         free: d.free,

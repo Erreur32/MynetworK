@@ -258,7 +258,44 @@ function getNetworkIP(): string | null {
 // Get host machine IP when running in Docker
 function getHostMachineIP(): string | null {
   try {
-    // Method 1: Try to read from /host/proc/net/route to find default gateway
+    // Method 1: Read host network interfaces from /host/sys/class/net/
+    // This gives us the real host machine IP addresses
+    const hostNetPath = '/host/sys/class/net';
+    if (fsSync.existsSync(hostNetPath)) {
+      const interfaces = fsSync.readdirSync(hostNetPath);
+      for (const iface of interfaces) {
+        // Skip virtual interfaces (lo, docker, veth, etc.)
+        if (iface === 'lo' || iface.startsWith('docker') || iface.startsWith('veth') || 
+            iface.startsWith('br-') || iface.startsWith('virbr')) {
+          continue;
+        }
+        
+        // Try to read IP address from /host/sys/class/net/<iface>/address (MAC) then get IP
+        // Better: read from /host/proc/net/route or use ip command via chroot
+        try {
+          // Use chroot to execute 'ip addr' on host to get real IPs
+          const { execSync } = require('child_process');
+          const ipCommand = `chroot /host ip -4 addr show ${iface} 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1`;
+          const result = execSync(ipCommand, { encoding: 'utf8', timeout: 2000 }).trim();
+          if (result && !result.startsWith('127.') && !result.startsWith('172.16.') && 
+              !result.startsWith('172.17.') && !result.startsWith('172.18.') && 
+              !result.startsWith('172.19.') && !result.startsWith('172.20.') && 
+              !result.startsWith('172.21.') && !result.startsWith('172.22.') && 
+              !result.startsWith('172.23.') && !result.startsWith('172.24.') && 
+              !result.startsWith('172.25.') && !result.startsWith('172.26.') && 
+              !result.startsWith('172.27.') && !result.startsWith('172.28.') && 
+              !result.startsWith('172.29.') && !result.startsWith('172.30.') && 
+              !result.startsWith('172.31.')) {
+            return result;
+          }
+        } catch {
+          // Continue to next interface
+        }
+      }
+    }
+    
+    // Method 2: Try to read from /host/proc/net/route to find interface with default route
+    // Then get IP of that interface from /host/proc/net/dev or ip command
     const routePath = '/host/proc/net/route';
     if (fsSync.existsSync(routePath)) {
       const routeContent = fsSync.readFileSync(routePath, 'utf8');
@@ -268,42 +305,34 @@ function getHostMachineIP(): string | null {
         const parts = line.split(/\s+/);
         // Default route has destination 00000000
         if (parts.length >= 3 && parts[1] === '00000000') {
-          const gatewayHex = parts[2];
-          if (gatewayHex && gatewayHex !== '00000000' && gatewayHex.length === 8) {
-            // Convert hex to IP (little-endian format)
-            const ip = [
-              parseInt(gatewayHex.substring(6, 8), 16),
-              parseInt(gatewayHex.substring(4, 6), 16),
-              parseInt(gatewayHex.substring(2, 4), 16),
-              parseInt(gatewayHex.substring(0, 2), 16)
-            ].join('.');
-            // Gateway IP is usually the host IP in Docker bridge networks
-            return ip;
-          }
-        }
-      }
-    }
-    
-    // Method 2: Try to get gateway from network interfaces
-    // In Docker, the gateway is usually on the default route
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-      // Look for eth0 or similar interface
-      if (name.includes('eth') || name.includes('ens')) {
-        for (const iface of interfaces[name] || []) {
-          if (iface.family === 'IPv4' && !iface.internal && iface.netmask) {
-            // Try to calculate gateway (usually .1 in the same subnet)
-            const ipParts = iface.address.split('.');
-            if (ipParts.length === 4) {
-              // Gateway is usually x.x.x.1 in Docker bridge networks
-              return `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.1`;
+          const iface = parts[0];
+          if (iface && iface !== 'lo' && !iface.startsWith('docker') && 
+              !iface.startsWith('veth') && !iface.startsWith('br-')) {
+            try {
+              // Get IP of this interface using chroot ip command
+              const { execSync } = require('child_process');
+              const ipCommand = `chroot /host ip -4 addr show ${iface} 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1`;
+              const result = execSync(ipCommand, { encoding: 'utf8', timeout: 2000 }).trim();
+              if (result && !result.startsWith('127.') && !result.startsWith('172.16.') && 
+                  !result.startsWith('172.17.') && !result.startsWith('172.18.') && 
+                  !result.startsWith('172.19.') && !result.startsWith('172.20.') && 
+                  !result.startsWith('172.21.') && !result.startsWith('172.22.') && 
+                  !result.startsWith('172.23.') && !result.startsWith('172.24.') && 
+                  !result.startsWith('172.25.') && !result.startsWith('172.26.') && 
+                  !result.startsWith('172.27.') && !result.startsWith('172.28.') && 
+                  !result.startsWith('172.29.') && !result.startsWith('172.30.') && 
+                  !result.startsWith('172.31.')) {
+                return result;
+              }
+            } catch {
+              // Continue
             }
           }
         }
       }
     }
   } catch (error) {
-    // Fallback to regular network IP detection
+    // Fallback
   }
   return null;
 }
@@ -397,6 +426,7 @@ server.listen(port, host, () => {
   }
   
   // Determine API and WebSocket URLs
+  // Always prefer host machine IP over localhost when available
   let apiUrl: string;
   let wsUrl: string;
   
@@ -405,20 +435,20 @@ server.listen(port, host, () => {
     if (config.publicUrl) {
       apiUrl = config.publicUrl;
       wsUrl = config.publicUrl.replace(/^http/, 'ws') + '/ws/connection';
-    } else if (isDockerEnv && networkIP) {
-      // In Docker production, use detected host machine IP
+    } else if (networkIP) {
+      // Use detected host machine IP (preferred over localhost)
       const dashboardPort = process.env.DASHBOARD_PORT || '7505';
       apiUrl = `http://${networkIP}:${dashboardPort}`;
       wsUrl = `ws://${networkIP}:${dashboardPort}/ws/connection`;
     } else {
-      // Fallback to localhost
+      // Fallback to localhost only if no network IP detected
       const dashboardPort = process.env.DASHBOARD_PORT || '7505';
       apiUrl = `http://localhost:${dashboardPort}`;
       wsUrl = `ws://localhost:${dashboardPort}/ws/connection`;
     }
   } else {
-    // Development: use host machine IP if in Docker, otherwise localhost
-    if (isDockerEnv && networkIP) {
+    // Development: use host machine IP if available, otherwise localhost
+    if (networkIP) {
       apiUrl = `http://${networkIP}:${port}`;
       wsUrl = `ws://${networkIP}:${port}/ws/connection`;
     } else {
@@ -550,11 +580,11 @@ ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
 ${containerName ? `${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}📦${colors.reset} ${colors.bright}Container:${colors.reset}            ${colors.cyan}${containerName}${colors.reset}${colors.reset}` : ''}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB:${colors.reset}    ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}   ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}    ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}     ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}          ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
