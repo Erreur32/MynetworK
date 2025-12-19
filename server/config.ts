@@ -89,7 +89,7 @@ export const config = {
     localIp: process.env.FREEBOX_LOCAL_IP || '192.168.1.254',
 
     // App registration details
-    appId: process.env.FREEBOX_APP_ID || 'fr.mynetwork.dashboard',
+    appId: process.env.FREEBOX_APP_ID || 'fr.mynetwork',
     // Default app name: "MynetworK" (can be overridden via FREEBOX_APP_NAME env var)
     // Docker Compose files set specific names per environment (Dev, Local, Production)
     appName: process.env.FREEBOX_APP_NAME || 'MynetworK',
