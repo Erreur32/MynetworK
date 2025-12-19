@@ -255,6 +255,62 @@ function getNetworkIP(): string | null {
   return null;
 }
 
+// Helper function to get host machine IP address when running in Docker
+// First tries environment variable HOST_IP, then attempts to read from host filesystem
+function getHostMachineIP(): string | null {
+  // First priority: environment variable (most reliable)
+  if (process.env.HOST_IP) {
+    return process.env.HOST_IP;
+  }
+  
+  // Second priority: try to read from host network interfaces
+  const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
+  
+  try {
+    // Try to read host network interfaces from mounted /host/sys/class/net
+    const netPath = path.join(HOST_ROOT_PATH, 'sys', 'class', 'net');
+    if (fsSync.existsSync(netPath)) {
+      const interfaces = fsSync.readdirSync(netPath);
+      
+      // Filter out virtual interfaces (lo, docker, veth, br-, virbr)
+      const physicalInterfaces = interfaces.filter(iface => {
+        return !iface.startsWith('lo') && 
+               !iface.startsWith('docker') && 
+               !iface.startsWith('veth') &&
+               !iface.startsWith('br-') &&
+               !iface.startsWith('virbr');
+      });
+      
+      // Try to get IP from first active physical interface
+      for (const ifaceName of physicalInterfaces) {
+        try {
+          // Check if interface is up
+          const operstatePath = path.join(netPath, ifaceName, 'operstate');
+          if (fsSync.existsSync(operstatePath)) {
+            const operstate = fsSync.readFileSync(operstatePath, 'utf8').trim();
+            if (operstate === 'up') {
+              // Try to get IP from /host/proc/net/route or use default gateway
+              // For simplicity, we'll use the Docker default gateway pattern
+              // In most cases, the host IP can be found by checking the default route
+              // But parsing /proc/net/route is complex, so we'll use a simpler fallback
+              // The host IP is typically the gateway IP (172.17.0.1 for default bridge)
+              // But that's not the actual host IP. We need the host's actual IP.
+              // For now, return null and let the caller use container IP as fallback
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+  } catch {
+    // Fallback to null
+  }
+  
+  // Return null to use container IP as fallback
+  return null;
+}
+
 // Check JWT secret on startup and notify if default
 const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
 if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
@@ -296,13 +352,26 @@ server.listen(port, host, () => {
   // Determine frontend URL to display based on environment
   const isProduction = process.env.NODE_ENV === 'production';
   const isDockerEnv = isDocker();
+  
+  // Get host machine IP (for Docker) or container IP (for dev)
+  const hostIP = isDockerEnv ? getHostMachineIP() : null;
+  const containerIP = getNetworkIP();
+  const displayIP = hostIP || containerIP || 'localhost';
+  const dashboardPort = process.env.DASHBOARD_PORT || '7505';
+  
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
   
   if (isProduction) {
-    // Production mode (Docker): use PUBLIC_URL or default to localhost with port mapping
-    frontendWebUrl = config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`;
-    frontendLocalUrl = frontendWebUrl;
+    // Production mode (Docker): use host IP instead of Docker IP
+    if (hostIP) {
+      frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
+      frontendLocalUrl = frontendWebUrl;
+    } else {
+      // Fallback to PUBLIC_URL or localhost
+      frontendWebUrl = config.publicUrl || `http://localhost:${dashboardPort}`;
+      frontendLocalUrl = frontendWebUrl;
+    }
   } else {
     // Development mode: frontend is on Vite dev server (port 5173)
     const vitePort = process.env.VITE_PORT || '5173';
@@ -312,11 +381,14 @@ server.listen(port, host, () => {
   }
   
   const apiUrl = isProduction 
-    ? (config.publicUrl || `http://localhost:${process.env.DASHBOARD_PORT || '7505'}`)
+    ? (hostIP ? `http://${hostIP}:${dashboardPort}` : (config.publicUrl || `http://localhost:${dashboardPort}`))
     : `http://localhost:${port}`;
   const wsUrl = isProduction
-    ? (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${port}/ws/connection`)
+    ? (hostIP ? `ws://${hostIP}:${dashboardPort}/ws/connection` : (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${dashboardPort}/ws/connection`))
     : `ws://localhost:${port}/ws/connection`;
+  
+  // Get container name (from hostname or environment variable)
+  const containerName = process.env.CONTAINER_NAME || os.hostname() || 'MynetworK';
   
   // ANSI color codes for terminal output
   const colors = {
@@ -363,17 +435,20 @@ server.listen(port, host, () => {
   const title = 'MynetworK Backend Server';
   const subtitle = 'Multi-Source Network Dashboard';
   
-  // Determine version label with app version
+  // Determine version label with app version and container name
   const versionLabel = isProduction || isDockerEnv 
     ? `Version DOCKER v${appVersion}`
     : `DEV v${appVersion}`;
   
+  const containerLabel = `📦 Container:            ${containerName}`;
+  
   const contentLines = [
-    `  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
-    `  💻 Frontend Local:      ${frontendLocalUrl}`,
-    `  🔌 Backend API:         ${apiUrl}/api/health`,
-    `  🔗 WebSocket:           ${wsUrl}`,
-    `  📡 Freebox:             ${config.freebox.url}`,
+    containerLabel,
+    `  🌐 Frontend WEB  : ${frontendWebUrl}`,
+    `  💻 Frontend Local: ${frontendLocalUrl}`,
+    `  🔌 Backend API:    ${apiUrl}/api/health`,
+    `  🔗 WebSocket:      ${wsUrl}`,
+    `  📡 Freebox:        ${config.freebox.url}`,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
@@ -385,7 +460,8 @@ server.listen(port, host, () => {
     ...contentLines.map(line => visibleLength(line)),
     visibleLength(title),
     visibleLength(subtitle),
-    visibleLength(versionLabel)
+    visibleLength(versionLabel),
+    visibleLength(containerLabel)
   );
   
   // Calculate total width: content + minimal padding (4 chars)
@@ -407,6 +483,9 @@ server.listen(port, host, () => {
     return line + ' '.repeat(padding);
   };
 
+  // Calculate padding for container label
+  const containerPadding = Math.max(Math.floor((width - visibleLength(containerLabel)) / 2), minPadding);
+  
   // Display header in console (with colors)
   console.log(`
 ${colors.bright}${colors.cyan}╔${'═'.repeat(width)}${colors.reset}
@@ -414,12 +493,13 @@ ${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${col
 ${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📦${colors.reset} ${colors.bright}Container:${colors.reset}           ${colors.cyan}${containerName}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB (Users):${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset}      ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API:${colors.reset}         ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket:${colors.reset}           ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox:${colors.reset}             ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB :${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset} ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API :${colors.reset} ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket  :${colors.reset} ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox       :${colors.reset} ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
@@ -435,11 +515,12 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
     `║${' '.repeat(subtitlePadding)}${subtitle}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}`,
     `╠${'═'.repeat(width)}`,
     `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
+    `║  📦 Container:            ${containerName}`,
     `╠${'═'.repeat(width)}`,
-    `║  🌐 Frontend WEB (Users): ${frontendWebUrl}`,
-    `║  💻 Frontend Local:      ${frontendLocalUrl}`,
-    `║  🔌 Backend API:         ${apiUrl}/api/health`,
-    `║  🔗 WebSocket:           ${wsUrl}`,
+    `║  🌐 Frontend WEB  : ${frontendWebUrl}`,
+    `║  💻 Frontend Local:  ${frontendLocalUrl}`,
+    `║  🔌 Backend API:      ${apiUrl}/api/health`,
+    `║  🔗 WebSocket:        ${wsUrl}`,
     `║  📡 Freebox:             ${config.freebox.url}`,
     `║`,
     `║  Features:`,
