@@ -1,22 +1,6 @@
-# ===========================================
-# MynetworK Dashboard - Docker Compose
-# ===========================================
-#
-# Production deployment using pre-built image from registry
-#
-# For local development (building from source), use docker-compose.local.yml instead
-#
-# Usage:
-#   docker-compose up -d
-#
-# Environment variables (optional):
-#   DASHBOARD_PORT - Dashboard port (default: 7505)
-#   FREEBOX_HOST - Freebox hostname (default: mafreebox.freebox.fr)
-#   JWT_SECRET - JWT secret for authentication (required in production)
-#
-# Examples:
-#   DASHBOARD_PORT=8080 docker-compose up -d
-#   docker-compose --env-file .env up -d
+# MynetworK Dashboard - Docker Compose (Production)
+# Usage: docker-compose up -d
+# Environment variables: DASHBOARD_PORT (default: 7505), FREEBOX_HOST, JWT_SECRET
 
 services:
   mynetwork:
@@ -24,100 +8,47 @@ services:
     container_name: MynetworK
     restart: unless-stopped
 
-    # Port mapping: host:container
     ports:
       - "${DASHBOARD_PORT:-7505}:3000"
 
-    # Environment configuration
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
+      # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
+      #
+      # Pour générer un secret sécurisé (minimum 32 caractères) :
+      #   Linux/Mac:   openssl rand -base64 32
+      #   PowerShell:  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+
+      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      #  Host root path used to read real host metrics when running in Docker
+      #  The corresponding filesystem mount is configured in the volumes section below.
+      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+        
+      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
+      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json      
       # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
       # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
       # - Sans nginx, l'application fonctionne sans cette variable
       # - Décommentez et configurez si vous utilisez nginx :
       # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
-      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
-      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
-      # ⚠️ SECURITE CRITIQUE : JWT_SECRET - Secret pour signer les tokens JWT
-      # 
-      # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
-      # Le secret par défaut est uniquement pour le développement.
-      #
-      # Pour générer un secret sécurisé (minimum 32 caractères) :
-      #   Linux/Mac:   openssl rand -base64 32
-      #   PowerShell:  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-      #
-      # Méthodes de configuration :
-      #   1. Fichier .env (recommandé) :
-      #      Créez un fichier .env dans le même répertoire que docker-compose.yml
-      #      Docker Compose le chargera AUTOMATIQUEMENT :
-      #        JWT_SECRET=votre_secret_genere
-      #      Puis lancez simplement : docker-compose up -d
-      #      (pas besoin de --env-file, c'est automatique)
-      #
-      #   2. Variable d'environnement système :
-      #      export JWT_SECRET=$(openssl rand -base64 32)
-      #      docker-compose up -d
-      #
-      #   3. Ligne de commande :
-      #      JWT_SECRET=votre_secret docker-compose up -d
-      #
-      # Exemple de secret généré : aB3xK9mP2vQ7wR5tY8uI0oP1aS6dF4gH7jK2lM9nB0vC3xZ6
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
-      # Optional: External config file path
-      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      # Host root path used to read real host metrics when running in Docker
-      # The corresponding filesystem mount is configured in the volumes section below.
-      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
 
-    # Persistent storage for Freebox API token, database, and config
-    # Using bind mount to ./data directory for easy backup access
-    # The ./data directory will be created automatically if it doesn't exist
-    # Users can easily backup/restore by copying the ./data directory
+
+
     volumes:
+      #  Mount external configuration database and token file
       - ./data:/app/data
-      # Optional: Mount external configuration file
-      # Uncomment the line below to use an external config file
-      # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
-      # Mount the host root filesystem read-only inside the container so that
-      # the backend can read real host metrics (disks, uptime, hostname).
-      # This is used only for system information; the mount is read-only to
-      # avoid accidental modifications on the host.
       - /:/host:ro
-      # Mount /proc and /sys from host to access host system information
-      # These pseudo-filesystems are not included in the root mount above
+      #  Mount host filesystem (read-only) to access real host metrics
       - /proc:/host/proc:ro
+      #  Mount host filesystem (read-only) to access real host metrics
       - /sys:/host/sys:ro
-      # Mount Docker socket to enable Docker version detection
+      #  Mount Docker socket to enable Docker version detection
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-    # Network mode options:
-    # Option 1: Bridge mode (default) - uses port mapping
-    # Option 2: Host mode - direct network access (uncomment below)
-    # network_mode: host
-
-    # Health check
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-    # Resource limits (optional)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.5'
-    #       memory: 512M
-    #     reservations:
-    #       cpus: '0.1'
-    #       memory: 256M
-
-# Volume named 'mynetwork_data' removed - using bind mount ./data instead
-# This allows users to easily backup/restore the data directory
-# volumes:
-#   mynetwork_data:
-#     name: mynetwork_data
 

@@ -197,28 +197,28 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onerror = (error) => {
-      // Suppress "Invalid frame header" errors in development - they are normal
-      // when the proxy Vite is handling WebSocket connections or backend is not ready
-      // These errors are expected in dev mode and don't need to be logged
-      // Note: error is an Event, not an Error object
-      // In dev mode, silently ignore these proxy-related errors
+      // In development, suppress proxy-related errors
       if (!import.meta.env.PROD) {
-        // In development, ignore "Invalid frame header" errors (Vite proxy issue or backend not ready)
-        // The browser console will still show the error, but it's expected behavior
-        // The onclose handler will automatically retry the connection
         return;
       }
-      // In production, log actual connection errors (but not proxy-related ones)
+      
+      // In production, log WebSocket errors for debugging
+      // "Invalid frame header" usually means the reverse proxy (nginx) is not configured for WebSocket
       const errorMessage = (error.target as WebSocket)?.url 
         ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
         : String(error.type || 'error');
-      if (
-        errorMessage.includes('Invalid frame header') ||
-        errorMessage.includes('WebSocket connection failed')
-      ) {
-        // Silently ignore - the onclose handler will handle reconnection
+      
+      if (errorMessage.includes('Invalid frame header')) {
+        // This usually indicates nginx reverse proxy is not configured for WebSocket upgrade
+        console.warn('[WS Client] Invalid frame header - Check nginx WebSocket configuration. The connection will retry automatically.');
         return;
       }
+      
+      if (errorMessage.includes('WebSocket connection failed')) {
+        // Connection failed but will retry
+        return;
+      }
+      
       console.error('[WS Client] Error:', error);
     };
   }, [enabled, fetchConnectionStatus, onFreeboxEvent]);
