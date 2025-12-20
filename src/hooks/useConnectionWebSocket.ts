@@ -59,6 +59,8 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
   const { enabled = true, onFreeboxEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const maxReconnectAttempts = 5; // Maximum 5 tentatives avant de s'arrêter
   const [isConnected, setIsConnected] = useState(false);
 
   const { fetchConnectionStatus } = useConnectionStore();
@@ -82,6 +84,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
         console.log('[WS Client] Connected successfully');
       }
       setIsConnected(true);
+      reconnectAttemptsRef.current = 0; // Reset counter on successful connection
       // Do an initial fetch to get current state immediately
       fetchConnectionStatus();
     };
@@ -174,21 +177,38 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onclose = (event) => {
-      // Only log disconnections with error codes (not normal closures)
-      // Code 1006 (abnormal closure) is normal during development when backend restarts
-      if (event.code !== 1000 && event.code !== 1001) {
-        // In development, code 1006 is expected (backend restart, proxy issues, etc.)
-        if (import.meta.env.DEV && event.code === 1006) {
-          // Silently handle - automatic reconnection will occur
-          return;
-        }
-        console.warn('[WS Client] Disconnected:', event.code, event.reason);
-      }
       setIsConnected(false);
       wsRef.current = null;
 
-      // Reconnect after delay if still enabled
-      if (enabled) {
+      // Only log disconnections with error codes (not normal closures)
+      // Code 1006 (abnormal closure) is normal during development when backend restarts
+      // In production, code 1006 is also common when nginx is not configured for WebSocket
+      // Suppress these logs to avoid flooding the console
+      if (event.code !== 1000 && event.code !== 1001) {
+        // Code 1006 is expected in both dev and prod (backend restart, proxy issues, nginx misconfiguration)
+        if (event.code === 1006) {
+          // Increment reconnect attempts counter
+          reconnectAttemptsRef.current += 1;
+          
+          // Stop trying after max attempts to avoid infinite flood
+          if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+            // Silently stop - nginx is probably not configured correctly
+            // User will need to fix nginx configuration
+            return;
+          }
+        } else {
+          // Only log unexpected error codes (not 1006)
+          if (import.meta.env.DEV) {
+            console.warn('[WS Client] Disconnected:', event.code, event.reason);
+          }
+        }
+      } else {
+        // Normal closure - reset counter
+        reconnectAttemptsRef.current = 0;
+      }
+
+      // Reconnect after delay if still enabled and under max attempts
+      if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
         reconnectTimeoutRef.current = setTimeout(() => {
           // console.log('[WS Client] Attempting reconnect...'); // Debug only
           connect();
@@ -197,29 +217,23 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onerror = (error) => {
-      // In development, suppress proxy-related errors
-      if (!import.meta.env.PROD) {
-        return;
-      }
-      
-      // In production, log WebSocket errors for debugging
+      // Suppress all WebSocket errors to avoid flooding the console
       // "Invalid frame header" usually means the reverse proxy (nginx) is not configured for WebSocket
-      const errorMessage = (error.target as WebSocket)?.url 
-        ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
-        : String(error.type || 'error');
-      
-      if (errorMessage.includes('Invalid frame header')) {
-        // This usually indicates nginx reverse proxy is not configured for WebSocket upgrade
-        console.warn('[WS Client] Invalid frame header - Check nginx WebSocket configuration. The connection will retry automatically.');
-        return;
+      // These errors are expected when nginx is misconfigured and will retry automatically
+      // Only log unexpected errors in development mode for debugging
+      if (import.meta.env.DEV) {
+        const errorMessage = (error.target as WebSocket)?.url 
+          ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
+          : String(error.type || 'error');
+        
+        // In development, only log non-proxy errors
+        if (!errorMessage.includes('Invalid frame header') && 
+            !errorMessage.includes('WebSocket connection failed')) {
+          console.error('[WS Client] Error:', error);
+        }
       }
-      
-      if (errorMessage.includes('WebSocket connection failed')) {
-        // Connection failed but will retry
-        return;
-      }
-      
-      console.error('[WS Client] Error:', error);
+      // In production, silently suppress all WebSocket errors
+      // The connection will retry automatically, no need to flood the console
     };
   }, [enabled, fetchConnectionStatus, onFreeboxEvent]);
 
@@ -235,6 +249,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     }
 
     setIsConnected(false);
+    reconnectAttemptsRef.current = 0; // Reset counter on manual disconnect
   }, []);
 
   useEffect(() => {
