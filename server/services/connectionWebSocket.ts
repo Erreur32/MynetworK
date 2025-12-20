@@ -33,7 +33,7 @@ interface SystemStatus {
 
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
-const CONNECTION_POLLING_INTERVAL = 1000; // 1 second for connection data
+const CONNECTION_POLLING_INTERVAL = 500; // 500ms for real-time connection data (bandwidth)
 const SYSTEM_POLLING_INTERVAL = 5000; // 5 seconds for system data (less frequent)
 
 class ConnectionWebSocketService {

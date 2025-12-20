@@ -71,12 +71,16 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/connection`;
 
-    // console.log('[WS Client] Connecting to:', wsUrl); // Debug only
+    if (import.meta.env.DEV) {
+      console.log('[WS Client] Connecting to:', wsUrl);
+    }
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      // console.log('[WS Client] Connected'); // Debug only
+      if (import.meta.env.DEV) {
+        console.log('[WS Client] Connected successfully');
+      }
       setIsConnected(true);
       // Do an initial fetch to get current state immediately
       fetchConnectionStatus();
@@ -104,7 +108,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
             return {
               status,
               error: null,
-              history: [...state.history.slice(-59), newPoint]
+              history: [...state.history.slice(-299), newPoint] // Keep last 300 points (5 minutes)
             };
           });
         } else if (message.type === 'system_status' && message.data) {
@@ -154,7 +158,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
             return {
               info: updatedInfo,
-              temperatureHistory: [...state.temperatureHistory.slice(-59), newPoint]
+              temperatureHistory: [...state.temperatureHistory.slice(-299), newPoint] // Keep last 300 points (5 minutes)
             };
           });
         } else if (message.type === 'freebox_event' && message.eventType && message.data) {
@@ -171,7 +175,13 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
     ws.onclose = (event) => {
       // Only log disconnections with error codes (not normal closures)
+      // Code 1006 (abnormal closure) is normal during development when backend restarts
       if (event.code !== 1000 && event.code !== 1001) {
+        // In development, code 1006 is expected (backend restart, proxy issues, etc.)
+        if (import.meta.env.DEV && event.code === 1006) {
+          // Silently handle - automatic reconnection will occur
+          return;
+        }
         console.warn('[WS Client] Disconnected:', event.code, event.reason);
       }
       setIsConnected(false);
@@ -188,15 +198,17 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
     ws.onerror = (error) => {
       // Suppress "Invalid frame header" errors in development - they are normal
-      // when the proxy Vite is handling WebSocket connections
+      // when the proxy Vite is handling WebSocket connections or backend is not ready
       // These errors are expected in dev mode and don't need to be logged
       // Note: error is an Event, not an Error object
       // In dev mode, silently ignore these proxy-related errors
       if (!import.meta.env.PROD) {
-        // In development, ignore "Invalid frame header" errors (Vite proxy issue)
+        // In development, ignore "Invalid frame header" errors (Vite proxy issue or backend not ready)
+        // The browser console will still show the error, but it's expected behavior
+        // The onclose handler will automatically retry the connection
         return;
       }
-      // In production, log actual connection errors
+      // In production, log actual connection errors (but not proxy-related ones)
       const errorMessage = (error.target as WebSocket)?.url 
         ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
         : String(error.type || 'error');
@@ -227,14 +239,21 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
   useEffect(() => {
     if (enabled) {
-      connect();
+      // Add a small delay to ensure backend is ready (especially after npm run dev restart)
+      const connectTimeout = setTimeout(() => {
+        connect();
+      }, 500);
+      
+      return () => {
+        clearTimeout(connectTimeout);
+        disconnect();
+      };
     } else {
       disconnect();
+      return () => {
+        disconnect();
+      };
     }
-
-    return () => {
-      disconnect();
-    };
   }, [enabled, connect, disconnect]);
 
   return { isConnected };

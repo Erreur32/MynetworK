@@ -55,9 +55,10 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       // Process connection logs
       if (connectionLogsRes.status === 'fulfilled' && connectionLogsRes.value.success && connectionLogsRes.value.result) {
         const connectionLogs = connectionLogsRes.value.result;
-        for (const log of connectionLogs.slice(0, 10)) {
+        for (let i = 0; i < connectionLogs.slice(0, 10).length; i++) {
+          const log = connectionLogs[i];
           logs.push({
-            id: `conn-${log.date}`,
+            id: `conn-${log.date}-${i}`,
             type: log.type === 'error' ? 'error' : log.type === 'warning' ? 'warning' : 'info',
             message: log.msg || 'Événement réseau',
             timestamp: formatTimestamp(log.date),

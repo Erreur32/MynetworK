@@ -360,15 +360,33 @@ class FreeboxApiService {
 
     // Check if session is valid
     async checkSession(): Promise<boolean> {
+        // If we don't have a session token, we're definitely not logged in
+        if (!this.sessionToken) {
+            return false;
+        }
+
         try {
-            const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN, undefined, false);
+            // Use authenticated request to check session status
+            // The /login/ endpoint returns logged_in status when called with session token
+            const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN, undefined, true);
             if (!response.success) {
                 console.log('[FreeboxAPI] checkSession failed:', response.msg || response.error_code);
+                // If authentication fails, clear the session token
+                if (response.error_code === 'invalid_session' || response.msg?.includes('session')) {
+                    this.sessionToken = null;
+                }
                 return false;
             }
-            return response.result?.logged_in === true;
+            const isLoggedIn = response.result?.logged_in === true;
+            if (!isLoggedIn) {
+                // Session expired, clear token
+                this.sessionToken = null;
+            }
+            return isLoggedIn;
         } catch (error) {
             console.error('[FreeboxAPI] checkSession error:', error);
+            // On error, assume session is invalid
+            this.sessionToken = null;
             return false;
         }
     }

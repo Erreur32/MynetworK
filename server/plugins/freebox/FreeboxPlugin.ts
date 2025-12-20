@@ -39,37 +39,48 @@ export class FreeboxPlugin extends BasePlugin {
             return;
         }
         
-        // Reload token from file (important after Docker restart)
+        console.log('[FreeboxPlugin] Starting Freebox plugin...');
+        console.log('[FreeboxPlugin] Base URL:', this.apiService.getBaseUrl());
+        
+        // Reload token from file (important after Docker restart or file changes)
         // freeboxApi singleton has reloadToken() method
         if (typeof this.apiService.reloadToken === 'function') {
+            console.log('[FreeboxPlugin] Reloading token from file...');
             this.apiService.reloadToken();
         }
         
         // Check if already registered
-        if (!this.apiService.isRegistered()) {
+        const isRegistered = this.apiService.isRegistered();
+        console.log('[FreeboxPlugin] Is registered:', isRegistered);
+        
+        if (!isRegistered) {
             console.log('[FreeboxPlugin] Not registered yet, skipping login. Register via /api/auth/register');
             return;
         }
 
-        // Simple login logic - same as what the Auth button does
+        // Always attempt to login on startup (session may have expired)
+        // This ensures the plugin is connected after Docker restart or server restart
         try {
-            // Check if session is already valid
+            console.log('[FreeboxPlugin] Checking session status...');
             const isLoggedIn = await this.apiService.checkSession();
+            console.log('[FreeboxPlugin] Current session status:', isLoggedIn);
             
             if (!isLoggedIn) {
-                console.log('[FreeboxPlugin] Session not valid, attempting to login...');
+                console.log('[FreeboxPlugin] Session not valid or expired, attempting to login...');
                 await this.apiService.login();
-                console.log('[FreeboxPlugin] Login successful');
+                console.log('[FreeboxPlugin] Login successful - session restored');
             } else {
                 console.log('[FreeboxPlugin] Session is valid, maintaining connection');
             }
             
             // Start keep-alive mechanism to maintain session
             this.startKeepAlive();
+            console.log('[FreeboxPlugin] Plugin started successfully');
             
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             console.error('[FreeboxPlugin] Login failed:', errorMessage);
+            console.error('[FreeboxPlugin] Plugin will continue but may not be fully functional. User can manually authenticate via UI.');
             // Don't throw - allow plugin to continue, user can manually authenticate via UI
         }
     }
@@ -171,14 +182,17 @@ export class FreeboxPlugin extends BasePlugin {
         }
 
         // Check if logged in, try to reconnect if needed
-        const isLoggedIn = await this.apiService.checkSession();
+        let isLoggedIn = await this.apiService.checkSession();
         if (!isLoggedIn) {
             try {
                 console.log('[FreeboxPlugin] Session expired in getStats(), attempting to reconnect...');
                 await this.apiService.login();
+                // Wait a bit for the session to be fully established
+                await new Promise(resolve => setTimeout(resolve, 100));
                 // Verify login was successful
-                const verified = await this.apiService.checkSession();
-                if (!verified) {
+                isLoggedIn = await this.apiService.checkSession();
+                if (!isLoggedIn) {
+                    console.error('[FreeboxPlugin] Login succeeded but session verification failed - session token may be invalid');
                     throw new Error('Login appeared successful but session verification failed');
                 }
                 console.log('[FreeboxPlugin] Reconnection successful in getStats()');
@@ -467,11 +481,18 @@ export class FreeboxPlugin extends BasePlugin {
             }
             
             // Check if logged in, try to reconnect if needed (same logic as getStats)
-            const isLoggedIn = await this.apiService.checkSession();
+            let isLoggedIn = await this.apiService.checkSession();
             if (!isLoggedIn) {
                 try {
                     console.log('[FreeboxPlugin] Session expired in testConnection(), attempting to reconnect...');
                     await this.apiService.login();
+                    // Wait a bit for the session to be fully established
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    isLoggedIn = await this.apiService.checkSession();
+                    if (!isLoggedIn) {
+                        console.error('[FreeboxPlugin] Login succeeded but session verification failed in testConnection()');
+                        return false;
+                    }
                     console.log('[FreeboxPlugin] Reconnection successful in testConnection()');
                 } catch (error) {
                     console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', error);

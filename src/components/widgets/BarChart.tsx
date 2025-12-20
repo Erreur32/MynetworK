@@ -20,8 +20,47 @@ export const BarChart: React.FC<BarChartProps> = ({
   unit,
   trend
 }) => {
-  // Get values for sparkline
-  const values = data.slice(-60).map(d => d[dataKey]);
+  // Get values for sparkline - ensure data is valid
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex flex-col h-full bg-[#151515] rounded-xl p-4 border border-gray-800/50 relative overflow-hidden group">
+        <div className="flex justify-between items-start z-10 relative mb-2">
+          <span className="text-xs text-gray-400 font-medium">{title}</span>
+          <div className="flex items-center gap-1">
+            <span className="text-lg font-bold text-white">{currentValue}</span>
+            <span className="text-sm text-gray-500">{unit}</span>
+          </div>
+        </div>
+        <div className="h-6 mt-1 flex items-center justify-center">
+          <span className="text-xs text-gray-500">Aucune donnée disponible</span>
+        </div>
+      </div>
+    );
+  }
+
+  const values = data.slice(-300).map(d => { // Last 300 points (5 minutes)
+    const val = d?.[dataKey];
+    return typeof val === 'number' && !isNaN(val) ? val : 0;
+  }).filter(v => typeof v === 'number'); // Keep all numeric values including 0
+  
+  // If no data at all, show empty state
+  if (values.length === 0) {
+    return (
+      <div className="flex flex-col h-full bg-[#151515] rounded-xl p-4 border border-gray-800/50 relative overflow-hidden group">
+        <div className="flex justify-between items-start z-10 relative mb-2">
+          <span className="text-xs text-gray-400 font-medium">{title}</span>
+          <div className="flex items-center gap-1">
+            <span className="text-lg font-bold text-white">{currentValue}</span>
+            <span className="text-sm text-gray-500">{unit}</span>
+          </div>
+        </div>
+        <div className="h-6 mt-1 flex items-center justify-center">
+          <span className="text-xs text-gray-500">En attente de données...</span>
+        </div>
+      </div>
+    );
+  }
+  
   const maxValue = Math.max(...values, 1);
   const minValue = Math.min(...values, 0);
   const range = maxValue - minValue || 1;

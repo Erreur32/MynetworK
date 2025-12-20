@@ -338,17 +338,6 @@ export const Header: React.FC<HeaderProps> = ({
   const downloadChart = networkHistory && networkHistory.length > 0 ? generateCompactChart(networkHistory, 'download', '#3b82f6') : null;
   const uploadChart = networkHistory && networkHistory.length > 0 ? generateCompactChart(networkHistory, 'upload', '#10b981') : null;
   
-  // Debug: log chart generation (temporary)
-  if (pageType === 'dashboard' && connectionStatus && import.meta.env.DEV) {
-    console.log('[Header] Chart debug:', {
-      hasConnectionStatus: !!connectionStatus,
-      hasDownload: !!connectionStatus.download,
-      hasUpload: !!connectionStatus.upload,
-      networkHistoryLength: networkHistory?.length || 0,
-      downloadChart: !!downloadChart,
-      uploadChart: !!uploadChart
-    });
-  }
   const wifiStatus = 'OK';
   const phoneStatus = 'OK'; // Phone line status - would need API endpoint to get real status
   const connectionState = connectionStatus?.state === 'up' ? 'UP' : 'DOWN';

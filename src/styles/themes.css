@@ -1368,47 +1368,141 @@ a:hover:focus,
 
 /* Dark theme - UniFi cards with blue/cyan tint */
 [data-theme="dark"] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.15) 100%) !important;
-    border-color: rgba(59, 130, 246, 0.3) !important;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(8, 47, 73, 0.95) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
 /* Glass theme - UniFi cards with blue/cyan glass effect */
 [data-theme="glass"] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(8, 47, 73, 0.8) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
-    backdrop-filter: var(--backdrop-blur) !important;
-    -webkit-backdrop-filter: var(--backdrop-blur) !important;
-    border-color: rgba(59, 130, 246, 0.4) !important;
-}
-
-/* Modern theme - UniFi cards with blue/cyan gradient */
-[data-theme="modern"] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(30, 58, 138, 0.6) 0%, rgba(14, 116, 144, 0.5) 50%, rgba(59, 130, 246, 0.3) 100%) !important;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(8, 47, 73, 0.85) 50%, rgba(14, 116, 144, 0.25) 100%) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
     border-color: rgba(59, 130, 246, 0.5) !important;
 }
 
+/* Modern theme - UniFi cards with blue/cyan gradient */
+[data-theme="modern"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.7) 0%, rgba(14, 116, 144, 0.6) 50%, rgba(59, 130, 246, 0.4) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: rgba(59, 130, 246, 0.6) !important;
+}
+
 /* Nightly theme - UniFi cards with subtle blue/cyan tint */
 [data-theme="nightly"] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
-    border-color: rgba(150, 180, 200, 0.3) !important;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(8, 47, 73, 0.95) 50%, rgba(14, 116, 144, 0.25) 100%) !important;
+    border-color: rgba(150, 180, 200, 0.4) !important;
 }
 
 /* Neon theme - UniFi cards with cyan/purple accent */
 [data-theme="neon"] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(20, 15, 35, 0.6) 0%, rgba(14, 116, 144, 0.4) 50%, rgba(192, 132, 252, 0.3) 100%) !important;
+    background: linear-gradient(135deg, rgba(20, 15, 35, 0.75) 0%, rgba(14, 116, 144, 0.5) 50%, rgba(192, 132, 252, 0.4) 100%) !important;
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
-    border-color: rgba(14, 116, 144, 0.5) !important;
+    border-color: rgba(14, 116, 144, 0.6) !important;
     box-shadow: 
-        0 1px 3px rgba(14, 116, 144, 0.2),
-        0 0 0 1px rgba(14, 116, 144, 0.15) inset !important;
+        0 1px 3px rgba(14, 116, 144, 0.3),
+        0 0 0 1px rgba(14, 116, 144, 0.2) inset !important;
 }
 
 /* Default fallback for other themes */
 [data-theme] .bg-unifi-card {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(8, 47, 73, 0.9) 50%, rgba(14, 116, 144, 0.15) 100%) !important;
-    border-color: rgba(59, 130, 246, 0.3) !important;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(8, 47, 73, 0.95) 50%, rgba(14, 116, 144, 0.2) 100%) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+/* UniFi card variants with opacity for table rows */
+[data-theme="dark"] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.3) 0%, rgba(8, 47, 73, 0.25) 50%, rgba(14, 116, 144, 0.05) 100%) !important;
+}
+
+[data-theme="dark"] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.2) 0%, rgba(8, 47, 73, 0.15) 50%, rgba(14, 116, 144, 0.03) 100%) !important;
+}
+
+[data-theme="glass"] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.25) 0%, rgba(8, 47, 73, 0.2) 50%, rgba(14, 116, 144, 0.06) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="glass"] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.15) 0%, rgba(8, 47, 73, 0.12) 50%, rgba(14, 116, 144, 0.04) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="modern"] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.18) 0%, rgba(14, 116, 144, 0.15) 50%, rgba(59, 130, 246, 0.09) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="modern"] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.12) 0%, rgba(14, 116, 144, 0.1) 50%, rgba(59, 130, 246, 0.06) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="nightly"] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.3) 0%, rgba(8, 47, 73, 0.25) 50%, rgba(14, 116, 144, 0.06) 100%) !important;
+}
+
+[data-theme="nightly"] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.2) 0%, rgba(8, 47, 73, 0.15) 50%, rgba(14, 116, 144, 0.04) 100%) !important;
+}
+
+[data-theme="neon"] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(20, 15, 35, 0.18) 0%, rgba(14, 116, 144, 0.12) 50%, rgba(192, 132, 252, 0.09) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="neon"] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(20, 15, 35, 0.12) 0%, rgba(14, 116, 144, 0.08) 50%, rgba(192, 132, 252, 0.06) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Default fallback for table row variants */
+[data-theme] .bg-unifi-card\/30 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.3) 0%, rgba(8, 47, 73, 0.25) 50%, rgba(14, 116, 144, 0.05) 100%) !important;
+}
+
+[data-theme] .bg-unifi-card\/20 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.2) 0%, rgba(8, 47, 73, 0.15) 50%, rgba(14, 116, 144, 0.03) 100%) !important;
+}
+
+/* UniFi card variant with 50% opacity for code blocks and pre elements */
+[data-theme="dark"] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 47, 73, 0.45) 50%, rgba(14, 116, 144, 0.08) 100%) !important;
+}
+
+[data-theme="glass"] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.4) 0%, rgba(8, 47, 73, 0.35) 50%, rgba(14, 116, 144, 0.1) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="modern"] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.3) 0%, rgba(14, 116, 144, 0.25) 50%, rgba(59, 130, 246, 0.15) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+[data-theme="nightly"] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 47, 73, 0.45) 50%, rgba(14, 116, 144, 0.1) 100%) !important;
+}
+
+[data-theme="neon"] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(20, 15, 35, 0.3) 0%, rgba(14, 116, 144, 0.2) 50%, rgba(192, 132, 252, 0.15) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+}
+
+/* Default fallback for bg-unifi-card/50 */
+[data-theme] .bg-unifi-card\/50 {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 47, 73, 0.45) 50%, rgba(14, 116, 144, 0.08) 100%) !important;
 }
 
 [data-theme="neon"] table,

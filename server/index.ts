@@ -349,9 +349,34 @@ const isDocker = (): boolean => {
 const port = config.port;
 const host = '0.0.0.0'; // Bind to all interfaces for Docker compatibility
 server.listen(port, host, () => {
-  // Determine frontend URL to display based on environment
+  // Determine environment type
   const isProduction = process.env.NODE_ENV === 'production';
   const isDockerEnv = isDocker();
+  const isNpmDev = !isProduction && !isDockerEnv;
+  const isDockerDev = !isProduction && isDockerEnv;
+  const isDockerProd = isProduction && isDockerEnv;
+  
+  // Get container name - try multiple methods
+  let containerName = 'MynetworK';
+  if (isDockerEnv) {
+    // Try environment variable first
+    if (process.env.CONTAINER_NAME) {
+      containerName = process.env.CONTAINER_NAME;
+    } else {
+      // Try to get from Docker hostname (container name)
+      const hostname = os.hostname();
+      // If hostname looks like a container ID (12 hex chars), try to get real container name
+      if (hostname && hostname.length === 12 && /^[a-f0-9]+$/.test(hostname)) {
+        // It's a container ID, use a default name based on environment
+        containerName = isDockerDev ? 'Mynetwork-dev' : 'MynetworK';
+      } else {
+        // Use hostname as container name
+        containerName = hostname;
+      }
+    }
+  } else if (isNpmDev) {
+    containerName = 'NPM DEV';
+  }
   
   // Get host machine IP (for Docker) or container IP (for dev)
   const hostIP = isDockerEnv ? getHostMachineIP() : null;
@@ -386,9 +411,6 @@ server.listen(port, host, () => {
   const wsUrl = isProduction
     ? (hostIP ? `ws://${hostIP}:${dashboardPort}/ws/connection` : (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${dashboardPort}/ws/connection`))
     : `ws://localhost:${port}/ws/connection`;
-  
-  // Get container name (from hostname or environment variable)
-  const containerName = process.env.CONTAINER_NAME || os.hostname() || 'MynetworK';
   
   // ANSI color codes for terminal output
   const colors = {
@@ -435,20 +457,40 @@ server.listen(port, host, () => {
   const title = 'MynetworK Backend Server';
   const subtitle = 'Multi-Source Network Dashboard';
   
-  // Determine version label with app version and container name
-  const versionLabel = isProduction || isDockerEnv 
-    ? `Version DOCKER v${appVersion}`
-    : `DEV v${appVersion}`;
+  // Determine version label based on environment
+  let versionLabel: string;
+  if (isNpmDev) {
+    versionLabel = `NPM Docker DEV v${appVersion}`;
+  } else if (isDockerDev) {
+    versionLabel = `Docker DEV v${appVersion}`;
+  } else if (isDockerProd) {
+    versionLabel = `Version v${appVersion}`;
+  } else {
+    versionLabel = `DEV v${appVersion}`;
+  }
   
   const containerLabel = `📦 Container:            ${containerName}`;
   
+  // Align URLs with consistent spacing
+  const maxLabelLength = Math.max(
+    'Frontend WEB'.length,
+    'Frontend Local'.length,
+    'Backend API'.length,
+    'WebSocket'.length,
+    'Freebox'.length
+  );
+  
+  const padLabel = (label: string): string => {
+    return label.padEnd(maxLabelLength);
+  };
+  
   const contentLines = [
     containerLabel,
-    `  🌐 Frontend WEB  : ${frontendWebUrl}`,
-    `  💻 Frontend Local: ${frontendLocalUrl}`,
-    `  🔌 Backend API:    ${apiUrl}/api/health`,
-    `  🔗 WebSocket:      ${wsUrl}`,
-    `  📡 Freebox:        ${config.freebox.url}`,
+    `  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
+    `  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
+    `  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
+    `  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
+    `  📡 ${padLabel('Freebox')}: ${config.freebox.url}`,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
@@ -492,14 +534,14 @@ ${colors.bright}${colors.cyan}╔${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${' '.repeat(width - titlePadding - visibleLength(title))}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isProduction || isDockerEnv ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isDockerProd ? colors.yellow : (isNpmDev || isDockerDev ? colors.bright : colors.bright)}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📦${colors.reset} ${colors.bright}Container:${colors.reset}           ${colors.cyan}${containerName}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}Frontend WEB :${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}Frontend Local:${colors.reset} ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}Backend API :${colors.reset} ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}WebSocket  :${colors.reset} ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}Freebox       :${colors.reset} ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}${padLabel('Frontend WEB')}:${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}${padLabel('Frontend Local')}:${colors.reset} ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}${padLabel('Backend API')}:${colors.reset} ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}${padLabel('WebSocket')}:${colors.reset} ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
+${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}${padLabel('Freebox')}:${colors.reset} ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
@@ -517,11 +559,11 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
     `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
     `║  📦 Container:            ${containerName}`,
     `╠${'═'.repeat(width)}`,
-    `║  🌐 Frontend WEB  : ${frontendWebUrl}`,
-    `║  💻 Frontend Local:  ${frontendLocalUrl}`,
-    `║  🔌 Backend API:      ${apiUrl}/api/health`,
-    `║  🔗 WebSocket:        ${wsUrl}`,
-    `║  📡 Freebox:             ${config.freebox.url}`,
+    `║  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
+    `║  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
+    `║  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
+    `║  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
+    `║  📡 ${padLabel('Freebox')}: ${config.freebox.url}`,
     `║`,
     `║  Features:`,
     `║  ✓ User Authentication (JWT)`,

@@ -60,7 +60,10 @@ class ApiClient {
       } else {
         // If not JSON, read as text for error details
         const text = await response.text();
-        console.error(`[API] Non-JSON response from ${method} ${url}:`, text);
+        // Only log non-JSON responses in development
+        if (import.meta.env.DEV) {
+          console.error(`[API] Non-JSON response from ${method} ${url}:`, text);
+        }
         return {
           success: false,
           error: {
@@ -92,7 +95,17 @@ class ApiClient {
         const missingRight = freeboxError.missing_right;
         const permissionLabel = PERMISSION_LABELS[missingRight] || missingRight;
 
-        console.warn(`[API] Insufficient rights for ${method} ${endpoint}: missing "${missingRight}"`);
+        // Only log in development mode to avoid console spam
+        // Note: This is normal if the Freebox app doesn't have the required permissions
+        // The user will be notified via the UI, so we don't need to spam the console
+        if (import.meta.env.DEV) {
+          // Only log once per session to avoid spam
+          const logKey = `permission_warning_${missingRight}`;
+          if (!(window as any)[logKey]) {
+            console.warn(`[API] Insufficient rights for ${method} ${endpoint}: missing "${missingRight}" (this is normal if Freebox app lacks permissions)`);
+            (window as any)[logKey] = true;
+          }
+        }
 
         // Update the permission in the auth store
         useAuthStore.getState().updatePermissionFromError(missingRight);
@@ -164,15 +177,26 @@ class ApiClient {
 
       return data as ApiResponse<T>;
     } catch (error: any) {
-      // In development, only log non-connection-refused errors to reduce noise
+      // In development, suppress connection refused errors - they are normal when backend is not started
       const errorMessage = error?.message || String(error || '');
       const isConnectionRefused = 
         errorMessage.includes('ECONNREFUSED') ||
         errorMessage.includes('Failed to fetch') ||
-        (error instanceof TypeError && errorMessage.includes('fetch'));
+        errorMessage.includes('ERR_CONNECTION_REFUSED') ||
+        errorMessage.includes('NetworkError') ||
+        (error instanceof TypeError && (errorMessage.includes('fetch') || errorMessage.includes('network')));
       
-      if (!isConnectionRefused || !import.meta.env.DEV) {
-      console.error(`[API] ${method} ${endpoint} failed:`, error);
+      // Only log errors that are not connection refused, or log connection refused only once
+      if (!isConnectionRefused) {
+        console.error(`[API] ${method} ${endpoint} failed:`, error);
+      } else if (import.meta.env.DEV) {
+        // In dev mode, silently handle connection refused - backend might not be started yet
+        // Only log once per session to avoid spam
+        const logKey = 'connection_refused_logged';
+        if (!(window as any)[logKey]) {
+          console.warn(`[API] Backend not available - is the server running? (${method} ${endpoint})`);
+          (window as any)[logKey] = true;
+        }
       }
       
       // Provide more detailed error messages

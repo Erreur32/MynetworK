@@ -34,7 +34,10 @@ export default defineConfig({
     allowedHosts: ['mwk-dev.myoueb.fr'],
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
+        // Use localhost for proxy - Vite proxy runs on the same machine as the backend
+        // When accessing via IP (192.168.1.150), the proxy still connects to localhost:3003
+        // because the proxy runs server-side on the same machine
+        target: `http://127.0.0.1:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
         changeOrigin: true,
         secure: false,
         timeout: 60000, // Increased timeout for long-running requests like ping

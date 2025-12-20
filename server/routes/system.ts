@@ -7,6 +7,9 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { authService } from '../services/authService.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
+import fsSync from 'fs';
+import path from 'path';
+import os from 'os';
 
 const router = Router();
 
@@ -47,6 +50,94 @@ router.get('/', asyncHandler(async (_req, res) => {
   }
 
   res.json(systemResult);
+}));
+
+// GET /api/system/environment - Get environment information (NPM, Docker dev, Docker prod)
+router.get('/environment', asyncHandler(async (_req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Check if running in Docker
+  let isDockerEnv = false;
+  try {
+    const cgroup = fsSync.readFileSync('/proc/self/cgroup', 'utf8');
+    if (cgroup.includes('docker') || cgroup.includes('containerd')) {
+      isDockerEnv = true;
+    }
+  } catch {
+    // Not Linux or file doesn't exist
+  }
+  
+  if (!isDockerEnv) {
+    try {
+      fsSync.accessSync('/.dockerenv');
+      isDockerEnv = true;
+    } catch {
+      // Not in Docker
+    }
+  }
+  
+  if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
+    isDockerEnv = true;
+  }
+  
+  // Determine environment type
+  const isNpmDev = !isProduction && !isDockerEnv;
+  const isDockerDev = !isProduction && isDockerEnv;
+  const isDockerProd = isProduction && isDockerEnv;
+  
+  // Get container name
+  let containerName = 'MynetworK';
+  if (isDockerEnv) {
+    if (process.env.CONTAINER_NAME) {
+      containerName = process.env.CONTAINER_NAME;
+    } else {
+      const hostname = os.hostname();
+      if (hostname && hostname.length === 12 && /^[a-f0-9]+$/.test(hostname)) {
+        containerName = isDockerDev ? 'Mynetwork-dev' : 'MynetworK';
+      } else {
+        containerName = hostname;
+      }
+    }
+  } else if (isNpmDev) {
+    containerName = 'NPM DEV';
+  }
+  
+  // Read app version
+  let appVersion = '0.1.0';
+  try {
+    const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
+    const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+    appVersion = packageJson.version || appVersion;
+  } catch {
+    // Use default
+  }
+  
+  // Determine version label
+  let versionLabel: string;
+  if (isNpmDev) {
+    versionLabel = `NPM Docker DEV v${appVersion}`;
+  } else if (isDockerDev) {
+    versionLabel = `Docker DEV v${appVersion}`;
+  } else if (isDockerProd) {
+    versionLabel = `Version v${appVersion}`;
+  } else {
+    versionLabel = `DEV v${appVersion}`;
+  }
+  
+  res.json({
+    success: true,
+    result: {
+      environment: isNpmDev ? 'npm' : isDockerDev ? 'docker-dev' : isDockerProd ? 'docker-prod' : 'unknown',
+      isNpmDev,
+      isDockerDev,
+      isDockerProd,
+      containerName,
+      version: appVersion,
+      versionLabel,
+      isDocker: isDockerEnv,
+      isProduction
+    }
+  });
 }));
 
 // GET /api/system/reboot/schedule - Get reboot schedule

@@ -79,10 +79,18 @@ export const initTheme = async (): Promise<void> => {
       if (data.success && data.result?.customColors) {
         applyCustomColors(data.result.customColors);
       }
+    } else if (response.status === 401) {
+      // User not authenticated yet - this is normal, don't log
+      // Note: Browser will still show 401 in console, but this is expected behavior
+      return;
     }
   } catch (error) {
     // Silently fail - use default theme colors
-    console.warn('Failed to load custom theme colors:', error);
+    // Only log if it's not a network error (which is expected if server is not ready)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      // Network error - server might not be ready yet, don't log
+      return;
+    }
   }
 };
 

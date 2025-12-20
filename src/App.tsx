@@ -17,6 +17,7 @@ import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, Cre
 import { TvPage, PhonePage, FilesPage, VmsPage, AnalyticsPage, SettingsPage, PluginsPage, UsersPage, LogsPage, UnifiedDashboardPage, UniFiPage, SearchPage } from './pages';
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
+import { fetchEnvironmentInfo } from './constants/version';
 import {
   useAuthStore,
   useUserAuthStore,
@@ -120,6 +121,10 @@ const App: React.FC = () => {
       window.removeEventListener('themechange', handleThemeChange);
       window.removeEventListener('themeupdate', handleThemeChange);
     };
+    
+    // Fetch environment info on mount
+    fetchEnvironmentInfo();
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
@@ -185,6 +190,25 @@ const App: React.FC = () => {
   // WebSocket for real-time connection status (replaces polling)
   // Only enable if Freebox is logged in
   useConnectionWebSocket({ enabled: isFreeboxLoggedIn });
+  
+  // Fallback: If WebSocket is not connected, fetch connection status manually
+  // This ensures data is available even if WebSocket takes time to connect
+  useEffect(() => {
+    if (isFreeboxLoggedIn && isUserAuthenticated) {
+      // Initial fetch to populate data immediately (don't wait for WebSocket)
+      if (import.meta.env.DEV) {
+        console.log('[App] Freebox logged in, fetching initial connection status...');
+      }
+      fetchConnectionStatus();
+      
+      // Also fetch periodically as fallback if WebSocket fails
+      const fallbackInterval = setInterval(() => {
+        fetchConnectionStatus();
+      }, 1000); // Every 1 second as fallback (faster than before)
+      
+      return () => clearInterval(fallbackInterval);
+    }
+  }, [isFreeboxLoggedIn, isUserAuthenticated, fetchConnectionStatus]);
 
   // Polling only if user is authenticated AND Freebox is connected
   usePolling(fetchSystemInfo, {
@@ -580,8 +604,13 @@ const App: React.FC = () => {
                 }
               >
                 <div className="flex flex-col gap-4">
+                  {import.meta.env.DEV && (
+                    <div className="text-xs text-gray-500 mb-2">
+                      Debug: history length={networkHistory?.length || 0}, status={connectionStatus ? 'OK' : 'null'}
+                    </div>
+                  )}
                   <BarChart
-                    data={networkHistory}
+                    data={networkHistory || []}
                     dataKey="download"
                     color="#3b82f6"
                     title="Descendant en temps réel"
@@ -590,7 +619,7 @@ const App: React.FC = () => {
                     trend="down"
                   />
                   <BarChart
-                    data={networkHistory}
+                    data={networkHistory || []}
                     dataKey="upload"
                     color="#10b981"
                     title="Montant en temps réel"

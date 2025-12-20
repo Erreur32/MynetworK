@@ -5,16 +5,17 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Settings, Power, CheckCircle, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
+import { Settings, Power, CheckCircle, XCircle, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
 import { usePluginStore, type Plugin } from '../stores/pluginStore';
 import { useAuthStore } from '../stores/authStore';
 import { Section, SettingRow } from '../pages/SettingsPage';
 import { PluginConfigModal } from './modals/PluginConfigModal';
 import { LoginModal } from './modals/LoginModal';
+import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
     const { plugins, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
-    const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
+    const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn, permissions, freeboxUrl } = useAuthStore();
     const [testingPlugin, setTestingPlugin] = useState<string | null>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [selectedPluginId, setSelectedPluginId] = useState<string>('');
@@ -101,9 +102,48 @@ export const PluginsManagementSection: React.FC = () => {
         );
     }
 
+    // Check if Freebox plugin has missing permissions
+    const freeboxPlugin = plugins.find(p => p.id === 'freebox');
+    const hasSettingsPermission = permissions.settings === true;
+    const showFreeboxPermissionWarning = freeboxPlugin?.enabled && !hasSettingsPermission;
+
     return (
         <>
             <Section title="Gestion des plugins" icon={Settings} iconColor="emerald">
+                {/* Freebox Permission Warning */}
+                {showFreeboxPermissionWarning && (
+                    <div className="mb-4 p-4 bg-orange-500/10 border-2 border-orange-500/30 rounded-lg">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle size={20} className="text-orange-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-orange-400 mb-1.5">
+                                    Permission manquante pour le plugin Freebox
+                                </div>
+                                <div className="text-xs text-orange-300/90 mb-3">
+                                    La permission <span className="font-medium text-orange-200">"{PERMISSION_LABELS.settings || 'settings'}"</span> est requise pour accéder à certaines fonctionnalités de la Freebox (historique RRD, statistiques étendues, etc.).
+                                </div>
+                                <div className="text-xs text-orange-300/80 mb-2">
+                                    <strong>Pour activer cette permission :</strong>
+                                </div>
+                                <ol className="text-xs text-orange-300/80 list-decimal list-inside space-y-1 mb-3">
+                                    <li>Ouvrez l'interface Freebox OS</li>
+                                    <li>Allez dans <span className="font-medium">Paramètres → Gestion des accès → Applications</span></li>
+                                    <li>Sélectionnez <span className="font-medium">"MynetworK Dashboard"</span></li>
+                                    <li>Activez la permission <span className="font-medium">"{PERMISSION_LABELS.settings || 'settings'}"</span></li>
+                                </ol>
+                                <a
+                                    href={getFreeboxSettingsUrl(freeboxUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 rounded-lg text-xs text-orange-300 hover:text-orange-200 transition-colors"
+                                >
+                                    Ouvrir les paramètres Freebox OS
+                                    <ExternalLink size={14} />
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {lastTestMessage && (
                     <div
                         className={`mb-4 px-4 py-3 rounded-lg border-2 flex items-center gap-3 ${

@@ -16,10 +16,13 @@
 #   docker compose -f docker-compose.dev.yml -p mynetwork-dev up -d --build
 #
 # Environment variables:
-#   DASHBOARD_PORT - Vite dev server port (default: 3000)
+#   DASHBOARD_PORT - Vite dev server port (default: 5174)
 #   SERVER_PORT    - Backend API port (default: 3003)
 #   FREEBOX_HOST   - Freebox server hostname (default: mafreebox.freebox.fr)
 #   JWT_SECRET     - JWT secret for authentication
+#
+# NOTE: Frontend port changed from 3000 to 5174 to avoid conflicts with production
+#       Production uses port 7505, npm dev uses 5173, docker dev uses 5174
 
 services:
   mynetwork-dev:
@@ -28,8 +31,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: Mynetwork-dev
     ports:
-      - "${DASHBOARD_PORT:-3000}:${DASHBOARD_PORT:-3000}"  # Vite dev server (frontend)
-      - "${SERVER_PORT:-3003}:${SERVER_PORT:-3003}"        # API server (backend)
+      - "${DASHBOARD_PORT:-3666}:5174"  # Vite dev server (frontend) - Port hôte 3666 → Port conteneur 5174
+      - "${SERVER_PORT:-3668}:3003"    # API server (backend) - Port hôte 3668 → Port conteneur 3003
     environment:
       - NODE_ENV=development
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
@@ -62,9 +65,9 @@ services:
       #
       # Exemple de secret généré : aB3xK9mP2vQ7wR5tY8uI0oP1aS6dF4gH7jK2lM9nB0vC3xZ6
       - JWT_SECRET=${JWT_SECRET:-dev_secret_change_in_production}
-      - VITE_PORT=${DASHBOARD_PORT:-3000}
-      - PORT=${SERVER_PORT:-3003}
-      - SERVER_PORT=${SERVER_PORT:-3003}
+      - VITE_PORT=5174
+      - PORT=3003
+      - SERVER_PORT=3003
       # Host root path used to read real host metrics when running in Docker
       # The corresponding filesystem mount is configured in the volumes section below.
       - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}

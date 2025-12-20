@@ -11,8 +11,10 @@
  */
 
 import React from 'react';
-import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { usePluginStore, type PluginStats } from '../../stores/pluginStore';
+import { useAuthStore } from '../../stores/authStore';
+import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../../utils/permissions';
 import { Card } from './Card';
 
 interface MultiSourceWidgetProps {
@@ -22,8 +24,14 @@ interface MultiSourceWidgetProps {
 
 export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className = '', onPluginClick }) => {
     const { plugins, pluginStats } = usePluginStore();
+    const { permissions, freeboxUrl } = useAuthStore();
 
     const activePlugins = plugins.filter((plugin) => plugin.enabled && plugin.connectionStatus);
+    
+    // Check if Freebox plugin has missing permissions
+    const freeboxPlugin = plugins.find(p => p.id === 'freebox');
+    const hasSettingsPermission = permissions.settings === true;
+    const showFreeboxPermissionWarning = freeboxPlugin?.enabled && !hasSettingsPermission;
 
     return (
         <Card
@@ -48,6 +56,31 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                 </div>
             ) : (
                 <div className="space-y-4">
+                    {/* Freebox Permission Warning */}
+                    {showFreeboxPermissionWarning && (
+                        <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                            <div className="flex items-start gap-2">
+                                <AlertCircle size={16} className="text-orange-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-semibold text-orange-400 mb-1">
+                                        Permission manquante pour Freebox
+                                    </div>
+                                    <div className="text-[11px] text-orange-300/90 mb-2">
+                                        La permission <span className="font-medium text-orange-200">"{PERMISSION_LABELS.settings || 'settings'}"</span> est requise pour accéder à certaines fonctionnalités.
+                                    </div>
+                                    <a
+                                        href={getFreeboxSettingsUrl(freeboxUrl)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-[11px] text-orange-400 hover:text-orange-300 underline"
+                                    >
+                                        Configurer les permissions dans Freebox OS
+                                        <ExternalLink size={12} />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div>
                         <div className="flex flex-col gap-3">
                             {plugins.map((plugin) => {

@@ -154,7 +154,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
             <div className="h-64 min-h-[256px]">
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={256}>
-                        <AreaChart data={chartData}>
+                        <AreaChart data={chartData} isAnimationActive={selectedRange !== 0}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis
                                 dataKey="time"
@@ -181,22 +181,24 @@ export const BandwidthHistoryWidget: React.FC = () => {
                             />
                             <Legend />
                             <Area
-                                type="monotone"
+                                type={selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="download"
                                 stackId="1"
                                 stroke={COLORS.blue}
                                 fill={COLORS.blue}
                                 fillOpacity={0.3}
                                 name="Descendant"
+                                isAnimationActive={selectedRange !== 0}
                             />
                             <Area
-                                type="monotone"
+                                type={selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="upload"
                                 stackId="2"
                                 stroke={COLORS.green}
                                 fill={COLORS.green}
                                 fillOpacity={0.3}
                                 name="Montant"
+                                isAnimationActive={selectedRange !== 0}
                             />
                         </AreaChart>
                     </ResponsiveContainer>

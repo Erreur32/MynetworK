@@ -153,7 +153,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                         </button>
                         <h1 className="text-2xl font-semibold">UniFi Controller</h1>
                     </div>
-                    <Card title="Plugin UniFi non disponible">
+                    <Card title="Plugin UniFi non disponible" className="bg-unifi-card border border-gray-800 rounded-xl">
                         <div className="text-center py-8 text-gray-500">
                             <AlertCircle size={32} className="mx-auto mb-2" />
                             <p>Le plugin UniFi n'est pas installé ou configuré.</p>
@@ -177,7 +177,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                         </button>
                         <h1 className="text-2xl font-semibold">UniFi Controller</h1>
                     </div>
-                    <Card title="Plugin UniFi non connecté">
+                    <Card title="Plugin UniFi non connecté" className="bg-unifi-card border border-gray-800 rounded-xl">
                         <div className="text-center py-8 text-gray-500">
                             <XCircle size={32} className="mx-auto mb-2 text-yellow-400" />
                             <p className="mb-2">Le plugin UniFi n'est pas activé ou connecté.</p>
@@ -833,7 +833,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                     {/* Access Points Tab */}
                     {activeTab === 'accesspoints' && (
                         <div className="col-span-full">
-                            <Card title="Points d'Accès">
+                            <Card title="Points d'Accès" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const accessPoints = unifiStats.devices.filter((d: any) => {
@@ -1021,7 +1021,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                     {/* Switches Tab */}
                     {activeTab === 'switches' && (
                         <div className="col-span-full">
-                            <Card title="Switches">
+                            <Card title="Switches" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const switches = unifiStats.devices.filter((d: any) => {
@@ -1512,7 +1512,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                         {sortedClients.map((c: any, index: number) => (
                                                             <tr
                                                                 key={c.id || c.mac || index}
-                                                                className={index % 2 === 0 ? 'bg-[#0b0b10]' : 'bg-[#101016]'}
+                                                                className={index % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                                             >
                                                                 <td className="px-3 py-1.5 text-left font-semibold text-[13px] text-gray-300">
                                                                     {(() => {
@@ -1662,7 +1662,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                     {/* Traffic Tab */}
                     {activeTab === 'traffic' && (
                         <div className="col-span-full">
-                            <Card title="Trafic Réseau (UniFi)">
+                            <Card title="Trafic Réseau (UniFi)" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const devices = unifiStats.devices as any[];
@@ -1859,7 +1859,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     {topClients.map((c: any, idx: number) => (
                                                                         <tr
                                                                             key={c.id || c.mac || idx}
-                                                                            className={idx % 2 === 0 ? 'bg-[#0b0b10]' : 'bg-[#101016]'}
+                                                                            className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                                                         >
                                                                             <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
                                                                                 {(c.name || c.hostname || c.ip || c.mac || '-').toString()}
@@ -1939,7 +1939,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     {topDevices.map(([name, info], idx) => (
                                                                         <tr
                                                                             key={name}
-                                                                            className={idx % 2 === 0 ? 'bg-[#0b0b10]' : 'bg-[#101016]'}
+                                                                            className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                                                         >
                                                                             <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
                                                                                 {name}
@@ -2229,7 +2229,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
                             {/* Settings */}
                             <Card title="Configuration" className="bg-unifi-card border border-gray-800 rounded-xl">
-                                <pre className="text-xs bg-[#050505] p-4 rounded-lg overflow-auto max-h-96 text-gray-300">
+                                <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-96 text-gray-300">
                                     {JSON.stringify(unifiPlugin.settings, null, 2)}
                                 </pre>
                             </Card>
@@ -2345,8 +2345,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
                             {/* Network Stats Analysis */}
                             {unifiStats?.network && (
-                                <Card title="Analyse des Stats Réseau">
-                                    <pre className="text-xs bg-[#1a1a1a] p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
+                                <Card title="Analyse des Stats Réseau" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
                                         {JSON.stringify(unifiStats.network, null, 2)}
                                     </pre>
                                 </Card>
@@ -2354,15 +2354,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
                             {/* System Stats Analysis */}
                             {unifiStats?.system && (
-                                <Card title="Analyse des Stats Système">
-                                    <pre className="text-xs bg-[#1a1a1a] p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
+                                <Card title="Analyse des Stats Système" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
                                         {JSON.stringify(unifiStats.system, null, 2)}
                                     </pre>
                                 </Card>
                             )}
 
                             {/* Actions */}
-                            <Card title="Actions de Debug">
+                            <Card title="Actions de Debug" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 <div className="space-y-3">
                                     <button
                                         onClick={handleRefresh}
