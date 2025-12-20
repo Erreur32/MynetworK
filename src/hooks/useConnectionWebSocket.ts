@@ -62,6 +62,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
   const reconnectAttemptsRef = useRef<number>(0);
   const maxReconnectAttempts = 3; // Maximum 3 tentatives avant de s'arrêter (réduit pour éviter le flood)
   const isPermanentlyDisabledRef = useRef<boolean>(false); // Flag pour désactiver définitivement si échecs répétés
+  const isConnectingRef = useRef<boolean>(false); // Flag pour éviter les connexions multiples simultanées
   const [isConnected, setIsConnected] = useState(false);
 
   const { fetchConnectionStatus } = useConnectionStore();
@@ -78,12 +79,55 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       return;
     }
     
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
+    // Éviter les connexions multiples simultanées
+    if (isConnectingRef.current) {
+      return;
+    }
+    
+    // Ne pas créer de nouvelle connexion si une existe déjà
+    if (wsRef.current) {
+      // Si la connexion est ouverte ou en cours, ne rien faire
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        return;
+      }
+      // Si la connexion est en cours de fermeture, attendre qu'elle se ferme
+      if (wsRef.current.readyState === WebSocket.CLOSING) {
+        return;
+      }
+      // Sinon, fermer proprement avant de créer une nouvelle connexion
+      try {
+        wsRef.current.close();
+      } catch (e) {
+        // Ignorer les erreurs de fermeture
+      }
+      wsRef.current = null;
+    }
+    
+    // Marquer qu'on est en train de se connecter
+    isConnectingRef.current = true;
 
-    // Build WebSocket URL based on current location
+    // Build WebSocket URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/connection`;
+    let wsUrl: string;
+    
+    // In dev mode, check if we're accessing via IP (Docker dev) or localhost (npm dev)
+    // If accessing via IP and port 3666, connect directly to backend port 3668 to avoid proxy issues
+    if (import.meta.env.DEV) {
+      const host = window.location.hostname;
+      const port = window.location.port;
+      const isDockerDevAccess = host !== 'localhost' && host !== '127.0.0.1' && port === '3666';
+      
+      if (isDockerDevAccess) {
+        // Docker dev: connect directly to backend port (3668) to bypass Vite proxy
+        wsUrl = `${protocol}//${host}:3668/ws/connection`;
+      } else {
+        // NPM dev or localhost: use proxy via current host
+        wsUrl = `${protocol}//${window.location.host}/ws/connection`;
+      }
+    } else {
+      // Production: use current host
+      wsUrl = `${protocol}//${window.location.host}/ws/connection`;
+    }
 
     if (import.meta.env.DEV) {
       console.log('[WS Client] Connecting to:', wsUrl);
@@ -92,13 +136,22 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     wsRef.current = ws;
 
     ws.onopen = () => {
+      isConnectingRef.current = false; // Connexion établie
       if (import.meta.env.DEV) {
         console.log('[WS Client] Connected successfully');
       }
       setIsConnected(true);
       reconnectAttemptsRef.current = 0; // Reset counter on successful connection
-      // Do an initial fetch to get current state immediately
+      isPermanentlyDisabledRef.current = false; // Réactiver en cas de succès
+      // Don't fetch immediately - wait for WebSocket to send data
+      // The server will send connection_status and system_status via WebSocket
+      // Only fetch if WebSocket doesn't send data within a reasonable time
+      setTimeout(() => {
+        // If still connected but no data received, do a fallback fetch
+        if (wsRef.current?.readyState === WebSocket.OPEN && !isConnected) {
       fetchConnectionStatus();
+        }
+      }, 2000); // Wait 2 seconds for WebSocket data
     };
 
     ws.onmessage = (event) => {
@@ -189,6 +242,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onclose = (event) => {
+      isConnectingRef.current = false; // Connexion fermée
       setIsConnected(false);
       wsRef.current = null;
 
@@ -206,13 +260,13 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
           if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
             // Silently stop - nginx is probably not configured correctly
             // User will need to fix nginx configuration
-            return;
-          }
+          return;
+        }
         } else {
           // Only log unexpected error codes (not 1006)
           if (import.meta.env.DEV) {
-            console.warn('[WS Client] Disconnected:', event.code, event.reason);
-          }
+        console.warn('[WS Client] Disconnected:', event.code, event.reason);
+      }
         }
       } else {
         // Normal closure - reset counter
@@ -220,15 +274,18 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       }
 
       // Reconnect after delay if still enabled and under max attempts
+      // Increase delay to avoid rapid reconnection loops
       if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const delay = Math.min(3000 * (reconnectAttemptsRef.current + 1), 10000); // Exponential backoff, max 10s
         reconnectTimeoutRef.current = setTimeout(() => {
           // console.log('[WS Client] Attempting reconnect...'); // Debug only
           connect();
-        }, 3000);
+        }, delay);
       }
     };
 
     ws.onerror = (error) => {
+      isConnectingRef.current = false; // Erreur, on peut réessayer
       // Intercepter l'erreur pour éviter qu'elle soit loggée par le navigateur
       // On ne peut pas complètement supprimer les erreurs natives du navigateur,
       // mais on peut éviter de créer de nouvelles connexions si elles échouent
@@ -243,7 +300,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
         if (wsRef.current) {
           wsRef.current.close();
           wsRef.current = null;
-        }
+      }
       }
       
       // Ne rien logger - le navigateur affichera ses propres erreurs qu'on ne peut pas supprimer

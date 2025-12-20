@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import React, { useEffect, useState, Suspense, lazy, useMemo } from 'react';
 import { Header, Footer, type PageType } from './components/layout';
 import {
   Card,
@@ -16,18 +16,19 @@ import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
 
 // Lazy load pages for code splitting
-const TvPage = lazy(() => import('./pages').then(m => ({ default: m.TvPage })));
-const PhonePage = lazy(() => import('./pages').then(m => ({ default: m.PhonePage })));
-const FilesPage = lazy(() => import('./pages').then(m => ({ default: m.FilesPage })));
-const VmsPage = lazy(() => import('./pages').then(m => ({ default: m.VmsPage })));
-const AnalyticsPage = lazy(() => import('./pages').then(m => ({ default: m.AnalyticsPage })));
-const SettingsPage = lazy(() => import('./pages').then(m => ({ default: m.SettingsPage })));
-const PluginsPage = lazy(() => import('./pages').then(m => ({ default: m.PluginsPage })));
-const UsersPage = lazy(() => import('./pages').then(m => ({ default: m.UsersPage })));
-const LogsPage = lazy(() => import('./pages').then(m => ({ default: m.LogsPage })));
-const UnifiedDashboardPage = lazy(() => import('./pages').then(m => ({ default: m.UnifiedDashboardPage })));
-const UniFiPage = lazy(() => import('./pages').then(m => ({ default: m.UniFiPage })));
-const SearchPage = lazy(() => import('./pages').then(m => ({ default: m.SearchPage })));
+// Use default exports when available, otherwise use named exports
+const TvPage = lazy(() => import('./pages/TvPage'));
+const PhonePage = lazy(() => import('./pages/PhonePage'));
+const FilesPage = lazy(() => import('./pages/FilesPage'));
+const VmsPage = lazy(() => import('./pages/VmsPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
+const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })));
+const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
+const UnifiedDashboardPage = lazy(() => import('./pages/UnifiedDashboardPage').then(m => ({ default: m.UnifiedDashboardPage })));
+const UniFiPage = lazy(() => import('./pages/UniFiPage').then(m => ({ default: m.UniFiPage })));
+const SearchPage = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })));
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { fetchEnvironmentInfo } from './constants/version';
@@ -212,7 +213,15 @@ const App: React.FC = () => {
 
   // WebSocket for real-time connection status (replaces polling)
   // Only enable if Freebox is logged in
-  useConnectionWebSocket({ enabled: isFreeboxLoggedIn });
+  // Disable WebSocket in Docker dev mode to avoid connection issues
+  // Fallback polling HTTP is already in place (see useEffect below)
+  const isDockerDev = useMemo(() => {
+    return import.meta.env.DEV && 
+      window.location.hostname !== 'localhost' && 
+      window.location.hostname !== '127.0.0.1' && 
+      window.location.port === '3666';
+  }, []); // Only calculate once, doesn't change during app lifetime
+  useConnectionWebSocket({ enabled: isFreeboxLoggedIn && !isDockerDev });
   
   // Fallback: If WebSocket is not connected, fetch connection status manually
   // This ensures data is available even if WebSocket takes time to connect
@@ -398,7 +407,7 @@ const App: React.FC = () => {
   const renderPageWithFooter = (pageContent: React.ReactNode) => (
     <div className="min-h-screen pb-20 bg-theme-primary text-theme-primary font-sans selection:bg-accent-primary/30">
       <Suspense fallback={<PageLoader />}>
-        {pageContent}
+      {pageContent}
       </Suspense>
       <Footer
         currentPage={currentPage}
@@ -521,9 +530,9 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader />}>
-            <SearchPage 
-              onBack={() => setCurrentPage('dashboard')} 
-            />
+          <SearchPage 
+            onBack={() => setCurrentPage('dashboard')} 
+          />
           </Suspense>
         </main>
       </>
@@ -548,7 +557,7 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader />}>
-            <UniFiPage onBack={() => setCurrentPage('dashboard')} />
+      <UniFiPage onBack={() => setCurrentPage('dashboard')} />
           </Suspense>
         </main>
       </>
@@ -582,16 +591,16 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader />}>
-            <UnifiedDashboardPage 
-              onNavigateToFreebox={() => setCurrentPage('freebox')}
-              onNavigateToUniFi={() => setCurrentPage('unifi')}
-              onNavigateToPlugins={() => {
-                // Set sessionStorage BEFORE changing page to ensure it's read
-                sessionStorage.setItem('adminMode', 'true');
-                sessionStorage.setItem('adminTab', 'plugins');
-                setCurrentPage('settings');
-              }}
-            />
+          <UnifiedDashboardPage 
+            onNavigateToFreebox={() => setCurrentPage('freebox')}
+            onNavigateToUniFi={() => setCurrentPage('unifi')}
+            onNavigateToPlugins={() => {
+              // Set sessionStorage BEFORE changing page to ensure it's read
+              sessionStorage.setItem('adminMode', 'true');
+              sessionStorage.setItem('adminTab', 'plugins');
+              setCurrentPage('settings');
+            }}
+          />
           </Suspense>
         </main>
       </>
@@ -1015,10 +1024,10 @@ const App: React.FC = () => {
       />
       <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
         <Suspense fallback={<PageLoader />}>
-          <UnifiedDashboardPage 
-            onNavigateToFreebox={() => setCurrentPage('freebox')}
-            onNavigateToUniFi={() => setCurrentPage('unifi')}
-          />
+        <UnifiedDashboardPage 
+          onNavigateToFreebox={() => setCurrentPage('freebox')}
+          onNavigateToUniFi={() => setCurrentPage('unifi')}
+        />
         </Suspense>
       </main>
     </>

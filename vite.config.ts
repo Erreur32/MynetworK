@@ -160,10 +160,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Separate React and React-DOM into vendor-react chunk
-          if (id.includes('react') || id.includes('react-dom')) {
-            return 'vendor-react';
-          }
+          // Don't split React/React-DOM - keep them in main chunk to avoid issues with lazy loading
           // Separate Recharts into vendor-charts chunk
           if (id.includes('recharts')) {
             return 'vendor-charts';
@@ -176,8 +173,8 @@ export default defineConfig({
           if (id.includes('zustand')) {
             return 'vendor-state';
           }
-          // Separate node_modules dependencies into vendor chunk
-          if (id.includes('node_modules')) {
+          // Separate other node_modules dependencies into vendor chunk (but not React)
+          if (id.includes('node_modules') && !id.includes('react') && !id.includes('react-dom')) {
             return 'vendor';
           }
         }

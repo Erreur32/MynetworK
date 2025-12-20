@@ -81,7 +81,7 @@ export const BarChart: React.FC<BarChartProps> = ({
 
     // Create smooth curve using quadratic bezier curves (similar to Header.tsx)
     let path = `M ${points[0].x} ${points[0].y}`;
-    
+
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
       const curr = points[i];

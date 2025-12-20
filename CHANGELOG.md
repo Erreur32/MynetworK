@@ -2,6 +2,88 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.4] - 2025-01-XX
+
+### 🐛 Corrigé
+
+**WebSocket & Performance**
+- ✅ Désactivation automatique du WebSocket en dev Docker pour éviter les erreurs "Invalid frame header"
+- ✅ Fallback automatique vers polling HTTP toutes les 1 seconde si WebSocket désactivé
+- ✅ Correction du graphique Freebox : retour aux courbes lisses au lieu de lignes carrées
+- ✅ Optimisation des re-renders avec useMemo pour éviter les recalculs inutiles
+
+**Interface Utilisateur**
+- ✅ Amélioration de l'UI du champ URL publique : label au-dessus, input full-width
+- ✅ Suppression du texte explicatif redondant dans les settings
+
+**Build & Optimisation**
+- ✅ Intégration Tailwind CSS via PostCSS (suppression du CDN en production)
+- ✅ Code splitting avec React.lazy() pour réduire la taille des chunks
+- ✅ Configuration manualChunks pour séparer les dépendances (Recharts, Lucide, Zustand)
+- ✅ Réduction de la taille du chunk principal de ~1.3MB à ~686KB
+
+### ✨ Ajouté
+
+**Configuration**
+- 📦 Installation de Tailwind CSS, PostCSS et Autoprefixer comme devDependencies
+- ⚙️ Configuration `tailwind.config.js` et `postcss.config.js`
+- 🔧 Configuration `vite.config.ts` avec code splitting optimisé
+
+**WebSocket**
+- 🔄 Ajustement des intervalles de polling WebSocket alignés avec keep-alive Freebox :
+  - Connection status : 500ms → 1 seconde
+  - System status : 5s → 10 secondes
+- 🛡️ Vérification de session Freebox avant chaque fetch WebSocket
+- ⏱️ Délais augmentés pour éviter les erreurs de frames (1s pour polling, 5s pour ping)
+
+### 🔧 Modifié
+
+**Backend**
+- `server/services/connectionWebSocket.ts` :
+  - Intervalles de polling ajustés (1s connection, 10s system)
+  - Vérification de session avant chaque fetch
+  - Délais augmentés pour stabilisation (1s polling, 5s ping)
+  - Gestion d'erreurs améliorée avec validation de taille des messages
+  - Logs améliorés pour le débogage
+
+**Frontend**
+- `src/App.tsx` :
+  - Désactivation WebSocket en dev Docker (détection automatique)
+  - Code splitting avec React.lazy() pour toutes les pages
+  - Optimisation avec useMemo pour isDockerDev
+  - Suspense avec PageLoader pour les pages lazy-loaded
+- `src/hooks/useConnectionWebSocket.ts` :
+  - Détection automatique du mode Docker dev
+  - Connexion directe au backend (port 3668) en dev Docker
+  - Backoff exponentiel pour les reconnexions
+  - Flag isConnectingRef pour éviter les connexions multiples
+- `src/pages/SettingsPage.tsx` :
+  - UI améliorée pour le champ URL publique (label au-dessus, input full-width)
+  - Suppression du texte explicatif redondant
+- `src/components/widgets/BarChart.tsx` :
+  - Retour aux courbes lisses (quadratic Bezier) pour le graphique Freebox
+- `vite.config.ts` :
+  - Configuration manualChunks pour code splitting
+  - Séparation des dépendances (vendor-charts, vendor-icons, vendor-state)
+  - chunkSizeWarningLimit augmenté à 600KB
+- `index.html` :
+  - Suppression du CDN Tailwind CSS
+- `src/index.css` :
+  - Ajout des directives Tailwind (@tailwind base, components, utilities)
+- `src/main.tsx` :
+  - Import de index.css pour inclure Tailwind
+
+**Configuration**
+- `package.json` : Ajout de tailwindcss, postcss, autoprefixer en devDependencies
+- `tailwind.config.js` : Nouveau fichier de configuration Tailwind
+- `postcss.config.js` : Nouveau fichier de configuration PostCSS
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.1.4
+
+---
+
 ## [0.1.3] - 2025-01-XX
 
 ### 🐛 Corrigé
