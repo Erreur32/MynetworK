@@ -60,12 +60,24 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
-  const maxReconnectAttempts = 5; // Maximum 5 tentatives avant de s'arrêter
+  const maxReconnectAttempts = 3; // Maximum 3 tentatives avant de s'arrêter (réduit pour éviter le flood)
+  const isPermanentlyDisabledRef = useRef<boolean>(false); // Flag pour désactiver définitivement si échecs répétés
   const [isConnected, setIsConnected] = useState(false);
 
   const { fetchConnectionStatus } = useConnectionStore();
 
   const connect = useCallback(() => {
+    // Ne pas essayer de se connecter si désactivé de manière permanente
+    if (isPermanentlyDisabledRef.current) {
+      return;
+    }
+    
+    // Ne pas essayer si on a dépassé le nombre max de tentatives
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      isPermanentlyDisabledRef.current = true;
+      return;
+    }
+    
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
@@ -217,23 +229,25 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onerror = (error) => {
-      // Suppress all WebSocket errors to avoid flooding the console
-      // "Invalid frame header" usually means the reverse proxy (nginx) is not configured for WebSocket
-      // These errors are expected when nginx is misconfigured and will retry automatically
-      // Only log unexpected errors in development mode for debugging
-      if (import.meta.env.DEV) {
-        const errorMessage = (error.target as WebSocket)?.url 
-          ? `WebSocket connection failed to ${(error.target as WebSocket).url}`
-          : String(error.type || 'error');
-        
-        // In development, only log non-proxy errors
-        if (!errorMessage.includes('Invalid frame header') && 
-            !errorMessage.includes('WebSocket connection failed')) {
-          console.error('[WS Client] Error:', error);
+      // Intercepter l'erreur pour éviter qu'elle soit loggée par le navigateur
+      // On ne peut pas complètement supprimer les erreurs natives du navigateur,
+      // mais on peut éviter de créer de nouvelles connexions si elles échouent
+      
+      // Incrémenter le compteur d'échecs
+      reconnectAttemptsRef.current += 1;
+      
+      // Si on a dépassé le max, désactiver définitivement
+      if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+        isPermanentlyDisabledRef.current = true;
+        // Fermer la connexion pour éviter d'autres erreurs
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
         }
       }
-      // In production, silently suppress all WebSocket errors
-      // The connection will retry automatically, no need to flood the console
+      
+      // Ne rien logger - le navigateur affichera ses propres erreurs qu'on ne peut pas supprimer
+      // Mais on évite au moins de créer de nouvelles connexions qui échoueront
     };
   }, [enabled, fetchConnectionStatus, onFreeboxEvent]);
 
@@ -250,6 +264,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
     setIsConnected(false);
     reconnectAttemptsRef.current = 0; // Reset counter on manual disconnect
+    isPermanentlyDisabledRef.current = false; // Réactiver si déconnecté manuellement
   }, []);
 
   useEffect(() => {

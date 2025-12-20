@@ -65,7 +65,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   const minValue = Math.min(...values, 0);
   const range = maxValue - minValue || 1;
 
-  // Generate SVG path for linear line (straight lines between points)
+  // Generate SVG path for smooth curve (using quadratic bezier curves)
   const generatePath = () => {
     if (values.length < 2) return '';
 
@@ -79,11 +79,15 @@ export const BarChart: React.FC<BarChartProps> = ({
       return { x, y };
     });
 
-    // Create linear line (straight lines between points)
+    // Create smooth curve using quadratic bezier curves (similar to Header.tsx)
     let path = `M ${points[0].x} ${points[0].y}`;
-
+    
     for (let i = 1; i < points.length; i++) {
-      path += ` L ${points[i].x} ${points[i].y}`;
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpX = (prev.x + curr.x) / 2;
+      path += ` Q ${prev.x + (curr.x - prev.x) / 4} ${prev.y}, ${cpX} ${(prev.y + curr.y) / 2}`;
+      path += ` Q ${curr.x - (curr.x - prev.x) / 4} ${curr.y}, ${curr.x} ${curr.y}`;
     }
 
     return path;

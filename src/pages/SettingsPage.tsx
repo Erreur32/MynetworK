@@ -660,22 +660,20 @@ const GeneralNetworkSection: React.FC = () => {
         </div>
       )}
       
-      <SettingRow
-        label="URL publique (Domaine)"
-        description="URL publique d'accès au dashboard (ex: https://mwk.myoueb.fr). Utilisée pour les headers et WebSocket en production avec nginx."
-      >
-        <div className="flex items-center gap-2 w-full max-w-md">
+      <div className="py-3 border-b border-gray-800">
+        <h4 className="text-sm font-medium text-white mb-2">URL publique (Domaine)</h4>
+        <div className="flex items-center gap-2 w-full">
           <input
             type="url"
             value={publicUrl}
             onChange={(e) => setPublicUrl(e.target.value)}
             placeholder="https://mwk.myoueb.fr"
-            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            className="flex-1 w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
           >
             {isSaving ? (
               <>
@@ -690,15 +688,13 @@ const GeneralNetworkSection: React.FC = () => {
             )}
           </button>
         </div>
-      </SettingRow>
+      </div>
       
       <div className="text-xs text-gray-500 mt-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-        <p className="font-medium text-gray-400 mb-1">💡 Note importante :</p>
+        <p className="font-medium text-gray-400 mb-1">💡 Note :</p>
         <ul className="list-disc list-inside space-y-1 ml-2">
-          <li>Cette URL est utilisée pour construire les URLs WebSocket et les headers</li>
           <li>Format attendu : <code className="text-blue-400">https://votre-domaine.com</code> ou <code className="text-blue-400">http://votre-domaine.com</code></li>
-          <li>Assurez-vous que nginx est configuré pour gérer les WebSockets (voir <code className="text-blue-400">Docs/NGINX_WEBSOCKET_CONFIG.md</code>)</li>
-          <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
+ <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
         </ul>
       </div>
     </div>
