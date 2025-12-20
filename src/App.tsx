@@ -375,6 +375,11 @@ const App: React.FC = () => {
     sessionStorage.setItem('adminTab', 'general');
   };
 
+  // Handle users click (navigate to users page)
+  const handleUsersClick = () => {
+    setCurrentPage('users');
+  };
+
   // Show loading state while checking authentication
   if (userAuthLoading) {
     return (
@@ -481,6 +486,11 @@ const App: React.FC = () => {
         mode={showAdmin ? 'administration' : 'freebox'}
         initialAdminTab={adminTab || 'general'}
         onNavigateToPage={(page) => setCurrentPage(page)}
+        onUsersClick={handleUsersClick}
+        onSettingsClick={handleSettingsClick}
+        onAdminClick={handleAdminClick}
+        onProfileClick={handleProfileClick}
+        onLogout={handleLogout}
       />
     );
   }
@@ -525,6 +535,7 @@ const App: React.FC = () => {
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
           onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           onSearchClick={() => setCurrentPage('search')}
         />
@@ -552,6 +563,7 @@ const App: React.FC = () => {
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
           onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           unifiStats={pluginStats['unifi'] || null}
         />
@@ -586,6 +598,7 @@ const App: React.FC = () => {
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
           onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           onSearchClick={() => setCurrentPage('search')}
         />
@@ -620,6 +633,7 @@ const App: React.FC = () => {
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}
           onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
           onLogout={handleLogout}
         />
 
@@ -1020,6 +1034,7 @@ const App: React.FC = () => {
         onSettingsClick={handleSettingsClick}
         onAdminClick={handleAdminClick}
         onProfileClick={handleProfileClick}
+        onUsersClick={handleUsersClick}
         onLogout={handleLogout}
       />
       <main className="p-4 md:p-6 max-w-[1920px] mx-auto">

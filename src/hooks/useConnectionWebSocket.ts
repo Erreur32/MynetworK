@@ -60,7 +60,9 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
-  const maxReconnectAttempts = 3; // Maximum 3 tentatives avant de s'arrêter (réduit pour éviter le flood)
+  // In production, stop after 1 failed attempt to avoid console spam
+  // In dev, allow 3 attempts for debugging
+  const maxReconnectAttempts = import.meta.env.PROD ? 1 : 3;
   const isPermanentlyDisabledRef = useRef<boolean>(false); // Flag pour désactiver définitivement si échecs répétés
   const isConnectingRef = useRef<boolean>(false); // Flag pour éviter les connexions multiples simultanées
   const [isConnected, setIsConnected] = useState(false);
@@ -260,12 +262,14 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
           if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
             // Silently stop - nginx is probably not configured correctly
             // User will need to fix nginx configuration
+            // In production, HTTP polling fallback is already active
+            isPermanentlyDisabledRef.current = true;
           return;
         }
         } else {
           // Only log unexpected error codes (not 1006)
           if (import.meta.env.DEV) {
-        console.warn('[WS Client] Disconnected:', event.code, event.reason);
+            console.warn('[WS Client] Disconnected:', event.code, event.reason);
       }
         }
       } else {
@@ -274,8 +278,9 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       }
 
       // Reconnect after delay if still enabled and under max attempts
-      // Increase delay to avoid rapid reconnection loops
-      if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+      // In production, stop after 1 attempt to avoid console spam
+      // HTTP polling fallback is already active and will handle data updates
+      if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts && !isPermanentlyDisabledRef.current) {
         const delay = Math.min(3000 * (reconnectAttemptsRef.current + 1), 10000); // Exponential backoff, max 10s
         reconnectTimeoutRef.current = setTimeout(() => {
           // console.log('[WS Client] Attempting reconnect...'); // Debug only

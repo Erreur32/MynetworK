@@ -89,14 +89,16 @@ export const useUserAuthStore = create<UserAuthState>((set, get) => ({
                 return true;
             } else {
                 // Check if it's an authentication error (401 or invalid credentials)
+                const errorCode = response.error?.code || '';
                 const errorMessage = response.error?.message || '';
                 const isAuthError = 
-                    response.error?.code === 'UNAUTHORIZED' ||
-                    response.error?.code === 'INVALID_CREDENTIALS' ||
+                    errorCode === 'UNAUTHORIZED' ||
+                    errorCode === 'INVALID_CREDENTIALS' ||
                     errorMessage.toLowerCase().includes('invalid credentials') ||
                     errorMessage.toLowerCase().includes('incorrect') ||
                     errorMessage.toLowerCase().includes('mauvais') ||
-                    errorMessage.toLowerCase().includes('incorrect');
+                    errorMessage.toLowerCase().includes('incorrect') ||
+                    errorMessage.toLowerCase().includes('credentials');
                 
                 set({
                     isLoading: false,
@@ -107,20 +109,30 @@ export const useUserAuthStore = create<UserAuthState>((set, get) => ({
                 return false;
             }
         } catch (error: any) {
-            // Check if it's a network error or authentication error
-            const errorMessage = error?.message || String(error || '');
-            const isNetworkError = 
+            // Check if the error is actually an API response with error code
+            // Sometimes the API client returns errors in the error object
+            const errorCode = error?.error?.code || error?.code || '';
+            const errorMessage = error?.error?.message || error?.message || String(error || '');
+            
+            // Check if it's an authentication error from the API response
+            // The API client returns UNAUTHORIZED code for 401 errors
+            const isAuthError = 
+                errorCode === 'UNAUTHORIZED' ||
+                errorCode === 'INVALID_CREDENTIALS' ||
+                errorMessage.toLowerCase().includes('invalid credentials') ||
+                errorMessage.toLowerCase().includes('incorrect') ||
+                errorMessage.toLowerCase().includes('credentials');
+            
+            // Check if it's a network error (only if not an auth error)
+            const isNetworkError = !isAuthError && (
                 errorMessage.includes('Impossible de contacter') ||
                 errorMessage.includes('serveur') ||
                 errorMessage.includes('network') ||
                 errorMessage.includes('ECONNREFUSED') ||
-                errorMessage.includes('Failed to fetch');
-            
-            // Check if it's an authentication error from the API response
-            const isAuthError = 
-                error?.response?.status === 401 ||
-                errorMessage.toLowerCase().includes('invalid credentials') ||
-                errorMessage.toLowerCase().includes('incorrect');
+                errorMessage.includes('Failed to fetch') ||
+                errorMessage.includes('CONNECTION_REFUSED') ||
+                errorMessage.includes('NETWORK_ERROR')
+            );
             
             set({
                 isLoading: false,

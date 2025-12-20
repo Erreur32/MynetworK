@@ -51,6 +51,7 @@ interface HeaderProps {
   onSettingsClick?: () => void;
   onAdminClick?: () => void;
   onProfileClick?: () => void;
+  onUsersClick?: () => void;
   onLogout?: () => void;
   unifiStats?: {
     network?: {
@@ -222,6 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSettingsClick,
   onAdminClick,
   onProfileClick,
+  onUsersClick,
   onLogout,
   onSearchClick,
   unifiStats
@@ -861,6 +863,7 @@ export const Header: React.FC<HeaderProps> = ({
             onSettingsClick={onSettingsClick}
             onAdminClick={onAdminClick}
             onProfileClick={onProfileClick}
+            onUsersClick={onUsersClick}
             onLogout={onLogout}
           />
         )}

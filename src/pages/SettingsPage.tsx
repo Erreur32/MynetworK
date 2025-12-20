@@ -54,12 +54,18 @@ import { APP_VERSION, getVersionString } from '../constants/version';
 import { SecuritySection } from '../components/SecuritySection';
 import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
+import { UserMenu } from '../components/ui';
 
 interface SettingsPageProps {
   onBack: () => void;
   mode?: 'freebox' | 'administration';
   initialAdminTab?: 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info';
   onNavigateToPage?: (page: 'plugins' | 'users' | 'logs') => void;
+  onUsersClick?: () => void;
+  onSettingsClick?: () => void;
+  onAdminClick?: () => void;
+  onProfileClick?: () => void;
+  onLogout?: () => void;
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system';
@@ -1444,7 +1450,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onBack, 
   mode = 'freebox',
   initialAdminTab = 'general',
-  onNavigateToPage
+  onNavigateToPage,
+  onUsersClick,
+  onSettingsClick,
+  onAdminClick,
+  onProfileClick,
+  onLogout
 }) => {
   const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
@@ -1964,6 +1975,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     </div>
                   </div>
                 </div>
+                {/* User Menu */}
+                {currentUser && (
+                  <UserMenu
+                    user={currentUser}
+                    onSettingsClick={onSettingsClick}
+                    onAdminClick={onAdminClick}
+                    onProfileClick={onProfileClick}
+                    onUsersClick={onUsersClick}
+                    onLogout={onLogout}
+                  />
+                )}
               </div>
             ) : (
               <button

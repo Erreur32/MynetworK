@@ -2,6 +2,51 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.5] - 2025-01-XX
+
+### 🐛 Corrigé
+
+**Authentification**
+- ✅ Correction du message d'erreur pour les mots de passe incorrects : affiche maintenant "Nom d'utilisateur ou mot de passe incorrect" au lieu de "Impossible de contacter le serveur"
+- ✅ Amélioration de la détection des erreurs d'authentification dans le store utilisateur
+
+**WebSocket**
+- ✅ Suppression des erreurs WebSocket "Invalid frame header" en production (interception console.error)
+- ✅ Limitation des tentatives de reconnexion WebSocket à 1 seule tentative en production pour éviter le spam console
+- ✅ Désactivation automatique après 1 échec en production (le polling HTTP prend le relais)
+
+### ✨ Ajouté
+
+**Interface Utilisateur**
+- 👥 Ajout du menu "Utilisateurs" dans le header pour les administrateurs
+- 👤 Menu utilisateur ajouté dans le header de la page Administration
+- 🎨 Avatar utilisateur agrandi dans le header (32px → 40px)
+- 📏 Icônes du menu utilisateur agrandies (16px → 20px) pour une meilleure visibilité
+
+### 🔧 Modifié
+
+**Frontend**
+- `src/components/ui/UserMenu.tsx` :
+  - Ajout du bouton "Utilisateurs" visible uniquement pour les admins
+  - Avatar agrandi (w-8 h-8 → w-10 h-10)
+  - Icônes agrandies (size={16} → size={20})
+- `src/components/layout/Header.tsx` :
+  - Ajout de la prop `onUsersClick` pour la navigation vers la page utilisateurs
+- `src/pages/SettingsPage.tsx` :
+  - Ajout du composant UserMenu dans le header en mode administration
+  - Import de UserMenu depuis '../components/ui'
+- `src/App.tsx` :
+  - Ajout du handler `handleUsersClick` pour naviguer vers la page utilisateurs
+  - Passage des props nécessaires à SettingsPage et Header
+- `src/stores/userAuthStore.ts` :
+  - Amélioration de la détection des erreurs d'authentification
+  - Vérification améliorée des codes d'erreur API (UNAUTHORIZED, INVALID_CREDENTIALS)
+- `src/hooks/useConnectionWebSocket.ts` :
+  - Limitation à 1 tentative de reconnexion en production (au lieu de 3)
+  - Désactivation automatique après 1 échec en production
+- `src/main.tsx` :
+  - Interception de console.error en production pour supprimer les erreurs WebSocket natives
+
 ## [0.1.4] - 2025-01-XX
 
 ### 🐛 Corrigé

@@ -10,7 +10,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Settings, LogOut, Shield, ChevronDown, User } from 'lucide-react';
+import { Settings, LogOut, Shield, ChevronDown, User, Users } from 'lucide-react';
 
 interface User {
     username: string;
@@ -24,6 +24,7 @@ interface UserMenuProps {
     onSettingsClick?: () => void;
     onAdminClick?: () => void;
     onProfileClick?: () => void;
+    onUsersClick?: () => void;
     onLogout?: () => void;
 }
 
@@ -32,6 +33,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     onSettingsClick,
     onAdminClick,
     onProfileClick,
+    onUsersClick,
     onLogout
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -111,10 +113,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                         <img 
                             src={user.avatar} 
                             alt={user.username}
-                            className="w-8 h-8 rounded-full object-cover border-2 border-gray-600"
+                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-600"
                         />
                     ) : (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-base">
                             {initials}
                         </div>
                     )}
@@ -172,7 +174,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                             }}
                             className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                         >
-                            <User size={16} className="text-gray-400" />
+                            <User size={20} className="text-gray-400" />
                             <span>Mon Profil</span>
                         </button>
 
@@ -185,8 +187,22 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                                 }}
                                 className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3 bg-blue-900/20 border-l-2 border-blue-500"
                             >
-                                <Shield size={16} className="text-blue-400" />
+                                <Shield size={20} className="text-blue-400" />
                                 <span className="font-medium">Administration</span>
+                            </button>
+                        )}
+
+                        {/* Utilisateurs (Admin only) */}
+                        {user.role === 'admin' && (
+                            <button
+                                onClick={() => {
+                                    setIsOpen(false);
+                                    onUsersClick?.();
+                                }}
+                                className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
+                            >
+                                <Users size={20} className="text-gray-400" />
+                                <span>Utilisateurs</span>
                             </button>
                         )}
 
@@ -198,7 +214,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                             }}
                             className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                         >
-                            <LogOut size={16} className="text-gray-400" />
+                            <LogOut size={20} className="text-gray-400" />
                             <span>Déconnexion</span>
                         </button>
                     </div>
