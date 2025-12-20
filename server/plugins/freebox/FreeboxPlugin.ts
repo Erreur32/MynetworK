@@ -6,15 +6,13 @@
  */
 
 import { BasePlugin } from '../base/BasePlugin.js';
-import { FreeboxApiService } from './FreeboxApiService.js';
 import { freeboxApi } from '../../services/freeboxApi.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 
 export class FreeboxPlugin extends BasePlugin {
     // Use the singleton instance from freeboxApi service to share the same session
     // This ensures the plugin uses the same session as the routes (/api/auth/*)
-    // Type assertion needed because freeboxApi is from a different FreeboxApiService class
-    private apiService: FreeboxApiService = freeboxApi as unknown as FreeboxApiService;
+    private apiService = freeboxApi;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private readonly KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000; // Check every 2 minutes
 
@@ -43,8 +41,8 @@ export class FreeboxPlugin extends BasePlugin {
         
         // Reload token from file (important after Docker restart)
         // freeboxApi singleton has reloadToken() method
-        if (typeof (this.apiService as any).reloadToken === 'function') {
-            (this.apiService as any).reloadToken();
+        if (typeof this.apiService.reloadToken === 'function') {
+            this.apiService.reloadToken();
         }
         
         // Check if already registered
@@ -491,7 +489,7 @@ export class FreeboxPlugin extends BasePlugin {
     /**
      * Get the underlying API service (for backward compatibility)
      */
-    getApiService(): FreeboxApiService {
+    getApiService() {
         return this.apiService;
     }
 }

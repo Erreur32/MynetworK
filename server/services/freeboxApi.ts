@@ -290,18 +290,29 @@ class FreeboxApiService {
     // Step 4: Open session
     async login(): Promise<SessionData> {
         if (!this.appToken) {
+            console.error('[FreeboxAPI] Login failed: No app_token available. Please register first.');
             throw new Error('No app_token available. Please register first.');
         }
 
+        console.log('[FreeboxAPI] Starting login process...');
+        console.log('[FreeboxAPI] Base URL:', this.baseUrl);
+
         // Get fresh challenge
-        await this.getChallenge();
+        try {
+            await this.getChallenge();
+        } catch (error) {
+            console.error('[FreeboxAPI] Failed to get challenge:', error);
+            throw new Error(`Failed to get challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
 
         if (!this.challenge) {
+            console.error('[FreeboxAPI] Login failed: No challenge available after getChallenge()');
             throw new Error('No challenge available');
         }
 
         const password = this.computePassword(this.challenge);
 
+        console.log('[FreeboxAPI] Sending login request...');
         const response = await this.request<{
             session_token: string;
             challenge: string;
@@ -318,7 +329,10 @@ class FreeboxApiService {
         );
 
         if (!response.success || !response.result) {
-            throw new Error(response.msg || response.error_code || 'Login failed');
+            const errorMsg = response.msg || response.error_code || 'Login failed';
+            console.error('[FreeboxAPI] Login failed:', errorMsg);
+            console.error('[FreeboxAPI] Response:', JSON.stringify(response, null, 2));
+            throw new Error(errorMsg);
         }
 
         this.sessionToken = response.result.session_token;
@@ -326,6 +340,7 @@ class FreeboxApiService {
         this.permissions = response.result.permissions;
 
         console.log('[FreeboxAPI] Login successful');
+        console.log('[FreeboxAPI] Session token received, permissions:', Object.keys(this.permissions).length);
 
         return {
             sessionToken: this.sessionToken,
@@ -346,9 +361,14 @@ class FreeboxApiService {
     // Check if session is valid
     async checkSession(): Promise<boolean> {
         try {
-            const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN);
-            return response.success && response.result?.logged_in === true;
-        } catch {
+            const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN, undefined, false);
+            if (!response.success) {
+                console.log('[FreeboxAPI] checkSession failed:', response.msg || response.error_code);
+                return false;
+            }
+            return response.result?.logged_in === true;
+        } catch (error) {
+            console.error('[FreeboxAPI] checkSession error:', error);
             return false;
         }
     }

@@ -62,7 +62,7 @@ services:
       #      JWT_SECRET=votre_secret docker-compose -f docker-compose.local.yml up -d --build
       #
       # Exemple de secret généré : aB3xK9mP2vQ7wR5tY8uI0oP1aS6dF4gH7jK2lM9nB0vC3xZ6
-      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
       - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
     volumes:
       # Persistent storage for Freebox authentication token and database
