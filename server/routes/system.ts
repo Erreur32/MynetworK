@@ -7,6 +7,7 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { authService } from '../services/authService.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
+import { AppConfigRepository } from '../database/models/AppConfig.js';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
@@ -269,6 +270,69 @@ router.post('/security', requireAuth, requireAdmin, asyncHandler(async (req: Aut
       message: sessionTimeoutHours !== undefined 
         ? 'Security settings updated. Note: New session timeout will apply to new login sessions only. Existing sessions will keep their original expiration time.'
         : 'Security settings updated.'
+    }
+  });
+}));
+
+// GET /api/system/general - Get general application settings
+router.get('/general', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
+  const publicUrl = AppConfigRepository.get('public_url') || process.env.PUBLIC_URL || process.env.DASHBOARD_URL || '';
+  
+  res.json({
+    success: true,
+    result: {
+      publicUrl
+    }
+  });
+}));
+
+// PUT /api/system/general - Update general application settings
+router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { publicUrl } = req.body;
+
+  // Validate publicUrl format if provided
+  if (publicUrl !== undefined && publicUrl !== null && publicUrl !== '') {
+    try {
+      // Validate URL format
+      const url = new URL(publicUrl);
+      // Ensure it's http or https
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw createError('Public URL must use http:// or https:// protocol', 400, 'INVALID_URL');
+      }
+      
+      // Save to database
+      AppConfigRepository.set('public_url', publicUrl);
+      
+      // Also update environment variable for current process (for immediate effect)
+      process.env.PUBLIC_URL = publicUrl;
+      
+      // Log the change
+      if (req.user) {
+        await securityNotificationService.notifySecuritySettingsChanged(
+          req.user.userId,
+          req.user.username,
+          { publicUrl: 'Updated' }
+        );
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw createError('Invalid URL format. Please use format: https://domain.com or http://domain.com', 400, 'INVALID_URL');
+      }
+      throw error;
+    }
+  } else if (publicUrl === '') {
+    // Empty string means clear the setting
+    AppConfigRepository.delete('public_url');
+    delete process.env.PUBLIC_URL;
+  }
+
+  const currentPublicUrl = AppConfigRepository.get('public_url') || process.env.PUBLIC_URL || process.env.DASHBOARD_URL || '';
+
+  res.json({
+    success: true,
+    result: {
+      publicUrl: currentPublicUrl,
+      message: 'General settings updated. Note: Some changes may require a server restart to take full effect.'
     }
   });
 }));

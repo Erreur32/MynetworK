@@ -42,7 +42,7 @@ import http from 'http';
 import os from 'os';
 import fsSync from 'fs';
 import { fileURLToPath } from 'url';
-import { config } from './config.js';
+import { config, getPublicUrl } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectionWebSocket } from './services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from './services/freeboxNativeWebSocket.js';
@@ -389,19 +389,29 @@ server.listen(port, host, () => {
   let wsUrl: string;
   
   if (isProduction) {
-    // Production mode (Docker): use host IP and DASHBOARD_PORT
+    // Production mode (Docker): check for configured domain first, then use host IP
     const dashboardPort = process.env.DASHBOARD_PORT || '7505';
-    if (hostIP) {
+    const publicUrl = getPublicUrl();
+    
+    if (publicUrl) {
+      // Domain configured: use it for all URLs
+      frontendWebUrl = publicUrl;
+      frontendLocalUrl = publicUrl;
+      apiUrl = publicUrl;
+      wsUrl = publicUrl.replace(/^http/, 'ws') + '/ws/connection';
+    } else if (hostIP) {
+      // No domain configured: use host IP
       frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
       frontendLocalUrl = frontendWebUrl;
       apiUrl = `http://${hostIP}:${dashboardPort}`;
       wsUrl = `ws://${hostIP}:${dashboardPort}/ws/connection`;
     } else {
-      // Fallback to PUBLIC_URL or localhost
-      frontendWebUrl = config.publicUrl || `http://localhost:${dashboardPort}`;
+      // Fallback: use container IP or localhost
+      const fallbackIP = containerIP || 'localhost';
+      frontendWebUrl = `http://${fallbackIP}:${dashboardPort}`;
       frontendLocalUrl = frontendWebUrl;
-      apiUrl = config.publicUrl || `http://localhost:${dashboardPort}`;
-      wsUrl = config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${dashboardPort}/ws/connection`;
+      apiUrl = `http://${fallbackIP}:${dashboardPort}`;
+      wsUrl = `ws://${fallbackIP}:${dashboardPort}/ws/connection`;
     }
   } else if (isDockerDev) {
     // Docker dev mode: use host ports from docker-compose.dev.yml (DASHBOARD_PORT and SERVER_PORT)

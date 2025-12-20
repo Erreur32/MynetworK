@@ -278,20 +278,18 @@ export const PluginsManagementSection: React.FC = () => {
                                     </button>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                    {plugin.enabled && (
-                                        <button
-                                            onClick={() => handleTest(plugin.id)}
-                                            disabled={testingPlugin === plugin.id}
-                                            className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-blue-500/30"
-                                            title="Tester la connexion"
-                                        >
-                                            {testingPlugin === plugin.id ? (
-                                                <RefreshCw size={12} className="animate-spin" />
-                                            ) : (
-                                                <RefreshCw size={12} />
-                                            )}
-                                        </button>
-                                    )}
+                                    <button
+                                        onClick={() => handleTest(plugin.id)}
+                                        disabled={testingPlugin === plugin.id}
+                                        className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-blue-500/30"
+                                        title="Tester la connexion"
+                                    >
+                                        {testingPlugin === plugin.id ? (
+                                            <RefreshCw size={12} className="animate-spin" />
+                                        ) : (
+                                            <RefreshCw size={12} />
+                                        )}
+                                    </button>
                                     <button
                                         onClick={() => handleConfigure(plugin.id)}
                                         className="p-1.5 bg-theme-secondary border border-theme hover:bg-theme-primary hover:border-emerald-500/50 rounded-lg text-theme-primary transition-all hover:shadow-lg hover:shadow-emerald-500/10"

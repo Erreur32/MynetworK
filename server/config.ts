@@ -78,7 +78,9 @@ export const config = {
     (process.env.NODE_ENV === 'production' ? '3000' : '3003'), 
     10
   ),
-  // Public URL for frontend access (used in logs)
+  // Public URL for frontend access (used in logs and WebSocket URLs)
+  // Priority: 1. Database config, 2. Environment variable, 3. null
+  // Note: Use getPublicUrl() function to get the value (reads from DB if available)
   publicUrl: process.env.PUBLIC_URL || process.env.DASHBOARD_URL || null,
 
   // Freebox API
@@ -106,6 +108,22 @@ export const config = {
     // Token storage file path (absolute path for Docker compatibility)
     tokenFile: getTokenFilePath()
   }
+};
+
+/**
+ * Get public URL with priority: Database > Environment variable > null
+ * This function should be used instead of config.publicUrl to get the current value
+ */
+export const getPublicUrl = (): string | null => {
+  try {
+    // Try to get from database (if available)
+    const { AppConfigRepository } = require('./database/models/AppConfig.js');
+    const dbValue = AppConfigRepository.get('public_url');
+    if (dbValue) return dbValue;
+  } catch {
+    // If AppConfigRepository is not available yet, fall back to env
+  }
+  return process.env.PUBLIC_URL || process.env.DASHBOARD_URL || config.publicUrl || null;
 };
 
 // API endpoints

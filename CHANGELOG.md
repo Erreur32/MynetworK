@@ -2,6 +2,107 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.3] - 2025-01-XX
+
+### 🐛 Corrigé
+
+**Authentification & Connexion**
+- ✅ Amélioration des messages d'erreur de connexion : affichage de "Nom d'utilisateur ou mot de passe incorrect" au lieu de "Impossible de contacter le serveur"
+- ✅ Suppression du message des identifiants par défaut sur la page de login
+- ✅ Correction de l'authentification UniFi en production : amélioration de la validation des URLs et des identifiants
+- ✅ Correction des erreurs WebSocket "Invalid frame header" et "Disconnected: 1006" en mode développement (suppression des warnings)
+
+**Interface Utilisateur**
+- ✅ Correction de l'affichage des ports dans les logs Docker dev (affichage des ports hôte au lieu des ports conteneur)
+- ✅ Correction du warning Recharts "width(-1) and height(-1)" en définissant des dimensions fixes pour les conteneurs
+- ✅ Correction des clés React dupliquées dans l'historique des connexions
+
+**Graphiques**
+- ✅ Correction des graphiques en temps réel Freebox : passage des courbes lisses aux lignes linéaires pour plus de clarté
+- ✅ Désactivation des animations pour les graphiques en temps réel (mode live)
+- ✅ Extension de la durée des graphiques live de 1 minute à 5 minutes (300 points)
+
+### ✨ Ajouté
+
+**Configuration**
+- 🌐 Ajout de la configuration du domaine (PUBLIC_URL) via l'interface d'administration
+- 📝 Nouvelle section "Configuration réseau" dans Administration > Général
+- 💾 Stockage de la configuration du domaine dans la base de données (priorité sur les variables d'environnement)
+- 🔄 Utilisation automatique du domaine configuré pour les URLs WebSocket et les logs
+
+**Documentation**
+- 📚 Guide de configuration Nginx pour les WebSockets (`Docs/NGINX_WEBSOCKET_CONFIG.md`)
+- 📚 Guide de dépannage pour l'environnement Docker production (`TROUBLESHOOTING_PROD.md`)
+- 📚 Documentation des configurations de ports pour tous les modes (`Docs/CONFIGURATION_PORTS_MODES.md`)
+
+**Plugins**
+- 🔧 Bouton "Test" toujours disponible même si le plugin est désactivé (permet de tester la configuration avant activation)
+- 🔍 Amélioration des messages d'erreur pour le plugin UniFi avec détails de la réponse HTTP
+
+### 🔧 Modifié
+
+**Backend**
+- `server/config.ts` : Ajout de `getPublicUrl()` qui lit depuis la DB en priorité, puis les variables d'environnement
+- `server/index.ts` : 
+  - Affichage du domaine configuré dans les logs de production (au lieu de l'IP par défaut)
+  - Priorité : Domaine configuré > IP machine hôte > IP conteneur > localhost
+  - Correction des ports affichés dans les logs Docker dev (utilisation des ports hôte)
+- `server/routes/system.ts` : Ajout des endpoints `/api/system/config` (GET/POST) pour gérer la configuration générale
+- `server/database/models/AppConfig.ts` : Nouveau modèle pour stocker la configuration générale (public_url)
+- `server/services/authService.ts` : Amélioration des messages d'erreur pour les identifiants incorrects
+- `server/routes/users.ts` : Gestion des erreurs d'authentification avec messages génériques pour éviter l'énumération d'utilisateurs
+- `server/plugins/unifi/UniFiApiService.ts` : 
+  - Amélioration de la validation des URLs et du trimming des identifiants
+  - Messages d'erreur plus détaillés pour les erreurs 400/401/403
+- `server/plugins/unifi/UniFiPlugin.ts` : Ajout du trimming des paramètres de configuration
+
+**Frontend**
+- `src/pages/SettingsPage.tsx` : Ajout de la section "Configuration réseau" avec champ pour PUBLIC_URL
+- `src/components/modals/UserLoginModal.tsx` : Suppression du message des identifiants par défaut
+- `src/stores/userAuthStore.ts` : Amélioration des messages d'erreur de connexion
+- `src/api/client.ts` : 
+  - Retour du code d'erreur `UNAUTHORIZED` pour les réponses 401
+  - Amélioration de la gestion des erreurs de connexion
+- `src/components/PluginsManagementSection.tsx` : Bouton "Test" toujours visible même si le plugin est désactivé
+- `src/components/modals/PluginConfigModal.tsx` : Envoi des paramètres de test directement sans sauvegarde préalable
+- `src/components/widgets/BarChart.tsx` : Passage des courbes lisses aux lignes linéaires pour les graphiques Freebox
+- `src/components/widgets/BandwidthHistoryWidget.tsx` : 
+  - Désactivation des animations pour le mode live
+  - Extension de la durée à 5 minutes (300 points)
+  - Correction des dimensions du conteneur pour éviter les warnings Recharts
+- `src/hooks/useConnectionWebSocket.ts` : 
+  - Suppression des warnings WebSocket en mode développement
+  - Extension de l'historique à 300 points (5 minutes)
+  - Ajout d'un mécanisme de fallback par polling si WebSocket échoue
+- `src/stores/connectionStore.ts` : Extension de l'historique à 300 points (5 minutes)
+- `vite.config.ts` : 
+  - Correction du proxy pour Docker dev (utilisation des ports conteneur)
+  - Configuration du HMR pour utiliser le port hôte en Docker dev
+
+**Docker**
+- `docker-compose.yml` : Nettoyage des commentaires superflus et des variables d'environnement redondantes
+- `docker-compose.dev.yml` : Configuration des ports hôte (3666 pour frontend, 3668 pour backend)
+
+**Configuration**
+- `src/constants/version.ts` : Version mise à jour à 0.1.3
+- `package.json` : Version mise à jour à 0.1.3
+- `README.md` : Badge de version mis à jour à 0.1.3
+
+### 🔒 Sécurité
+
+**Authentification**
+- ✅ Messages d'erreur génériques pour éviter l'énumération d'utilisateurs
+- ✅ Validation stricte des URLs dans la configuration du domaine
+
+### 📝 Documentation
+
+- `CHANGELOG.md` - Ajout de la version 0.1.3
+- `Docs/NGINX_WEBSOCKET_CONFIG.md` - Guide de configuration Nginx pour WebSockets
+- `TROUBLESHOOTING_PROD.md` - Guide de dépannage Docker production
+- `Docs/CONFIGURATION_PORTS_MODES.md` - Documentation des ports pour tous les modes
+
+---
+
 ## [0.1.2] - 2025-12-19
 
 ### 🐛 Corrigé

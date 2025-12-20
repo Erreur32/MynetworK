@@ -596,6 +596,115 @@ const UpdateCheckSection: React.FC = () => {
   );
 };
 
+// General Network Configuration Section Component (for Administration > General tab)
+const GeneralNetworkSection: React.FC = () => {
+  const [publicUrl, setPublicUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await api.get<{ publicUrl: string }>('/api/system/general');
+        if (response.success && response.result) {
+          setPublicUrl(response.result.publicUrl || '');
+        }
+      } catch (error) {
+        console.error('Failed to fetch general settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const response = await api.put<{ publicUrl: string; message?: string }>('/api/system/general', {
+        publicUrl: publicUrl.trim() || ''
+      });
+      if (response.success) {
+        setMessage({ type: 'success', text: response.result?.message || 'Configuration sauvegardée avec succès' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } catch (error: any) {
+      setMessage({ 
+        type: 'error', 
+        text: error?.response?.data?.error?.message || 'Erreur lors de la sauvegarde' 
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-4">
+        <Loader2 className="animate-spin text-blue-400" size={20} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {message && (
+        <div className={`p-3 rounded-lg text-sm ${
+          message.type === 'success' 
+            ? 'bg-green-900/30 border border-green-700 text-green-400' 
+            : 'bg-red-900/30 border border-red-700 text-red-400'
+        }`}>
+          {message.text}
+        </div>
+      )}
+      
+      <SettingRow
+        label="URL publique (Domaine)"
+        description="URL publique d'accès au dashboard (ex: https://mwk.myoueb.fr). Utilisée pour les headers et WebSocket en production avec nginx."
+      >
+        <div className="flex items-center gap-2 w-full max-w-md">
+          <input
+            type="url"
+            value={publicUrl}
+            onChange={(e) => setPublicUrl(e.target.value)}
+            placeholder="https://mwk.myoueb.fr"
+            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+          />
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                <span>Sauvegarde...</span>
+              </>
+            ) : (
+              <>
+                <Save size={16} />
+                <span>Sauvegarder</span>
+              </>
+            )}
+          </button>
+        </div>
+      </SettingRow>
+      
+      <div className="text-xs text-gray-500 mt-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
+        <p className="font-medium text-gray-400 mb-1">💡 Note importante :</p>
+        <ul className="list-disc list-inside space-y-1 ml-2">
+          <li>Cette URL est utilisée pour construire les URLs WebSocket et les headers</li>
+          <li>Format attendu : <code className="text-blue-400">https://votre-domaine.com</code> ou <code className="text-blue-400">http://votre-domaine.com</code></li>
+          <li>Assurez-vous que nginx est configuré pour gérer les WebSockets (voir <code className="text-blue-400">Docs/NGINX_WEBSOCKET_CONFIG.md</code>)</li>
+          <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
+
 // User Profile Section Component (for Administration > General tab)
 const UserProfileSection: React.FC = () => {
   const { user: currentUser, checkAuth } = useUserAuthStore();
@@ -2031,6 +2140,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
                 {/* Colonne 2 */}
                 <div className="space-y-6">
+                  <Section title="Configuration réseau" icon={Network} iconColor="blue">
+                    <GeneralNetworkSection />
+                  </Section>
+
                   <Section title="Localisation" icon={Globe} iconColor="cyan">
                     <SettingRow
                       label="Fuseau horaire"
