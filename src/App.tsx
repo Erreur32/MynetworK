@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { Header, Footer, type PageType } from './components/layout';
 import {
   Card,
@@ -14,7 +14,20 @@ import {
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
-import { TvPage, PhonePage, FilesPage, VmsPage, AnalyticsPage, SettingsPage, PluginsPage, UsersPage, LogsPage, UnifiedDashboardPage, UniFiPage, SearchPage } from './pages';
+
+// Lazy load pages for code splitting
+const TvPage = lazy(() => import('./pages').then(m => ({ default: m.TvPage })));
+const PhonePage = lazy(() => import('./pages').then(m => ({ default: m.PhonePage })));
+const FilesPage = lazy(() => import('./pages').then(m => ({ default: m.FilesPage })));
+const VmsPage = lazy(() => import('./pages').then(m => ({ default: m.VmsPage })));
+const AnalyticsPage = lazy(() => import('./pages').then(m => ({ default: m.AnalyticsPage })));
+const SettingsPage = lazy(() => import('./pages').then(m => ({ default: m.SettingsPage })));
+const PluginsPage = lazy(() => import('./pages').then(m => ({ default: m.PluginsPage })));
+const UsersPage = lazy(() => import('./pages').then(m => ({ default: m.UsersPage })));
+const LogsPage = lazy(() => import('./pages').then(m => ({ default: m.LogsPage })));
+const UnifiedDashboardPage = lazy(() => import('./pages').then(m => ({ default: m.UnifiedDashboardPage })));
+const UniFiPage = lazy(() => import('./pages').then(m => ({ default: m.UniFiPage })));
+const SearchPage = lazy(() => import('./pages').then(m => ({ default: m.SearchPage })));
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { fetchEnvironmentInfo } from './constants/version';
@@ -48,6 +61,16 @@ import {
   Clock,
   ArrowDownWideNarrow
 } from 'lucide-react';
+
+// Loading component for lazy-loaded pages
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+      <p className="text-gray-400 text-sm">Chargement...</p>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   // User authentication (JWT) - New system
@@ -374,7 +397,9 @@ const App: React.FC = () => {
   // Helper component to render page with footer
   const renderPageWithFooter = (pageContent: React.ReactNode) => (
     <div className="min-h-screen pb-20 bg-theme-primary text-theme-primary font-sans selection:bg-accent-primary/30">
-      {pageContent}
+      <Suspense fallback={<PageLoader />}>
+        {pageContent}
+      </Suspense>
       <Footer
         currentPage={currentPage}
         onPageChange={handlePageChange}
@@ -495,9 +520,11 @@ const App: React.FC = () => {
           onSearchClick={() => setCurrentPage('search')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <SearchPage 
-            onBack={() => setCurrentPage('dashboard')} 
-          />
+          <Suspense fallback={<PageLoader />}>
+            <SearchPage 
+              onBack={() => setCurrentPage('dashboard')} 
+            />
+          </Suspense>
         </main>
       </>
     );
@@ -520,7 +547,9 @@ const App: React.FC = () => {
           unifiStats={pluginStats['unifi'] || null}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-      <UniFiPage onBack={() => setCurrentPage('dashboard')} />
+          <Suspense fallback={<PageLoader />}>
+            <UniFiPage onBack={() => setCurrentPage('dashboard')} />
+          </Suspense>
         </main>
       </>
     );
@@ -552,16 +581,18 @@ const App: React.FC = () => {
           onSearchClick={() => setCurrentPage('search')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <UnifiedDashboardPage 
-            onNavigateToFreebox={() => setCurrentPage('freebox')}
-            onNavigateToUniFi={() => setCurrentPage('unifi')}
-            onNavigateToPlugins={() => {
-              // Set sessionStorage BEFORE changing page to ensure it's read
-              sessionStorage.setItem('adminMode', 'true');
-              sessionStorage.setItem('adminTab', 'plugins');
-              setCurrentPage('settings');
-            }}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <UnifiedDashboardPage 
+              onNavigateToFreebox={() => setCurrentPage('freebox')}
+              onNavigateToUniFi={() => setCurrentPage('unifi')}
+              onNavigateToPlugins={() => {
+                // Set sessionStorage BEFORE changing page to ensure it's read
+                sessionStorage.setItem('adminMode', 'true');
+                sessionStorage.setItem('adminTab', 'plugins');
+                setCurrentPage('settings');
+              }}
+            />
+          </Suspense>
         </main>
       </>
     );
@@ -983,10 +1014,12 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
       <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-        <UnifiedDashboardPage 
-          onNavigateToFreebox={() => setCurrentPage('freebox')}
-          onNavigateToUniFi={() => setCurrentPage('unifi')}
-        />
+        <Suspense fallback={<PageLoader />}>
+          <UnifiedDashboardPage 
+            onNavigateToFreebox={() => setCurrentPage('freebox')}
+            onNavigateToUniFi={() => setCurrentPage('unifi')}
+          />
+        </Suspense>
       </main>
     </>
   );

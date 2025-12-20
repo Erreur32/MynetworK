@@ -155,5 +155,35 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Separate React and React-DOM into vendor-react chunk
+          if (id.includes('react') || id.includes('react-dom')) {
+            return 'vendor-react';
+          }
+          // Separate Recharts into vendor-charts chunk
+          if (id.includes('recharts')) {
+            return 'vendor-charts';
+          }
+          // Separate Lucide React icons into vendor-icons chunk
+          if (id.includes('lucide-react')) {
+            return 'vendor-icons';
+          }
+          // Separate Zustand state management into vendor-state chunk
+          if (id.includes('zustand')) {
+            return 'vendor-state';
+          }
+          // Separate node_modules dependencies into vendor chunk
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        }
+      }
+    },
+    // Increase chunk size warning limit to 600 KB (optional, but we're splitting anyway)
+    chunkSizeWarningLimit: 600
   }
 });
