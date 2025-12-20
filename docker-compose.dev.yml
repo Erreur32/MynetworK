@@ -67,7 +67,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev_secret_change_in_production}
       - VITE_PORT=5174
       - PORT=3003
-      - SERVER_PORT=3003
+      - SERVER_PORT=${SERVER_PORT:-3668}
+      - DASHBOARD_PORT=${DASHBOARD_PORT:-3666}
       # Host root path used to read real host metrics when running in Docker
       # The corresponding filesystem mount is configured in the volumes section below.
       - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}

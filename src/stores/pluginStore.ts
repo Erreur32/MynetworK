@@ -59,7 +59,7 @@ interface PluginState {
     fetchPluginStats: (pluginId: string) => Promise<void>;
     fetchAllStats: () => Promise<void>;
     updatePluginConfig: (pluginId: string, config: { enabled?: boolean; settings?: Record<string, unknown> }) => Promise<boolean>;
-    testPluginConnection: (pluginId: string) => Promise<{ connected: boolean; message: string } | null>;
+    testPluginConnection: (pluginId: string, testSettings?: Record<string, any>) => Promise<{ connected: boolean; message: string } | null>;
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
@@ -136,9 +136,10 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         }
     },
 
-    testPluginConnection: async (pluginId: string) => {
+    testPluginConnection: async (pluginId: string, testSettings?: Record<string, any>) => {
         try {
-            const response = await api.post<{ connected: boolean; message: string }>(`/api/plugins/${pluginId}/test`);
+            const body = testSettings ? { settings: testSettings } : {};
+            const response = await api.post<{ connected: boolean; message: string }>(`/api/plugins/${pluginId}/test`, body);
             if (response.success && response.result) {
                 return {
                     connected: response.result.connected,

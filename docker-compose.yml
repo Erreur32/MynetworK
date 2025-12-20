@@ -50,8 +50,11 @@ services:
       #
       # Méthodes de configuration :
       #   1. Fichier .env (recommandé) :
-      #      Créez un fichier .env avec : JWT_SECRET=votre_secret_genere
-      #      Puis lancez : docker-compose --env-file .env up -d
+      #      Créez un fichier .env dans le même répertoire que docker-compose.yml
+      #      Docker Compose le chargera AUTOMATIQUEMENT :
+      #        JWT_SECRET=votre_secret_genere
+      #      Puis lancez simplement : docker-compose up -d
+      #      (pas besoin de --env-file, c'est automatique)
       #
       #   2. Variable d'environnement système :
       #      export JWT_SECRET=$(openssl rand -base64 32)
@@ -69,10 +72,11 @@ services:
       - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
 
     # Persistent storage for Freebox API token, database, and config
-    # Use a named Docker volume for SQLite to avoid filesystem/permission issues
-    # with network shares and ensure proper locking support.
+    # Using bind mount to ./data directory for easy backup access
+    # The ./data directory will be created automatically if it doesn't exist
+    # Users can easily backup/restore by copying the ./data directory
     volumes:
-      - mynetwork_data:/app/data
+      - ./data:/app/data
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
@@ -111,7 +115,9 @@ services:
     #       cpus: '0.1'
     #       memory: 256M
 
-volumes:
-  mynetwork_data:
-    name: mynetwork_data
+# Volume named 'mynetwork_data' removed - using bind mount ./data instead
+# This allows users to easily backup/restore the data directory
+# volumes:
+#   mynetwork_data:
+#     name: mynetwork_data
 

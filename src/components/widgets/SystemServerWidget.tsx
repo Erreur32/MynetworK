@@ -98,8 +98,8 @@ export const SystemServerWidget: React.FC = () => {
             const response = await api.get<SystemInfo>('/api/system/server');
             if (response.success && response.result) {
                 setSystemInfo(response.result);
-                // Debug: Log Docker stats to console
-                if (response.result.docker) {
+                // Debug: Log Docker stats to console (only in verbose mode)
+                if (response.result.docker && import.meta.env.DEV && import.meta.env.VITE_DEBUG === 'true') {
                     console.log('[SystemServerWidget] Docker detected:', {
                         docker: response.result.docker,
                         dockerVersion: response.result.dockerVersion,

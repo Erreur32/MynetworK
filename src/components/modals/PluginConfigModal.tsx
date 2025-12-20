@@ -124,19 +124,15 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
             if (apiMode === 'site-manager') {
                 configToTest.apiKey = formData.apiKey;
             } else {
-                configToTest.url = formData.url;
-                configToTest.username = formData.username;
+                configToTest.url = formData.url.trim();
+                configToTest.username = formData.username.trim();
                 configToTest.password = formData.password;
-                configToTest.site = formData.site;
+                configToTest.site = formData.site.trim() || 'default';
             }
 
-            // First save the config temporarily
-            await updatePluginConfig(pluginId, {
-                settings: formData
-            });
-
-            // Then test
-            const result = await testPluginConnection(pluginId);
+            // Test connection with the provided settings (without saving first)
+            // This allows testing before saving invalid credentials
+            const result = await testPluginConnection(pluginId, configToTest);
             if (result) {
                 setTestResult({
                     success: result.connected,

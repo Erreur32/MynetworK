@@ -102,10 +102,6 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
                         </button>
                     </div>
                 </form>
-
-                <div className="mt-4 text-xs text-gray-500 text-center">
-                    Identifiants par défaut : admin / admin123
-                </div>
             </div>
         </div>
     );

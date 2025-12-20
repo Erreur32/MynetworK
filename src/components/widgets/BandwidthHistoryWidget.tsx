@@ -151,9 +151,9 @@ export const BandwidthHistoryWidget: React.FC = () => {
                     </button>
                 </div>
             </div>
-            <div className="h-64 min-h-[256px]">
+            <div className="w-full" style={{ height: '256px', minHeight: '256px' }}>
                 {chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={256}>
+                    <ResponsiveContainer width="100%" height={256} minWidth={0} minHeight={256}>
                         <AreaChart data={chartData} isAnimationActive={selectedRange !== 0}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis

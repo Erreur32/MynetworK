@@ -30,14 +30,26 @@ if (process.env.NODE_ENV !== 'production') {
 export default defineConfig({
   server: {
     port: parseInt(process.env.VITE_PORT || '5173', 10),
-    host: '0.0.0.0',
+    host: '0.0.0.0', // Listen on all interfaces to allow access via IP
     allowedHosts: ['mwk-dev.myoueb.fr'],
+    // Configure HMR WebSocket
+    // In Docker dev, use DASHBOARD_PORT (host port) instead of VITE_PORT (container port)
+    // Vite will automatically detect the host from the browser's window.location.hostname
+    // clientPort should be the port the browser connects to (host port in Docker)
+    hmr: {
+      clientPort: parseInt(process.env.DASHBOARD_PORT || process.env.VITE_PORT || '5173', 10),
+      // Vite will automatically detect the host from the browser's window.location.hostname
+      // So if you access via 192.168.1.150:3666, HMR will use ws://192.168.1.150:3666
+    },
     proxy: {
       '/api': {
         // Use localhost for proxy - Vite proxy runs on the same machine as the backend
         // When accessing via IP (192.168.1.150), the proxy still connects to localhost:3003
         // because the proxy runs server-side on the same machine
-        target: `http://127.0.0.1:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
+        // IMPORTANT: Use PORT (container port) not SERVER_PORT (host port) in Docker
+        // In Docker dev: PORT=3003 (container), SERVER_PORT=3668 (host)
+        // In npm dev: PORT=3003 or SERVER_PORT=3003 (same value)
+        target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
         changeOrigin: true,
         secure: false,
         timeout: 60000, // Increased timeout for long-running requests like ping
@@ -74,10 +86,14 @@ export default defineConfig({
         }
       },
       '/ws': {
-        target: `ws://localhost:${process.env.SERVER_PORT || process.env.PORT || '3003'}`,
+        // IMPORTANT: Use PORT (container port) not SERVER_PORT (host port) in Docker
+        // In Docker dev: PORT=3003 (container), SERVER_PORT=3668 (host)
+        // In npm dev: PORT=3003 or SERVER_PORT=3003 (same value)
+        target: `ws://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
         ws: true,
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path, // Don't rewrite the path, pass it as-is
         configure: (proxy, _options) => {
           // Suppress all WebSocket proxy errors - they are normal during connection attempts
           // The frontend will automatically retry connecting

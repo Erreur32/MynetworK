@@ -39,10 +39,12 @@ export class UniFiPlugin extends BasePlugin {
             const password = settings?.password as string;
             const site = (settings?.site as string) || 'default';
 
-            // Only set connection if all required settings are provided
-            if (url && username && password) {
-                this.apiService.setConnection(url, username, password, site);
-                logger.debug('UniFiPlugin', 'Controller connection details set');
+            // Only set connection if all required settings are provided and not empty
+            if (url && url.trim() && username && username.trim() && password && password.trim()) {
+                this.apiService.setConnection(url.trim(), username.trim(), password, site.trim() || 'default');
+                logger.debug('UniFiPlugin', `Controller connection details set: URL=${url.trim()}, Site=${site.trim() || 'default'}`);
+            } else {
+                logger.debug('UniFiPlugin', 'Controller connection details not set - missing or empty required fields');
             }
         }
     }

@@ -156,6 +156,18 @@ class ApiClient {
         
         // Client error (400, 401, 403, 404, etc.)
         if (response.status >= 400 && response.status < 500) {
+          // Special handling for 401 (Unauthorized) - authentication errors
+          if (response.status === 401) {
+            const errorMessage = data?.error?.message || data?.msg || 'Invalid credentials';
+            return {
+              success: false,
+              error: {
+                code: 'UNAUTHORIZED',
+                message: errorMessage
+              }
+            };
+          }
+          
           return {
             success: false,
             error: {

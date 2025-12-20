@@ -88,16 +88,47 @@ export const useUserAuthStore = create<UserAuthState>((set, get) => ({
                 });
                 return true;
             } else {
+                // Check if it's an authentication error (401 or invalid credentials)
+                const errorMessage = response.error?.message || '';
+                const isAuthError = 
+                    response.error?.code === 'UNAUTHORIZED' ||
+                    response.error?.code === 'INVALID_CREDENTIALS' ||
+                    errorMessage.toLowerCase().includes('invalid credentials') ||
+                    errorMessage.toLowerCase().includes('incorrect') ||
+                    errorMessage.toLowerCase().includes('mauvais') ||
+                    errorMessage.toLowerCase().includes('incorrect');
+                
                 set({
                     isLoading: false,
-                    error: response.error?.message || 'Login failed'
+                    error: isAuthError 
+                        ? 'Nom d\'utilisateur ou mot de passe incorrect'
+                        : (response.error?.message || 'Erreur de connexion')
                 });
                 return false;
             }
-        } catch (error) {
+        } catch (error: any) {
+            // Check if it's a network error or authentication error
+            const errorMessage = error?.message || String(error || '');
+            const isNetworkError = 
+                errorMessage.includes('Impossible de contacter') ||
+                errorMessage.includes('serveur') ||
+                errorMessage.includes('network') ||
+                errorMessage.includes('ECONNREFUSED') ||
+                errorMessage.includes('Failed to fetch');
+            
+            // Check if it's an authentication error from the API response
+            const isAuthError = 
+                error?.response?.status === 401 ||
+                errorMessage.toLowerCase().includes('invalid credentials') ||
+                errorMessage.toLowerCase().includes('incorrect');
+            
             set({
                 isLoading: false,
-                error: error instanceof Error ? error.message : 'Login failed'
+                error: isAuthError 
+                    ? 'Nom d\'utilisateur ou mot de passe incorrect'
+                    : (isNetworkError 
+                        ? 'Impossible de contacter le serveur. Vérifiez votre connexion réseau.'
+                        : (error instanceof Error ? error.message : 'Erreur de connexion'))
             });
             return false;
         }

@@ -299,7 +299,7 @@ class FreeboxApiService {
 
         // Get fresh challenge
         try {
-            await this.getChallenge();
+        await this.getChallenge();
         } catch (error) {
             console.error('[FreeboxAPI] Failed to get challenge:', error);
             throw new Error(`Failed to get challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);

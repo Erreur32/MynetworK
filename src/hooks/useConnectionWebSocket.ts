@@ -241,7 +241,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     if (enabled) {
       // Add a small delay to ensure backend is ready (especially after npm run dev restart)
       const connectTimeout = setTimeout(() => {
-        connect();
+      connect();
       }, 500);
       
       return () => {
@@ -250,9 +250,9 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       };
     } else {
       disconnect();
-      return () => {
-        disconnect();
-      };
+    return () => {
+      disconnect();
+    };
     }
   }, [enabled, connect, disconnect]);
 

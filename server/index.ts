@@ -382,35 +382,62 @@ server.listen(port, host, () => {
   const hostIP = isDockerEnv ? getHostMachineIP() : null;
   const containerIP = getNetworkIP();
   const displayIP = hostIP || containerIP || 'localhost';
-  const dashboardPort = process.env.DASHBOARD_PORT || '7505';
   
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
+  let apiUrl: string;
+  let wsUrl: string;
   
   if (isProduction) {
-    // Production mode (Docker): use host IP instead of Docker IP
+    // Production mode (Docker): use host IP and DASHBOARD_PORT
+    const dashboardPort = process.env.DASHBOARD_PORT || '7505';
     if (hostIP) {
       frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
       frontendLocalUrl = frontendWebUrl;
+      apiUrl = `http://${hostIP}:${dashboardPort}`;
+      wsUrl = `ws://${hostIP}:${dashboardPort}/ws/connection`;
     } else {
       // Fallback to PUBLIC_URL or localhost
       frontendWebUrl = config.publicUrl || `http://localhost:${dashboardPort}`;
       frontendLocalUrl = frontendWebUrl;
+      apiUrl = config.publicUrl || `http://localhost:${dashboardPort}`;
+      wsUrl = config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${dashboardPort}/ws/connection`;
+    }
+  } else if (isDockerDev) {
+    // Docker dev mode: use host ports from docker-compose.dev.yml (DASHBOARD_PORT and SERVER_PORT)
+    // These are the ports exposed on the host machine, not the container ports
+    const dashboardPort = process.env.DASHBOARD_PORT || '3666'; // Host port for frontend
+    const serverPort = process.env.SERVER_PORT || '3668'; // Host port for backend
+    const networkIP = getNetworkIP();
+    
+    if (hostIP) {
+      frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
+      frontendLocalUrl = `http://localhost:${dashboardPort}`;
+      apiUrl = `http://${hostIP}:${serverPort}`;
+      wsUrl = `ws://${hostIP}:${serverPort}/ws/connection`;
+    } else if (networkIP) {
+      frontendWebUrl = `http://${networkIP}:${dashboardPort}`;
+      frontendLocalUrl = `http://localhost:${dashboardPort}`;
+      apiUrl = `http://${networkIP}:${serverPort}`;
+      wsUrl = `ws://${networkIP}:${serverPort}/ws/connection`;
+    } else {
+      frontendWebUrl = `http://localhost:${dashboardPort}`;
+      frontendLocalUrl = frontendWebUrl;
+      apiUrl = `http://localhost:${serverPort}`;
+      wsUrl = `ws://localhost:${serverPort}/ws/connection`;
     }
   } else {
-    // Development mode: frontend is on Vite dev server (port 5173)
+    // NPM dev mode: frontend is on Vite dev server, backend on configured port
+    // Use environment variables if set, otherwise defaults
     const vitePort = process.env.VITE_PORT || '5173';
+    const serverPort = process.env.SERVER_PORT || process.env.PORT || '3003';
     const networkIP = getNetworkIP();
+    
     frontendLocalUrl = `http://localhost:${vitePort}`;
     frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
+    apiUrl = `http://localhost:${serverPort}`;
+    wsUrl = `ws://localhost:${serverPort}/ws/connection`;
   }
-  
-  const apiUrl = isProduction 
-    ? (hostIP ? `http://${hostIP}:${dashboardPort}` : (config.publicUrl || `http://localhost:${dashboardPort}`))
-    : `http://localhost:${port}`;
-  const wsUrl = isProduction
-    ? (hostIP ? `ws://${hostIP}:${dashboardPort}/ws/connection` : (config.publicUrl ? config.publicUrl.replace(/^http/, 'ws') + '/ws/connection' : `ws://localhost:${dashboardPort}/ws/connection`))
-    : `ws://localhost:${port}/ws/connection`;
   
   // ANSI color codes for terminal output
   const colors = {

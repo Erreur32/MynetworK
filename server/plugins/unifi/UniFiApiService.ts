@@ -241,10 +241,29 @@ export class UniFiApiService {
             throw new Error('UniFi connection details not set');
         }
 
-        const baseUrl = this.url.replace(/\/+$/, '');
+        // Validate and clean URL
+        let baseUrl = this.url.trim();
+        // Remove trailing slashes
+        baseUrl = baseUrl.replace(/\/+$/, '');
+        // Ensure URL has protocol
+        if (!baseUrl.match(/^https?:\/\//)) {
+            throw new Error(`Invalid UniFi URL format: "${baseUrl}". URL must start with http:// or https://`);
+        }
+
         const loginUrl = `${baseUrl}/api/login`;
 
-        // Login is verbose (only shown if verbose debug enabled)
+        // Validate credentials are not empty
+        if (!this.username.trim() || !this.password.trim()) {
+            throw new Error('Username and password cannot be empty');
+        }
+
+        // Prepare login payload
+        const loginPayload = {
+            username: this.username.trim(),
+            password: this.password
+        };
+
+        logger.debug('UniFi', `Attempting login to: ${baseUrl} (username: ${this.username.trim()})`);
 
         const response = await fetch(loginUrl, {
             method: 'POST',
@@ -252,14 +271,38 @@ export class UniFiApiService {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                username: this.username,
-                password: this.password
-            })
+            body: JSON.stringify(loginPayload)
         });
 
         if (!response.ok) {
-            throw new Error(`UniFi login failed: ${response.status} ${response.statusText}`);
+            // Try to get more details from the response body
+            let errorDetails = '';
+            try {
+                const errorBody = await response.text();
+                if (errorBody) {
+                    try {
+                        const errorJson = JSON.parse(errorBody);
+                        errorDetails = errorJson.msg || errorJson.message || errorJson.error || '';
+                    } catch {
+                        errorDetails = errorBody.substring(0, 200); // Limit length
+                    }
+                }
+            } catch {
+                // Ignore errors when reading response body
+            }
+
+            const statusText = response.statusText || 'Unknown error';
+            const details = errorDetails ? ` - ${errorDetails}` : '';
+            
+            if (response.status === 400) {
+                throw new Error(`UniFi login failed (400 Bad Request): Invalid credentials or malformed request${details}. Verify URL, username, and password.`);
+            } else if (response.status === 401) {
+                throw new Error(`UniFi login failed (401 Unauthorized): Invalid username or password${details}`);
+            } else if (response.status === 403) {
+                throw new Error(`UniFi login failed (403 Forbidden): Access denied${details}`);
+            } else {
+                throw new Error(`UniFi login failed: ${response.status} ${statusText}${details}`);
+            }
         }
 
         // UniFi returns session information in the Set-Cookie header.
