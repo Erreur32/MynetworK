@@ -5,10 +5,20 @@
 
 set -e
 
+# Couleurs pour la sortie
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
 # Vérifier qu'un argument version est fourni
 if [ -z "$1" ]; then
-    echo "❌ Erreur: Veuillez fournir une version (ex: 0.0.4)"
-    echo "Usage: $0 <version>"
+    echo -e "${RED}❌ Erreur: Veuillez fournir une version (ex: 0.0.4)${NC}"
+    echo -e "${YELLOW}Usage: $0 <version>${NC}"
     exit 1
 fi
 
@@ -16,39 +26,33 @@ NEW_VERSION="$1"
 OLD_VERSION=$(grep -oP '"version":\s*"\K[^"]+' package.json)
 
 if [ -z "$OLD_VERSION" ]; then
-    echo "❌ Erreur: Impossible de trouver la version actuelle dans package.json"
+    echo -e "${RED}❌ Erreur: Impossible de trouver la version actuelle dans package.json${NC}"
     exit 1
 fi
 
-echo "🔄 Mise à jour de la version de $OLD_VERSION vers $NEW_VERSION..."
+echo -e "${CYAN}${BOLD}🔄 Mise à jour de la version de ${YELLOW}$OLD_VERSION${CYAN} vers ${GREEN}$NEW_VERSION${NC}..."
 
 # 1. package.json
-echo "  📝 Mise à jour de package.json..."
+echo -e "${BLUE}  📝 Mise à jour de package.json...${NC}"
 sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package.json
 
 # 2. src/constants/version.ts (fichier de constantes centralisé)
-echo "  📝 Mise à jour de src/constants/version.ts..."
+echo -e "${BLUE}  📝 Mise à jour de src/constants/version.ts...${NC}"
 sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
 
 # 3. README.md (badge)
-echo "  📝 Mise à jour de README.md..."
+echo -e "${BLUE}  📝 Mise à jour de README.md...${NC}"
 sed -i "s/MynetworK-$OLD_VERSION/MynetworK-$NEW_VERSION/g" README.md
 
 # 4. CHANGELOG.md (ajout de la nouvelle entrée en haut)
-echo "  📝 Mise à jour de CHANGELOG.md..."
+echo -e "${BLUE}  📝 Mise à jour de CHANGELOG.md...${NC}"
 # Obtenir la date actuelle au format YYYY-MM-DD
 CURRENT_DATE=$(date +%Y-%m-%d)
 
-# Créer un fichier temporaire avec la nouvelle entrée
+# Créer un fichier temporaire avec la nouvelle entrée (sans template vide)
 TEMP_CHANGELOG=$(mktemp)
 cat > "$TEMP_CHANGELOG" << EOF
 ## [$NEW_VERSION] - $CURRENT_DATE
-
-### 🐛 Corrigé
-
-### 🔧 Modifié
-
-### 📝 Documentation
 
 ---
 
@@ -79,18 +83,104 @@ mv "$TEMP_OUTPUT" CHANGELOG.md
 # Nettoyer les fichiers temporaires
 rm -f "$TEMP_CHANGELOG"
 
-echo "✅ Version mise à jour avec succès de $OLD_VERSION vers $NEW_VERSION"
+# Créer le message de commit basé sur le format de commit-message.txt
+COMMIT_MESSAGE_FILE="commit-message.txt"
+
+# Extraire le contenu du CHANGELOG pour cette version
+# Utiliser awk pour extraire entre la version actuelle et la suivante ou ---
+CHANGELOG_CONTENT=$(awk -v version="$NEW_VERSION" '
+    /^## \[/ { 
+        if (found) exit
+        if ($0 ~ "^## \\[" version "\\]") { found=1; next }
+    }
+    found && /^## \[/ { exit }
+    found && /^---$/ { exit }
+    found { print }
+' CHANGELOG.md 2>/dev/null || echo "")
+
+# Si le CHANGELOG contient du contenu, créer le message formaté
+if [ -n "$CHANGELOG_CONTENT" ] && echo "$CHANGELOG_CONTENT" | grep -qE "^###|^\-"; then
+    # Formater les sections avec les emojis appropriés (format commit-message.txt)
+    FORMATTED_CONTENT=$(echo "$CHANGELOG_CONTENT" | \
+        sed 's/^### 🐛 Corrigé/🐛 Corrigé/' | \
+        sed 's/^### 🔧 Modifié/🔧 Modifié/' | \
+        sed 's/^### 📝 Documentation/📝 Documentation/' | \
+        sed 's/^### ✨ Ajouté/✨ Ajouté/' | \
+        sed 's/^### 🐛/🐛 Corrigé/' | \
+        sed 's/^### 🔧/🔧 Modifié/' | \
+        sed 's/^### 📝/📝 Documentation/' | \
+        sed 's/^### ✨/✨ Ajouté/')
+    
+    cat > "$COMMIT_MESSAGE_FILE" << EOF
+feat: Version $NEW_VERSION - Mise à jour
+
+$FORMATTED_CONTENT
+EOF
+else
+    # Template par défaut si le CHANGELOG est vide
+    cat > "$COMMIT_MESSAGE_FILE" << EOF
+feat: Version $NEW_VERSION - Mise à jour
+
+✨ Ajouté
+- (À compléter)
+
+🔧 Modifié
+- (À compléter)
+
+🐛 Corrigé
+- (À compléter)
+EOF
+fi
+
+# Corriger les permissions des fichiers modifiés
+echo -e "${BLUE}  🔐 Correction des permissions...${NC}"
+if command -v chown &> /dev/null; then
+    # Chemin spécifique demandé par l'utilisateur
+    PROJECT_PATH="/home/tools/Project/MyNetwork"
+    if [ -d "$PROJECT_PATH" ]; then
+        if chown debian32:debian32 "$PROJECT_PATH" -R 2>/dev/null; then
+            echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_PATH${NC}"
+        else
+            echo -e "${YELLOW}  ⚠️  Impossible d'exécuter chown (peut nécessiter les droits sudo)${NC}"
+            echo -e "${YELLOW}     Exécutez manuellement: ${CYAN}sudo chown debian32:debian32 $PROJECT_PATH -R${NC}"
+        fi
+    else
+        # Fallback: utiliser le répertoire racine du projet détecté automatiquement
+        PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+        if chown debian32:debian32 "$PROJECT_ROOT" -R 2>/dev/null; then
+            echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_ROOT${NC}"
+        else
+            echo -e "${YELLOW}  ⚠️  Impossible d'exécuter chown (peut nécessiter les droits sudo)${NC}"
+            echo -e "${YELLOW}     Exécutez manuellement: ${CYAN}sudo chown debian32:debian32 $PROJECT_ROOT -R${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}  ⚠️  Commande chown non disponible${NC}"
+fi
+
+echo -e "${GREEN}${BOLD}✅ Version mise à jour avec succès de ${YELLOW}$OLD_VERSION${GREEN} vers ${CYAN}$NEW_VERSION${NC}"
 echo ""
-echo "📋 Fichiers modifiés:"
-echo "  - package.json"
-echo "  - src/constants/version.ts"
-echo "  - README.md"
-echo "  - CHANGELOG.md"
+echo -e "${CYAN}${BOLD}📋 Fichiers modifiés:${NC}"
+echo -e "  ${BLUE}- package.json${NC}"
+echo -e "  ${BLUE}- src/constants/version.ts${NC}"
+echo -e "  ${BLUE}- README.md${NC}"
+echo -e "  ${BLUE}- CHANGELOG.md${NC}"
+echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"
 echo ""
-echo "ℹ️  Note: Les fichiers Header.tsx et SettingsPage.tsx utilisent maintenant"
-echo "   la constante APP_VERSION depuis src/constants/version.ts"
+echo -e "${YELLOW}📝 Message de commit créé dans: ${MAGENTA}$COMMIT_MESSAGE_FILE${NC}"
 echo ""
-echo "⚠️  N'oubliez pas de:"
-echo "  1. Vérifier le contenu de CHANGELOG.md et compléter les sections"
-echo "  2. Faire un commit: git add -A && git commit -m \"chore: bump version to $NEW_VERSION\""
+echo -e "${CYAN}${BOLD}⚠️  N'oubliez pas de:${NC}"
+echo -e "  ${YELLOW}1.${NC} Vérifier le contenu de ${BLUE}CHANGELOG.md${NC} et compléter les sections"
+echo ""
+echo -e "${GREEN}${BOLD}🚀 Commandes Git à exécuter:${NC}"
+echo ""
+echo -e "${CYAN}${BOLD}Option 1 - Avec fichier de message:${NC}"
+echo -e "${CYAN}git add -A && git commit -F $COMMIT_MESSAGE_FILE && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
+echo ""
+echo -e "${CYAN}${BOLD}Option 2 - Avec message inline:${NC}"
+COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Mise à jour")
+echo -e "${CYAN}git add -A && git commit -m \"$COMMIT_MESSAGE_INLINE\" && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
+echo ""
+echo -e "${YELLOW}💡 Note:${NC} Le message de commit complet est dans ${MAGENTA}$COMMIT_MESSAGE_FILE${NC}"
+echo -e "${YELLOW}   Vous pouvez le modifier avant d'exécuter les commandes ci-dessus.${NC}"
 

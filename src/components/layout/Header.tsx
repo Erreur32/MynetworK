@@ -396,12 +396,42 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="flex flex-col md:flex-row items-center justify-between p-4 bg-theme-header border-b border-theme gap-4 relative z-40" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
       {/* Logo / Box identifier with Search icon */}
       <div className="flex items-center gap-2">
-        {/* Logo badge - cliquable sur page recherche pour retour dashboard */}
-        {pageType === 'search' && onHomeClick ? (
+        {/* Logo badge - cliquable pour retour dashboard */}
+        {onHomeClick && pageType !== 'dashboard' ? (
           <button
             onClick={onHomeClick}
             className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme hover:bg-theme-primary transition-colors"
           >
+            {pageType === 'freebox' ? (
+              <>
+                <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
+                <div className="flex flex-col leading-tight">
+                  <span className="font-semibold text-theme-primary">{boxName}</span>
+                  <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
+                </div>
+              </>
+            ) : pageType === 'unifi' ? (
+              <>
+                <div className="w-7 h-7 flex items-center justify-center">
+                  {/* UniFi icon (custom SVG, same color palette as original) */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    className="w-7 h-7"
+                  >
+                    <path
+                      fill="#1fb0ec"
+                      d="M5.343 4.222h1.099v1.1H5.343zm7.438 14.435a7.2 7.2 0 0 1-3.51-.988a6.5 6.5 0 0 0 2.947 3.936l.66.364c5.052-.337 8.009-3.6 8.009-7.863v-.924c-1.201 3.918-3.995 5.66-8.106 5.475m-4.107-2.291V8.355H7.562v4.1H6.448V10h-1.11v1.1H4.225V5.042H3.113v9.063c0 4.508 3.3 7.9 8.888 7.9a6.82 6.82 0 0 1-3.327-5.639M7.562 4.772h1.112v1.1H7.562zM3.113 2h1.112v1.111H3.113zm2.231 5.805h1.1v1.1h-1.1zm1.111-1.649h1.1v1.1h-1.1zm-.006-3.045h1.113V4.21H6.449zm8.876 2.677v10.577a9 9 0 0 1-.164 1.7c2.671-.486 4.414-2.137 5.3-5.014l.431-1.407V2.012c-5.042 0-5.567 1.931-5.567 3.776"
+                    />
+                  </svg>
+                </div>
+                <div className="flex flex-col leading-tight">
+                  <span className="font-semibold text-gray-200">UniFi Controller</span>
+                  <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
+                </div>
+              </>
+            ) : (
+              <>
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight relative">
               <span className="font-semibold text-theme-primary">MynetworK</span>
@@ -414,6 +444,8 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
             </div>
+              </>
+            )}
           </button>
         ) : (
           <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
@@ -767,10 +799,14 @@ export const Header: React.FC<HeaderProps> = ({
             const nonClientDevices = devices.filter(
               (d: any) => (d.type || '').toString().toLowerCase() !== 'client'
             );
-            const anyUpgradable = nonClientDevices.some(
-              (d: any) =>
-                d.upgradable === true || !!d.upgrade_to_firmware || !!d.required_version
-            );
+            // More precise check: upgradable must be explicitly true
+            // OR upgrade_to_firmware must exist and be different from current version
+            const anyUpgradable = nonClientDevices.some((d: any) => {
+              const hasUpgradeToFirmware = !!d.upgrade_to_firmware && 
+                                            d.upgrade_to_firmware !== d.version &&
+                                            d.upgrade_to_firmware !== d.firmware_version;
+              return d.upgradable === true || hasUpgradeToFirmware;
+            });
 
             // Clients per SSID (wireless only)
             const clients = devices.filter((d: any) => {

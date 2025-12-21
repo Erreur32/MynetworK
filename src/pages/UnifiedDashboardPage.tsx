@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkEventsWidget } from '../components/widgets';
+import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkScanWidget } from '../components/widgets';
 import { TrafficHistoryModal } from '../components/modals';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
@@ -15,12 +15,14 @@ interface UnifiedDashboardPageProps {
     onNavigateToFreebox?: () => void;
     onNavigateToUniFi?: () => void;
     onNavigateToPlugins?: (pluginId?: string) => void;
+    onNavigateToNetworkScan?: () => void;
 }
 
 export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({ 
     onNavigateToFreebox,
     onNavigateToUniFi,
-    onNavigateToPlugins
+    onNavigateToPlugins,
+    onNavigateToNetworkScan
 }) => {
     const { plugins, fetchPlugins, fetchAllStats } = usePluginStore();
 
@@ -38,6 +40,8 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
     const hasUniFi = activePlugins.some(p => p.id === 'unifi');
     // Freebox is available only if it's enabled AND connected (same condition as the Freebox card)
     const hasFreebox = activePlugins.some(p => p.id === 'freebox');
+    // Scan-réseau n'a pas besoin de connexion externe, donc on vérifie seulement si activé
+    const hasScanReseau = plugins.some(p => p.id === 'scan-reseau' && p.enabled);
     const hasAnyPlugin = plugins.some(p => p.configured);
 
     return (
@@ -64,7 +68,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                     </div>
                 )}
 
-                {/* Ligne du dessous: cartes Freebox / UniFi + évènements réseau alignés sous la bande passante */}
+                {/* Ligne du dessous: cartes Freebox / UniFi / Scan Réseau + évènements réseau alignés sous la bande passante */}
                 {hasAnyPlugin && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {activePlugins.find(p => p.id === 'freebox') && (
@@ -79,8 +83,10 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                             onViewDetails={onNavigateToUniFi}
                         />
                     )}
-                    {hasUniFi && (
-                        <NetworkEventsWidget />
+                    {hasScanReseau && (
+                        <NetworkScanWidget 
+                            onViewDetails={onNavigateToNetworkScan}
+                        />
                     )}
                 </div>
                 )}

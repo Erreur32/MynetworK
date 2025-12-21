@@ -18,7 +18,7 @@ interface UniFiPageProps {
     onBack: () => void;
 }
 
-type TabType = 'overview' | 'sites-aps-switches' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
+type TabType = 'overview' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
@@ -85,8 +85,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
     // Migrate old tab values to new combined tab
     useEffect(() => {
-        if (activeTab === 'sites' || activeTab === 'accesspoints' || activeTab === 'sites-aps') {
-            setActiveTab('sites-aps-switches');
+        if (activeTab === 'sites' || activeTab === 'accesspoints' || activeTab === 'sites-aps' || activeTab === 'sites-aps-switches') {
+            setActiveTab('overview');
         }
     }, [activeTab]);
 
@@ -140,10 +140,9 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
-        { id: 'sites-aps-switches', label: 'Sites, APs & Switches', icon: Server },
+        { id: 'clients', label: 'Clients', icon: Users },
         { id: 'switches', label: 'Switch', icon: Network },
         { id: 'analyse', label: 'Analyse', icon: Activity },
-        { id: 'clients', label: 'Clients', icon: Users },
         { id: 'traffic', label: 'Trafic', icon: TrendingUp },
         { id: 'events', label: 'Événements', icon: AlertCircle },
         { id: 'debug', label: 'Debug', icon: AlertCircle }
@@ -224,7 +223,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                         d="M5.343 4.222h1.099v1.1H5.343zm7.438 14.435a7.2 7.2 0 0 1-3.51-.988a6.5 6.5 0 0 0 2.947 3.936l.66.364c5.052-.337 8.009-3.6 8.009-7.863v-.924c-1.201 3.918-3.995 5.66-8.106 5.475m-4.107-2.291V8.355H7.562v4.1H6.448V10h-1.11v1.1H4.225V5.042H3.113v9.063c0 4.508 3.3 7.9 8.888 7.9a6.82 6.82 0 0 1-3.327-5.639M7.562 4.772h1.112v1.1H7.562zM3.113 2h1.112v1.111H3.113zm2.231 5.805h1.1v1.1h-1.1zm1.111-1.649h1.1v1.1h-1.1zm-.006-3.045h1.113V4.21H6.449zm8.876 2.677v10.577a9 9 0 0 1-.164 1.7c2.671-.486 4.414-2.137 5.3-5.014l.431-1.407V2.012c-5.042 0-5.567 1.931-5.567 3.776"
                                     />
                                 </svg>
-                                UniFi Controller
+                                UniFi
                             </h1>
                             <p className="text-sm text-gray-500 mt-1">
                                 {unifiPlugin.settings?.url as string || 'Non configuré'}
@@ -336,10 +335,19 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 const controller = (unifiStats?.system || {}) as any;
 
                                 const classifyUpdateStatus = (d: any): 'ok' | 'update' | 'critical' => {
-                                    const upgradable = d.upgradable === true || !!d.upgrade_to_firmware || !!d.required_version;
-                                    if (!upgradable) return 'ok';
                                     // If UniFi marks device as unsupported, consider it critical
                                     if (d.unsupported === true || d.unsupported_reason) return 'critical';
+                                    
+                                    // More precise check: upgradable must be explicitly true
+                                    // OR upgrade_to_firmware must exist and be different from current version
+                                    const hasUpgradeToFirmware = !!d.upgrade_to_firmware && 
+                                                                  d.upgrade_to_firmware !== d.version &&
+                                                                  d.upgrade_to_firmware !== d.firmware_version;
+                                    const isUpgradable = d.upgradable === true || hasUpgradeToFirmware;
+                                    
+                                    // required_version alone is not enough - it just indicates minimum required version
+                                    // Only count as update if upgradable is true or upgrade_to_firmware is different
+                                    if (!isUpgradable) return 'ok';
                                     return 'update';
                                 };
 
@@ -354,9 +362,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                     else if (status === 'critical') criticalCount += 1;
                                 }
 
-                                // Use controller info as an additional "critical" flag if update is available
-                                if (controller.updateAvailable === true) {
-                                    updateAvailableCount = Math.max(updateAvailableCount, 1);
+                                // Use controller info as an additional flag if update is available
+                                // Only count if there are actually devices with updates OR if controller explicitly says update is available
+                                // Note: controller.updateAvailable can be true even if update is just downloaded, so we're conservative
+                                if (controller.updateAvailable === true && updateAvailableCount === 0) {
+                                    // Only add if no devices have updates - this means controller itself has an update
+                                    // But we verify it's not just a downloaded update that's pending installation
+                                    if (controller.updateDownloaded !== true) {
+                                        updateAvailableCount = 1;
+                                    }
                                 }
 
                                 const totalEquipments = nonClientDevices.length;
@@ -657,100 +671,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                     </Card>
                                 </div>
 
-                                {/* Ligne 3 : cartes par équipement (APs + Switches) */}
-                                {unifiStats?.devices && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                                        {unifiStats.devices
-                                            .filter((d: any) => {
-                                                const type = (d.type || '').toLowerCase();
-                                                return type !== 'client';
-                                            })
-                                            .slice(0, 4)
-                                            .map((device: any) => (
-                                                <div
-                                                    key={device.id}
-                                                    className={`bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 ${
-                                                        device.active === false ? 'opacity-60' : ''
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-2 h-2 rounded-full bg-gray-300" />
-                                                            <span className="text-sm font-semibold text-white truncate">
-                                                                {device.name || device.model || device.id}
-                                                            </span>
-                                                            <span
-                                                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                                                                    device.active === false
-                                                                        ? 'bg-gray-900 text-gray-400 border-gray-700'
-                                                                        : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
-                                                                }`}
-                                                            >
-                                                                {device.active === false ? 'OFFLINE' : 'ONLINE'}
-                                            </span>
-                                        </div>
-                                                        {(() => {
-                                                            const upgradable =
-                                                                device.upgradable === true ||
-                                                                !!device.upgrade_to_firmware ||
-                                                                !!device.required_version;
-                                                            const statusDotClass = (() => {
-                                                                if (device.active === false) return 'bg-gray-500';
-                                                                if (upgradable) return 'bg-amber-400';
-                                                                return 'bg-emerald-400';
-                                                            })();
-                                                            const title =
-                                                                device.active === false
-                                                                    ? 'Équipement hors ligne (état de mise à jour inconnu)'
-                                                                    : upgradable
-                                                                    ? 'Mise à jour disponible pour cet équipement'
-                                                                    : 'Équipement à jour (aucune mise à jour détectée)';
-                                                            return (
-                                                                <span
-                                                                    className={`w-2 h-2 rounded-full ${statusDotClass}`}
-                                                                    title={title}
-                                                                />
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                    <div className="text-xs space-y-0.5 mt-1">
-                                                        <div>
-                                                            <span className="text-gray-500">Type:&nbsp;</span>
-                                                            <span className="text-gray-300">
-                                                                {(device.type || device.model || 'N/A').toString().toLowerCase()}
-                                                </span>
-                                            </div>
-                                                        {device.ip && (
-                                                            <div>
-                                                                <span className="text-gray-500">IP:&nbsp;</span>
-                                                                <span className="text-gray-300">{device.ip}</span>
-                                        </div>
-                                    )}
-                                                        <div>
-                                                            <span className="text-gray-500">Statut:&nbsp;</span>
-                                                            <span className="text-gray-300">
-                                                                {device.active !== false ? 'En ligne' : 'Hors ligne'}
-                                                            </span>
-                                    </div>
-                                                        {device.last_seen && (
-                                                            <div>
-                                                                <span className="text-gray-500">Dernière vue:&nbsp;</span>
-                                                                <span className="text-gray-300">
-                                                                    {new Date(device.last_seen * 1000).toLocaleString('fr-FR')}
-                                                                </span>
-                                                            </div>
-                                    )}
-                                </div>
-                                                </div>
-                                            ))}
-                                    </div>
-                                )}
-                        </div>
-                        </>
-                    )}
-
-                    {/* Sites, Access Points & Switches Tab (Combined) */}
-                    {activeTab === 'sites-aps-switches' && (
+                                {/* Sites, Access Points & Switches Section */}
                         <div className="col-span-full space-y-6">
                             {/* Sites Section */}
                             <Card title="Sites UniFi">
@@ -770,7 +691,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             {sites.map((site, index) => (
                                                 <div
                                                     key={site.id || index}
-                                                    className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2"
+                                                    className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 relative"
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
@@ -785,7 +706,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                             }`}
                                                         />
                                                     </div>
-                                                    <div className="text-xs space-y-0.5 mt-1">
+                                                    <div className="text-xs space-y-0.5 mt-1 flex-1">
                                                         {site.hostname && (
                                                             <div>
                                                                 <span className="text-gray-500">Hostname:&nbsp;</span>
@@ -795,34 +716,34 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                             </div>
                                                         )}
                                                         {site.devices && (
-                                                            <>
                                                                 <div>
                                                                     <span className="text-gray-500">Équipements:&nbsp;</span>
                                                                     <span className="text-gray-300">
                                                                         {site.devices.total ?? 0}
                                                                     </span>
                                                                 </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">APs</span>
-                                                                    <span className="text-gray-300">
-                                                                        {site.devices.aps ?? 0}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Switches</span>
-                                                                    <span className="text-gray-300">
-                                                                        {site.devices.switches ?? 0}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-gray-500">Clients</span>
-                                                                    <span className="text-gray-300">
-                                                                        {site.devices.clients ?? 0}
-                                                                    </span>
-                                                                </div>
-                                                            </>
                                                         )}
-                                                    </div>
+                                                                </div>
+                                                    {/* Badges en bas à droite */}
+                                                    {site.devices && (
+                                                        <div className="flex items-center justify-end gap-2 mt-auto pt-2">
+                                                            {site.devices.clients !== undefined && (
+                                                                <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 font-semibold text-sm">
+                                                                    {site.devices.clients ?? 0} Clients
+                                                                    </span>
+                                                            )}
+                                                            {site.devices.aps !== undefined && (
+                                                                <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 font-semibold text-sm">
+                                                                    {site.devices.aps ?? 0} APs
+                                                                    </span>
+                                                            )}
+                                                            {site.devices.switches !== undefined && (
+                                                                <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/50 text-blue-300 font-semibold text-sm">
+                                                                    {site.devices.switches ?? 0} Switches
+                                                                </span>
+                                                            )}
+                                                                </div>
+                                                        )}
                                                 </div>
                                             ))}
                                         </div>
@@ -921,6 +842,16 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             }).length;
                                         };
 
+                                        const formatUptime = (seconds: number | undefined): string => {
+                                            if (!seconds || seconds <= 0) return 'N/A';
+                                            const days = Math.floor(seconds / 86400);
+                                            const hours = Math.floor((seconds % 86400) / 3600);
+                                            const minutes = Math.floor((seconds % 3600) / 60);
+                                            if (days > 0) return `${days}j ${hours}h`;
+                                            if (hours > 0) return `${hours}h ${minutes}min`;
+                                            return `${minutes}min`;
+                                        };
+
                                         return (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                                                 {accessPoints.map((device: any) => {
@@ -928,6 +859,9 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                     const wifiType = getWifiType(device);
                                                     const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
                                                     const bands = getUnifiBands(device);
+                                                    const uptime = device.uptime as number | undefined;
+                                                    const cpuUsage = device.cpu_usage || device.cpu?.usage || device.proc_usage as number | undefined;
+                                                    const power = device.power || device.watt || device.poe_power as number | undefined;
 
                                                     return (
                                                 <div
@@ -965,20 +899,50 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     />
                                                                 </div>
                                                             </div>
-                                                            <div className="text-xs space-y-0.5 mt-1">
+                                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 text-xs">
+                                                                {/* Colonne gauche - Informations système */}
+                                                                <div className="space-y-1">
                                                         {device.ip && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">IP:&nbsp;</span>
-                                                                        <span className="text-gray-300">{device.ip}</span>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">IP</span>
+                                                                            <span className="text-gray-300 font-mono text-[10px]">{device.ip}</span>
                                                                     </div>
                                                         )}
-                                                                <div>
-                                                                    <span className="text-gray-500">Type Wi‑Fi:&nbsp;</span>
+                                                                    {uptime !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Uptime</span>
+                                                                            <span className="text-gray-300">{formatUptime(uptime)}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {firmware && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Firmware</span>
+                                                                            <span className="text-gray-300">v{firmware}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {cpuUsage !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">CPU</span>
+                                                                            <span className="text-gray-300">{cpuUsage}%</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {power !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Puissance</span>
+                                                                            <span className="text-gray-300">{power}W</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Colonne droite - Informations réseau */}
+                                                                <div className="space-y-1">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-gray-500">Type Wi‑Fi</span>
                                                                     <span className="text-gray-300">{wifiType}</span>
                                                     </div>
-                                                                <div>
-                                                                    <span className="text-gray-500">Bandes:&nbsp;</span>
-                                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                                    <div className="flex flex-col gap-1">
+                                                                        <span className="text-gray-500">Bandes</span>
+                                                                        <div className="flex flex-wrap gap-1">
                                                                         {bands.map((band, bandIndex) => (
                                                                             <span
                                                                                 key={`band-${bandIndex}`}
@@ -989,16 +953,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                         ))}
                                                                     </div>
                                                                 </div>
-                                                                <div>
-                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
-                                                                    <span className="text-gray-300">{clientsCount}</span>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-gray-500">Clients</span>
+                                                                        <span className="text-gray-300 font-semibold">{clientsCount}</span>
                                                                 </div>
-                                                                {firmware && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">Firmware:&nbsp;</span>
-                                                                        <span className="text-gray-300">v{firmware}</span>
                                                                     </div>
-                                                    )}
                                                 </div>
                                                         </div>
                                                     );
@@ -1074,17 +1033,30 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             }).length;
                                         };
 
+                                        const formatUptime = (seconds: number | undefined): string => {
+                                            if (!seconds || seconds <= 0) return 'N/A';
+                                            const days = Math.floor(seconds / 86400);
+                                            const hours = Math.floor((seconds % 86400) / 3600);
+                                            const minutes = Math.floor((seconds % 3600) / 60);
+                                            if (days > 0) return `${days}j ${hours}h`;
+                                            if (hours > 0) return `${hours}h ${minutes}min`;
+                                            return `${minutes}min`;
+                                        };
+
                                         return (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                                                 {switches.map((device: any) => {
                                                     const { active, total } = getPortsSummary(device);
                                                     const clientsCount = getClientsForSwitch(device);
                                                     const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
+                                                    const uptime = device.uptime as number | undefined;
+                                                    const cpuUsage = device.cpu_usage || device.cpu?.usage || device.proc_usage as number | undefined;
+                                                    const power = device.power || device.watt || device.poe_power as number | undefined;
 
                                                     return (
                                                         <div
                                                             key={device.id}
-                                                            className={`bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 ${
+                                                            className={`bg-unifi-card rounded-xl px-3 py-2.5 border border-gray-800 flex flex-col ${
                                                                 device.active === false ? 'opacity-60' : ''
                                                             }`}
                                                         >
@@ -1117,31 +1089,54 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     />
                                                                 </div>
                                                             </div>
-                                                            <div className="text-xs space-y-0.5 mt-1">
+                                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 text-xs">
+                                                                {/* Colonne gauche - Informations système */}
+                                                                <div className="space-y-1">
                                                                 {device.ip && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">IP:&nbsp;</span>
-                                                                        <span className="text-gray-300">{device.ip}</span>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">IP</span>
+                                                                            <span className="text-gray-300 font-mono text-[10px]">{device.ip}</span>
                                                                     </div>
                                                                 )}
-                                                                <div>
-                                                                    <span className="text-gray-500">Ports actifs:&nbsp;</span>
-                                                                    <span className="text-gray-300">
-                                                                        {total > 0 ? `${active} / ${total}` : '-'}
-                                                                    </span>
+                                                                    {uptime !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Uptime</span>
+                                                                            <span className="text-gray-300">{formatUptime(uptime)}</span>
                                                                 </div>
-                                                                <div>
-                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
-                                                                    <span className="text-gray-300">
-                                                                        {clientsCount}
-                                                                    </span>
-                                                                </div>
+                                                                    )}
                                                                 {firmware && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">Firmware:&nbsp;</span>
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Firmware</span>
                                                                         <span className="text-gray-300">v{firmware}</span>
                                                                     </div>
                                                                 )}
+                                                                    {cpuUsage !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">CPU</span>
+                                                                            <span className="text-gray-300">{cpuUsage}%</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {power !== undefined && (
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="text-gray-500">Puissance</span>
+                                                                            <span className="text-gray-300">{power}W</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {/* Colonne droite - Informations réseau */}
+                                                                <div className="space-y-1">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-gray-500">Ports actifs</span>
+                                                                        <span className="text-gray-300 font-semibold">
+                                                                            {total > 0 ? `${active} / ${total}` : '-'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-gray-500">Clients</span>
+                                                                        <span className="text-gray-300 font-semibold">{clientsCount}</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     );
@@ -1157,6 +1152,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 )}
                             </Card>
                         </div>
+                        </div>
+                        </>
                     )}
 
                     {/* Switches Tab - REMOVED (now combined with Sites & APs) */}
@@ -1649,8 +1646,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                 key={`${row.switchName}-${row.port}-${index}`}
                                                                 className={index % 2 === 0 ? 'bg-[#0f1729]' : 'bg-[#1a1f2e]'}
                                                             >
-                                                                <td className="px-4 py-3 text-white">{row.switchName}</td>
-                                                                <td className="px-4 py-3 text-white">{row.switchIp}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-cyan-400 font-semibold">{row.switchName}</span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-blue-400 font-mono">{row.switchIp}</span>
+                                                                </td>
                                                                 <td className="px-4 py-3">
                                                                     {row.speed !== null ? (
                                                                         <span className="text-emerald-400">
@@ -1704,8 +1705,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 pluginId="unifi" 
                                 onViewDetails={undefined}
                                 hideController={true}
+                                cardClassName="bg-unifi-card border border-gray-800 rounded-xl"
+                                showDeviceTables={true}
                             />
-                            <NetworkEventsWidget twoColumns={true} />
+                            <NetworkEventsWidget 
+                                twoColumns={true}
+                                cardClassName="bg-unifi-card border border-gray-800 rounded-xl"
+                            />
                         </div>
                     )}
 

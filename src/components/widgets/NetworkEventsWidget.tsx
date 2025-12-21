@@ -54,9 +54,10 @@ function getSsidColorClass(ssid?: string): string {
 
 interface NetworkEventsWidgetProps {
     twoColumns?: boolean; // If true, display tables in two columns (for Analyse tab), otherwise single column (for dashboard)
+    cardClassName?: string;
 }
 
-export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoColumns = false }) => {
+export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoColumns = false, cardClassName }) => {
     const { pluginStats } = usePluginStore();
     const unifiStats: any = pluginStats['unifi'];
 
@@ -147,6 +148,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
 
     return (
         <Card
+            className={cardClassName}
             title={
                 <div className="flex items-center gap-2">
                     <Activity size={16} className="text-accent-info" />

@@ -14,7 +14,7 @@ import { LoginModal } from './modals/LoginModal';
 import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
-    const { plugins, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
+    const { plugins, pluginStats, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
     const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn, permissions, freeboxUrl } = useAuthStore();
     const [testingPlugin, setTestingPlugin] = useState<string | null>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
@@ -169,7 +169,7 @@ export const PluginsManagementSection: React.FC = () => {
                     {plugins.map((plugin) => (
                         <div
                             key={plugin.id}
-                            className={`rounded-lg p-3 border transition-all hover:shadow-lg ${
+                            className={`rounded-lg p-3 border transition-all hover:shadow-lg flex flex-col ${
                                 plugin.enabled && plugin.connectionStatus
                                     ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50 hover:shadow-emerald-500/20'
                                     : plugin.enabled
@@ -223,22 +223,25 @@ export const PluginsManagementSection: React.FC = () => {
 
                             {/* Plugin-specific info */}
                             {plugin.connectionStatus && (
-                                <div className="mb-2.5 space-y-1.5 p-2 bg-theme-primary/50 rounded border border-theme">
+                                <div className="mb-2.5 flex flex-wrap gap-1.5">
                                     {plugin.id === 'freebox' && (
                                         <>
                                             {plugin.firmware && (
-                                                <div className="text-[10px] text-theme-secondary">
-                                                    <span className="text-theme-tertiary">Box:</span> <span className="text-theme-primary font-mono font-medium">{plugin.firmware}</span>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
+                                                    <span className="text-blue-300/70">Box:</span>
+                                                    <span className="font-mono">{plugin.firmware}</span>
                                                 </div>
                                             )}
                                             {plugin.playerFirmware && (
-                                                <div className="text-[10px] text-theme-secondary">
-                                                    <span className="text-theme-tertiary">Player:</span> <span className="text-theme-primary font-mono font-medium">{plugin.playerFirmware}</span>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
+                                                    <span className="text-purple-300/70">Player:</span>
+                                                    <span className="font-mono">{plugin.playerFirmware}</span>
                                                 </div>
                                             )}
                                             {plugin.apiVersion && (
-                                                <div className="text-[10px] text-theme-secondary">
-                                                    <span className="text-theme-tertiary">API:</span> <span className="text-cyan-400 font-mono font-medium">{plugin.apiVersion}</span>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
+                                                    <span className="text-cyan-300/70">API:</span>
+                                                    <span className="font-mono">{plugin.apiVersion}</span>
                                                 </div>
                                             )}
                                         </>
@@ -246,22 +249,44 @@ export const PluginsManagementSection: React.FC = () => {
                                     {plugin.id === 'unifi' && (
                                         <>
                                             {plugin.controllerFirmware && (
-                                                <div className="text-[10px] text-theme-secondary">
-                                                    <span className="text-theme-tertiary">Firmware:</span> <span className="text-theme-primary font-mono font-medium">{plugin.controllerFirmware}</span>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
+                                                    <span className="text-blue-300/70">Firmware:</span>
+                                                    <span className="font-mono">{plugin.controllerFirmware}</span>
                                                 </div>
                                             )}
                                             {plugin.apiMode && (
-                                                <div className="text-[10px] text-theme-secondary">
-                                                    <span className="text-theme-tertiary">Mode:</span> <span className="text-purple-400 font-mono font-medium">{plugin.apiMode}</span>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
+                                                    <span className="text-purple-300/70">Mode:</span>
+                                                    <span className="font-mono uppercase">{plugin.apiMode}</span>
                                                 </div>
                                             )}
                                         </>
                                     )}
+                                    {plugin.id === 'scan-reseau' && (() => {
+                                        const stats = pluginStats?.['scan-reseau']?.system as any;
+                                        if (!stats) return null;
+                                        return (
+                                            <>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-500/20 border border-gray-500/30 rounded text-gray-300 text-[10px] font-medium">
+                                                    <span className="text-gray-400">Total:</span>
+                                                    <span className="font-mono font-semibold">{stats.totalIps || 0}</span>
+                                                </div>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
+                                                    <span className="text-emerald-300/70">Online:</span>
+                                                    <span className="font-mono font-semibold">{stats.onlineIps || 0}</span>
+                                                </div>
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-[10px] font-medium">
+                                                    <span className="text-red-300/70">Offline:</span>
+                                                    <span className="font-mono font-semibold">{stats.offlineIps || 0}</span>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             )}
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-2.5">
+                            <div className="flex items-center justify-between pt-2.5 mt-auto">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-theme-tertiary font-medium">Actif</span>
                                     <button
@@ -277,6 +302,7 @@ export const PluginsManagementSection: React.FC = () => {
                                         />
                                     </button>
                                 </div>
+                                {plugin.id !== 'scan-reseau' && (
                                 <div className="flex items-center gap-1.5">
                                     <button
                                         onClick={() => handleTest(plugin.id)}
@@ -298,6 +324,7 @@ export const PluginsManagementSection: React.FC = () => {
                                         <Settings size={12} />
                                     </button>
                                 </div>
+                                )}
                             </div>
                         </div>
                     ))}

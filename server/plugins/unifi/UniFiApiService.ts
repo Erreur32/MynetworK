@@ -437,7 +437,36 @@ export class UniFiApiService {
                                 model: d.model,
                                 state: d.state === 'connected' ? 1 : 0,
                                 uptime: d.uptime,
-                                last_seen: d.last_seen ? Math.floor(new Date(d.last_seen).getTime() / 1000) : undefined
+                                last_seen: d.last_seen ? Math.floor(new Date(d.last_seen).getTime() / 1000) : undefined,
+                                // Firmware information
+                                firmware_version: d.version || d.fw || d.firmware_version,
+                                version: d.version || d.fw,
+                                firmware: d.version || d.fw,
+                                // Port information (for switches)
+                                port_table: d.port_table,
+                                eth_port_table: d.eth_port_table,
+                                ports: d.ports,
+                                port_overrides: d.port_overrides,
+                                num_port: d.num_port,
+                                // CPU and system info
+                                cpu_usage: d.cpu_usage || d.cpu?.usage,
+                                cpu: d.cpu,
+                                proc_usage: d.proc_usage,
+                                // Power information
+                                power: d.power,
+                                watt: d.watt,
+                                poe_power: d.poe_power,
+                                // Radio information (for APs)
+                                radio_table: d.radio_table,
+                                radio_ng: d.radio_ng,
+                                radio_na: d.radio_na,
+                                radio_2g: d.radio_2g,
+                                radio_5g: d.radio_5g,
+                                radio_6g: d.radio_6g,
+                                // Additional device info
+                                active: d.state === 'connected',
+                                // Include all other fields
+                                ...d
                             })));
                         }
                     } catch (error) {
@@ -462,6 +491,35 @@ export class UniFiApiService {
                     state: typeof d.state === 'number' ? d.state : (d.state === 'connected' ? 1 : 0),
                     uptime: d.uptime,
                     last_seen: d.last_seen,
+                    // Firmware information
+                    firmware_version: d.version || d.fw || d.firmware_version,
+                    version: d.version || d.fw,
+                    firmware: d.version || d.fw,
+                    // Port information (for switches)
+                    port_table: d.port_table,
+                    eth_port_table: d.eth_port_table,
+                    ports: d.ports,
+                    port_overrides: d.port_overrides,
+                    num_port: d.num_port,
+                    // CPU and system info
+                    cpu_usage: d.cpu_usage || d.cpu?.usage,
+                    cpu: d.cpu,
+                    proc_usage: d.proc_usage,
+                    // Power information
+                    power: d.power,
+                    watt: d.watt,
+                    poe_power: d.poe_power,
+                    // Radio information (for APs)
+                    radio_table: d.radio_table,
+                    radio_ng: d.radio_ng,
+                    radio_na: d.radio_na,
+                    radio_2g: d.radio_2g,
+                    radio_5g: d.radio_5g,
+                    radio_6g: d.radio_6g,
+                    // Additional device info
+                    active: d.state === 1 || d.state === 'connected',
+                    // Include all other fields
+                    ...d
                 }));
             }
         } catch (error) {

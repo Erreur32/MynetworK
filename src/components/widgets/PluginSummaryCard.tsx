@@ -20,6 +20,8 @@ interface PluginSummaryCardProps {
     pluginId: string;
     onViewDetails?: () => void;
     hideController?: boolean;
+    cardClassName?: string;
+    showDeviceTables?: boolean; // Show APs and Switches tables (for Analyse tab)
 }
 
 // Helper functions for Freebox stats (copied from Header.tsx)
@@ -74,7 +76,7 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
     return Math.round(avg);
 };
 
-export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false }) => {
+export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false }) => {
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { login: loginFreebox, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
@@ -95,6 +97,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         clientsActive: number;
         clientsTotal: number;
         bands: string[];
+        channels: Array<{ band: string; channel: number | string }>; // Channel info per band
+        ssids: Array<{ ssid: string; band: string }>; // SSIDs with their associated band
     }
 
     interface UnifiSwitchRow {
@@ -157,6 +161,53 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
             return bands.length > 0 ? bands : ['N/A'];
         };
 
+        // Helper function to extract channels from UniFi device
+        const getUnifiChannels = (device: any): Array<{ band: string; channel: number | string }> => {
+            const channels: Array<{ band: string; channel: number | string }> = [];
+            
+            // Check radio_table (most common UniFi API structure)
+            if (device.radio_table && Array.isArray(device.radio_table)) {
+                device.radio_table.forEach((radio: any) => {
+                    const band = radio.radio || radio.name || '';
+                    const channel = radio.channel || radio.ht || radio.chan || null;
+                    
+                    if (band && channel !== null && channel !== undefined) {
+                        let bandName = '';
+                        const bandLower = band.toLowerCase();
+                        if (bandLower.includes('ng') || bandLower.includes('2.4') || bandLower === '2g') {
+                            bandName = '2.4GHz';
+                        } else if (bandLower.includes('na') || bandLower.includes('5') || bandLower === '5g') {
+                            bandName = '5GHz';
+                        } else if (bandLower.includes('6') || bandLower === '6g') {
+                            bandName = '6GHz';
+                        }
+                        
+                        if (bandName && !channels.find(c => c.band === bandName)) {
+                            channels.push({ band: bandName, channel: channel });
+                        }
+                    }
+                });
+            }
+            
+            // Fallback: check radio fields directly
+            if (channels.length === 0) {
+                if (device.radio_ng || device.radio_2g) {
+                    const channel = (device.radio_ng || device.radio_2g)?.channel || (device.radio_ng || device.radio_2g)?.ht;
+                    if (channel) channels.push({ band: '2.4GHz', channel: channel });
+                }
+                if (device.radio_na || device.radio_5g) {
+                    const channel = (device.radio_na || device.radio_5g)?.channel || (device.radio_na || device.radio_5g)?.ht;
+                    if (channel) channels.push({ band: '5GHz', channel: channel });
+                }
+                if (device.radio_6g) {
+                    const channel = device.radio_6g?.channel || device.radio_6g?.ht;
+                    if (channel) channels.push({ band: '6GHz', channel: channel });
+                }
+            }
+            
+            return channels;
+        };
+
         // Build rows for APs (bornes Wi‑Fi)
         unifiApRows = devices
             .filter((d) => {
@@ -178,12 +229,94 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                 const clientsActive = clientsForDevice.filter((c) => c.active !== false).length;
 
+                // Get SSIDs with their bands for this AP
+                // Use clients connected to this AP to determine SSIDs and their bands
+                const apSsidsMap = new Map<string, Set<string>>(); // SSID -> Set of bands
+                
+                clientsForDevice.forEach((client: any) => {
+                    const clientSsid = (client.ssid || client.essid || '').toString();
+                    if (!clientSsid) return;
+                    
+                    // Determine band from client's radio or channel
+                    let clientBand = '';
+                    const radio = (client.radio || client.band || '').toString().toLowerCase();
+                    const channel = client.channel || client.ht;
+                    
+                    if (radio) {
+                        if (radio.includes('ng') || radio.includes('2.4') || radio === '2g') {
+                            clientBand = '2.4GHz';
+                        } else if (radio.includes('na') || radio.includes('5') || radio === '5g') {
+                            clientBand = '5GHz';
+                        } else if (radio.includes('6') || radio === '6g') {
+                            clientBand = '6GHz';
+                        }
+                    } else if (channel) {
+                        // Determine band from channel number
+                        const chNum = typeof channel === 'number' ? channel : parseInt(String(channel));
+                        if (!isNaN(chNum)) {
+                            if (chNum >= 1 && chNum <= 14) {
+                                clientBand = '2.4GHz';
+                            } else if (chNum >= 36 && chNum <= 165) {
+                                clientBand = '5GHz';
+                            } else if (chNum > 165 && chNum <= 233) {
+                                clientBand = '6GHz';
+                            }
+                        }
+                    }
+                    
+                    // If band not determined, try to match with AP's bands
+                    if (!clientBand) {
+                        const apBands = getUnifiBands(d);
+                        // Default to first available band if we can't determine
+                        clientBand = apBands.length > 0 ? apBands[0] : '2.4GHz';
+                    }
+                    
+                    if (!apSsidsMap.has(clientSsid)) {
+                        apSsidsMap.set(clientSsid, new Set());
+                    }
+                    apSsidsMap.get(clientSsid)!.add(clientBand);
+                });
+                
+                // Convert to array format: if SSID has multiple bands, create entries for each
+                const ssidsWithBands: Array<{ ssid: string; band: string }> = [];
+                apSsidsMap.forEach((bands, ssid) => {
+                    bands.forEach(band => {
+                        ssidsWithBands.push({ ssid, band });
+                    });
+                });
+                
+                // If no SSIDs found from clients, use all enabled SSIDs with AP's bands
+                if (ssidsWithBands.length === 0) {
+                    const apBands = getUnifiBands(d);
+                    unifiWlans
+                        .filter(wlan => wlan.enabled)
+                        .forEach(wlan => {
+                            const ssid = wlan.ssid || wlan.name;
+                            if (ssid) {
+                                // Assign SSID to all available bands of the AP
+                                apBands.forEach(band => {
+                                    ssidsWithBands.push({ ssid, band });
+                                });
+                            }
+                        });
+                }
+                
+                // Sort SSIDs by band (2.4GHz, 5GHz, 6GHz) then by SSID name
+                const bandOrder = ['2.4GHz', '5GHz', '6GHz'];
+                ssidsWithBands.sort((a, b) => {
+                    const bandDiff = bandOrder.indexOf(a.band) - bandOrder.indexOf(b.band);
+                    if (bandDiff !== 0) return bandDiff;
+                    return a.ssid.localeCompare(b.ssid);
+                });
+
                 return {
                     name,
                     ip: d.ip as string | undefined,
                     clientsActive,
                     clientsTotal: clientsForDevice.length,
-                    bands: getUnifiBands(d)
+                    bands: getUnifiBands(d),
+                    channels: getUnifiChannels(d),
+                    ssids: ssidsWithBands
                 };
             });
 
@@ -269,8 +402,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         // Controller version / update status from system stats when exposed by backend
         const sys: any = (stats as any).system || {};
         unifiControllerVersion = sys.version as string | undefined;
-        unifiControllerUpdateAvailable =
-            (sys.updateAvailable as boolean | undefined) ?? (sys.update_available as boolean | undefined);
+        // Only show update available if it's truly available (not just downloaded)
+        const updateAvailable = (sys.updateAvailable as boolean | undefined) ?? (sys.update_available as boolean | undefined);
+        const updateDownloaded = (sys.updateDownloaded as boolean | undefined) ?? (sys.update_downloaded as boolean | undefined);
+        // If update is downloaded but not installed, it's not really "available" for the user to install
+        // Only show if update is available but not yet downloaded
+        unifiControllerUpdateAvailable = updateAvailable === true && updateDownloaded !== true;
     }
 
     if (pluginId === 'freebox' && stats && (stats as any).system) {
@@ -352,6 +489,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
     return (
         <Card
+            className={cardClassName}
             title={
                 <div className="flex items-center gap-2">
                     {getIcon()}
@@ -455,51 +593,107 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
 
 
-                        {!hideController && ((unifiControllerVersion || unifiControllerUpdateAvailable !== undefined || unifiControllerIp || (stats.system as any)?.name) && (
-                                    <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
+                        {/* UniFi infrastructure details: Sites, APs, switches, clients, controller */}
+                        {pluginId === 'unifi' && stats.devices && stats.devices.length > 0 && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-4 space-y-3 text-xs">
+                                {/* Sites Section - Enlarged and improved layout */}
+                                {(() => {
+                                    const sites = (stats as any)?.sites as Array<any> | undefined;
+                                    if (sites && sites.length > 0) {
+                                        return (
+                                            <div className="space-y-3">
                                         <div className="flex items-center justify-between">
-                                        <span className="text-gray-400">Controller</span>
-                                        <div className="flex flex-col items-end gap-0.5 text-gray-200">
-                                            {(stats.system as any)?.name && (
-                                                <span className="text-[10px] text-gray-300">
-                                                    Site&nbsp;:&nbsp;
-                                                    <span className="text-gray-100">
-                                                        {(stats.system as any).name}
-                                                    </span>
-                                                </span>
-                                            )}
-                                            {unifiControllerIp && (
-                                                <span className="text-[10px] text-gray-400">
-                                                    IP&nbsp;:&nbsp;
-                                                    <span className="text-gray-200">{unifiControllerIp}</span>
-                                                </span>
-                                            )}
-                                            <span className="flex items-center gap-2">
+                                                    <span className="text-gray-400 font-medium">Sites UniFi</span>
+                                                    {/* Version and update badge in header if available */}
+                                                    {!hideController && (unifiControllerVersion || unifiControllerUpdateAvailable !== undefined) && (
+                                                        <div className="flex items-center gap-2">
                                                 {unifiControllerVersion && (
-                                                    <span>v{unifiControllerVersion}</span>
+                                                                <span className="text-[10px] text-gray-500">v{unifiControllerVersion}</span>
                                                 )}
                                                 {unifiControllerUpdateAvailable && (
                                                     <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
                                                         Mise à jour dispo
                                                     </span>
                                                 )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {/* Single column layout for better width usage */}
+                                                <div className="space-y-3">
+                                                    {sites.map((site, index) => (
+                                                        <div
+                                                            key={site.id || index}
+                                                            className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 relative"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                    <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
+                                                                    <span className="text-sm font-semibold text-white truncate">
+                                                                        {site.name || site.id || 'Site UniFi'}
                                             </span>
                                         </div>
+                                                                <span
+                                                                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                                        site.status === 'online' ? 'bg-emerald-400' : 'bg-gray-500'
+                                                                    }`}
+                                                                />
                                     </div>
+                                                            <div className="grid grid-cols-2 gap-3 text-[11px]">
+                                                                {site.hostname && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">Hostname:&nbsp;</span>
+                                                                        <span className="text-gray-300">
+                                                                            {site.hostname}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {site.devices && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">Équipements:&nbsp;</span>
+                                                                        <span className="text-gray-300 font-medium">
+                                                                            {site.devices.total ?? 0}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {/* Badges en bas à droite - larger and better spaced */}
+                                                            {site.devices && (
+                                                                <div className="flex items-center justify-end gap-2 mt-1 pt-2 border-t border-gray-800">
+                                                                    {site.devices.clients !== undefined && (
+                                                                        <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 font-semibold text-[11px]">
+                                                                            {site.devices.clients ?? 0} Clients
+                                                                        </span>
+                                                                    )}
+                                                                    {site.devices.aps !== undefined && (
+                                                                        <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 font-semibold text-[11px]">
+                                                                            {site.devices.aps ?? 0} APs
+                                                                        </span>
+                                                                    )}
+                                                                    {site.devices.switches !== undefined && (
+                                                                        <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/50 text-blue-300 font-semibold text-[11px]">
+                                                                            {site.devices.switches ?? 0} Switches
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                     </div>
                                 ))}                            
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
 
-                                {/* Clients stats */}
-                                {(unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
-                                    <div className="flex flex-col gap-1 pt-1 border-t border-gray-800 mt-1 text-[11px]">
-                                        <div className="flex items-center justify-between">
+                                {/* Clients stats - moved here after sites */}
+                                {!hideController && (unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
+                                    <div className="flex items-center justify-between pt-2 border-t border-gray-800 text-[11px]">
                                             <span className="text-gray-400">Clients connectés</span>
+                                        <div className="flex items-center gap-2">
                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
                                                 {unifiClientsConnected}
                                             </span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-gray-400">Total</span>
+                                            <span className="text-gray-500">/</span>
                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
                                                 {unifiClientsTotal}
                                             </span>
@@ -507,54 +701,261 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                 )}
 
-                        {/* UniFi infrastructure details: APs, switches, clients, controller */}
-                        {pluginId === 'unifi' && stats.devices && stats.devices.length > 0 && (
-                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
+                                {/* APs with bands and channels - Dashboard and Analyse tab */}
+                                {(!hideController || showDeviceTables) && unifiApRows.length > 0 && (
+                                    <div className="pt-2 border-t border-gray-800 space-y-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-gray-400 font-medium text-[11px]">Points d'accès</span>
+                                        </div>
+                                        <div className={showDeviceTables ? "grid grid-cols-2 gap-3" : "space-y-2"}>
+                                            {unifiApRows.map((ap, index) => (
+                                                <div
+                                                    key={`dashboard-ap-${ap.name}-${index}`}
+                                                    className="bg-unifi-card rounded-lg px-3 py-2 border border-gray-800"
+                                                >
+                                                    <div className="flex items-center justify-between mb-1.5">
+                                                        <span 
+                                                            className="text-xs font-semibold text-white truncate"
+                                                            title={`Point d'accès: ${ap.name}${ap.ip ? ` (${ap.ip})` : ''}`}
+                                                        >
+                                                            {ap.name}
+                                                        </span>
+                                                        {ap.ip && (
+                                                            <span 
+                                                                className="text-[10px] text-gray-500"
+                                                                title={`Adresse IP du point d'accès`}
+                                                            >
+                                                                {ap.ip}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            {/* Bands */}
+                                                            {ap.bands.length > 0 && (
+                                                                <div className="flex items-center gap-1 flex-wrap">
+                                                                    {ap.bands.map((band, bandIndex) => (
+                                                                        <span
+                                                                            key={`dashboard-band-${bandIndex}`}
+                                                                            className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300 whitespace-nowrap"
+                                                                            title={`Bande de fréquence supportée: ${band}`}
+                                                                        >
+                                                                            {band}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            {/* Channels */}
+                                                            {ap.channels.length > 0 && (
+                                                                <div className="flex items-center gap-1 flex-wrap">
+                                                                    {ap.channels.map((ch, chIndex) => {
+                                                                        const matchingBand = ap.bands.find(b => b === ch.band);
+                                                                        if (!matchingBand) return null;
+                                                                        return (
+                                                                            <span
+                                                                                key={`dashboard-channel-${chIndex}`}
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] bg-purple-900/40 border border-purple-700/50 text-purple-300 whitespace-nowrap"
+                                                                                title={`Canal utilisé sur ${ch.band}: Canal ${ch.channel}`}
+                                                                            >
+                                                                                {ch.band === '2.4GHz' ? '2.4' : ch.band === '5GHz' ? '5' : '6'}:{ch.channel}
+                                                                            </span>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {/* SSIDs grouped by band - aligned by frequency */}
+                                                        {ap.ssids.length > 0 && (() => {
+                                                            // Get clients for this AP to count by band
+                                                            const devices = (stats.devices || []) as Array<any>;
+                                                            const allClients = devices.filter((d: any) => d.type === 'client');
+                                                            const apDevice = devices.find((d: any) => d.name === ap.name || d.ip === ap.ip);
+                                                            const apMac = apDevice?.mac || '';
+                                                            
+                                                            const clientsForAp = allClients.filter((client: any) => {
+                                                                const lastUplinkName = (client.last_uplink_name || client.uplink_name || '') as string;
+                                                                const lastUplinkMac = (client.last_uplink_mac || client.sw_mac || '') as string;
+                                                                return (
+                                                                    lastUplinkName === ap.name ||
+                                                                    (apMac && lastUplinkMac.toLowerCase() === apMac.toLowerCase())
+                                                                );
+                                                            });
+                                                            
+                                                            // Count clients by band
+                                                            const clientsByBand = new Map<string, number>();
+                                                            clientsForAp.forEach((client: any) => {
+                                                                if (client.active === false) return;
+                                                                
+                                                                let clientBand = '';
+                                                                const radio = (client.radio || client.band || '').toString().toLowerCase();
+                                                                const channel = client.channel || client.ht;
+                                                                
+                                                                if (radio) {
+                                                                    if (radio.includes('ng') || radio.includes('2.4') || radio === '2g') {
+                                                                        clientBand = '2.4GHz';
+                                                                    } else if (radio.includes('na') || radio.includes('5') || radio === '5g') {
+                                                                        clientBand = '5GHz';
+                                                                    } else if (radio.includes('6') || radio === '6g') {
+                                                                        clientBand = '6GHz';
+                                                                    }
+                                                                } else if (channel) {
+                                                                    const chNum = typeof channel === 'number' ? channel : parseInt(String(channel));
+                                                                    if (!isNaN(chNum)) {
+                                                                        if (chNum >= 1 && chNum <= 14) {
+                                                                            clientBand = '2.4GHz';
+                                                                        } else if (chNum >= 36 && chNum <= 165) {
+                                                                            clientBand = '5GHz';
+                                                                        } else if (chNum > 165 && chNum <= 233) {
+                                                                            clientBand = '6GHz';
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                if (clientBand) {
+                                                                    clientsByBand.set(clientBand, (clientsByBand.get(clientBand) || 0) + 1);
+                                                                }
+                                                            });
+                                                            
+                                                            // Group SSIDs by band
+                                                            const ssidsByBand = new Map<string, string[]>();
+                                                            ap.ssids.forEach(({ ssid, band }) => {
+                                                                if (!ssidsByBand.has(band)) {
+                                                                    ssidsByBand.set(band, []);
+                                                                }
+                                                                const ssidList = ssidsByBand.get(band)!;
+                                                                if (!ssidList.includes(ssid)) {
+                                                                    ssidList.push(ssid);
+                                                                }
+                                                            });
+                                                            
+                                                            // Order bands: 2.4GHz, 5GHz, 6GHz
+                                                            const bandOrder = ['2.4GHz', '5GHz', '6GHz'];
+                                                            
+                                                            return (
+                                                                <div className="grid grid-cols-3 gap-1.5">
+                                                                    {bandOrder.map((band) => {
+                                                                        const ssids = ssidsByBand.get(band) || [];
+                                                                        const clientsCount = clientsByBand.get(band) || 0;
+                                                                        return (
+                                                                            <div key={`ssid-group-${band}`} className="flex flex-col gap-1">
+                                                                                <span 
+                                                                                    className="text-[10px] text-gray-500 font-medium"
+                                                                                    title={`Bande de fréquence: ${band}`}
+                                                                                >
+                                                                                    {band}
+                                                                                </span>
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {ssids.length > 0 ? (
+                                                                                        ssids.map((ssid, ssidIndex) => (
+                                                                                            <span
+                                                                                                key={`dashboard-ssid-${band}-${ssidIndex}`}
+                                                                                                className="px-1.5 py-0.5 rounded text-[10px] bg-blue-900/40 border border-blue-700/50 text-blue-300 whitespace-nowrap"
+                                                                                                title={`Réseau Wi-Fi (SSID) transmis sur ${band}: ${ssid}`}
+                                                                                            >
+                                                                                                {ssid}
+                                                                                            </span>
+                                                                                        ))
+                                                                                    ) : (
+                                                                                        <span 
+                                                                                            className="text-[10px] text-gray-600"
+                                                                                            title={`Aucun réseau Wi-Fi configuré sur ${band}`}
+                                                                                        >
+                                                                                            --
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                {/* Clients count badge under frequency */}
+                                                                                {clientsCount > 0 && (
+                                                                                    <span 
+                                                                                        className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-900/40 border border-emerald-700/50 text-emerald-300 font-semibold w-fit"
+                                                                                        title={`Nombre de clients connectés sur ${band}: ${clientsCount} client${clientsCount > 1 ? 's' : ''} actif${clientsCount > 1 ? 's' : ''}`}
+                                                                                    >
+                                                                                        {clientsCount}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Wi‑Fi APs and Switches tables in two columns - Only show if showDeviceTables is true */}
+                                {showDeviceTables && (unifiApRows.length > 0 || unifiSwitchRows.length > 0) && (
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
                                 {/* Wi‑Fi APs table */}
                                 {unifiApRows.length > 0 && (
-                                    <div className="space-y-1">
+                                            <div className="flex flex-col h-full">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="text-gray-400">Bornes Wi‑Fi</span>
                                         </div>
-                                        <div className="rounded border border-gray-800 overflow-hidden">
+                                                <div className="rounded border border-gray-800 overflow-hidden flex-1 flex flex-col">
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Nom</th>
-                                                        <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                                        <th className="px-2 py-1 text-left" style={{ width: '22%' }}>Bandes</th>
-                                                        <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>Clients</th>
-                                                        <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>Total</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '20%' }}>Nom</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '22%' }}>IP</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '18%' }}>Bandes</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '18%' }}>Canal</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '11%' }}>Clients</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '11%' }}>Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {unifiApRows.map((row, index) => (
                                                         <tr
                                                             key={`ap-${row.name}-${index}`}
-                                                            className={index % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}
+                                                                    className={`${index % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'} h-10`}
                                                         >
-                                                            <td className="px-2 py-1 text-gray-200 truncate">
+                                                                    <td className="px-2 py-2 text-gray-200 truncate align-middle">
                                                                 {row.name}
                                                             </td>
-                                                            <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
+                                                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap align-middle">
                                                                 {row.ip || 'n/a'}
                                                             </td>
-                                                            <td className="px-2 py-1">
-                                                                <div className="flex flex-wrap gap-1">
+                                                                    <td className="px-2 py-2 align-middle">
+                                                                        <div className="flex flex-wrap lg:flex-nowrap gap-1 items-center">
                                                                     {row.bands.map((band, bandIndex) => (
                                                                         <span
                                                                             key={`band-${bandIndex}`}
-                                                                            className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300"
+                                                                                    className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300 whitespace-nowrap"
                                                                         >
                                                                             {band}
                                                                         </span>
                                                                     ))}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-2 py-1 text-right text-gray-200">
+                                                                    <td className="px-2 py-2 align-middle">
+                                                                        <div className="flex flex-wrap lg:flex-nowrap gap-1 items-center">
+                                                                            {row.channels.length > 0 ? (
+                                                                                row.channels.map((ch, chIndex) => {
+                                                                                    const matchingBand = row.bands.find(b => b === ch.band);
+                                                                                    if (!matchingBand) return null;
+                                                                                    return (
+                                                                                        <span
+                                                                                            key={`channel-${chIndex}`}
+                                                                                            className="px-1.5 py-0.5 rounded text-[10px] bg-purple-900/40 border border-purple-700/50 text-purple-300 whitespace-nowrap"
+                                                                                            title={`${ch.band}: Canal ${ch.channel}`}
+                                                                                        >
+                                                                                            {ch.band === '2.4GHz' ? '2.4' : ch.band === '5GHz' ? '5' : '6'}:{ch.channel}
+                                                                                        </span>
+                                                                                    );
+                                                                                })
+                                                                            ) : (
+                                                                                <span className="text-gray-500 text-[10px]">--</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-2 py-2 text-right text-gray-200 align-middle">
                                                                 {row.clientsActive}
                                                             </td>
-                                                            <td className="px-2 py-1 text-right text-gray-200">
+                                                                    <td className="px-2 py-2 text-right text-gray-200 align-middle">
                                                                 {row.clientsTotal}
                                                             </td>
                                                         </tr>
@@ -567,40 +968,40 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                                 {/* Switches table */}
                                 {unifiSwitchRows.length > 0 && (
-                                    <div className="space-y-2 pt-2 border-t border-gray-800 mt-2">
+                                            <div className="flex flex-col h-full">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="text-gray-400">Switches</span>
                                         </div>
-                                        <div className="rounded border border-gray-800 overflow-hidden">
+                                                <div className="rounded border border-gray-800 overflow-hidden flex-1 flex flex-col">
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left" style={{ width: '22%' }}>Nom</th>
-                                                        <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                                        <th className="px-2 py-1 text-right" style={{ width: '16%' }}>Ports actifs</th>
-                                                        <th className="px-2 py-1 text-right" style={{ width: '16%' }}>Speed</th>
-                                                        <th className="px-2 py-1 text-right" style={{ width: '18%' }}>Total</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '22%' }}>Nom</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '28%' }}>IP</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>Ports actifs</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>Speed</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '18%' }}>Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {unifiSwitchRows.map((row, index) => (
                                                         <tr
                                                             key={`sw-${row.name}-${index}`}
-                                                            className={index % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}
+                                                                    className={`${index % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'} h-10`}
                                                         >
-                                                            <td className="px-2 py-1 text-gray-200 truncate">
+                                                                    <td className="px-2 py-2 text-gray-200 truncate align-middle">
                                                                 {row.name}
                                                             </td>
-                                                            <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
+                                                                    <td className="px-2 py-2 text-gray-400 whitespace-nowrap align-middle">
                                                                 {row.ip || 'n/a'}
                                                             </td>
-                                                            <td className="px-2 py-1 text-right text-emerald-300">
+                                                                    <td className="px-2 py-2 text-right text-emerald-300 align-middle">
                                                                 {row.totalPorts > 0 ? row.activePorts : '-'}
                                                             </td>
-                                                            <td className="px-2 py-1 text-right text-gray-300">
+                                                                    <td className="px-2 py-2 text-right text-gray-300 align-middle">
                                                                 {row.speed ? `${row.speed}` : '-'}
                                                             </td>
-                                                            <td className="px-2 py-1 text-right text-gray-200">
+                                                                    <td className="px-2 py-2 text-right text-gray-200 align-middle">
                                                                 {row.totalPorts > 0 ? row.totalPorts : '-'}
                                                             </td>
                                                         </tr>
@@ -610,27 +1011,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         </div>
                                     </div>
                                 )}
-
-                                {/* WiFi Networks (SSIDs) */}
-                                {unifiWlans.length > 0 && (
-                                    <div className="space-y-2 pt-2 border-t border-gray-800 mt-2">
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-gray-400">Réseaux Wi‑Fi (SSID)</span>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {unifiWlans
-                                                .filter(wlan => wlan.enabled)
-                                                .map((wlan, index) => (
-                                                    <span
-                                                        key={`wlan-${wlan.name}-${index}`}
-                                                        className="px-2 py-1 rounded-full bg-blue-900/40 border border-blue-700 text-blue-300 text-[11px] font-medium"
-                                                    >
-                                                        {wlan.ssid || wlan.name}
-                                                    </span>
-                                                ))}
-                                        </div>
                                     </div>
                                 )}
+
 
                             </div>
                         )}

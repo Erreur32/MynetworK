@@ -2,13 +2,106 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
-## [0.1.6] - 2025-12-21
+## [0.1.7] - 2025-12-21
 
-### 🐛 Corrigé
+---
+
+## [0.1.7] - 2025-12-21
+
+### ✨ Ajouté
+
+**Plugin Scan Réseau**
+- 🔍 Nouveau plugin "Scan Réseau" pour scanner le réseau local et découvrir les IPs
+- 📊 Page dédiée avec tableau des résultats, filtres par statut (online/offline), et historique
+- 🎯 Fonctionnalités de scan : scan complet, rafraîchissement des IPs existantes, scan automatique configurable
+- 💾 Stockage en base de données SQLite avec historique des IPs (IP, MAC, hostname, statut, latence)
+- 🎨 Widget dashboard avec statistiques (Total IPs, Online, Offline) et listes des IPs offline et pires latences
+- 🔄 Badge footer pour accès rapide au plugin scan réseau
+- ⚙️ Configuration dans l'onglet Administration > Plugins avec mini-carte de statut
+- 📝 Édition inline du hostname dans le tableau des résultats
+- 🎨 Affichage des latences en couleurs selon la gravité (vert <50ms, jaune 50-100ms, orange 100-200ms, rouge >200ms)
+- 📋 Modal d'aide expliquant la différence entre "Scanner" et "Rafraîchir"
+
+**Page UniFi - Améliorations**
+- 🎨 Mini-cartes améliorées pour les points d'accès avec affichage des bandes, canaux, SSIDs et nombre de clients
+- 📊 Affichage des SSIDs groupés par bande de fréquence (2.4GHz, 5GHz, 6GHz) dans les mini-cartes AP
+- 🔢 Badge avec nombre de clients par bande de fréquence pour chaque AP
+- 💡 Tooltips informatifs sur les mini-cartes AP (nom, IP, bandes, canaux, SSIDs, clients)
+- 📈 Affichage de l'uptime, firmware, CPU et consommation électrique dans les mini-cartes AP et Switch
+- 🏷️ Badges plus grands pour clients, APs et switches dans les mini-cartes de sites
+- 🎨 Mini-cartes AP copiées dans l'onglet "Analyse" avec affichage en deux colonnes
+- 📊 Section "Sites UniFi" ajoutée dans la carte UniFi du dashboard avec mini-cartes de sites
+- 🔌 Informations détaillées des ports switches avec différenciation des couleurs (nom switch en cyan, IP en bleu)
+- 📋 Affichage des canaux utilisés par chaque AP avec badges colorés par bande
+- 🔄 Réorganisation de l'onglet "Vue d'ensemble" avec fusion de "Sites, APs & Switches"
+- 📊 Réorganisation des onglets : "Clients" déplacé en deuxième position après "Vue d'ensemble"
+
+**Dashboard**
+- 📊 Carte "Scan Réseau" avec statistiques et listes des IPs offline et pires latences
+- ⏱️ Affichage du dernier scan effectué dans le widget "État des plugins"
+- 🎨 Carte UniFi Controller réorganisée : mini-carte site agrandie, suppression des doublons d'infos contrôleur
+- 📊 Affichage des réseaux Wi-Fi (SSID) avec nombre de clients par SSID sur la même ligne que "Clients connectés"
+- 🔌 Informations des canaux et bandes pour chaque AP dans la carte UniFi du dashboard
+- 📋 Affichage conditionnel des tableaux AP/Switch uniquement dans l'onglet "Analyse" de la page UniFi
+
+**Interface**
+- 🏠 Logo du header cliquable pour retourner au dashboard principal
+- 🎨 Uniformisation des hauteurs de tableaux et cellules entre "Bornes Wi-Fi" et "Switches" dans l'onglet Analyse
+- 📊 Affichage de "Clients connectés" et "Total" sur la même ligne dans la carte UniFi
+- 🎯 Suppression de la carte "Analyse trafic UniFi" du dashboard (conservée uniquement dans l'onglet Analyse)
 
 ### 🔧 Modifié
 
+**Page UniFi**
+- 🎨 Correction de la couleur de fond de l'onglet "Analyse" pour correspondre aux autres cartes UniFi
+- 📊 Tableaux "Bornes Wi-Fi" et "Switches" affichés en deux colonnes dans l'onglet "Analyse"
+- 🎨 Uniformisation des hauteurs de tableaux et cellules entre les tableaux UniFi Controller
+- 🔄 Suppression des cartes AP et Switch de l'onglet "Overview" (fusion dans "Vue d'ensemble")
+- 📋 Correction de la logique d'affichage de l'alerte "Mise à jour dispo" (vérification précise de `upgradable` et `upgrade_to_firmware`)
+- 🎨 Amélioration de l'agencement interne des mini-cartes AP et Switch avec plusieurs colonnes
+- 📊 Alignement des badges SSID par fréquence dans les mini-cartes AP
+- 🔢 Déplacement du nombre d'utilisateurs sous chaque bande de fréquence dans les mini-cartes AP
+- 🎨 Affichage des badges de bandes et canaux sur une seule ligne sur grand écran dans le tableau des APs
+
+**Plugin Scan Réseau**
+- 🎨 Suppression des fonds colorés de la carte "Scan Réseau" du dashboard (conservation uniquement des nombres colorés)
+- 🔄 Correction des appels API pour inclure le préfixe `/api` et gérer correctement la structure `ApiResponse`
+- 🐛 Correction de la boucle de chargement infinie pour les listes "IPs Offline" et "Top Pire Latence"
+- 📊 Amélioration de l'affichage conditionnel des états de chargement et listes vides
+
+**Footer**
+- 🎨 Suppression des icônes "television", "telephone", "fichier", "vm" et "analytique" pour la page scan réseau (comme pour la page search)
+- 🔄 Ajout des boutons "Recherche" et "Administration" dans le footer pour la page scan réseau
+- 📝 Changement du texte du badge scan réseau de "Scan Réseau" à "IPs" dans le footer uniquement
+
+**Administration**
+- 🎨 Simplification de la carte plugin scan-réseau : suppression des boutons "check" et "options", conservation uniquement du switch on/off
+- 📊 Alignement du switch à gauche dans la carte plugin scan-réseau
+
+### 🐛 Corrigé
+
+**Plugin Scan Réseau**
+- ✅ Correction de l'erreur "Invalid token" lors du clic sur le bouton scan (utilisation de l'API client centralisée)
+- ✅ Correction de l'erreur "Activity is not defined" dans MultiSourceWidget (ajout de l'import)
+- ✅ Correction de l'affichage du hostname (utilisation correcte de `dns.reverse` et gestion des erreurs)
+- ✅ Correction de la syntaxe dans NetworkScanPage.tsx (suppression du point-virgule en trop)
+- ✅ Correction des appels API manquants du préfixe `/api` dans NetworkScanWidget
+- ✅ Correction de la boucle de chargement infinie pour les listes "IPs Offline" et "Top Pire Latence" (gestion correcte des dépendances useEffect)
+
+**Page UniFi**
+- ✅ Correction de la logique d'affichage de l'alerte "Mise à jour dispo" (vérification précise de `upgradable === true` et `upgrade_to_firmware`)
+- ✅ Correction de l'inversion des couleurs de fond et de texte dans l'onglet "Analyse"
+- ✅ Correction de l'affichage des données de firmware, CPU et consommation pour les switches et APs
+
+**Interface**
+- ✅ Correction de l'affichage du dernier scan dans le widget "État des plugins" (affichage de "scan en attente..." si aucun scan)
+
 ### 📝 Documentation
+
+- 📄 Consolidation de toute la documentation du plugin scan réseau dans `Doc_Dev/SCAN_RESEAU_COMPLETE.md`
+- 📝 Mise à jour du script `update-version.sh` avec couleurs, création automatique du message de commit et commandes Git complètes
+
+
 
 ---
 

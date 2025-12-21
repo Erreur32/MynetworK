@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { CheckCircle, XCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, ExternalLink, Activity } from 'lucide-react';
 import { usePluginStore, type PluginStats } from '../../stores/pluginStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../../utils/permissions';
@@ -265,6 +265,36 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                             )}
                                                         </>
                                                     )}
+                                                    {plugin.id === 'scan-reseau' && (() => {
+                                                        const scanStats = pluginStats?.['scan-reseau']?.system as any;
+                                                        const lastScan = scanStats?.lastScan ? new Date(scanStats.lastScan) : null;
+                                                        
+                                                        const formatLastScan = (date: Date | null): string => {
+                                                            if (!date) return 'scan en attente...';
+                                                            
+                                                            const now = new Date();
+                                                            const diffMs = now.getTime() - date.getTime();
+                                                            const diffMins = Math.floor(diffMs / 60000);
+                                                            const diffHours = Math.floor(diffMs / 3600000);
+                                                            const diffDays = Math.floor(diffMs / 86400000);
+                                                            
+                                                            if (diffMins < 1) return 'À l\'instant';
+                                                            if (diffMins < 60) return `Il y a ${diffMins}min`;
+                                                            if (diffHours < 24) return `Il y a ${diffHours}h`;
+                                                            if (diffDays < 7) return `Il y a ${diffDays}j`;
+                                                            
+                                                            return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                                                        };
+                                                        
+                                                        return (
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-gray-500">Dernier scan&nbsp;:</span>
+                                                                <span className={`font-mono font-medium text-xs ${lastScan ? 'text-gray-200' : 'text-yellow-400'}`}>
+                                                                    {formatLastScan(lastScan)}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
 

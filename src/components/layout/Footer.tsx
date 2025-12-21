@@ -18,7 +18,7 @@ import {
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { usePluginStore } from '../../stores/pluginStore';
 
-export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search';
+export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search' | 'network-scan';
 
 interface FooterProps {
   currentPage?: PageType;
@@ -73,6 +73,15 @@ export const Footer: React.FC<FooterProps> = ({
       
       // Sur la page de recherche: afficher les mêmes onglets que le dashboard
       if (currentPage === 'search') {
+        if (tab.id === 'freebox' || 
+            tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
+            tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
+          return false;
+        }
+      }
+      
+      // Sur la page scan réseau: afficher les mêmes onglets que le dashboard
+      if (currentPage === 'network-scan') {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
             tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
@@ -178,8 +187,8 @@ export const Footer: React.FC<FooterProps> = ({
             );
           })}
           
-          {/* Show "Recherche" button on dashboard and search page */}
-          {(currentPage === 'dashboard' || currentPage === 'search') && (
+          {/* Show "Recherche" button on dashboard, search page, and network-scan page */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && (
             <button
               onClick={() => onPageChange?.('search')}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
@@ -193,8 +202,8 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
           )}
           
-          {/* Show "Administration" button on dashboard and search page if settings tab is hidden */}
-          {(currentPage === 'dashboard' || currentPage === 'search') && !visibleTabs.find(t => t.id === 'settings') && (
+          {/* Show "Administration" button on dashboard, search page, and network-scan page if settings tab is hidden */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && !visibleTabs.find(t => t.id === 'settings') && (
             <button
               onClick={() => {
                 sessionStorage.setItem('adminMode', 'true');
@@ -214,13 +223,17 @@ export const Footer: React.FC<FooterProps> = ({
           {(() => {
             const freeboxPlugin = plugins.find(p => p.id === 'freebox');
             const unifiPlugin = plugins.find(p => p.id === 'unifi');
+            const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
             const isFreeboxActive = freeboxPlugin?.enabled && freeboxPlugin?.connectionStatus;
             const isUniFiActive = unifiPlugin?.enabled && unifiPlugin?.connectionStatus;
+            // Scan-réseau n'a pas besoin de connexion externe, donc on vérifie seulement si activé
+            const isScanReseauActive = scanReseauPlugin?.enabled;
 
             const showFreeboxButton = !!isFreeboxActive;
             const showUniFiButton = !!isUniFiActive;
+            const showScanReseauButton = !!isScanReseauActive;
 
-            if (!showFreeboxButton && !showUniFiButton) {
+            if (!showFreeboxButton && !showUniFiButton && !showScanReseauButton) {
               return null;
             }
             
@@ -259,6 +272,23 @@ export const Footer: React.FC<FooterProps> = ({
                     <span className="hidden sm:inline text-sm font-medium">UniFi</span>
                   </button>
                 )}
+                {showScanReseauButton && (
+                  <button
+                    onClick={() => onPageChange?.('network-scan')}
+                    className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-accent-primary/20 text-theme-primary hover:text-accent-primary rounded-lg border-theme transition-colors"
+                  >
+                    {/* Icône Scan Réseau custom */}
+                    <span className="w-5 h-5 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 50 50" className="w-5 h-5">
+                        <g fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
+                          <path stroke="currentColor" d="M25 35.417v-2.084M8.333 25h33.334zm8.334-10.417v2.084zm8.333 0v2.084zm-8.333 20.834v-2.084zm16.666-20.834v2.084zm0 20.834v-2.084z"/>
+                          <path stroke="currentColor" d="M6.25 16.667V8.333A2.083 2.083 0 0 1 8.333 6.25h8.334M43.75 16.667V8.333a2.083 2.083 0 0 0-2.083-2.083h-8.334M6.25 33.333v8.334a2.083 2.083 0 0 0 2.083 2.083h8.334m16.666 0h8.334a2.083 2.083 0 0 0 2.083-2.083v-8.334"/>
+                        </g>
+                      </svg>
+                    </span>
+                    <span className="hidden sm:inline text-sm font-medium">IPs</span>
+                  </button>
+                )}
 
                 {/* UniFi summary badge in footer when on UniFi page */}
                 {currentPage === 'unifi' && pluginStats && pluginStats['unifi'] && (() => {
@@ -273,9 +303,14 @@ export const Footer: React.FC<FooterProps> = ({
                     const type = (d.type || '').toLowerCase();
                     return type.startsWith('usw') && d.active !== false;
                   }).length;
-                  const anyUpgradable = nonClientDevices.some((d: any) =>
-                    d.upgradable === true || !!d.upgrade_to_firmware || !!d.required_version
-                  );
+                  // More precise check: upgradable must be explicitly true
+                  // OR upgrade_to_firmware must exist and be different from current version
+                  const anyUpgradable = nonClientDevices.some((d: any) => {
+                    const hasUpgradeToFirmware = !!d.upgrade_to_firmware && 
+                                                  d.upgrade_to_firmware !== d.version &&
+                                                  d.upgrade_to_firmware !== d.firmware_version;
+                    return d.upgradable === true || hasUpgradeToFirmware;
+                  });
 
                   return (
                     <div className="hidden sm:flex items-center gap-2 ml-2 px-3 py-2 rounded-lg border border-theme bg-theme-secondary/60">

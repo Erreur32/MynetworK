@@ -29,6 +29,7 @@ const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.L
 const UnifiedDashboardPage = lazy(() => import('./pages/UnifiedDashboardPage').then(m => ({ default: m.UnifiedDashboardPage })));
 const UniFiPage = lazy(() => import('./pages/UniFiPage').then(m => ({ default: m.UniFiPage })));
 const SearchPage = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })));
+const NetworkScanPage = lazy(() => import('./pages/NetworkScanPage').then(m => ({ default: m.NetworkScanPage })));
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { fetchEnvironmentInfo } from './constants/version';
@@ -577,6 +578,31 @@ const App: React.FC = () => {
     );
   }
 
+  // Render Network Scan page
+  if (currentPage === 'network-scan') {
+    return renderPageWithFooter(
+      <>
+        <Header 
+          systemInfo={systemInfo} 
+          connectionStatus={connectionStatus}
+          pageType="network-scan"
+          onHomeClick={handleHomeClick}
+          user={user || undefined}
+          onSettingsClick={handleSettingsClick}
+          onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
+          onLogout={handleLogout}
+        />
+        <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
+          <Suspense fallback={<PageLoader />}>
+            <NetworkScanPage onBack={() => setCurrentPage('dashboard')} />
+          </Suspense>
+        </main>
+      </>
+    );
+  }
+
   // Check if Freebox plugin is enabled
   const freeboxPlugin = plugins.find(p => p.id === 'freebox');
   const isFreeboxPluginEnabled = freeboxPlugin?.enabled || false;
@@ -608,6 +634,7 @@ const App: React.FC = () => {
           <UnifiedDashboardPage 
             onNavigateToFreebox={() => setCurrentPage('freebox')}
             onNavigateToUniFi={() => setCurrentPage('unifi')}
+            onNavigateToNetworkScan={() => setCurrentPage('network-scan')}
             onNavigateToPlugins={() => {
               // Set sessionStorage BEFORE changing page to ensure it's read
               sessionStorage.setItem('adminMode', 'true');

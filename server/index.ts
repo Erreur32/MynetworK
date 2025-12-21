@@ -211,6 +211,7 @@ import logsRoutes from './routes/logs.js';
 import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
 import searchRoutes from './routes/search.js';
+import networkScanRoutes from './routes/network-scan.js';
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
@@ -219,6 +220,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/docs', apiDocsRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/network-scan', networkScanRoutes);
 
 // Existing Freebox routes (kept for backward compatibility)
 app.use('/api/auth', authRoutes);

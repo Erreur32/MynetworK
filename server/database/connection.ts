@@ -156,6 +156,23 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Network scans table (for network scan plugin)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS network_scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL UNIQUE,
+            mac TEXT,
+            hostname TEXT,
+            vendor TEXT,
+            status TEXT NOT NULL DEFAULT 'unknown' CHECK(status IN ('online', 'offline', 'unknown')),
+            ping_latency INTEGER,
+            first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            scan_count INTEGER NOT NULL DEFAULT 1,
+            additional_info TEXT
+        )
+    `);
+
     // Create indexes for better performance
     database.exec(`
         CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
@@ -164,6 +181,9 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_logs_action ON logs(action);
         CREATE INDEX IF NOT EXISTS idx_user_plugin_permissions_user_id ON user_plugin_permissions(user_id);
         CREATE INDEX IF NOT EXISTS idx_user_plugin_permissions_plugin_id ON user_plugin_permissions(plugin_id);
+        CREATE INDEX IF NOT EXISTS idx_network_scans_ip ON network_scans(ip);
+        CREATE INDEX IF NOT EXISTS idx_network_scans_last_seen ON network_scans(last_seen);
+        CREATE INDEX IF NOT EXISTS idx_network_scans_status ON network_scans(status);
     `);
 
     logger.success('Database', 'Schema initialized');

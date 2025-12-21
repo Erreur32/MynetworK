@@ -6,6 +6,7 @@
 
 import { FreeboxPlugin } from '../plugins/freebox/FreeboxPlugin.js';
 import { UniFiPlugin } from '../plugins/unifi/UniFiPlugin.js';
+import { ScanReseauPlugin } from '../plugins/scan-reseau/ScanReseauPlugin.js';
 import { PluginConfigRepository } from '../database/models/PluginConfig.js';
 import { logger } from '../utils/logger.js';
 import type { IPlugin, PluginStats, PluginConfig } from '../plugins/base/PluginInterface.js';
@@ -17,7 +18,7 @@ export class PluginManager {
         // Register all available plugins
         this.registerPlugin(new FreeboxPlugin());
         this.registerPlugin(new UniFiPlugin());
-        // TODO: Register ScanPlugin when implemented
+        this.registerPlugin(new ScanReseauPlugin());
     }
 
     /**
