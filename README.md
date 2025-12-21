@@ -53,51 +53,52 @@
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    container_name: mynetwork
+    container_name: MynetworK
     restart: unless-stopped
 
-    # Port mapping: host:container
     ports:
       - "${DASHBOARD_PORT:-7505}:3000"
 
-    # Environment configuration
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
+      # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
+      #
+      # Pour générer un secret sécurisé (minimum 32 caractères) :
+      #   Linux/Mac:   openssl rand -base64 32
+      #   PowerShell:  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+
+      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      #  Host root path used to read real host metrics when running in Docker
+      #  The corresponding filesystem mount is configured in the volumes section below.
+      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+        
+      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
+      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json      
       # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
       # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
       # - Sans nginx, l'application fonctionne sans cette variable
+      # - Décommentez et configurez si vous utilisez nginx :
       # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
-      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
-      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
-      # ⚠️ SECURITE : Définissez JWT_SECRET via variable d'environnement
-      # Ne jamais utiliser la valeur par défaut en production !
-      # Voir section "Configuration sécurisée de JWT_SECRET" ci-dessous pour les exemples
-      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
-      # Optional: External config file path
-      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      # Host root path used to read real host metrics when running in Docker
-      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
 
-    # Persistent storage for Freebox API token, database, and config
+
     volumes:
-      - mynetwork_data:/app/data
-      # Optional: Mount external configuration file
-      # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
-      # Mount the host root filesystem read-only for system information
+      #  Mount external configuration database and token file
+      - ./data:/app/data
       - /:/host:ro
-      # Mount /proc and /sys from host to access host system information
+      #  Mount host filesystem (read-only) to access real host metrics
       - /proc:/host/proc:ro
+      #  Mount host filesystem (read-only) to access real host metrics
       - /sys:/host/sys:ro
-      # Mount Docker socket to enable Docker version detection
+      #  Mount Docker socket to enable Docker version detection
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-    # Network mode options:
-    # Option 1: Bridge mode (default) - uses port mapping
-    # Option 2: Host mode - direct network access (uncomment below)
-    # network_mode: host
+    # Network capabilities required for network scanning (ping, arp)
+    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
+    # NET_ADMIN: Required for some network operations and ARP table access
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
 
-    # Health check
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
@@ -105,20 +106,6 @@ services:
       retries: 3
       start_period: 40s
 
-    # Resource limits (optional)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.5'
-    #       memory: 512M
-    #     reservations:
-    #       cpus: '0.1'
-    #       memory: 256M
-
-# Named volume for persistent token storage, database, and config
-volumes:
-  mynetwork_data:
-    name: mynetwork_data
 ```
 
 **Lancement :**
