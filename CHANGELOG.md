@@ -2,6 +2,67 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.6] - 2025-12-21
+
+### 🐛 Corrigé
+
+### 🔧 Modifié
+
+### 📝 Documentation
+
+---
+
+## [0.1.6] - 2025-01-XX
+
+### ✨ Ajouté
+
+**Page UniFi**
+- 🔌 Nouvel onglet "Switch" avec tableau détaillé des ports des switches UniFi
+- 📊 Colonnes du tableau Switch : SWITCH, IP, VITESSE, POE, PORT, ERREURS, NOM PORT
+- 📈 Nouvel onglet "Analyse" dans la page UniFi avec carte PluginSummaryCard et widget NetworkEventsWidget
+- 📋 Tableau "Top 3 des temps de client connecté" dans l'onglet Analyse
+- 🔄 Réorganisation des onglets : regroupement de "Sites", "Points d'Accès" et "Switches" dans un seul onglet
+- 🎨 Affichage en deux colonnes pour les tableaux dans l'onglet Analyse (grand écran)
+- 📐 Alignement des colonnes entre tous les tableaux de l'onglet Analyse
+
+**Widget Analyse rapide du trafic UniFi**
+- 📊 Affichage conditionnel en deux colonnes (onglet Analyse) ou une colonne (dashboard)
+- ⏱️ Nouveau tableau "Top 3 des temps de client connecté" avec formatage du temps (jours/heures)
+- 📏 Colonne IP agrandie (28%) pour éviter la troncature sur petits écrans
+
+**Carte PluginSummaryCard**
+- 📊 Colonne "Speed" ajoutée au tableau des switches
+- 📐 Alignement des colonnes IP (28%) dans tous les tableaux
+- 📍 Informations "Clients connectés" et "Total" déplacées dans le corps de la carte (au lieu du header)
+
+**Carte Système Serveur**
+- ⏱️ Uptime ajouté en bas de la carte avec format jours/heures (si > 24h)
+
+### 🔧 Modifié
+
+**Page UniFi**
+- 🔄 Suppression du bouton "Actualiser" du header
+- 📊 Tableaux Wi‑Fi et Switches affichés en une seule colonne sur le dashboard (au lieu de deux)
+- 📊 Tableaux "Top 5 upload" et "Top 5 download" affichés en deux colonnes dans l'onglet Analyse
+- 📊 Tableaux "3 pires signaux Wi‑Fi" et "Top 3 temps de connexion" affichés en deux colonnes dans l'onglet Analyse
+- 🎯 Amélioration de l'extraction des données des ports switches (détection vitesse depuis media, PoE amélioré)
+- 🐛 Correction de la détection des switches (filtrage amélioré par type et modèle)
+- 🐛 Ajout de logs de debug pour diagnostiquer les problèmes d'affichage des ports
+
+**Formatage Uptime**
+- ⏱️ Affichage des jours si uptime > 24h pour les cartes Freebox, UniFi et Système Serveur
+- 📅 Format : "Xj Yh" si jours et heures, "Xj" si seulement jours, "Xh" si < 24h
+
+**Interface**
+- 📏 Colonne IP agrandie à 28% dans tous les tableaux de l'onglet Analyse
+- 🎨 Suppression du troncage sur la colonne IP (whitespace-nowrap) pour affichage complet
+
+### 🐛 Corrigé
+
+**Page UniFi**
+- ✅ Correction de l'onglet "Switch" qui n'était pas cliquable (suppression de la redirection automatique)
+- ✅ Correction de l'affichage des ports switches (amélioration de l'extraction des données)
+
 ## [0.1.5] - 2025-01-XX
 
 ### 🐛 Corrigé

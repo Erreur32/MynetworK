@@ -378,8 +378,8 @@ export const Header: React.FC<HeaderProps> = ({
   const showFreeboxInfo = pageType === 'freebox' && !!connectionStatus;
   const showSystemInfo = pageType === 'dashboard';
   
-  // Safety check: ensure showFreeboxInfo is false on dashboard (even if connectionStatus exists)
-  const finalShowFreeboxInfo = showFreeboxInfo && pageType !== 'dashboard';
+  // finalShowFreeboxInfo is the same as showFreeboxInfo since showFreeboxInfo can only be true when pageType === 'freebox'
+  const finalShowFreeboxInfo = showFreeboxInfo;
   
   // Debug: log if badges would show on dashboard (should never happen)
   // Removed verbose debug log - was spamming console
@@ -394,11 +394,15 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="flex flex-col md:flex-row items-center justify-between p-4 bg-theme-header border-b border-theme gap-4 relative z-40" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
-      {/* Logo / Box identifier */}
-      <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
-        {pageType === 'dashboard' ? (
-          <>
-            <img src={logoMynetworK} alt="MynetworK" className="w-12 h-12 flex-shrink-0" />
+      {/* Logo / Box identifier with Search icon */}
+      <div className="flex items-center gap-2">
+        {/* Logo badge - cliquable sur page recherche pour retour dashboard */}
+        {pageType === 'search' && onHomeClick ? (
+          <button
+            onClick={onHomeClick}
+            className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme hover:bg-theme-primary transition-colors"
+          >
+            <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
             <div className="flex flex-col leading-tight relative">
               <span className="font-semibold text-theme-primary">MynetworK</span>
               <div className="flex items-center gap-1.5">
@@ -410,8 +414,25 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
             </div>
-          </>
-        ) : pageType === 'freebox' ? (
+          </button>
+        ) : (
+          <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
+            {pageType === 'dashboard' ? (
+              <>
+                <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
+                <div className="flex flex-col leading-tight relative">
+                  <span className="font-semibold text-theme-primary">MynetworK</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
+                    {updateInfo?.updateAvailable && updateInfo.enabled && (
+                      <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
+                        Nouvelle version disponible
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : pageType === 'freebox' ? (
           <>
             <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
@@ -439,16 +460,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
             </div>
           </>
-        ) : pageType === 'search' ? (
-          <>
-            <div className="w-7 h-7 flex items-center justify-center">
-              <Search className="w-7 h-7 text-accent-primary" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold text-theme-primary">Recherche</span>
-              <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
-            </div>
-          </>
         ) : (
           <>
             <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
@@ -458,30 +469,50 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </>
         )}
-      </div>
-
-      {/* Search bar - Only on dashboard */}
-      {pageType === 'dashboard' && onSearchClick && (
-        <div className="flex-1 max-w-md mx-4 hidden md:flex">
-          <div className="relative w-full">
-            <input
-              type="text"
-              placeholder="Rechercher (nom, MAC, IP, port...)"
-              className="w-full px-4 py-2 pl-10 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-colors"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && onSearchClick) {
-                  const query = (e.target as HTMLInputElement).value.trim();
-                  if (query) {
-                    sessionStorage.setItem('searchQuery', query);
-                    onSearchClick();
-                  }
-                }
-              }}
-            />
-            <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-theme-tertiary" />
           </div>
-        </div>
-      )}
+        )}
+        
+        {/* Search icon/badge - Only on dashboard, next to logo */}
+        {pageType === 'dashboard' && onSearchClick && (
+          <>
+            {/* Mobile: Only icon */}
+            <button
+              onClick={onSearchClick}
+              className="md:hidden flex items-center justify-center w-10 h-10 bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-primary transition-colors"
+              title="Recherche"
+            >
+              <Search size={20} className="text-theme-primary" />
+            </button>
+            {/* Desktop: Full badge like search page */}
+            <button
+              onClick={onSearchClick}
+              className="hidden md:flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme hover:bg-theme-primary transition-colors text-left"
+              title="Recherche"
+            >
+              <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                <Search className="w-7 h-7 text-accent-primary" />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="font-semibold text-theme-primary">Recherche</span>
+                <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
+              </div>
+            </button>
+          </>
+        )}
+        
+        {/* Search badge - Only on search page, next to logo badge */}
+        {pageType === 'search' && (
+          <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
+            <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+              <Search className="w-7 h-7 text-accent-primary" />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="font-semibold text-theme-primary">Recherche</span>
+              <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Date and Time - Only on search page (center) */}
       {pageType === 'search' && (

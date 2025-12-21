@@ -6,10 +6,11 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
 import { usePluginStore } from '../stores/pluginStore';
+import { SearchOptionsInfoModal } from '../components/modals/SearchOptionsInfoModal';
 
 interface SearchResult {
     pluginId: string;
@@ -62,8 +63,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [pingEnabled, setPingEnabled] = useState(false);
     const [pingResults, setPingResults] = useState<Record<string, { success: boolean; time?: number; error?: string }>>({});
     const [pingingIps, setPingingIps] = useState<Set<string>>(new Set());
+    const [showOptionsInfoModal, setShowOptionsInfoModal] = useState(false);
     
-    // Filters
+    // Get active plugins
+    const activePlugins = useMemo(() => {
+        return plugins.filter(p => p.enabled && p.connectionStatus);
+    }, [plugins]);
+
+    // Filters - Initialize with all active plugins by default
     const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     
@@ -74,10 +81,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
 
-    // Get active plugins
-    const activePlugins = useMemo(() => {
-        return plugins.filter(p => p.enabled && p.connectionStatus);
-    }, [plugins]);
+    // Initialize selectedPlugins with all active plugins by default
+    useEffect(() => {
+        const activePluginIds = activePlugins.map(p => p.id);
+        if (activePluginIds.length > 0 && selectedPlugins.length === 0) {
+            // First load: select all active plugins
+            setSelectedPlugins(activePluginIds);
+        } else if (activePluginIds.length > 0) {
+            // Keep only active plugins that are still available
+            setSelectedPlugins(prev => prev.filter(id => activePluginIds.includes(id)));
+        }
+    }, [activePlugins, selectedPlugins.length]);
 
     // Check if IP is IPv4 and local (private range)
     const isLocalIPv4 = (ip?: string): boolean => {
@@ -103,16 +117,44 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         );
     };
 
-    // Ping an IP address (local IPv4 only)
-    const pingIp = async (ip: string): Promise<{ success: boolean; time?: number; error?: string }> => {
-        if (!isLocalIPv4(ip)) {
-            return { success: false, error: 'Seules les adresses IPv4 locales sont autorisées' };
+    // Check if string is a valid IP (IPv4) or domain name
+    const isValidIpOrDomain = (target?: string): boolean => {
+        if (!target) return false;
+        
+        // Check if it's an IPv4 address
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (ipv4Regex.test(target)) {
+            const parts = target.split('.').map(Number);
+            return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
+        }
+        
+        // Check if it's a valid domain name (basic validation)
+        // Domain regex: allows letters, numbers, dots, hyphens
+        const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+        return domainRegex.test(target) || target === 'localhost';
+    };
+
+    // Ping an IP address or domain
+    const pingIp = async (target: string, forceExternal: boolean = false): Promise<{ success: boolean; time?: number; error?: string }> => {
+        // Check if target is valid
+        if (!isValidIpOrDomain(target)) {
+            return { success: false, error: 'Adresse IP ou domaine invalide' };
+        }
+
+        // For automatic ping, only ping local IPs (for security)
+        // For manual ping (forceExternal=true), allow any IP/domain
+        const isLocal = isLocalIPv4(target);
+        if (!isLocal && !forceExternal) {
+            // In automatic ping mode, skip external IPs for security
+            return { success: false, error: 'Ping exterieur ignoré en mode automatique. Utilisez le bouton "Ping direct" pour pinger des IP externes.' };
         }
 
         try {
-            const response = await api.get<{ success: boolean; result?: { latency: number } }>(`/api/speedtest/ping?target=${encodeURIComponent(ip)}&count=3`);
+            const response = await api.get<{ success: boolean; result?: { latency: number } }>(`/api/speedtest/ping?target=${encodeURIComponent(target)}&count=3`);
             if (response.success && response.result && 'latency' in response.result && typeof response.result.latency === 'number') {
-                return { success: true, time: Math.round(response.result.latency) };
+                // Round to at least 1ms if result is 0ms (for display purposes)
+                const latency = Math.round(response.result.latency);
+                return { success: true, time: latency > 0 ? latency : 1 };
             } else {
                 return { success: false, error: 'Ping échoué' };
             }
@@ -123,6 +165,87 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 return { success: false, error: 'Connexion interrompue' };
             }
             return { success: false, error: errorMessage };
+        }
+    };
+
+    // Ping a single IP/domain manually
+    const pingSingleTarget = async (target: string) => {
+        if (!target) return;
+        
+        // Add to pinging set
+        setPingingIps(prev => new Set(prev).add(target));
+        
+        try {
+            // Force external ping if it's not local (for manual ping button)
+            // This allows pinging external IPs/domains even if allowExternalPing toggle is off
+            const isLocal = isLocalIPv4(target);
+            const result = await pingIp(target, !isLocal);
+            setPingResults(prev => ({ ...prev, [target]: result }));
+        } catch (err) {
+            setPingResults(prev => ({ ...prev, [target]: { success: false, error: 'Erreur' } }));
+        } finally {
+            setPingingIps(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(target);
+                return newSet;
+            });
+        }
+    };
+
+    // Ping all local IPs in current results (non-blocking)
+    const pingAllResults = async (resultsToPing: SearchResult[]) => {
+        if (!pingEnabled || resultsToPing.length === 0) return;
+
+        // Ping all local IP addresses in results
+        const ipsToPing = resultsToPing
+            .filter(r => {
+                if (!r.ip) return false;
+                return isLocalIPv4(r.ip); // Only local IPs in automatic ping
+            })
+            .map(r => r.ip!)
+            .filter((ip, index, self) => self.indexOf(ip) === index); // Unique IPs
+
+        if (ipsToPing.length === 0) return;
+
+        // Set pinging state immediately to show animation
+        setPingingIps(new Set(ipsToPing));
+
+        // Ping each IP sequentially to avoid overwhelming the server
+        // This runs in the background, results are displayed as they come
+        for (let i = 0; i < ipsToPing.length; i++) {
+            const ip = ipsToPing[i];
+            try {
+                const result = await pingIp(ip);
+                setPingResults(prev => ({ ...prev, [ip]: result }));
+            } catch (err) {
+                // Handle errors silently for individual pings
+                setPingResults(prev => ({ ...prev, [ip]: { success: false, error: 'Erreur' } }));
+            }
+
+            // Remove from pinging set once done
+            setPingingIps(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(ip);
+                return newSet;
+            });
+
+            // Small delay between pings to avoid overwhelming the server
+            if (i < ipsToPing.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+        }
+    };
+
+    // Ping the search query directly (from input field)
+    const pingSearchQuery = async (query: string) => {
+        if (!query.trim() || !isValidIpOrDomain(query.trim())) return;
+        
+        const target = query.trim();
+        const isLocal = isLocalIPv4(target);
+        
+        // Only ping if it's a valid IP/domain
+        if (isValidIpOrDomain(target)) {
+            await pingSingleTarget(target);
         }
     };
 
@@ -148,7 +271,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             });
 
             if (response.success && response.result?.results) {
+                // Display results immediately
                 setResults(response.result.results);
+                
+                // If ping automatic is enabled, ping all local IPs in results (non-blocking)
+                // This runs in the background, results are already displayed
+                if (pingEnabled) {
+                    // Don't await - let it run in background while results are displayed
+                    pingAllResults(response.result.results);
+                }
             } else {
                 // Handle API error response
                 const errorMsg = response.error?.message || 'Erreur lors de la recherche';
@@ -358,84 +489,172 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
     return (
         <div className="min-h-screen bg-theme-primary">
-            <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+            <div className="max-w-[1920px] mx-auto p-4 md:p-6 space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                         
-                        <p className="text-sm text-theme-secondary">
-                            Recherche dans les plugins actifs (Freebox, UniFi)
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleRefresh}
-                            className="px-4 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-tertiary transition-colors flex items-center gap-2"
-                            title="Réinitialiser la recherche"
-                        >
-                            <RotateCw size={18} />
-                            Actualiser
-                        </button>
-                        {onBack && (
-                            <button
-                                onClick={onBack}
-                                className="px-4 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-tertiary transition-colors flex items-center gap-2"
-                            >
-                                <ChevronLeft size={18} />
-                                Retour
-                            </button>
-                        )}
-                    </div>
+                <div className="mb-6">
+                    <p className="text-sm text-theme-secondary">
+                        Recherche dans les plugins actifs (Freebox, UniFi)
+                    </p>
                 </div>
 
-                {/* Search bar */}
-                <Card title="Rechercher">
-                    <div className="space-y-4">
-                        <div className="flex gap-3">
-                            <div className="flex-1 relative">
-                                <Search size={24} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-accent-primary opacity-80" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => {
-                                        setSearchQuery(e.target.value);
-                                        // Reset hasSearched when user types to prevent showing "no results" message
-                                        if (hasSearched) {
-                                            setHasSearched(false);
-                                        }
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleSearch();
-                                        }
-                                    }}
-                                    placeholder="Rechercher (nom, MAC, IP, port, hostname...)"
-                                    className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
-                                />
-                            </div>
-                            <button
-                                onClick={handleSearch}
-                                disabled={isLoading || !searchQuery.trim()}
-                                className="px-6 py-3 bg-accent-primary text-white rounded-lg hover:bg-accent-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-accent-primary/20"
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 size={18} className="animate-spin" />
-                                        Recherche...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Search size={18} />
-                                        Rechercher
-                                    </>
+                {/* Two columns layout: Search bar and Options/Filters */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left column: Search bar */}
+                    <div>
+                        <Card title="Rechercher">
+                            <div className="space-y-4">
+                                <div className="flex gap-3">
+                                    <div className="flex-1 relative">
+                                        <Search size={24} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-accent-primary opacity-80" />
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => {
+                                                setSearchQuery(e.target.value);
+                                                // Reset hasSearched when user types to prevent showing "no results" message
+                                                if (hasSearched) {
+                                                    setHasSearched(false);
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleSearch();
+                                                }
+                                            }}
+                                            placeholder="Rechercher (nom, MAC, IP, port, hostname...)"
+                                            className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleSearch}
+                                        disabled={isLoading || !searchQuery.trim()}
+                                        className="px-6 py-3 bg-accent-primary text-white rounded-lg hover:bg-accent-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-accent-primary/20"
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 size={18} className="animate-spin" />
+                                                Recherche...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Search size={18} />
+                                                Rechercher
+                                            </>
+                                        )}
+                                    </button>
+                                    {/* Ping direct button - for direct IP/domain ping without search results */}
+                                    {/* Ping direct button - Only visible when ping switch is enabled */}
+                                    {pingEnabled && searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && (
+                                        <button
+                                            onClick={() => pingSingleTarget(searchQuery.trim())}
+                                            disabled={pingingIps.has(searchQuery.trim())}
+                                            className={`px-4 py-3 rounded-lg transition-all flex items-center gap-2 font-medium ${
+                                                pingingIps.has(searchQuery.trim())
+                                                    ? 'bg-theme-tertiary text-theme-secondary cursor-not-allowed'
+                                                    : 'bg-cyan-500 text-white hover:bg-cyan-600 shadow-lg shadow-cyan-500/20'
+                                            }`}
+                                            title={`Pinger directement ${searchQuery.trim()} (sans recherche dans les résultats)`}
+                                        >
+                                            {pingingIps.has(searchQuery.trim()) ? (
+                                                <>
+                                                    <Loader2 size={18} className="animate-spin" />
+                                                    Ping...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Network size={18} />
+                                                    Ping direct
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                                {/* Display ping result for search query if it's an IP/domain */}
+                                {searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && pingResults[searchQuery.trim()] && (
+                                    <div className={`p-3 rounded-lg border ${
+                                        pingResults[searchQuery.trim()].success
+                                            ? 'bg-emerald-500/10 border-emerald-500/30'
+                                            : 'bg-red-500/10 border-red-500/30'
+                                    }`}>
+                                        <div className="flex items-center gap-2">
+                                            {pingResults[searchQuery.trim()].success ? (
+                                                <>
+                                                    <CheckCircle size={16} className="text-emerald-400" />
+                                                    <span className="text-sm text-emerald-400 font-medium">
+                                                        {searchQuery.trim()} répond en {pingResults[searchQuery.trim()].time}ms
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <X size={16} className="text-red-400" />
+                                                    <span className="text-sm text-red-400">
+                                                        {searchQuery.trim()} ne répond pas
+                                                        {pingResults[searchQuery.trim()].error && ` (${pingResults[searchQuery.trim()].error})`}
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
                                 )}
-                            </button>
-                        </div>
-                    </div>
-                </Card>
 
-                {/* Search options and filters */}
-                <Card title="Options et filtres">
+                                {/* Plugin filter - Under search bar */}
+                                {activePlugins.length > 0 && (
+                                    <div>
+                                        <label className="text-sm font-medium text-theme-secondary mb-3 block">
+                                            Plugins
+                                        </label>
+                                        <div className="flex flex-wrap gap-3">
+                                            {activePlugins.map(plugin => {
+                                                const isFreebox = plugin.id === 'freebox';
+                                                const isUnifi = plugin.id === 'unifi';
+                                                const isSelected = selectedPlugins.includes(plugin.id);
+                                                
+                                                return (
+                                                    <button
+                                                        key={plugin.id}
+                                                        onClick={() => togglePlugin(plugin.id)}
+                                                        className={`group relative px-4 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 flex items-center gap-2 ${
+                                                            isSelected
+                                                                ? isFreebox
+                                                                    ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
+                                                                    : isUnifi
+                                                                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/10'
+                                                                        : 'bg-accent-primary/20 border-accent-primary text-accent-primary'
+                                                                : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
+                                                        }`}
+                                                    >
+                                                        {isFreebox && <Server size={16} className={isSelected ? 'text-blue-400' : 'text-theme-tertiary'} />}
+                                                        {isUnifi && <Wifi size={16} className={isSelected ? 'text-purple-400' : 'text-theme-tertiary'} />}
+                                                        <span>{plugin.name}</span>
+                                                        {isSelected && (
+                                                            <span className="ml-1 text-xs opacity-70">
+                                                                ({results.filter(r => r.pluginId === plugin.id).length})
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    </div>
+
+                    {/* Right column: Search options and filters */}
+                    <div>
+                        <Card 
+                            title="Filtres"
+                            actions={
+                                <button
+                                    onClick={() => setShowOptionsInfoModal(true)}
+                                    className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary"
+                                    title="Aide sur les options de recherche"
+                                >
+                                    <Info size={18} />
+                                </button>
+                            }
+                        >
                     <div className="space-y-4">
                         {/* Search options - Toggle buttons */}
                         <div className="flex flex-wrap gap-3 items-center text-sm">
@@ -462,6 +681,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     }`} />
                                 </div>
                                 <span>Actif seulement</span>
+                                <CheckCircle size={12} className={showOnlyActive ? 'text-emerald-400' : 'text-theme-tertiary'} />
                             </button>
                             
                             <button
@@ -525,34 +745,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         setCaseSensitive(false);
                                         setShowOnlyActive(false);
                                         
-                                        // Ping all local IPv4 addresses in current filtered results
-                                        const localIps = filteredResults
-                                            .filter(r => r.ip && isLocalIPv4(r.ip))
-                                            .map(r => r.ip!)
-                                            .filter((ip, index, self) => self.indexOf(ip) === index); // Unique IPs
-                                        
-                                        setPingResults({});
-                                        setPingingIps(new Set(localIps));
-                                        
-                                        // Ping each IP sequentially to avoid overwhelming the server
-                                        // Add delay between pings to prevent socket issues
-                                        for (let i = 0; i < localIps.length; i++) {
-                                            const ip = localIps[i];
-                                            try {
-                                                const result = await pingIp(ip);
-                                                setPingResults(prev => ({ ...prev, [ip]: result }));
-                                            } catch (err) {
-                                                // Handle errors silently for individual pings
-                                                setPingResults(prev => ({ ...prev, [ip]: { success: false, error: 'Erreur' } }));
-                                            }
-                                            
-                                            // Small delay between pings to avoid overwhelming the server
-                                            if (i < localIps.length - 1) {
-                                                await new Promise(resolve => setTimeout(resolve, 200));
-                                            }
+                                        // If we have search results, ping them
+                                        // Otherwise, ping the search query directly (from input field)
+                                        if (results.length > 0) {
+                                            await pingAllResults(filteredResults);
+                                        } else if (searchQuery.trim() && isValidIpOrDomain(searchQuery.trim())) {
+                                            // Ping the search query directly without doing a search
+                                            await pingSearchQuery(searchQuery.trim());
                                         }
-                                        
-                                        setPingingIps(new Set());
                                     } else {
                                         setPingResults({});
                                         setPingingIps(new Set());
@@ -571,114 +771,70 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         pingEnabled ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Ping IP locales (IPv4)</span>
+                                <span>Ping automatique des résultats </span>
                             </button>
                         </div>
 
-                        {/* Filters - Plugin and Type in two columns */}
-                        {(activePlugins.length > 0 || availableTypes.length > 0) && (
+                        {/* Filters - Type filter */}
+                        {availableTypes.length > 0 && (
                             <div className="pt-3 border-t border-theme">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {/* Plugin filter - Freebox and UniFi specific */}
-                                    {activePlugins.length > 0 && (
-                                        <div>
-                                            <label className="text-sm font-medium text-theme-secondary mb-3 block">
-                                                Plugins
-                                            </label>
-                                            <div className="flex flex-wrap gap-3">
-                                            {activePlugins.map(plugin => {
-                                                const isFreebox = plugin.id === 'freebox';
-                                                const isUnifi = plugin.id === 'unifi';
-                                                const isSelected = selectedPlugins.includes(plugin.id);
-                                                
-                                                return (
-                                                    <button
-                                                        key={plugin.id}
-                                                        onClick={() => togglePlugin(plugin.id)}
-                                                        className={`group relative px-4 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 flex items-center gap-2 ${
-                                                            isSelected
-                                                                ? isFreebox
-                                                                    ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
-                                                                    : isUnifi
-                                                                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/10'
-                                                                        : 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                                                                : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
-                                                        }`}
-                                                    >
-                                                        {isFreebox && <Server size={16} className={isSelected ? 'text-blue-400' : 'text-theme-tertiary'} />}
-                                                        {isUnifi && <Wifi size={16} className={isSelected ? 'text-purple-400' : 'text-theme-tertiary'} />}
-                                                        <span>{plugin.name}</span>
-                                                        {isSelected && (
-                                                            <span className="ml-1 text-xs opacity-70">
-                                                                ({results.filter(r => r.pluginId === plugin.id).length})
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Type filter */}
-                                    {availableTypes.length > 0 && (
-                                        <div>
-                                            <label className="text-sm font-medium text-theme-secondary mb-3 block">
-                                                Types de résultats
-                                            </label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {availableTypes.map(type => {
-                                                    const isSelected = selectedTypes.includes(type);
-                                                    const count = filteredResults.filter(r => r.type === type).length;
-                                                    
-                                                    // Color coding by type
-                                                    let colorClass = '';
-                                                    if (isSelected) {
-                                                        switch (type) {
-                                                            case 'device':
-                                                            case 'client':
-                                                                colorClass = 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400';
-                                                                break;
-                                                            case 'ap':
-                                                            case 'switch':
-                                                                colorClass = 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400';
-                                                                break;
-                                                            case 'dhcp':
-                                                                colorClass = 'bg-amber-500/20 border-amber-500/50 text-amber-400';
-                                                                break;
-                                                            case 'port-forward':
-                                                                colorClass = 'bg-orange-500/20 border-orange-500/50 text-orange-400';
-                                                                break;
-                                                            default:
-                                                                colorClass = 'bg-accent-primary/20 border-accent-primary text-accent-primary';
-                                                        }
-                                                    } else {
-                                                        colorClass = 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary';
-                                                    }
-                                                    
-                                                    return (
-                                                        <button
-                                                            key={type}
-                                                            onClick={() => toggleType(type)}
-                                                            className={`px-3 py-1.5 rounded-lg text-sm border transition-all duration-200 font-medium ${colorClass}`}
-                                                        >
-                                                            {getTypeLabel(type)}
-                                                            {isSelected && count > 0 && (
-                                                                <span className="ml-1.5 text-xs opacity-70">
-                                                                    ({count})
-                                                                </span>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
+                                <div>
+                                    <label className="text-sm font-medium text-theme-secondary mb-3 block">
+                                        Types de résultats
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availableTypes.map(type => {
+                                            const isSelected = selectedTypes.includes(type);
+                                            const count = filteredResults.filter(r => r.type === type).length;
+                                            
+                                            // Color coding by type
+                                            let colorClass = '';
+                                            if (isSelected) {
+                                                switch (type) {
+                                                    case 'device':
+                                                    case 'client':
+                                                        colorClass = 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400';
+                                                        break;
+                                                    case 'ap':
+                                                    case 'switch':
+                                                        colorClass = 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400';
+                                                        break;
+                                                    case 'dhcp':
+                                                        colorClass = 'bg-amber-500/20 border-amber-500/50 text-amber-400';
+                                                        break;
+                                                    case 'port-forward':
+                                                        colorClass = 'bg-orange-500/20 border-orange-500/50 text-orange-400';
+                                                        break;
+                                                    default:
+                                                        colorClass = 'bg-accent-primary/20 border-accent-primary text-accent-primary';
+                                                }
+                                            } else {
+                                                colorClass = 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary';
+                                            }
+                                            
+                                            return (
+                                                <button
+                                                    key={type}
+                                                    onClick={() => toggleType(type)}
+                                                    className={`px-3 py-1.5 rounded-lg text-sm border transition-all duration-200 font-medium ${colorClass}`}
+                                                >
+                                                    {getTypeLabel(type)}
+                                                    {isSelected && count > 0 && (
+                                                        <span className="ml-1.5 text-xs opacity-70">
+                                                            ({count})
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
-                </Card>
+                        </Card>
+                    </div>
+                </div>
 
                 {/* Results */}
                 {isLoading ? (
@@ -699,7 +855,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     <Card>
                         <div className="flex items-center justify-center py-12 text-theme-secondary">
                             <AlertCircle size={24} className="mr-2" />
-                            <span>Aucun résultat trouvé pour "{searchQuery}"</span>
+                            <div className="text-center space-y-2">
+                                <span className="block">Aucun résultat trouvé pour "{searchQuery}"</span>
+                                <span className="block text-sm text-theme-tertiary">
+                                    La recherche fonctionne uniquement dans les données locales des plugins (appareils, clients, DHCP, etc.)
+                                </span>
+                                {isValidIpOrDomain(searchQuery) && !isLocalIPv4(searchQuery) && (
+                                    <span className="block text-sm text-cyan-400 mt-2">
+                                        💡 Astuce : Utilisez le bouton de ping pour tester la connectivité de "{searchQuery}"
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </Card>
                 ) : filteredResults.length === 0 && hasSearched && !isLoading ? (
@@ -821,9 +987,31 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex flex-col gap-1">
-                                                    <span className="font-mono text-theme-secondary">
-                                                        {result.ip || '--'}
-                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-theme-secondary">
+                                                            {result.ip || '--'}
+                                                        </span>
+                                                        {/* Manual ping button - visible when ping is enabled */}
+                                                        {pingEnabled && result.ip && isValidIpOrDomain(result.ip) && (
+                                                            <button
+                                                                onClick={() => pingSingleTarget(result.ip!)}
+                                                                disabled={pingingIps.has(result.ip)}
+                                                                className={`p-1 rounded transition-colors ${
+                                                                    pingingIps.has(result.ip)
+                                                                        ? 'text-theme-tertiary cursor-not-allowed'
+                                                                        : 'text-theme-secondary hover:text-cyan-400 hover:bg-cyan-500/10'
+                                                                }`}
+                                                                title={pingingIps.has(result.ip) ? 'Ping en cours...' : `Pinger ${result.ip}`}
+                                                            >
+                                                                {pingingIps.has(result.ip) ? (
+                                                                    <Loader2 size={14} className="animate-spin" />
+                                                                ) : (
+                                                                    <Network size={14} />
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {/* Ping result display - Show animation while pinging, result when done */}
                                                     {pingEnabled && result.ip && isLocalIPv4(result.ip) && (
                                                         <div className="flex items-center gap-1">
                                                             {pingingIps.has(result.ip) ? (
@@ -913,6 +1101,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     </Card>
                 )}
             </div>
+
+            {/* Search Options Info Modal */}
+            <SearchOptionsInfoModal
+                isOpen={showOptionsInfoModal}
+                onClose={() => setShowOptionsInfoModal(false)}
+            />
         </div>
     );
 };

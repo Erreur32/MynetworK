@@ -6,8 +6,10 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
+import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
+import { NetworkEventsWidget } from '../components/widgets/NetworkEventsWidget';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../utils/constants';
@@ -16,7 +18,7 @@ interface UniFiPageProps {
     onBack: () => void;
 }
 
-type TabType = 'overview' | 'sites' | 'accesspoints' | 'switches' | 'clients' | 'traffic' | 'events' | 'debug';
+type TabType = 'overview' | 'sites-aps-switches' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
@@ -81,6 +83,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
         fetchPlugins();
     }, [fetchPlugins]);
 
+    // Migrate old tab values to new combined tab
+    useEffect(() => {
+        if (activeTab === 'sites' || activeTab === 'accesspoints' || activeTab === 'sites-aps') {
+            setActiveTab('sites-aps-switches');
+        }
+    }, [activeTab]);
+
     useEffect(() => {
         if (isActive) {
             fetchPluginStats('unifi');
@@ -131,11 +140,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
-        { id: 'sites', label: 'Sites', icon: Server },
-        { id: 'accesspoints', label: 'Points d\'Accès', icon: Wifi },
-        { id: 'switches', label: 'Switches', icon: Server },
+        { id: 'sites-aps-switches', label: 'Sites, APs & Switches', icon: Server },
+        { id: 'switches', label: 'Switch', icon: Network },
+        { id: 'analyse', label: 'Analyse', icon: Activity },
         { id: 'clients', label: 'Clients', icon: Users },
-        { id: 'traffic', label: 'Trafic', icon: Activity },
+        { id: 'traffic', label: 'Trafic', icon: TrendingUp },
         { id: 'events', label: 'Événements', icon: AlertCircle },
         { id: 'debug', label: 'Debug', icon: AlertCircle }
     ];
@@ -291,14 +300,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 </span>
                             </div>
                         </div>
-                    <button
-                        onClick={handleRefresh}
-                        disabled={isRefreshing}
-                        className="p-2 hover:bg-[#1a1a1a] rounded transition-colors disabled:opacity-50"
-                        title="Actualiser"
-                    >
-                        <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
-                    </button>
                     </div>
                 </div>
 
@@ -748,9 +749,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                         </>
                     )}
 
-                    {/* Sites Tab */}
-                    {activeTab === 'sites' && (
-                        <div className="col-span-full">
+                    {/* Sites, Access Points & Switches Tab (Combined) */}
+                    {activeTab === 'sites-aps-switches' && (
+                        <div className="col-span-full space-y-6">
+                            {/* Sites Section */}
                             <Card title="Sites UniFi">
                                 {(() => {
                                     const sites = (unifiStats as any)?.sites as Array<any> | undefined;
@@ -758,7 +760,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                         return (
                                 <div className="text-center py-8 text-gray-500">
                                     <Server size={32} className="mx-auto mb-2" />
-                                                <p>Aucun site détecté pour l’instant</p>
+                                                <p>Aucun site détecté pour l'instant</p>
                                 </div>
                                         );
                                     }
@@ -827,11 +829,338 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                     );
                                 })()}
                             </Card>
+
+                            {/* Access Points Section */}
+                            <Card title="Points d'Accès" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                {unifiStats?.devices ? (
+                                    (() => {
+                                        const accessPoints = unifiStats.devices.filter((d: any) => {
+                                            // UniFi devices can have type: 'uap', 'uap-ac', 'uap-ac-lite', etc.
+                                            // Or model names containing 'UAP', 'AP', 'accesspoint'
+                                            // Exclude clients (type === 'client')
+                                            const type = (d.type || '').toLowerCase();
+                                            const model = (d.model || '').toLowerCase();
+                                            return (type === 'uap' || 
+                                                    type.includes('uap') || 
+                                                    type === 'accesspoint' || 
+                                                    type === 'ap' ||
+                                                    model.includes('uap') ||
+                                                    model.includes('ap')) &&
+                                                   type !== 'client';
+                                        });
+                                        
+                                        if (accessPoints.length === 0) {
+                                            return (
+                                                <div className="text-center py-8 text-gray-500">
+                                                    <Wifi size={32} className="mx-auto mb-2" />
+                                                    <p>Aucun point d'accès détecté</p>
+                                                    <p className="text-xs mt-2 text-gray-600">
+                                                        Total devices: {unifiStats.devices.length}
+                                                        {unifiStats.devices.length > 0 && (
+                                                            <span className="block mt-1">
+                                                                Types: {Array.from(new Set(unifiStats.devices.map((d: any) => d.type || 'unknown'))).join(', ')}
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+                                        
+                                        const clients = unifiStats.devices.filter((d: any) => {
+                                            const type = (d.type || '').toLowerCase();
+                                            return type === 'client';
+                                        });
+
+                                        const getWifiType = (device: any): string => {
+                                            const model = (device.model || '').toString().toLowerCase();
+                                            if (model.includes('be') || model.includes('wifi 7') || model.includes('wi-fi 7')) return 'Wi‑Fi 7';
+                                            if (model.includes('6e')) return 'Wi‑Fi 6E';
+                                            if (model.includes('6') || model.includes('ax')) return 'Wi‑Fi 6';
+                                            if (model.includes('ac')) return 'Wi‑Fi 5';
+                                            if (model.includes('n')) return 'Wi‑Fi 4';
+                                            return 'Wi‑Fi';
+                                        };
+
+                                        const getUnifiBands = (device: any): string[] => {
+                                            const bands: string[] = [];
+                                            // Check radio_table (most common UniFi API structure)
+                                            if (device.radio_table && Array.isArray(device.radio_table)) {
+                                                device.radio_table.forEach((radio: any) => {
+                                                    const band = radio.radio || radio.name || '';
+                                                    if (band) {
+                                                        const bandLower = band.toLowerCase();
+                                                        if (bandLower.includes('ng') || bandLower.includes('2.4') || bandLower === '2g') {
+                                                            if (!bands.includes('2.4GHz')) bands.push('2.4GHz');
+                                                        } else if (bandLower.includes('na') || bandLower.includes('5') || bandLower === '5g') {
+                                                            if (!bands.includes('5GHz')) bands.push('5GHz');
+                                                        } else if (bandLower.includes('6') || bandLower === '6g') {
+                                                            if (!bands.includes('6GHz')) bands.push('6GHz');
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                            // Fallback: check radio fields directly
+                                            if (bands.length === 0) {
+                                                if (device.radio_ng || device.radio_2g) bands.push('2.4GHz');
+                                                if (device.radio_na || device.radio_5g) bands.push('5GHz');
+                                                if (device.radio_6g) bands.push('6GHz');
+                                            }
+                                            return bands.length > 0 ? bands : ['N/A'];
+                                        };
+
+                                        const getClientsForAp = (ap: any): number => {
+                                            const apName = (ap.name || ap.model || '').toString();
+                                            const apMac = (ap.mac || '').toString().toLowerCase();
+                                            return clients.filter((client: any) => {
+                                                const lastUplinkName = (client.last_uplink_name || client.uplink_name || '') as string;
+                                                const lastUplinkMac = (client.last_uplink_mac || client.sw_mac || '') as string;
+                                        return (
+                                                    lastUplinkName === apName ||
+                                                    lastUplinkMac.toLowerCase() === apMac
+                                                );
+                                            }).length;
+                                        };
+
+                                        return (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                                {accessPoints.map((device: any) => {
+                                                    const clientsCount = getClientsForAp(device);
+                                                    const wifiType = getWifiType(device);
+                                                    const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
+                                                    const bands = getUnifiBands(device);
+
+                                                    return (
+                                                <div
+                                                    key={device.id}
+                                                            className={`bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 ${
+                                                                device.active === false ? 'opacity-60' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                                                                    <span className="text-sm font-semibold text-white truncate">
+                                                                        {device.name || device.model || device.id}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span
+                                                                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                                                            device.active === false
+                                                                                ? 'bg-gray-900 text-gray-400 border-gray-700'
+                                                                                : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
+                                                                        }`}
+                                                                    >
+                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
+                                                                    </span>
+                                                                    <span
+                                                                        className={`w-2 h-2 rounded-full ${
+                                                                            device.active !== false ? 'bg-emerald-400' : 'bg-gray-500'
+                                                                        }`}
+                                                                        title={
+                                                                            device.active !== false
+                                                                                ? "Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
+                                                                                : "Point d'accès hors ligne"
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-xs space-y-0.5 mt-1">
+                                                        {device.ip && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">IP:&nbsp;</span>
+                                                                        <span className="text-gray-300">{device.ip}</span>
+                                                                    </div>
+                                                        )}
+                                                                <div>
+                                                                    <span className="text-gray-500">Type Wi‑Fi:&nbsp;</span>
+                                                                    <span className="text-gray-300">{wifiType}</span>
+                                                    </div>
+                                                                <div>
+                                                                    <span className="text-gray-500">Bandes:&nbsp;</span>
+                                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                                        {bands.map((band, bandIndex) => (
+                                                                            <span
+                                                                                key={`band-${bandIndex}`}
+                                                                                className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300"
+                                                                            >
+                                                                                {band}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
+                                                                    <span className="text-gray-300">{clientsCount}</span>
+                                                                </div>
+                                                                {firmware && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">Firmware:&nbsp;</span>
+                                                                        <span className="text-gray-300">v{firmware}</span>
+                                                                    </div>
+                                                    )}
+                                                </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <Wifi size={32} className="mx-auto mb-2" />
+                                        <p>Aucune donnée disponible</p>
+                                    </div>
+                                )}
+                            </Card>
+
+                            {/* Switches Section */}
+                            <Card title="Switches" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                {unifiStats?.devices ? (
+                                    (() => {
+                                        const switches = unifiStats.devices.filter((d: any) => {
+                                            const type = (d.type || '').toLowerCase();
+                                            return type.startsWith('usw');
+                                        });
+
+                                        if (switches.length === 0) {
+                                            return (
+                                                <div className="text-center py-8 text-gray-500">
+                                                    <Server size={32} className="mx-auto mb-2" />
+                                                    <p>Aucun switch détecté</p>
+                                                    <p className="text-xs mt-2 text-gray-600">
+                                                        Total devices: {unifiStats.devices.length}
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+
+                                        const clients = unifiStats.devices.filter((d: any) => {
+                                            const type = (d.type || '').toLowerCase();
+                                            return type === 'client';
+                                        });
+
+                                        const getPortsSummary = (device: any): { active: number; total: number } => {
+                                            const rawPorts =
+                                                (device as any).port_table ||
+                                                (device as any).eth_port_table ||
+                                                (device as any).ports ||
+                                                (device as any).port_overrides ||
+                                                [];
+                                            const ports = Array.isArray(rawPorts) ? (rawPorts as any[]) : [];
+                                            let total = ports.length;
+                                            if (total === 0 && typeof device.num_port === 'number') {
+                                                total = device.num_port as number;
+                                            }
+                                            const active = ports.filter((p: any) => {
+                                                const upFlag = p.up === true || p.enable === true;
+                                                const linkUp = p.link_state === 'up' || p.media === 'GE' || p.media === '10GE';
+                                                const speedUp = typeof p.speed === 'number' && p.speed > 0;
+                                                return upFlag || linkUp || speedUp;
+                                            }).length;
+                                            return { active, total };
+                                        };
+
+                                        const getClientsForSwitch = (sw: any): number => {
+                                            const swName = (sw.name || sw.model || '').toString();
+                                            const swMac = (sw.mac || '').toString().toLowerCase();
+                                            return clients.filter((client: any) => {
+                                                const lastUplinkName = (client.last_uplink_name || client.uplink_name || '') as string;
+                                                const lastUplinkMac = (client.last_uplink_mac || client.sw_mac || '') as string;
+                                                return (
+                                                    lastUplinkName === swName ||
+                                                    lastUplinkMac.toLowerCase() === swMac
+                                                );
+                                            }).length;
+                                        };
+
+                                        return (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                                                {switches.map((device: any) => {
+                                                    const { active, total } = getPortsSummary(device);
+                                                    const clientsCount = getClientsForSwitch(device);
+                                                    const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
+
+                                                    return (
+                                                        <div
+                                                            key={device.id}
+                                                            className={`bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 ${
+                                                                device.active === false ? 'opacity-60' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                                                                    <span className="text-sm font-semibold text-white truncate">
+                                                                        {device.name || device.model || device.id}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span
+                                                                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                                                            device.active === false
+                                                                                ? 'bg-gray-900 text-gray-400 border-gray-700'
+                                                                                : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
+                                                                        }`}
+                                                                    >
+                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
+                                                                    </span>
+                                                                    <span
+                                                                        className={`w-2 h-2 rounded-full ${
+                                                                            device.active !== false ? 'bg-emerald-400' : 'bg-gray-500'
+                                                                        }`}
+                                                                        title={
+                                                                            device.active !== false
+                                                                                ? "Switch en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
+                                                                                : 'Switch hors ligne'
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-xs space-y-0.5 mt-1">
+                                                                {device.ip && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">IP:&nbsp;</span>
+                                                                        <span className="text-gray-300">{device.ip}</span>
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <span className="text-gray-500">Ports actifs:&nbsp;</span>
+                                                                    <span className="text-gray-300">
+                                                                        {total > 0 ? `${active} / ${total}` : '-'}
+                                                                    </span>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
+                                                                    <span className="text-gray-300">
+                                                                        {clientsCount}
+                                                                    </span>
+                                                                </div>
+                                                                {firmware && (
+                                                                    <div>
+                                                                        <span className="text-gray-500">Firmware:&nbsp;</span>
+                                                                        <span className="text-gray-300">v{firmware}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <Server size={32} className="mx-auto mb-2" />
+                                        <p>Aucune donnée disponible</p>
+                                    </div>
+                                )}
+                            </Card>
                         </div>
                     )}
 
-                    {/* Access Points Tab */}
-                    {activeTab === 'accesspoints' && (
+                    {/* Switches Tab - REMOVED (now combined with Sites & APs) */}
+                    {false && activeTab === 'switches' && (
                         <div className="col-span-full">
                             <Card title="Points d'Accès" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
@@ -1018,150 +1347,365 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                         </div>
                     )}
 
-                    {/* Switches Tab */}
+                    {/* Switch Tab */}
                     {activeTab === 'switches' && (
-                        <div className="col-span-full">
-                            <Card title="Switches" className="bg-unifi-card border border-gray-800 rounded-xl">
+                        <div className="col-span-full space-y-6">
+                            <Card title="Ports des Switches UniFi" className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
-                                        const switches = unifiStats.devices.filter((d: any) => {
-                                            const type = (d.type || '').toLowerCase();
-                                            return type.startsWith('usw');
+                                        // Filter switches (type starts with 'usw' or model contains 'switch')
+                                        const switches = devicesArr.filter((d: any) => {
+                                            const type = (d.type || '').toString().toLowerCase();
+                                            const model = (d.model || '').toString().toLowerCase();
+                                            return type.startsWith('usw') || 
+                                                   type.includes('switch') ||
+                                                   model.includes('usw') ||
+                                                   model.includes('switch');
                                         });
+
+                                        // Debug: log all devices in dev mode
+                                        if (import.meta.env.DEV) {
+                                            console.log('[UniFiPage] All devices:', {
+                                                total: devicesArr.length,
+                                                deviceTypes: Array.from(new Set(devicesArr.map((d: any) => d.type || 'unknown'))),
+                                                switchesFound: switches.length,
+                                                switches: switches.map((s: any) => ({
+                                                    name: s.name,
+                                                    model: s.model,
+                                                    type: s.type,
+                                                    ip: s.ip
+                                                }))
+                                            });
+                                        }
 
                                         if (switches.length === 0) {
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
-                                                    <Server size={32} className="mx-auto mb-2" />
+                                                    <Network size={32} className="mx-auto mb-2" />
                                                     <p>Aucun switch détecté</p>
                                                     <p className="text-xs mt-2 text-gray-600">
-                                                        Total devices: {unifiStats.devices.length}
+                                                        Total devices: {devicesArr.length}
+                                                        {devicesArr.length > 0 && (
+                                                            <span className="block mt-1">
+                                                                Types: {Array.from(new Set(devicesArr.map((d: any) => d.type || 'unknown'))).join(', ')}
+                                                            </span>
+                                                        )}
                                                     </p>
                                                 </div>
                                             );
                                         }
 
-                                        const clients = unifiStats.devices.filter((d: any) => {
-                                            const type = (d.type || '').toLowerCase();
-                                            return type === 'client';
+                                        // Build port rows for all switches
+                                        interface PortRow {
+                                            switchName: string;
+                                            switchIp: string;
+                                            port: number;
+                                            speed: number | null;
+                                            poe: string;
+                                            errors: string;
+                                            portName: string;
+                                        }
+
+                                        const portRows: PortRow[] = [];
+
+                                        switches.forEach((switchDevice: any) => {
+                                            const switchName = switchDevice.name || switchDevice.model || 'Switch';
+                                            const switchIp = switchDevice.ip || 'N/A';
+
+                                            // Get ports from various possible fields
+                                            const rawPorts =
+                                                switchDevice.eth_port_table ||
+                                                switchDevice.port_table ||
+                                                switchDevice.ports ||
+                                                switchDevice.port_overrides ||
+                                                [];
+
+                                            const ports = Array.isArray(rawPorts) ? rawPorts : [];
+
+                                            // Debug: log switch device info in dev mode
+                                            if (import.meta.env.DEV) {
+                                                console.log('[UniFiPage] Switch device:', {
+                                                    name: switchName,
+                                                    ip: switchIp,
+                                                    type: switchDevice.type,
+                                                    hasEthPortTable: !!switchDevice.eth_port_table,
+                                                    hasPortTable: !!switchDevice.port_table,
+                                                    hasPorts: !!switchDevice.ports,
+                                                    hasPortOverrides: !!switchDevice.port_overrides,
+                                                    portsLength: ports.length,
+                                                    numPort: switchDevice.num_port,
+                                                    rawPortsType: typeof rawPorts,
+                                                    rawPortsIsArray: Array.isArray(rawPorts)
+                                                });
+                                            }
+
+                                            // If no ports array but num_port is defined, create placeholder entries
+                                            if (ports.length === 0 && typeof switchDevice.num_port === 'number' && switchDevice.num_port > 0) {
+                                                for (let i = 1; i <= switchDevice.num_port; i++) {
+                                                    portRows.push({
+                                                        switchName,
+                                                        switchIp,
+                                                        port: i,
+                                                        speed: null,
+                                                        poe: 'N/A',
+                                                        errors: 'N/A',
+                                                        portName: 'n/a'
+                                                    });
+                                                }
+                                            } else if (ports.length > 0) {
+                                                ports.forEach((port: any, index: number) => {
+                                                    // Port number: prefer port_idx, then portnum, then index + 1
+                                                    const portNum = port.port_idx !== undefined ? port.port_idx : 
+                                                                   (port.portnum !== undefined ? port.portnum : 
+                                                                    (index + 1));
+
+                                                    // Speed: prefer speed, then current_speed, then link_speed, then media type
+                                                    let speed: number | null = null;
+                                                    if (typeof port.speed === 'number' && port.speed > 0) {
+                                                        speed = port.speed;
+                                                    } else if (typeof port.current_speed === 'number' && port.current_speed > 0) {
+                                                        speed = port.current_speed;
+                                                    } else if (typeof port.link_speed === 'number' && port.link_speed > 0) {
+                                                        speed = port.link_speed;
+                                                    } else if (port.media) {
+                                                        // Try to extract speed from media type (e.g., "GE" = 1000, "10GE" = 10000)
+                                                        const mediaStr = port.media.toString().toUpperCase();
+                                                        if (mediaStr.includes('10GE') || mediaStr.includes('10G')) {
+                                                            speed = 10000;
+                                                        } else if (mediaStr.includes('2.5GE') || mediaStr.includes('2.5G')) {
+                                                            speed = 2500;
+                                                        } else if (mediaStr.includes('GE') || mediaStr.includes('1G')) {
+                                                            speed = 1000;
+                                                        } else if (mediaStr.includes('100M') || mediaStr.includes('100')) {
+                                                            speed = 100;
+                                                        } else if (mediaStr.includes('10M') || mediaStr.includes('10')) {
+                                                            speed = 10;
+                                                        }
+                                                    }
+
+                                                    // PoE: check poe_enable, poe_caps, poe_mode, poe_power
+                                                    let poe = 'off';
+                                                    if (port.poe_enable === true || port.poe_enable === 'auto') {
+                                                        poe = 'auto';
+                                                    } else if (port.poe_mode && port.poe_mode !== 'off') {
+                                                        poe = port.poe_mode.toString().toLowerCase();
+                                                    } else if (port.poe_caps && port.poe_caps > 0) {
+                                                        poe = 'auto';
+                                                    } else if (typeof port.poe_power === 'number' && port.poe_power > 0) {
+                                                        poe = 'auto';
+                                                    } else if (port.poe_class) {
+                                                        poe = 'auto';
+                                                    }
+
+                                                    // Errors: combine rx_errors and tx_errors
+                                                    let errors = 'N/A';
+                                                    const rxErrors = typeof port.rx_errors === 'number' ? port.rx_errors : 0;
+                                                    const txErrors = typeof port.tx_errors === 'number' ? port.tx_errors : 0;
+                                                    const totalErrors = rxErrors + txErrors;
+                                                    if (totalErrors > 0) {
+                                                        errors = totalErrors.toString();
+                                                    }
+
+                                                    // Port name
+                                                    const portName = port.name || port.port_name || 'n/a';
+
+                                                    portRows.push({
+                                                        switchName,
+                                                        switchIp,
+                                                        port: portNum,
+                                                        speed,
+                                                        poe,
+                                                        errors,
+                                                        portName
+                                                    });
+                                                });
+                                            } else {
+                                                // If no ports data and no num_port, create at least one placeholder entry
+                                                // This ensures we show something for the switch even if port data is missing
+                                                portRows.push({
+                                                    switchName,
+                                                    switchIp,
+                                                    port: 1,
+                                                    speed: null,
+                                                    poe: 'N/A',
+                                                    errors: 'N/A',
+                                                    portName: 'Données non disponibles'
+                                                });
+                                            }
                                         });
 
-                                        const getPortsSummary = (device: any): { active: number; total: number } => {
-                                            const rawPorts =
-                                                (device as any).port_table ||
-                                                (device as any).eth_port_table ||
-                                                (device as any).ports ||
-                                                (device as any).port_overrides ||
-                                                [];
-                                            const ports = Array.isArray(rawPorts) ? (rawPorts as any[]) : [];
-                                            let total = ports.length;
-                                            if (total === 0 && typeof device.num_port === 'number') {
-                                                total = device.num_port as number;
+                                        // Sort by switch name, then by port number
+                                        portRows.sort((a, b) => {
+                                            if (a.switchName !== b.switchName) {
+                                                return a.switchName.localeCompare(b.switchName);
                                             }
-                                            const active = ports.filter((p: any) => {
-                                                const upFlag = p.up === true || p.enable === true;
-                                                const linkUp = p.link_state === 'up' || p.media === 'GE' || p.media === '10GE';
-                                                const speedUp = typeof p.speed === 'number' && p.speed > 0;
-                                                return upFlag || linkUp || speedUp;
-                                            }).length;
-                                            return { active, total };
-                                        };
+                                            return a.port - b.port;
+                                        });
 
-                                        const getClientsForSwitch = (sw: any): number => {
-                                            const swName = (sw.name || sw.model || '').toString();
-                                            const swMac = (sw.mac || '').toString().toLowerCase();
-                                            return clients.filter((client: any) => {
-                                                const lastUplinkName = (client.last_uplink_name || client.uplink_name || '') as string;
-                                                const lastUplinkMac = (client.last_uplink_mac || client.sw_mac || '') as string;
-                                                return (
-                                                    lastUplinkName === swName ||
-                                                    lastUplinkMac.toLowerCase() === swMac
-                                                );
-                                            }).length;
-                                        };
+                                        // Debug: log port rows in dev mode
+                                        if (import.meta.env.DEV) {
+                                            console.log('[UniFiPage] Switch ports debug:', {
+                                                switchesCount: switches.length,
+                                                portRowsCount: portRows.length,
+                                                switches: switches.map((s: any) => ({
+                                                    name: s.name || s.model,
+                                                    ip: s.ip,
+                                                    type: s.type,
+                                                    hasEthPortTable: !!s.eth_port_table,
+                                                    hasPortTable: !!s.port_table,
+                                                    hasPorts: !!s.ports,
+                                                    numPort: s.num_port,
+                                                    ethPortTableLength: Array.isArray(s.eth_port_table) ? s.eth_port_table.length : 0,
+                                                    portTableLength: Array.isArray(s.port_table) ? s.port_table.length : 0
+                                                })),
+                                                firstPortRows: portRows.slice(0, 3)
+                                            });
+                                        }
+
+                                        if (portRows.length === 0) {
+                                            return (
+                                                <div className="text-center py-8 text-gray-500">
+                                                    <Network size={32} className="mx-auto mb-2" />
+                                                    <p>Aucune donnée de ports disponible</p>
+                                                    <p className="text-xs mt-2 text-gray-600">
+                                                        {switches.length} switch(es) détecté(s) mais aucune information de ports trouvée.
+                                                    </p>
+                                                    {import.meta.env.DEV && (
+                                                        <p className="text-xs mt-1 text-gray-500">
+                                                            Vérifiez la console pour les détails de debug.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
 
                                         return (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                                                {switches.map((device: any) => {
-                                                    const { active, total } = getPortsSummary(device);
-                                                    const clientsCount = getClientsForSwitch(device);
-                                                    const firmware = (device.firmware_version || device.version || device.firmware) as string | undefined;
-
-                                                    return (
-                                                        <div
-                                                            key={device.id}
-                                                            className={`bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2 ${
-                                                                device.active === false ? 'opacity-60' : ''
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center justify-between">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm table-fixed">
+                                                    <thead className="bg-[#0a1929] text-gray-300">
+                                                        <tr>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '20%' }}>
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="w-2 h-2 rounded-full bg-gray-300" />
-                                                                    <span className="text-sm font-semibold text-white truncate">
-                                                                        {device.name || device.model || device.id}
-                                                                    </span>
+                                                                    <div className="flex gap-0.5">
+                                                                        <div className="w-2.5 h-2.5 bg-gray-400 rounded-sm"></div>
+                                                                        <div className="w-2.5 h-2.5 bg-gray-400 rounded-sm"></div>
+                                                                    </div>
+                                                                    <span>SWITCH</span>
                                                                 </div>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '15%' }}>
                                                                 <div className="flex items-center gap-2">
-                                                                    <span
-                                                                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                                                                            device.active === false
-                                                                                ? 'bg-gray-900 text-gray-400 border-gray-700'
-                                                                                : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
-                                                                        }`}
-                                                                    >
-                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
-                                                                    </span>
-                                                                    <span
-                                                                        className={`w-2 h-2 rounded-full ${
-                                                                            device.active !== false ? 'bg-emerald-400' : 'bg-gray-500'
-                                                                        }`}
-                                                                        title={
-                                                                            device.active !== false
-                                                                                ? 'Switch en ligne (état de mise à jour détaillé visible dans Vue d’ensemble)'
-                                                                                : 'Switch hors ligne'
-                                                                        }
-                                                                    />
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                                    </svg>
+                                                                    <span>IP</span>
                                                                 </div>
-                                                            </div>
-                                                            <div className="text-xs space-y-0.5 mt-1">
-                                                                {device.ip && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">IP:&nbsp;</span>
-                                                                        <span className="text-gray-300">{device.ip}</span>
-                                                                    </div>
-                                                                )}
-                                                                <div>
-                                                                    <span className="text-gray-500">Ports actifs:&nbsp;</span>
-                                                                    <span className="text-gray-300">
-                                                                        {total > 0 ? `${active} / ${total}` : '-'}
-                                                                    </span>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '12%' }}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                                                    </svg>
+                                                                    <span>VITESSE</span>
                                                                 </div>
-                                                                <div>
-                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
-                                                                    <span className="text-gray-300">
-                                                                        {clientsCount}
-                                                                    </span>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '10%' }}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                                    </svg>
+                                                                    <span>POE</span>
                                                                 </div>
-                                                                {firmware && (
-                                                                    <div>
-                                                                        <span className="text-gray-500">Firmware:&nbsp;</span>
-                                                                        <span className="text-gray-300">v{firmware}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '8%' }}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                                    </svg>
+                                                                    <span>PORT</span>
+                                                                </div>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '10%' }}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                                    </svg>
+                                                                    <span>ERREURS</span>
+                                                                </div>
+                                                            </th>
+                                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '25%' }}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                                    </svg>
+                                                                    <span>NOM PORT</span>
+                                                                </div>
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {portRows.map((row, index) => (
+                                                            <tr
+                                                                key={`${row.switchName}-${row.port}-${index}`}
+                                                                className={index % 2 === 0 ? 'bg-[#0f1729]' : 'bg-[#1a1f2e]'}
+                                                            >
+                                                                <td className="px-4 py-3 text-white">{row.switchName}</td>
+                                                                <td className="px-4 py-3 text-white">{row.switchIp}</td>
+                                                                <td className="px-4 py-3">
+                                                                    {row.speed !== null ? (
+                                                                        <span className="text-emerald-400">
+                                                                            {row.speed >= 1000 ? `${row.speed / 1000}G` : `${row.speed}`}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-gray-500">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className={
+                                                                        row.poe === 'auto' || row.poe === 'passthrough' || row.poe === '24v' 
+                                                                            ? 'text-yellow-400' 
+                                                                            : row.poe === 'off' || row.poe === 'N/A'
+                                                                            ? 'text-gray-500'
+                                                                            : 'text-yellow-300'
+                                                                    }>
+                                                                        {row.poe === 'N/A' ? 'N/A' : row.poe}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-white">{row.port}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className={row.errors !== 'N/A' && parseInt(row.errors) > 0 ? 'text-red-400' : 'text-emerald-400'}>
+                                                                        {row.errors}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className="text-yellow-400">{row.portName}</span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         );
                                     })()
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
-                                        <Server size={32} className="mx-auto mb-2" />
+                                        <Network size={32} className="mx-auto mb-2" />
                                         <p>Aucune donnée disponible</p>
                                     </div>
                                 )}
                             </Card>
+                        </div>
+                    )}
+
+                    {/* Analyse Tab */}
+                    {activeTab === 'analyse' && (
+                        <div className="col-span-full space-y-6">
+                            <PluginSummaryCard 
+                                pluginId="unifi" 
+                                onViewDetails={undefined}
+                                hideController={true}
+                            />
+                            <NetworkEventsWidget twoColumns={true} />
                         </div>
                     )}
 

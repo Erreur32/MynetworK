@@ -278,17 +278,22 @@ router.post('/security', requireAuth, requireAdmin, asyncHandler(async (req: Aut
 router.get('/general', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   const publicUrl = AppConfigRepository.get('public_url') || process.env.PUBLIC_URL || process.env.DASHBOARD_URL || '';
   
+  // Get CORS config from database
+  const corsConfigJson = AppConfigRepository.get('cors_config');
+  const corsConfig = corsConfigJson ? JSON.parse(corsConfigJson) : null;
+  
   res.json({
     success: true,
     result: {
-      publicUrl
+      publicUrl,
+      corsConfig
     }
   });
 }));
 
 // PUT /api/system/general - Update general application settings
 router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { publicUrl } = req.body;
+  const { publicUrl, corsConfig } = req.body;
 
   // Validate publicUrl format if provided
   if (publicUrl !== undefined && publicUrl !== null && publicUrl !== '') {
@@ -326,13 +331,67 @@ router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: Authe
     delete process.env.PUBLIC_URL;
   }
 
+  // Handle CORS configuration
+  if (corsConfig !== undefined) {
+    try {
+      // Validate CORS config structure
+      if (corsConfig.allowedOrigins && !Array.isArray(corsConfig.allowedOrigins)) {
+        throw createError('allowedOrigins must be an array', 400, 'INVALID_CORS_CONFIG');
+      }
+      if (corsConfig.allowCredentials !== undefined && typeof corsConfig.allowCredentials !== 'boolean') {
+        throw createError('allowCredentials must be a boolean', 400, 'INVALID_CORS_CONFIG');
+      }
+      if (corsConfig.allowedMethods && !Array.isArray(corsConfig.allowedMethods)) {
+        throw createError('allowedMethods must be an array', 400, 'INVALID_CORS_CONFIG');
+      }
+      if (corsConfig.allowedHeaders && !Array.isArray(corsConfig.allowedHeaders)) {
+        throw createError('allowedHeaders must be an array', 400, 'INVALID_CORS_CONFIG');
+      }
+
+      // Validate origins format
+      if (corsConfig.allowedOrigins) {
+        for (const origin of corsConfig.allowedOrigins) {
+          if (typeof origin !== 'string' || origin.trim() === '') {
+            throw createError('Each origin must be a non-empty string', 400, 'INVALID_CORS_CONFIG');
+          }
+          // Allow wildcard or valid URL patterns
+          if (origin !== '*' && !origin.match(/^https?:\/\//) && !origin.match(/^\/.*\/$/)) {
+            throw createError(`Invalid origin format: ${origin}. Must be a URL (http://... or https://...) or a regex pattern (/pattern/)`, 400, 'INVALID_CORS_CONFIG');
+          }
+        }
+      }
+
+      // Save to database as JSON
+      AppConfigRepository.set('cors_config', JSON.stringify(corsConfig));
+      
+      // Log the change
+      if (req.user) {
+        await securityNotificationService.notifySecuritySettingsChanged(
+          req.user.userId,
+          req.user.username,
+          { corsConfig: 'Updated' }
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('INVALID_CORS_CONFIG')) {
+        throw error;
+      }
+      throw createError('Invalid CORS configuration format', 400, 'INVALID_CORS_CONFIG');
+    }
+  }
+
   const currentPublicUrl = AppConfigRepository.get('public_url') || process.env.PUBLIC_URL || process.env.DASHBOARD_URL || '';
+  
+  // Get current CORS config
+  const corsConfigJson = AppConfigRepository.get('cors_config');
+  const currentCorsConfig = corsConfigJson ? JSON.parse(corsConfigJson) : null;
 
   res.json({
     success: true,
     result: {
       publicUrl: currentPublicUrl,
-      message: 'General settings updated. Note: Some changes may require a server restart to take full effect.'
+      corsConfig: currentCorsConfig,
+      message: 'General settings updated. Note: CORS changes require a server restart to take full effect.'
     }
   });
 }));

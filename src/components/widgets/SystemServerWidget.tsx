@@ -355,10 +355,6 @@ export const SystemServerWidget: React.FC = () => {
                 {/* System Info */}
                 <div className="pt-4 border-t border-gray-700 space-y-2 text-xs">
                     <div className="flex justify-between">
-                        <span className="text-gray-500">Uptime</span>
-                        <span className="text-gray-300">{formatUptime(systemInfo.uptime)}</span>
-                    </div>
-                    <div className="flex justify-between">
                         <span className="text-gray-500">Hostname</span>
                         <span className="text-gray-300">{systemInfo.hostname}</span>
                     </div>
@@ -419,6 +415,25 @@ export const SystemServerWidget: React.FC = () => {
                                 trend="up"
                             />
                         </div>
+                    </div>
+                )}
+
+                {/* Uptime en pied de carte (même format que les autres cartes) */}
+                {systemInfo.uptime && (
+                    <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
+                        <span>Uptime</span>
+                        <span className="text-gray-300 font-medium">
+                            {(() => {
+                                const uptimeSeconds = systemInfo.uptime;
+                                const hours = Math.floor(uptimeSeconds / 3600);
+                                const days = Math.floor(hours / 24);
+                                if (days > 0) {
+                                    const remainingHours = hours % 24;
+                                    return remainingHours > 0 ? `${days}j ${remainingHours}h` : `${days}j`;
+                                }
+                                return `${hours}h`;
+                            })()}
+                        </span>
                     </div>
                 )}
             </div>

@@ -43,6 +43,7 @@ import os from 'os';
 import fsSync from 'fs';
 import { fileURLToPath } from 'url';
 import { config, getPublicUrl } from './config.js';
+import { AppConfigRepository } from './database/models/AppConfig.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectionWebSocket } from './services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from './services/freeboxNativeWebSocket.js';
@@ -140,22 +141,62 @@ const app = express();
 // This allows Express to use X-Forwarded-For and X-Real-IP headers
 app.set('trust proxy', true);
 
-// Middleware
-// In production (Docker), allow all origins since frontend is served from same server
-// In development, allow localhost and common network IPs
-const corsOrigin = process.env.NODE_ENV === 'production'
-  ? true  // Allow all origins in production (frontend served from same origin)
-  : [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      /^http:\/\/192\.168\.\d+\.\d+:5173$/,  // Allow any 192.168.x.x:5173
-      /^http:\/\/192\.168\.\d+\.\d+:3000$/,  // Allow any 192.168.x.x:3000
-      /^http:\/\/127\.0\.0\.1:\d+$/           // Allow 127.0.0.1 with any port
-    ];
-app.use(cors({
-  origin: corsOrigin,
-  credentials: true
-}));
+// Middleware - CORS Configuration
+// Get CORS config from database, fallback to defaults
+function getCorsConfig() {
+  try {
+    const corsConfigJson = AppConfigRepository.get('cors_config');
+    if (corsConfigJson) {
+      const corsConfig = JSON.parse(corsConfigJson);
+      
+      // Process allowedOrigins - convert regex strings to RegExp objects
+      let origin: boolean | string[] | RegExp[] = corsConfig.allowedOrigins || true;
+      if (Array.isArray(origin)) {
+        origin = origin.map((o: string) => {
+          // Check if it's a regex pattern (starts and ends with /)
+          if (typeof o === 'string' && o.startsWith('/') && o.endsWith('/')) {
+            try {
+              const pattern = o.slice(1, -1); // Remove leading and trailing /
+              return new RegExp(pattern);
+            } catch {
+              return o; // If regex is invalid, return as string
+            }
+          }
+          return o;
+        });
+      }
+      
+      return {
+        origin: origin === '*' ? true : origin,
+        credentials: corsConfig.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+        methods: corsConfig.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: corsConfig.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+      };
+    }
+  } catch (error) {
+    logger.warn('Server', 'Failed to parse CORS config from database, using defaults:', error);
+  }
+  
+  // Default CORS configuration
+  // In production (Docker), allow all origins since frontend is served from same server
+  // In development, allow localhost and common network IPs
+  const corsOrigin = process.env.NODE_ENV === 'production'
+    ? true  // Allow all origins in production (frontend served from same origin)
+    : [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        /^http:\/\/192\.168\.\d+\.\d+:5173$/,  // Allow any 192.168.x.x:5173
+        /^http:\/\/192\.168\.\d+\.\d+:3000$/,  // Allow any 192.168.x.x:3000
+        /^http:\/\/127\.0\.0\.1:\d+$/           // Allow 127.0.0.1 with any port
+      ];
+  
+  return {
+    origin: corsOrigin,
+    credentials: true
+  };
+}
+
+app.use(cors(getCorsConfig()));
 app.use(express.json({ limit: '10mb' }));
 
 // Request logging (only in debug mode)

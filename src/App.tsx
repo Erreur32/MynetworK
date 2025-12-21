@@ -531,6 +531,7 @@ const App: React.FC = () => {
           systemInfo={systemInfo} 
           connectionStatus={connectionStatus}
           pageType="search"
+          onHomeClick={handleHomeClick}
           user={user || undefined}
           onSettingsClick={handleSettingsClick}
           onAdminClick={handleAdminClick}

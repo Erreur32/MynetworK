@@ -6,11 +6,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, Key, AlertTriangle, Save, Loader2, CheckCircle, XCircle, Info } from 'lucide-react';
+import { Shield, Lock, AlertTriangle, Save, Loader2, CheckCircle, XCircle, Info, Trash2, RefreshCw, Plus, Globe } from 'lucide-react';
 import { Section, SettingRow } from '../pages/SettingsPage';
 import { api } from '../api/client';
 import { useUserAuthStore } from '../stores/userAuthStore';
-import { getVersionString } from '../constants/version';
 
 export const SecuritySection: React.FC = () => {
     const { user } = useUserAuthStore();
@@ -24,9 +23,60 @@ export const SecuritySection: React.FC = () => {
     const [trackingWindow, setTrackingWindow] = useState(30); // minutes
     const [sessionTimeoutHours, setSessionTimeoutHours] = useState(168); // hours (7 days default)
     const [showSessionWarning, setShowSessionWarning] = useState(false);
+    
+    // Blocked IPs state
+    const [blockedIPs, setBlockedIPs] = useState<Array<{
+        identifier: string;
+        count: number;
+        blockedUntil: number;
+        remainingTime: number;
+    }>>([]);
+    const [isLoadingBlockedIPs, setIsLoadingBlockedIPs] = useState(false);
+    
+    // CORS configuration state
+    const [corsConfig, setCorsConfig] = useState<{
+        allowedOrigins?: string[];
+        allowCredentials?: boolean;
+        allowedMethods?: string[];
+        allowedHeaders?: string[];
+    } | null>(null);
+    const [newOrigin, setNewOrigin] = useState('');
+    const [newMethod, setNewMethod] = useState('');
+    const [newHeader, setNewHeader] = useState('');
+
+    // Track initial values to detect unsaved changes
+    const [initialSecuritySettings, setInitialSecuritySettings] = useState<{
+        maxLoginAttempts: number;
+        lockoutDuration: number;
+        sessionTimeoutHours: number;
+    } | null>(null);
+    const [initialCorsConfig, setInitialCorsConfig] = useState<{
+        allowedOrigins?: string[];
+        allowCredentials?: boolean;
+        allowedMethods?: string[];
+        allowedHeaders?: string[];
+    } | null>(null);
+
+    // Check if there are unsaved changes
+    const hasUnsavedSecurityChanges = initialSecuritySettings && (
+        maxLoginAttempts !== initialSecuritySettings.maxLoginAttempts ||
+        lockoutDuration !== initialSecuritySettings.lockoutDuration ||
+        sessionTimeoutHours !== initialSecuritySettings.sessionTimeoutHours
+    );
+
+    const hasUnsavedCorsChanges = initialCorsConfig && corsConfig && (
+        JSON.stringify(corsConfig.allowedOrigins?.sort()) !== JSON.stringify(initialCorsConfig.allowedOrigins?.sort()) ||
+        corsConfig.allowCredentials !== initialCorsConfig.allowCredentials ||
+        JSON.stringify(corsConfig.allowedMethods?.sort()) !== JSON.stringify(initialCorsConfig.allowedMethods?.sort()) ||
+        JSON.stringify(corsConfig.allowedHeaders?.sort()) !== JSON.stringify(initialCorsConfig.allowedHeaders?.sort())
+    );
+
+    const hasUnsavedChanges = hasUnsavedSecurityChanges || hasUnsavedCorsChanges;
 
     useEffect(() => {
         checkSecuritySettings();
+        loadBlockedIPs();
+        loadCorsConfig();
     }, []);
 
     const checkSecuritySettings = async () => {
@@ -42,10 +92,19 @@ export const SecuritySection: React.FC = () => {
             }>('/api/system/security');
             if (response.success && response.result) {
                 setJwtSecretWarning(response.result.jwtSecretIsDefault || false);
-                setMaxLoginAttempts(response.result.maxLoginAttempts || 5);
-                setLockoutDuration(response.result.lockoutDuration || 15);
+                const maxAttempts = response.result.maxLoginAttempts || 5;
+                const lockout = response.result.lockoutDuration || 15;
+                const timeout = response.result.sessionTimeout || 168;
+                setMaxLoginAttempts(maxAttempts);
+                setLockoutDuration(lockout);
                 setTrackingWindow(response.result.trackingWindow || 30);
-                setSessionTimeoutHours(response.result.sessionTimeout || 168);
+                setSessionTimeoutHours(timeout);
+                // Store initial values
+                setInitialSecuritySettings({
+                    maxLoginAttempts: maxAttempts,
+                    lockoutDuration: lockout,
+                    sessionTimeoutHours: timeout
+                });
             }
         } catch (error) {
             console.log('Security settings endpoint not available');
@@ -64,15 +123,23 @@ export const SecuritySection: React.FC = () => {
             });
             
             if (response.success) {
-                const messageText = response.result?.message 
-                    ? response.result.message 
+                const result = response.result as { message?: string } | undefined;
+                const messageText = result?.message 
+                    ? result.message 
                     : 'Paramètres de sécurité sauvegardés avec succès';
                 setMessage({ type: 'success', text: messageText });
                 // Reload settings to get updated values
                 await checkSecuritySettings();
                 setShowSessionWarning(false);
+                // Reset initial values after save
+                setInitialSecuritySettings({
+                    maxLoginAttempts,
+                    lockoutDuration,
+                    sessionTimeoutHours
+                });
             } else {
-                setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+                const error = response.error as { message?: string } | undefined;
+                setMessage({ type: 'error', text: error?.message || 'Erreur lors de la sauvegarde' });
             }
         } catch (error) {
             setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Erreur lors de la sauvegarde' });
@@ -91,8 +158,203 @@ export const SecuritySection: React.FC = () => {
         }
     };
 
+    const loadBlockedIPs = async () => {
+        setIsLoadingBlockedIPs(true);
+        try {
+            const response = await api.get<Array<{
+                identifier: string;
+                count: number;
+                blockedUntil: number;
+                remainingTime: number;
+            }>>('/api/security/blocked');
+            if (response.success && response.result) {
+                setBlockedIPs(response.result);
+            }
+        } catch (error) {
+            console.error('Failed to load blocked IPs:', error);
+        } finally {
+            setIsLoadingBlockedIPs(false);
+        }
+    };
+
+    const handleUnblock = async (identifier: string) => {
+        try {
+            const response = await api.post(`/api/security/blocked/${encodeURIComponent(identifier)}/unblock`);
+            if (response.success) {
+                // Reload the list
+                await loadBlockedIPs();
+                setMessage({ type: 'success', text: `L'identifiant "${identifier}" a été débloqué avec succès` });
+                setTimeout(() => setMessage(null), 3000);
+            }
+        } catch (error: unknown) {
+            const errorMessage = (error as any)?.response?.data?.error?.message || 'Erreur lors du déblocage';
+            setMessage({ 
+                type: 'error', 
+                text: errorMessage
+            });
+            setTimeout(() => setMessage(null), 3000);
+        }
+    };
+
+    const formatRemainingTime = (seconds: number): string => {
+        if (seconds <= 0) return 'Expiré';
+        const minutes = Math.ceil(seconds / 60);
+        if (minutes < 60) return `${minutes} min`;
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        if (remainingMinutes === 0) {
+            return `${hours}h`;
+        }
+        return `${hours}h ${remainingMinutes}min`;
+    };
+
+    const loadCorsConfig = async () => {
+        try {
+            const response = await api.get<{ corsConfig?: {
+                allowedOrigins?: string[];
+                allowCredentials?: boolean;
+                allowedMethods?: string[];
+                allowedHeaders?: string[];
+            } }>('/api/system/general');
+            if (response.success && response.result) {
+                const config = response.result.corsConfig || null;
+                setCorsConfig(config);
+                // Store initial values (deep copy)
+                setInitialCorsConfig(config ? JSON.parse(JSON.stringify(config)) : null);
+            }
+        } catch (error) {
+            console.error('Failed to load CORS config:', error);
+        }
+    };
+
+    const handleSaveCorsConfig = async () => {
+        setIsLoading(true);
+        setMessage(null);
+        
+        try {
+            const response = await api.put('/api/system/general', {
+                corsConfig: corsConfig || {
+                    allowedOrigins: [],
+                    allowCredentials: true,
+                    allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+                    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+                }
+            });
+            
+            if (response.success) {
+                setMessage({ type: 'success', text: 'Configuration CORS sauvegardée. Un redémarrage du serveur est nécessaire pour appliquer les changements.' });
+                setTimeout(() => setMessage(null), 5000);
+                // Reload CORS config to get updated values
+                await loadCorsConfig();
+            } else {
+                const error = response.error as { message?: string } | undefined;
+                setMessage({ type: 'error', text: error?.message || 'Erreur lors de la sauvegarde' });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Erreur lors de la sauvegarde' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const addOrigin = () => {
+        if (newOrigin.trim()) {
+            const origins = corsConfig?.allowedOrigins || [];
+            if (!origins.includes(newOrigin.trim())) {
+                setCorsConfig({
+                    ...corsConfig,
+                    allowedOrigins: [...origins, newOrigin.trim()],
+                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+                });
+                setNewOrigin('');
+            }
+        }
+    };
+
+    const removeOrigin = (origin: string) => {
+        const origins = corsConfig?.allowedOrigins || [];
+        setCorsConfig({
+            ...corsConfig,
+            allowedOrigins: origins.filter(o => o !== origin),
+            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+            allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+            allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+        });
+    };
+
+    const addMethod = () => {
+        if (newMethod.trim()) {
+            const methods = corsConfig?.allowedMethods || [];
+            if (!methods.includes(newMethod.trim().toUpperCase())) {
+                setCorsConfig({
+                    ...corsConfig,
+                    allowedMethods: [...methods, newMethod.trim().toUpperCase()],
+                    allowedOrigins: corsConfig?.allowedOrigins || [],
+                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+                });
+                setNewMethod('');
+            }
+        }
+    };
+
+    const removeMethod = (method: string) => {
+        const methods = corsConfig?.allowedMethods || [];
+        setCorsConfig({
+            ...corsConfig,
+            allowedMethods: methods.filter(m => m !== method),
+            allowedOrigins: corsConfig?.allowedOrigins || [],
+            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+            allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+        });
+    };
+
+    const addHeader = () => {
+        if (newHeader.trim()) {
+            const headers = corsConfig?.allowedHeaders || [];
+            if (!headers.includes(newHeader.trim())) {
+                setCorsConfig({
+                    ...corsConfig,
+                    allowedHeaders: [...headers, newHeader.trim()],
+                    allowedOrigins: corsConfig?.allowedOrigins || [],
+                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
+                });
+                setNewHeader('');
+            }
+        }
+    };
+
+    const removeHeader = (header: string) => {
+        const headers = corsConfig?.allowedHeaders || [];
+        setCorsConfig({
+            ...corsConfig,
+            allowedHeaders: headers.filter(h => h !== header),
+            allowedOrigins: corsConfig?.allowedOrigins || [],
+            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+            allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
+        });
+    };
+
     return (
         <div className="space-y-6">
+            {/* Unsaved Changes Notification */}
+            {hasUnsavedChanges && (
+                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg flex items-start gap-3">
+                    <AlertTriangle size={20} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <h4 className="text-sm font-medium text-amber-400 mb-1">
+                            Modifications non sauvegardées
+                        </h4>
+                        <p className="text-xs text-amber-300">
+                            Vous avez modifié des paramètres. N'oubliez pas de cliquer sur <strong>"Sauvegarder"</strong> pour enregistrer vos changements.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Message Banner */}
             {message && (
                 <div className={`p-3 rounded-lg flex items-center gap-2 ${
@@ -299,57 +561,271 @@ export const SecuritySection: React.FC = () => {
                 </div>
             </div>
 
-            {/* Informations de sécurité - Full Width */}
-            <Section title="Informations de sécurité" icon={Key} iconColor="purple">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-400">Version</span>
-                            <span className="text-sm text-white font-mono">{getVersionString()}</span>
+            {/* Blocked IPs Section - Full Width */}
+            <Section title="IPs et comptes bloqués" icon={Shield} iconColor="red">
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-gray-400">
+                            Liste des adresses IP et noms d'utilisateur actuellement bloqués suite à des tentatives de connexion échouées
+                        </p>
+                        <button
+                            onClick={loadBlockedIPs}
+                            disabled={isLoadingBlockedIPs}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <RefreshCw size={14} className={isLoadingBlockedIPs ? 'animate-spin' : ''} />
+                            <span>Actualiser</span>
+                        </button>
+                    </div>
+
+                    {isLoadingBlockedIPs ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="animate-spin text-blue-400" size={20} />
+                        </div>
+                    ) : blockedIPs.length === 0 ? (
+                        <div className="py-8 text-center">
+                            <CheckCircle size={32} className="text-green-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-400">Aucune IP ou compte bloqué actuellement</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {blockedIPs.map((item) => (
+                                <div
+                                    key={item.identifier}
+                                    className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg border border-gray-800 hover:border-red-700/50 transition-colors"
+                                >
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-sm font-medium text-white font-mono">
+                                                {item.identifier}
+                                            </span>
+                                            <span className="px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">
+                                                {item.count} tentative{item.count > 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            Bloqué pendant encore : <span className="text-orange-400 font-medium">{formatRemainingTime(item.remainingTime)}</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleUnblock(item.identifier)}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
+                                        title="Débloquer cet identifiant"
+                                    >
+                                        <Trash2 size={14} />
+                                        <span>Débloquer</span>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </Section>
+
+            {/* CORS Configuration Section - Full Width */}
+            <Section title="Configuration CORS" icon={Globe} iconColor="cyan">
+                <div className="space-y-4">
+                    <div className="p-3 bg-blue-900/10 border border-blue-700/30 rounded-lg">
+                        <div className="flex items-start gap-2">
+                            <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-blue-300 mb-1">
+                                    <strong>Configuration CORS pour proxy et accès externe</strong>
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                    Configurez les origines autorisées, méthodes HTTP et headers pour éviter les erreurs CORS avec des proxies locaux ou des accès externes.
+                                </p>
+                            </div>
                         </div>
                     </div>
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-400">Base de données</span>
-                            <span className="text-sm text-white">SQLite</span>
+
+                    {/* Allowed Origins */}
+                    <SettingRow
+                        label="Origines autorisées"
+                        description="Liste des domaines/IP autorisés à accéder à l'API. Utilisez * pour autoriser toutes les origines (non recommandé en production)."
+                    >
+                        <div className="w-full space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newOrigin}
+                                    onChange={(e) => setNewOrigin(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addOrigin()}
+                                    placeholder="https://example.com ou http://192.168.1.100:3000"
+                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                />
+                                <button
+                                    onClick={addOrigin}
+                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <Plus size={14} />
+                                    <span>Ajouter</span>
+                                </button>
+                            </div>
+                            {corsConfig?.allowedOrigins && corsConfig.allowedOrigins.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {corsConfig.allowedOrigins.map((origin) => (
+                                        <div
+                                            key={origin}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
+                                        >
+                                            <span className="text-sm text-white font-mono">{origin}</span>
+                                            <button
+                                                onClick={() => removeOrigin(origin)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                                title="Supprimer"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {(!corsConfig?.allowedOrigins || corsConfig.allowedOrigins.length === 0) && (
+                                <p className="text-xs text-gray-500">Aucune origine configurée. Les valeurs par défaut seront utilisées.</p>
+                            )}
                         </div>
-                    </div>
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-400">Authentification</span>
-                            <span className="text-sm text-white">JWT</span>
+                    </SettingRow>
+
+                    {/* Allow Credentials */}
+                    <SettingRow
+                        label="Autoriser les credentials"
+                        description="Permet l'envoi de cookies et headers d'authentification dans les requêtes cross-origin"
+                    >
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true}
+                                onChange={(e) => setCorsConfig({
+                                    ...corsConfig,
+                                    allowCredentials: e.target.checked,
+                                    allowedOrigins: corsConfig?.allowedOrigins || [],
+                                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+                                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+                                })}
+                                className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-400">
+                                {corsConfig?.allowCredentials !== undefined && corsConfig.allowCredentials ? 'Activé' : 'Désactivé'}
+                            </span>
                         </div>
+                    </SettingRow>
+
+                    {/* Allowed Methods */}
+                    <SettingRow
+                        label="Méthodes HTTP autorisées"
+                        description="Méthodes HTTP autorisées pour les requêtes cross-origin"
+                    >
+                        <div className="w-full space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newMethod}
+                                    onChange={(e) => setNewMethod(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addMethod()}
+                                    placeholder="GET, POST, PUT, DELETE, etc."
+                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                />
+                                <button
+                                    onClick={addMethod}
+                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <Plus size={14} />
+                                    <span>Ajouter</span>
+                                </button>
+                            </div>
+                            {corsConfig?.allowedMethods && corsConfig.allowedMethods.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {corsConfig.allowedMethods.map((method) => (
+                                        <div
+                                            key={method}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
+                                        >
+                                            <span className="text-sm text-white font-mono">{method}</span>
+                                            <button
+                                                onClick={() => removeMethod(method)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                                title="Supprimer"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </SettingRow>
+
+                    {/* Allowed Headers */}
+                    <SettingRow
+                        label="Headers autorisés"
+                        description="Headers HTTP autorisés dans les requêtes cross-origin"
+                    >
+                        <div className="w-full space-y-2">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newHeader}
+                                    onChange={(e) => setNewHeader(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && addHeader()}
+                                    placeholder="Content-Type, Authorization, etc."
+                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                />
+                                <button
+                                    onClick={addHeader}
+                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                    <Plus size={14} />
+                                    <span>Ajouter</span>
+                                </button>
+                            </div>
+                            {corsConfig?.allowedHeaders && corsConfig.allowedHeaders.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {corsConfig.allowedHeaders.map((header) => (
+                                        <div
+                                            key={header}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
+                                        >
+                                            <span className="text-sm text-white font-mono">{header}</span>
+                                            <button
+                                                onClick={() => removeHeader(header)}
+                                                className="text-red-400 hover:text-red-300 transition-colors"
+                                                title="Supprimer"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </SettingRow>
+
+                    {/* Save CORS Config Button */}
+                    <div className="flex justify-end pt-2 border-t border-gray-800">
+                        <button
+                            onClick={handleSaveCorsConfig}
+                            disabled={isLoading}
+                            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            <span>Sauvegarder la configuration CORS</span>
+                        </button>
                     </div>
                 </div>
             </Section>
 
             {/* Status Summary - Full Width */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-blue-900/10 border border-blue-700/30 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle size={18} className="text-blue-400" />
-                        <h4 className="text-sm font-medium text-blue-400">Fonctionnalités actives</h4>
-                    </div>
-                    <ul className="space-y-1 text-xs text-gray-400">
-                        <li>• Protection contre les attaques brute force</li>
-                        <li>• Blocage automatique des IPs et comptes</li>
-                        <li>• Notifications de sécurité</li>
-                        <li>• Audit de sécurité</li>
-                        <li>• Détection du secret JWT par défaut</li>
-                    </ul>
+            <div className="p-4 bg-blue-900/10 border border-blue-700/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle size={18} className="text-blue-400" />
+                    <h4 className="text-sm font-medium text-blue-400">Fonctionnalités actives</h4>
                 </div>
-
-                <div className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Info size={18} className="text-gray-500" />
-                        <h4 className="text-sm font-medium text-gray-500">Fonctionnalités à venir</h4>
-                    </div>
-                    <ul className="space-y-1 text-xs text-gray-500">
-                        <li>• Rate limiting configurable</li>
-                        <li>• Middleware HTTPS</li>
-                        <li>• Politique de mot de passe avancée</li>
-                    </ul>
-                </div>
+                <ul className="space-y-1 text-xs text-gray-400">
+                    <li>• Protection contre les attaques brute force</li>
+                    <li>• Blocage automatique des IPs et comptes</li>
+                    <li>• Notifications de sécurité</li>
+                </ul>
             </div>
 
             {/* Save Button */}

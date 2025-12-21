@@ -45,11 +45,15 @@ export const ExporterSection: React.FC = () => {
     const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [isAuditing, setIsAuditing] = useState(false);
     const [auditResult, setAuditResult] = useState<{ summary: { total: number; success: number; errors: number }; results: any[] } | null>(null);
+    const [initialConfig, setInitialConfig] = useState<MetricsConfig | null>(null);
 
     useEffect(() => {
         // Load config first
         loadConfig();
     }, []);
+
+    // Check if there are unsaved changes
+    const hasUnsavedChanges = initialConfig && JSON.stringify(config) !== JSON.stringify(initialConfig);
 
     // Update Prometheus URL when config changes
     useEffect(() => {
@@ -160,6 +164,8 @@ export const ExporterSection: React.FC = () => {
                     loadedConfig.prometheus.port = getDefaultPort();
                 }
                 setConfig(loadedConfig);
+                // Store initial config (deep copy)
+                setInitialConfig(JSON.parse(JSON.stringify(loadedConfig)));
             }
         } catch (error) {
             console.error('Failed to load metrics config:', error);
@@ -176,6 +182,8 @@ export const ExporterSection: React.FC = () => {
             const response = await api.post('/api/metrics/config', { config });
             if (response.success) {
                 setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès !' });
+                // Update initial config after save
+                setInitialConfig(JSON.parse(JSON.stringify(config)));
             } else {
                 setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
@@ -261,6 +269,21 @@ export const ExporterSection: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Unsaved Changes Notification */}
+            {hasUnsavedChanges && (
+                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg flex items-start gap-3">
+                    <AlertCircle size={20} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <h4 className="text-sm font-medium text-amber-400 mb-1">
+                            Modifications non sauvegardées
+                        </h4>
+                        <p className="text-xs text-amber-300">
+                            Vous avez modifié la configuration des métriques. N'oubliez pas de cliquer sur <strong>"Sauvegarder la configuration"</strong> pour enregistrer vos changements.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {message && (
                 <div className={`p-3 rounded text-sm ${message.type === 'success' ? 'bg-emerald-900/30 border border-emerald-700 text-emerald-400' : 'bg-red-900/30 border border-red-700 text-red-400'}`}>
                     {message.text}

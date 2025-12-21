@@ -19,6 +19,7 @@ import type { SystemSensor, SystemFan } from '../../types/api';
 interface PluginSummaryCardProps {
     pluginId: string;
     onViewDetails?: () => void;
+    hideController?: boolean;
 }
 
 // Helper functions for Freebox stats (copied from Header.tsx)
@@ -73,7 +74,7 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
     return Math.round(avg);
 };
 
-export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails }) => {
+export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false }) => {
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { login: loginFreebox, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
@@ -101,6 +102,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         ip?: string;
         activePorts: number;
         totalPorts: number;
+        speed?: number; // Max speed of active ports in Mbps
     }
 
     let unifiApRows: UnifiApRow[] = [];
@@ -220,11 +222,35 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     return upFlag || linkUp || speedUp;
                 }).length;
 
+                // Get max speed from active ports
+                let maxSpeed: number | undefined = undefined;
+                const activePortsWithSpeed = ports.filter((p) => {
+                    const upFlag = p.up === true || p.enable === true;
+                    const linkUp = p.link_state === 'up' || p.media === 'GE' || p.media === '10GE';
+                    const speedUp = typeof p.speed === 'number' && p.speed > 0;
+                    return upFlag || linkUp || speedUp;
+                });
+                if (activePortsWithSpeed.length > 0) {
+                    const speeds = activePortsWithSpeed
+                        .map((p) => {
+                            // Try different speed fields
+                            if (typeof p.speed === 'number' && p.speed > 0) return p.speed;
+                            if (typeof p.current_speed === 'number' && p.current_speed > 0) return p.current_speed;
+                            if (typeof p.link_speed === 'number' && p.link_speed > 0) return p.link_speed;
+                            return 0;
+                        })
+                        .filter((s) => s > 0);
+                    if (speeds.length > 0) {
+                        maxSpeed = Math.max(...speeds);
+                    }
+                }
+
                 return {
                     name,
                     ip: d.ip as string | undefined,
                     activePorts,
-                    totalPorts
+                    totalPorts,
+                    speed: maxSpeed
                 };
             });
 
@@ -431,7 +457,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
 
 
-                        {((unifiControllerVersion || unifiControllerUpdateAvailable !== undefined || unifiControllerIp || (stats.system as any)?.name) && (
+                        {!hideController && ((unifiControllerVersion || unifiControllerUpdateAvailable !== undefined || unifiControllerIp || (stats.system as any)?.name) && (
                                     <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
                                         <div className="flex items-center justify-between">
                                         <span className="text-gray-400">Controller</span>
@@ -464,7 +490,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                     </div>
                                 ))}                            
- 
+
+                                {/* Clients stats */}
                                 {(unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
                                     <div className="flex flex-col gap-1 pt-1 border-t border-gray-800 mt-1 text-[11px]">
                                         <div className="flex items-center justify-between">
@@ -473,14 +500,14 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                 {unifiClientsConnected}
                                             </span>
                                         </div>
-                                <div className="flex items-center justify-between">
+                                        <div className="flex items-center justify-between">
                                             <span className="text-gray-400">Total</span>
                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
                                                 {unifiClientsTotal}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
                         {/* UniFi infrastructure details: APs, switches, clients, controller */}
                         {pluginId === 'unifi' && stats.devices && stats.devices.length > 0 && (
@@ -495,11 +522,11 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left w-[30%]">Nom</th>
-                                                        <th className="px-2 py-1 text-left w-[20%]">IP</th>
-                                                        <th className="px-2 py-1 text-left w-[25%]">Bandes</th>
-                                                        <th className="px-2 py-1 text-right w-[12%]">Clients</th>
-                                                        <th className="px-2 py-1 text-right w-[13%]">Total</th>
+                                                        <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Nom</th>
+                                                        <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
+                                                        <th className="px-2 py-1 text-left" style={{ width: '22%' }}>Bandes</th>
+                                                        <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>Clients</th>
+                                                        <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -511,7 +538,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                             <td className="px-2 py-1 text-gray-200 truncate">
                                                                 {row.name}
                                                             </td>
-                                                            <td className="px-2 py-1 text-gray-400 truncate">
+                                                            <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                                 {row.ip || 'n/a'}
                                                             </td>
                                                             <td className="px-2 py-1">
@@ -550,10 +577,11 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left w-2/5">Nom</th>
-                                                        <th className="px-2 py-1 text-left w-1/5">IP</th>
-                                                        <th className="px-2 py-1 text-right w-1/5">Ports actifs</th>
-                                                        <th className="px-2 py-1 text-right w-1/5">Total</th>
+                                                        <th className="px-2 py-1 text-left" style={{ width: '22%' }}>Nom</th>
+                                                        <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
+                                                        <th className="px-2 py-1 text-right" style={{ width: '16%' }}>Ports actifs</th>
+                                                        <th className="px-2 py-1 text-right" style={{ width: '16%' }}>Speed</th>
+                                                        <th className="px-2 py-1 text-right" style={{ width: '18%' }}>Total</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -565,11 +593,14 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                             <td className="px-2 py-1 text-gray-200 truncate">
                                                                 {row.name}
                                                             </td>
-                                                            <td className="px-2 py-1 text-gray-400 truncate">
+                                                            <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                                 {row.ip || 'n/a'}
                                                             </td>
                                                             <td className="px-2 py-1 text-right text-emerald-300">
                                                                 {row.totalPorts > 0 ? row.activePorts : '-'}
+                                                            </td>
+                                                            <td className="px-2 py-1 text-right text-gray-300">
+                                                                {row.speed ? `${row.speed}` : '-'}
                                                             </td>
                                                             <td className="px-2 py-1 text-right text-gray-200">
                                                                 {row.totalPorts > 0 ? row.totalPorts : '-'}
@@ -945,7 +976,16 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
                         <span>Uptime</span>
                         <span className="text-gray-300 font-medium">
-                            {Math.floor(stats.system.uptime / 3600)}h
+                            {(() => {
+                                const uptimeSeconds = stats.system.uptime;
+                                const hours = Math.floor(uptimeSeconds / 3600);
+                                const days = Math.floor(hours / 24);
+                                if (days > 0) {
+                                    const remainingHours = hours % 24;
+                                    return remainingHours > 0 ? `${days}j ${remainingHours}h` : `${days}j`;
+                                }
+                                return `${hours}h`;
+                            })()}
                         </span>
                     </div>
                 )}

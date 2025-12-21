@@ -608,13 +608,16 @@ const GeneralNetworkSection: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [initialPublicUrl, setInitialPublicUrl] = useState('');
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const response = await api.get<{ publicUrl: string }>('/api/system/general');
         if (response.success && response.result) {
-          setPublicUrl(response.result.publicUrl || '');
+          const url = response.result.publicUrl || '';
+          setPublicUrl(url);
+          setInitialPublicUrl(url);
         }
       } catch (error) {
         console.error('Failed to fetch general settings:', error);
@@ -624,6 +627,8 @@ const GeneralNetworkSection: React.FC = () => {
     };
     fetchSettings();
   }, []);
+
+  const hasUnsavedChanges = publicUrl !== initialPublicUrl;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -635,6 +640,8 @@ const GeneralNetworkSection: React.FC = () => {
       if (response.success) {
         setMessage({ type: 'success', text: response.result?.message || 'Configuration sauvegardée avec succès' });
         setTimeout(() => setMessage(null), 3000);
+        // Update initial value after save
+        setInitialPublicUrl(publicUrl.trim() || '');
       }
     } catch (error: any) {
       setMessage({ 
@@ -656,6 +663,21 @@ const GeneralNetworkSection: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Unsaved Changes Notification */}
+      {hasUnsavedChanges && (
+        <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg flex items-start gap-3">
+          <AlertCircle size={20} className="text-amber-400 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-amber-400 mb-1">
+              Modifications non sauvegardées
+            </h4>
+            <p className="text-xs text-amber-300">
+              Vous avez modifié l'URL publique. N'oubliez pas de cliquer sur <strong>"Sauvegarder"</strong> pour enregistrer vos changements.
+            </p>
+          </div>
+        </div>
+      )}
+
       {message && (
         <div className={`p-3 rounded-lg text-sm ${
           message.type === 'success' 
@@ -673,7 +695,7 @@ const GeneralNetworkSection: React.FC = () => {
             type="url"
             value={publicUrl}
             onChange={(e) => setPublicUrl(e.target.value)}
-            placeholder="https://mwk.myoueb.fr"
+            placeholder="https://votre-domaine.com"
             className="flex-1 w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
           <button
@@ -2192,6 +2214,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <div className="space-y-6">
                   <Section title="Mises à jour" icon={RefreshCw} iconColor="amber">
                     <UpdateCheckSection />
+                  </Section>
+
+                  <Section title="Informations" icon={Key} iconColor="purple">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-400">Version</span>
+                          <span className="text-sm text-white font-mono">{getVersionString()}</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-400">Base de données</span>
+                          <span className="text-sm text-white">SQLite</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-400">Authentification</span>
+                          <span className="text-sm text-white">JWT</span>
+                        </div>
+                      </div>
+                    </div>
                   </Section>
                 </div>
               </div>
