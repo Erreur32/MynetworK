@@ -190,10 +190,45 @@ const DEFAULT_COLORS: Record<Theme, ThemeColors> = {
         buttonActiveText: '#ffffff',
         buttonBorder: 'rgba(192, 132, 252, 0.4)',
     },
+    elegant: {
+        accentPrimary: '#a78bfa',
+        accentPrimaryHover: '#8b5cf6',
+        accentSuccess: '#10b981',
+        accentWarning: '#f59e0b',
+        accentError: '#ef4444',
+        accentInfo: '#06b6d4',
+        bgPrimary: '#1a1a2e',
+        bgSecondary: 'rgba(45, 35, 65, 0.6)',
+        bgTertiary: 'rgba(60, 50, 80, 0.5)',
+        bgCard: 'rgba(35, 30, 55, 0.7)',
+        bgHeader: 'rgba(30, 25, 50, 0.85)',
+        bgFooter: 'rgba(25, 20, 45, 0.9)',
+        textPrimary: '#f0f2f8',
+        textSecondary: '#d8d0e8',
+        textTertiary: '#b8aed8',
+        borderColor: 'rgba(196, 181, 253, 0.4)',
+        borderColorLight: 'rgba(196, 181, 253, 0.5)',
+        borderColorHover: 'rgba(167, 139, 250, 0.6)',
+        buttonBg: 'rgba(196, 181, 253, 0.25)',
+        buttonText: '#f0f2f8',
+        buttonHoverBg: 'rgba(167, 139, 250, 0.35)',
+        buttonHoverText: '#ffffff',
+        buttonActiveBg: '#a78bfa',
+        buttonActiveText: '#ffffff',
+        buttonBorder: 'rgba(196, 181, 253, 0.5)',
+    },
 };
 
 export const ThemeSection: React.FC = () => {
-    const [currentTheme, setCurrentTheme] = useState<Theme>(getCurrentTheme());
+    // Initialize with the currently active theme (from DOM or localStorage)
+    const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
+        // Get theme from DOM first (most reliable), then localStorage
+        const htmlTheme = document.documentElement.getAttribute('data-theme');
+        if (htmlTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(htmlTheme)) {
+            return htmlTheme as Theme;
+        }
+        return getCurrentTheme();
+    });
     const [customColors, setCustomColors] = useState<Partial<ThemeColors>>({});
     const [isSaving, setIsSaving] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
@@ -201,35 +236,91 @@ export const ThemeSection: React.FC = () => {
     const availableThemes = getAvailableThemes();
 
     useEffect(() => {
-        // Load saved theme configuration
+        // Load saved theme configuration from server
         loadThemeConfig();
     }, []);
 
     useEffect(() => {
-        // Apply theme when it changes
-        applyTheme(currentTheme);
-    }, [currentTheme]);
+        // Sync currentTheme state with actual active theme from DOM
+        // This ensures the UI reflects the theme that's actually applied
+        const syncTheme = () => {
+            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const activeTheme = (htmlTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(htmlTheme)) 
+                ? htmlTheme as Theme 
+                : getCurrentTheme();
+            
+            // Update state with active theme (setState will only trigger re-render if different)
+            setCurrentTheme(prevTheme => {
+                // Only update if different to avoid unnecessary re-renders
+                return activeTheme !== prevTheme ? activeTheme : prevTheme;
+            });
+        };
+        
+        // Sync on mount
+        syncTheme();
+        
+        // Listen for external theme changes (when theme is changed outside this component)
+        const handleThemeChange = () => {
+            syncTheme();
+        };
+        window.addEventListener('themechange', handleThemeChange);
+        
+        return () => {
+            window.removeEventListener('themechange', handleThemeChange);
+        };
+    }, []); // Empty deps - only run on mount
 
     const loadThemeConfig = async () => {
         try {
+            // Get current active theme from DOM (most reliable source of truth)
+            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const currentActiveTheme = (htmlTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(htmlTheme)) 
+                ? htmlTheme as Theme 
+                : getCurrentTheme();
+            
+            // CRITICAL: Keep current active theme in state FIRST to prevent UI flicker
+            setCurrentTheme(currentActiveTheme);
+            
             const response = await api.get<ThemeConfig>('/api/settings/theme');
             if (response.success && response.result) {
                 const savedTheme = response.result.theme;
-                // Only update if theme is valid
-                if (['dark', 'glass', 'modern', 'nightly'].includes(savedTheme)) {
-                    setCurrentTheme(savedTheme);
+                // Only process if theme is valid
+                if (['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(savedTheme)) {
+                    // Load custom colors from server
                     setCustomColors(response.result.customColors || {});
-                    applyTheme(savedTheme);
+                    
+                    // IMPORTANT: Only apply server theme if it matches the currently active theme
+                    // OR if there's no active theme (first load)
+                    // This prevents overwriting user's current selection
+                    if (savedTheme === currentActiveTheme) {
+                        // Server theme matches active theme - everything is in sync
+                        // No need to change anything, just ensure state is correct
+                        setCurrentTheme(savedTheme);
+                    } else {
+                        // Server has different theme, but user has active theme
+                        // Keep user's active theme, don't change it
+                        // Only update state to show what's actually active
+                        setCurrentTheme(currentActiveTheme);
+                        // Optionally: could show a notification that server has different theme
+                        // But for now, prioritize user's current selection
+                    }
                 } else {
-                    console.warn(`Invalid theme from server: ${savedTheme}, using current: ${currentTheme}`);
+                    console.warn(`Invalid theme from server: ${savedTheme}, keeping current: ${currentActiveTheme}`);
+                    // Keep current theme active
+                    setCurrentTheme(currentActiveTheme);
                 }
+            } else {
+                // No theme from server, keep current active theme (don't change anything)
+                setCurrentTheme(currentActiveTheme);
             }
         } catch (error) {
             console.error('Failed to load theme config:', error);
-            // On error, use current theme from localStorage
-            const theme = getCurrentTheme();
+            // On error, keep current active theme from DOM/localStorage (don't change it)
+            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const theme = (htmlTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(htmlTheme)) 
+                ? htmlTheme as Theme 
+                : getCurrentTheme();
             setCurrentTheme(theme);
-            applyTheme(theme);
         }
     };
 
@@ -390,8 +481,12 @@ export const ThemeSection: React.FC = () => {
                         <h3 className="text-base font-semibold text-theme-primary mb-1">Thème principal</h3>
                         <p className="text-sm text-theme-secondary">Sélectionnez le thème de base pour l'interface</p>
                     </div>
-                    <div className="grid grid-cols-4 gap-8 px-6">
-                        {availableThemes.map((theme) => {
+                    
+                    {/* Black themes category */}
+                    <div className="mb-8">
+                        <h4 className="text-sm font-semibold text-theme-primary mb-4 px-6">Black</h4>
+                        <div className="grid grid-cols-4 gap-8 px-6">
+                            {availableThemes.filter(theme => ['dark', 'glass', 'nightly'].includes(theme.id)).map((theme) => {
                             const themeColors = DEFAULT_COLORS[theme.id];
                             const isActive = currentTheme === theme.id;
                             
@@ -586,6 +681,249 @@ export const ThemeSection: React.FC = () => {
                                 </button>
                             );
                         })}
+                        </div>
+                    </div>
+                    
+                    {/* Color themes category */}
+                    <div className="mb-8">
+                        <h4 className="text-sm font-semibold text-theme-primary mb-4 px-6">Couleur</h4>
+                        <div className="grid grid-cols-4 gap-8 px-6">
+                            {availableThemes.filter(theme => ['modern', 'neon'].includes(theme.id)).map((theme) => {
+                                const themeColors = DEFAULT_COLORS[theme.id];
+                                const isActive = currentTheme === theme.id;
+                                
+                                return (
+                                    <button
+                                        key={theme.id}
+                                        onClick={() => handleThemeChange(theme.id)}
+                                        className={`relative group rounded-xl border-2 transition-all overflow-hidden ${
+                                            isActive
+                                                ? 'border-yellow-500 shadow-xl shadow-yellow-500/30 scale-[1.02]'
+                                                : 'border-theme hover:border-yellow-500/50 hover:shadow-lg hover:shadow-yellow-500/10'
+                                        } ${theme.id === 'modern' ? 'backdrop-blur-md' : ''}`}
+                                        style={{
+                                            background: theme.id === 'glass' 
+                                                ? '#0a0a0a'
+                                                : theme.id === 'modern'
+                                                ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a1a2e 100%)'
+                                                : theme.id === 'nightly'
+                                                ? '#0f0f0f'
+                                                : '#0f0f0f',
+                                            backdropFilter: theme.id === 'glass' || theme.id === 'modern' ? 'blur(12px)' : 'none',
+                                            color: themeColors.textPrimary
+                                        }}
+                                    >
+                                        {/* Preview overlays pour chaque thème */}
+                                        {theme.id === 'modern' && (
+                                            <>
+                                                {/* Gradient diagonal bleu-mauve-rose doux - Représentatif du thème réel */}
+                                                <div 
+                                                    className="absolute inset-0"
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(91, 155, 213, 0.35) 0%, rgba(139, 124, 246, 0.32) 25%, rgba(236, 72, 153, 0.3) 50%, rgba(139, 124, 246, 0.32) 75%, rgba(91, 155, 213, 0.35) 100%)'
+                                                    }}
+                                                />
+                                                {/* Glass effect subtil pour les cartes transparentes */}
+                                                <div 
+                                                    className="absolute inset-0 opacity-30"
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(35, 30, 55, 0.5) 0%, rgba(40, 35, 65, 0.4) 100%)',
+                                                        backdropFilter: 'blur(8px)'
+                                                    }}
+                                                />
+                                                {/* Légère lueur pour la profondeur */}
+                                                <div 
+                                                    className="absolute inset-0 rounded-xl"
+                                                    style={{
+                                                        boxShadow: 'inset 0 0 20px rgba(139, 124, 246, 0.2), 0 0 15px rgba(91, 155, 213, 0.15)'
+                                                    }}
+                                                />
+                                            </>
+                                        )}
+                                        {theme.id === 'neon' && (
+                                            <>
+                                                {/* Gradient néon avec effets lumineux */}
+                                                <div 
+                                                    className="absolute inset-0"
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, #8b5cf626, #a78bfa1a, #3b82f626 80%, #8b5cf61a)'
+                                                    }}
+                                                />
+                                                {/* Carte avec effet glass et bordures néon */}
+                                                <div 
+                                                    className="absolute inset-0 opacity-60"
+                                                    style={{
+                                                        background: 'rgba(40, 30, 60, 0.5)',
+                                                        backdropFilter: 'blur(12px)',
+                                                        border: '1px solid rgba(192, 132, 252, 0.25)'
+                                                    }}
+                                                />
+                                                {/* Lueur néon pour la profondeur */}
+                                                <div 
+                                                    className="absolute inset-0 rounded-xl"
+                                                    style={{
+                                                        boxShadow: 'inset 0 0 20px rgba(192, 132, 252, 0.15), 0 0 20px rgba(139, 92, 246, 0.3)'
+                                                    }}
+                                                />
+                                            </>
+                                        )}
+                                        
+                                        {/* Active indicator */}
+                                        {isActive && (
+                                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50 flex items-center justify-center">
+                                                <div className="w-2 h-2 rounded-full bg-white" />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="relative z-10 p-5">
+                                            {/* Color palette preview - Only essential colors */}
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <div className="flex gap-1.5">
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.accentPrimary }}
+                                                        title="Couleur principale"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.textPrimary }}
+                                                        title="Couleur texte"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.accentSuccess }}
+                                                        title="Badge succès"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.buttonBg }}
+                                                        title="Couleur bouton"
+                                                    />
+                                                </div>
+                                            </div>
+                                            
+                                            <div 
+                                                className="text-lg font-semibold mb-1"
+                                                style={{ color: themeColors.textPrimary }}
+                                            >
+                                                {theme.name}
+                                            </div>
+                                            <div 
+                                                className="text-xs"
+                                                style={{ color: themeColors.textSecondary }}
+                                            >
+                                                {theme.description}
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    
+                    {/* Animation themes category */}
+                    <div>
+                        <h4 className="text-sm font-semibold text-theme-primary mb-4 px-6">Animation</h4>
+                        <div className="grid grid-cols-4 gap-8 px-6">
+                            {availableThemes.filter(theme => ['elegant'].includes(theme.id)).map((theme) => {
+                                const themeColors = DEFAULT_COLORS[theme.id];
+                                const isActive = currentTheme === theme.id;
+                                
+                                return (
+                                    <button
+                                        key={theme.id}
+                                        onClick={() => handleThemeChange(theme.id)}
+                                        className={`relative group rounded-xl border-2 transition-all overflow-hidden ${
+                                            isActive
+                                                ? 'border-yellow-500 shadow-xl shadow-yellow-500/30 scale-[1.02]'
+                                                : 'border-theme hover:border-yellow-500/50 hover:shadow-lg hover:shadow-yellow-500/10'
+                                        } backdrop-blur-md`}
+                                        style={{
+                                            background: 'linear-gradient(135deg, rgba(147, 197, 253, 0.3) 0%, rgba(196, 181, 253, 0.28) 25%, rgba(251, 207, 232, 0.26) 50%, rgba(196, 181, 253, 0.28) 75%, rgba(147, 197, 253, 0.3) 100%)',
+                                            backdropFilter: 'blur(12px)',
+                                            color: themeColors.textPrimary,
+                                            position: 'relative',
+                                            overflow: 'hidden'
+                                        }}
+                                    >
+                                        {/* Animated gradient background */}
+                                        <div 
+                                            className="absolute inset-0 elegant-gradient"
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(147, 197, 253, 0.4) 0%, rgba(196, 181, 253, 0.35) 25%, rgba(251, 207, 232, 0.3) 50%, rgba(196, 181, 253, 0.35) 75%, rgba(147, 197, 253, 0.4) 100%)',
+                                                backgroundSize: '400% 400%',
+                                                animation: 'elegantGradientShift 12s ease infinite'
+                                            }}
+                                        />
+                                        {/* Glass effect overlay */}
+                                        <div 
+                                            className="absolute inset-0 opacity-70"
+                                            style={{
+                                                background: 'rgba(35, 30, 55, 0.6)',
+                                                backdropFilter: 'blur(12px)',
+                                                border: '1px solid rgba(196, 181, 253, 0.4)'
+                                            }}
+                                        />
+                                        {/* Animated glow effect */}
+                                        <div 
+                                            className="absolute inset-0 rounded-xl elegant-preview-glow"
+                                            style={{
+                                                boxShadow: 'inset 0 0 30px rgba(196, 181, 253, 0.3), 0 0 20px rgba(251, 207, 232, 0.25)',
+                                                animation: 'elegantPreviewGlow 3s ease-in-out infinite'
+                                            }}
+                                        />
+                                        
+                                        {/* Active indicator */}
+                                        {isActive && (
+                                            <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-yellow-500 shadow-lg shadow-yellow-500/50 flex items-center justify-center">
+                                                <div className="w-2 h-2 rounded-full bg-white" />
+                                            </div>
+                                        )}
+                                        
+                                        <div className="relative z-10 p-5">
+                                            {/* Color palette preview */}
+                                            <div className="flex items-center gap-2 mb-4">
+                                                <div className="flex gap-1.5">
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm elegant-icon-pulse"
+                                                        style={{ backgroundColor: themeColors.accentPrimary }}
+                                                        title="Couleur principale"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.textPrimary }}
+                                                        title="Couleur texte"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm elegant-icon-pulse"
+                                                        style={{ backgroundColor: themeColors.accentSuccess }}
+                                                        title="Badge succès"
+                                                    />
+                                                    <div 
+                                                        className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
+                                                        style={{ backgroundColor: themeColors.buttonBg }}
+                                                        title="Couleur bouton"
+                                                    />
+                                                </div>
+                                            </div>
+                                            
+                                            <div 
+                                                className="text-lg font-semibold mb-1"
+                                                style={{ color: themeColors.textPrimary }}
+                                            >
+                                                {theme.name}
+                                            </div>
+                                            <div 
+                                                className="text-xs"
+                                                style={{ color: themeColors.textSecondary }}
+                                            >
+                                                {theme.description}
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
 

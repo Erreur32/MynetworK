@@ -150,7 +150,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
             title={
                 <div className="flex items-center gap-2">
                     <Activity size={16} className="text-accent-info" />
-                    <span>Analyse rapide du trafic UniFi</span>
+                    <span>Analyse trafic UniFi</span>
                 </div>
             }
         >

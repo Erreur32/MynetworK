@@ -628,9 +628,8 @@
    Effet gradient doux avec cartes transparentes très lisibles
 */
 
-/* Body - Gradient bleu-mauve-rose doux avec gradient diagonal visible sur tout l'écran */
-/* Modern theme - Full gradient complet et visible */
-[data-theme="modern"] body,
+/* Modern theme - Animated gradient background with same logic as elegant */
+/* Force background on html first, then body */
 [data-theme="modern"] html {
     background: 
         linear-gradient(135deg, 
@@ -649,26 +648,128 @@
             #1a1a2e 80%,
             #16213e 100%
         ) !important;
-    background-size: 100% 100%, 400% 400% !important;
-    background-position: 0 0, 0 0 !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
     background-attachment: fixed !important;
     background-repeat: no-repeat !important;
     min-height: 100vh !important;
     width: 100% !important;
-    animation: gradientShift 25s ease infinite !important;
+    animation: modernGradientShift 12s linear infinite !important;
+}
+
+[data-theme="modern"] body {
+    background: 
+        linear-gradient(135deg, 
+            rgba(91, 155, 213, 0.4) 0%, 
+            rgba(139, 124, 246, 0.38) 20%, 
+            rgba(236, 72, 153, 0.35) 40%, 
+            rgba(139, 124, 246, 0.38) 60%, 
+            rgba(91, 155, 213, 0.4) 80%,
+            rgba(139, 124, 246, 0.38) 100%
+        ),
+        linear-gradient(135deg, 
+            #1a1a2e 0%, 
+            #16213e 20%, 
+            #0f3460 40%, 
+            #533483 60%, 
+            #1a1a2e 80%,
+            #16213e 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    animation: modernGradientShift 12s linear infinite !important;
+    margin: 0 !important;
+    padding: 0 !important;
     color: var(--text-primary) !important;
+}
+
+/* Modern theme - Override ALL inline styles from index.html - MUST come after body/html rules */
+[data-theme="modern"] body[style],
+[data-theme="modern"] body[style*="background"] {
+    background: 
+        linear-gradient(135deg, 
+            rgba(91, 155, 213, 0.4) 0%, 
+            rgba(139, 124, 246, 0.38) 20%, 
+            rgba(236, 72, 153, 0.35) 40%, 
+            rgba(139, 124, 246, 0.38) 60%, 
+            rgba(91, 155, 213, 0.4) 80%,
+            rgba(139, 124, 246, 0.38) 100%
+        ),
+        linear-gradient(135deg, 
+            #1a1a2e 0%, 
+            #16213e 20%, 
+            #0f3460 40%, 
+            #533483 60%, 
+            #1a1a2e 80%,
+            #16213e 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    animation: modernGradientShift 12s linear infinite !important;
+    background-color: transparent !important;
+}
+
+@keyframes modernGradientShift {
+    0% { 
+        background-position: 0% 0%, 0% 0%; 
+    }
+    25% { 
+        background-position: 100% 0%, 50% 50%; 
+    }
+    50% { 
+        background-position: 100% 100%, 100% 100%; 
+    }
+    75% { 
+        background-position: 0% 100%, 50% 50%; 
+    }
+    100% { 
+        background-position: 0% 0%, 0% 0%; 
+    }
+}
+
+/* Modern theme - Maximum specificity override for inline styles from index.html */
+html[data-theme="modern"] body,
+html[data-theme="modern"] body[style],
+html[data-theme="modern"] body[style*="background-color"],
+html[data-theme="modern"] body[style*="background"] {
+    background: 
+        linear-gradient(135deg, 
+            rgba(91, 155, 213, 0.4) 0%, 
+            rgba(139, 124, 246, 0.38) 20%, 
+            rgba(236, 72, 153, 0.35) 40%, 
+            rgba(139, 124, 246, 0.38) 60%, 
+            rgba(91, 155, 213, 0.4) 80%,
+            rgba(139, 124, 246, 0.38) 100%
+        ),
+        linear-gradient(135deg, 
+            #1a1a2e 0%, 
+            #16213e 20%, 
+            #0f3460 40%, 
+            #533483 60%, 
+            #1a1a2e 80%,
+            #16213e 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    animation: modernGradientShift 12s linear infinite !important;
 }
 
 /* Assurer que le contenu principal hérite aussi du gradient */
 [data-theme="modern"] main,
+[data-theme="modern"] #root,
+[data-theme="modern"] [class*="min-h-screen"],
+[data-theme="modern"] [class*="min-h-screen"].bg-theme-primary,
 [data-theme="modern"] .bg-theme-primary {
     background: transparent !important;
-}
-
-@keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+    background-color: transparent !important;
 }
 
 /* Header and Footer - Plus clairs et semi-transparents avec glass effect */
@@ -706,10 +807,6 @@
     box-shadow: var(--shadow-md) !important;
 }
 
-/* Primary background - Utilise le gradient du body */
-[data-theme="modern"] .bg-theme-primary {
-    background: transparent !important;
-}
 
 /* Secondary backgrounds - Glass effect transparent */
 [data-theme="modern"] .bg-theme-secondary {
@@ -1121,7 +1218,11 @@ a:hover:focus,
     color: var(--text-tertiary) !important;
 }
 
-[data-theme="modern"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
+/* Modern theme - Make bg-theme-primary transparent so body background is visible */
+[data-theme="modern"] .bg-theme-primary { 
+    background: transparent !important;
+    background-color: transparent !important;
+}
 [data-theme="modern"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
 [data-theme="modern"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
 [data-theme="modern"] .bg-theme-card { background-color: var(--bg-card) !important; }
@@ -1709,4 +1810,354 @@ a:hover:focus,
 [data-theme] .border-unifi-accent {
     border-color: var(--accent-unifi, var(--accent-primary)) !important;
 }
+
+/* ============================================
+   ELEGANT THEME - Animated theme with elegant gradients
+   ============================================
+   Elegant animated theme with subtle background animations and icon animations
+*/
+
+[data-theme="elegant"] {
+    --bg-primary: rgba(26, 26, 46, 0.98);
+    --bg-secondary: rgba(45, 35, 65, 0.6);
+    --bg-tertiary: rgba(60, 50, 80, 0.5);
+    --bg-card: rgba(35, 30, 55, 0.7);
+    --bg-unifi-card: rgba(30, 25, 50, 0.8);
+    --bg-header: rgba(30, 25, 50, 0.85);
+    --bg-footer: rgba(25, 20, 45, 0.9);
+    --border-color: rgba(196, 181, 253, 0.4);
+    --border-color-light: rgba(196, 181, 253, 0.5);
+    --border-color-hover: rgba(167, 139, 250, 0.6);
+    --text-primary: #f0f2f8;
+    --text-secondary: #d8d0e8;
+    --text-tertiary: #b8aed8;
+    --accent-primary: #a78bfa;
+    --accent-primary-hover: #8b5cf6;
+    --accent-unifi: #1fb0ec;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --accent-error: #ef4444;
+    --accent-info: #06b6d4;
+    --button-bg: rgba(196, 181, 253, 0.25);
+    --button-text: #f0f2f8;
+    --button-hover-bg: rgba(167, 139, 250, 0.35);
+    --button-hover-text: #ffffff;
+    --button-active-bg: #a78bfa;
+    --button-active-text: #ffffff;
+    --button-border: rgba(196, 181, 253, 0.5);
+    --input-bg: rgba(45, 35, 65, 0.6);
+    --input-text: #f0f2f8;
+    --input-border: rgba(196, 181, 253, 0.4);
+    --input-border-focus: #a78bfa;
+    --input-placeholder: #b8aed8;
+    --card-bg: rgba(35, 30, 55, 0.7);
+    --card-border: rgba(196, 181, 253, 0.4);
+    --header-border: rgba(196, 181, 253, 0.4);
+    --footer-border: rgba(196, 181, 253, 0.4);
+    --backdrop-blur: blur(12px);
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+    --shadow-xl: none;
+}
+
+/* Elegant theme - Animated blue-mauve-rose darker gradient background with more pronounced animation */
+/* Force background on html first, then body */
+[data-theme="elegant"] html {
+    background: 
+        linear-gradient(135deg, 
+            rgba(96, 165, 250, 0.65) 0%,
+            rgba(167, 139, 250, 0.6) 25%,
+            rgba(244, 114, 182, 0.55) 50%,
+            rgba(167, 139, 250, 0.6) 75%,
+            rgba(96, 165, 250, 0.65) 100%
+        ),
+        linear-gradient(135deg, 
+            #0f0f1a 0%,
+            #1a0f2e 25%,
+            #2a1a3d 50%,
+            #1a0f2e 75%,
+            #0f0f1a 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    animation: elegantGradientShift 12s linear infinite !important;
+}
+
+[data-theme="elegant"] body {
+    background: 
+        linear-gradient(135deg, 
+            rgba(96, 165, 250, 0.65) 0%,
+            rgba(167, 139, 250, 0.6) 25%,
+            rgba(244, 114, 182, 0.55) 50%,
+            rgba(167, 139, 250, 0.6) 75%,
+            rgba(96, 165, 250, 0.65) 100%
+        ),
+        linear-gradient(135deg, 
+            #0f0f1a 0%,
+            #1a0f2e 25%,
+            #2a1a3d 50%,
+            #1a0f2e 75%,
+            #0f0f1a 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 0%, 0% 0% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    animation: elegantGradientShift 12s linear infinite !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Elegant theme - Override ALL inline styles from index.html - MUST come after body/html rules */
+[data-theme="elegant"] body[style],
+[data-theme="elegant"] body[style*="background"] {
+    background: 
+        linear-gradient(135deg, 
+            rgba(96, 165, 250, 0.65) 0%,
+            rgba(167, 139, 250, 0.6) 25%,
+            rgba(244, 114, 182, 0.55) 50%,
+            rgba(167, 139, 250, 0.6) 75%,
+            rgba(96, 165, 250, 0.65) 100%
+        ),
+        linear-gradient(135deg, 
+            #0f0f1a 0%,
+            #1a0f2e 25%,
+            #2a1a3d 50%,
+            #1a0f2e 75%,
+            #0f0f1a 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 50%, 0% 50% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    animation: elegantGradientShift 15s ease-in-out infinite !important;
+    background-color: transparent !important;
+}
+
+@keyframes elegantGradientShift {
+    0% { 
+        background-position: 0% 0%, 0% 0%; 
+    }
+    25% { 
+        background-position: 100% 0%, 50% 50%; 
+    }
+    50% { 
+        background-position: 100% 100%, 100% 100%; 
+    }
+    75% { 
+        background-position: 0% 100%, 50% 50%; 
+    }
+    100% { 
+        background-position: 0% 0%, 0% 0%; 
+    }
+}
+
+/* Elegant theme - Maximum specificity override for inline styles from index.html */
+html[data-theme="elegant"] body,
+html[data-theme="elegant"] body[style],
+html[data-theme="elegant"] body[style*="background-color"],
+html[data-theme="elegant"] body[style*="background"] {
+    background: 
+        linear-gradient(135deg, 
+            rgba(96, 165, 250, 0.65) 0%,
+            rgba(167, 139, 250, 0.6) 25%,
+            rgba(244, 114, 182, 0.55) 50%,
+            rgba(167, 139, 250, 0.6) 75%,
+            rgba(96, 165, 250, 0.65) 100%
+        ),
+        linear-gradient(135deg, 
+            #0f0f1a 0%,
+            #1a0f2e 25%,
+            #2a1a3d 50%,
+            #1a0f2e 75%,
+            #0f0f1a 100%
+        ) !important;
+    background-size: 500% 500%, 600% 600% !important;
+    background-position: 0% 50%, 0% 50% !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    animation: elegantGradientShift 15s ease-in-out infinite !important;
+}
+
+/* Elegant theme - Preview card glow animation */
+@keyframes elegantPreviewGlow {
+    0%, 100% { 
+        box-shadow: 
+            inset 0 0 30px rgba(196, 181, 253, 0.3), 
+            0 0 20px rgba(251, 207, 232, 0.25);
+    }
+    50% { 
+        box-shadow: 
+            inset 0 0 40px rgba(196, 181, 253, 0.5), 
+            0 0 30px rgba(251, 207, 232, 0.4),
+            0 0 40px rgba(147, 197, 253, 0.3);
+    }
+}
+
+/* Elegant theme - Icon pulse animation */
+@keyframes elegantIconPulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+.elegant-icon-pulse {
+    animation: elegantIconPulse 2s ease-in-out infinite;
+}
+
+/* Elegant theme - Apply icon animation to success icons */
+[data-theme="elegant"] svg[class*="text-emerald"],
+[data-theme="elegant"] svg[class*="text-green"],
+[data-theme="elegant"] .text-accent-success svg,
+[data-theme="elegant"] [class*="success"] svg {
+    animation: elegantIconPulse 2s ease-in-out infinite;
+}
+
+/* Elegant theme - Header and footer with flat style (no shadows, no borders) */
+[data-theme="elegant"] header,
+[data-theme="elegant"] .bg-theme-header,
+[data-theme="elegant"] header.bg-theme-header {
+    background-color: var(--bg-header) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+[data-theme="elegant"] footer,
+[data-theme="elegant"] .bg-theme-footer,
+[data-theme="elegant"] footer.bg-theme-footer {
+    background-color: var(--bg-footer) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Elegant theme - Cards with flat style (no shadows, no borders) */
+[data-theme="elegant"] [class*="card"],
+[data-theme="elegant"] [class*="section"],
+[data-theme="elegant"] [class*="widget"],
+[data-theme="elegant"] [class*="panel"],
+[data-theme="elegant"] .bg-theme-secondary,
+[data-theme="elegant"] .bg-theme-card {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Elegant theme - Input/Textarea styles */
+[data-theme="elegant"] input[type="text"],
+[data-theme="elegant"] input[type="password"],
+[data-theme="elegant"] input[type="email"],
+[data-theme="elegant"] input[type="number"],
+[data-theme="elegant"] input[type="search"],
+[data-theme="elegant"] input[type="tel"],
+[data-theme="elegant"] input[type="url"],
+[data-theme="elegant"] textarea,
+[data-theme="elegant"] select {
+    background-color: var(--input-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="elegant"] input::placeholder,
+[data-theme="elegant"] textarea::placeholder {
+    color: var(--input-placeholder) !important;
+}
+
+[data-theme="elegant"] input:focus,
+[data-theme="elegant"] textarea:focus,
+[data-theme="elegant"] select:focus {
+    border-color: var(--input-border-focus) !important;
+    box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.3) !important;
+    outline: none;
+    animation: elegantInputGlow 2s ease-in-out infinite !important;
+}
+
+@keyframes elegantInputGlow {
+    0%, 100% { 
+        box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.3) !important;
+    }
+    50% { 
+        box-shadow: 0 0 0 2px rgba(251, 207, 232, 0.4) !important;
+    }
+}
+
+/* Elegant theme - Remove focus outline on buttons */
+[data-theme="elegant"] button:focus,
+[data-theme="elegant"] a:focus,
+[data-theme="elegant"] [role="button"]:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Elegant theme - Border overrides - No borders */
+[data-theme="elegant"] .border,
+[data-theme="elegant"] .border-theme,
+[data-theme="elegant"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border: none !important;
+    border-color: transparent !important;
+}
+
+/* Elegant theme - Text color overrides */
+[data-theme="elegant"] .text-theme-primary {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="elegant"] .text-theme-secondary {
+    color: var(--text-secondary) !important;
+}
+
+[data-theme="elegant"] .text-theme-tertiary {
+    color: var(--text-tertiary) !important;
+}
+
+/* Elegant theme - Background utility classes */
+/* Elegant theme - Make bg-theme-primary transparent so body background is visible */
+[data-theme="elegant"] .bg-theme-primary { 
+    background: transparent !important;
+    background-color: transparent !important;
+}
+[data-theme="elegant"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="elegant"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="elegant"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="elegant"] .border-theme { border-color: var(--border-color) !important; }
+
+/* Elegant theme - Override any inline styles or hardcoded backgrounds */
+[data-theme="elegant"] main,
+[data-theme="elegant"] #root,
+[data-theme="elegant"] [class*="min-h-screen"],
+[data-theme="elegant"] [class*="min-h-screen"].bg-theme-primary {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* Elegant theme - UniFi cards with elegant mauve-rose gradient - flat style */
+[data-theme="elegant"] .bg-unifi-card {
+    background: linear-gradient(135deg, rgba(30, 25, 50, 0.8) 0%, rgba(196, 181, 253, 0.4) 50%, rgba(251, 207, 232, 0.35) 100%) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
 

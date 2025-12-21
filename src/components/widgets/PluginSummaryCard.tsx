@@ -305,8 +305,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
             if (import.meta.env.DEV && freeboxWifiNetworks.length > 0) {
                 console.log('[PluginSummaryCard] Freebox WiFi networks found:', freeboxWifiNetworks);
             }
-        } else if (import.meta.env.DEV) {
-            console.log('[PluginSummaryCard] No WiFi networks in stats.system.wifiNetworks:', { wifiNetworks, hasSystem: !!sys });
         }
     }
 
