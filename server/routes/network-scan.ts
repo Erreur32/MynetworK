@@ -72,11 +72,41 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
         });
     } catch (error: any) {
         logger.error('NetworkScan', 'Scan failed:', error);
+        logger.error('NetworkScan', 'Error details:', {
+            message: error.message,
+            stack: error.stack,
+            range: scanRange,
+            scanType
+        });
+        
+        // Provide more detailed error message with suggestions
+        let errorMessage = error.message || 'Scan failed';
+        let suggestion: string | undefined;
+        
+        if (error.message?.includes('too large') || error.message?.includes('Maximum 1000 IPs')) {
+            // Extract IP from range and suggest /24
+            const ipMatch = scanRange.match(/(\d+\.\d+\.\d+)\./);
+            if (ipMatch) {
+                const suggestedRange = `${ipMatch[1]}.0/24`;
+                errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;
+                suggestion = `Try using a smaller range like ${suggestedRange} (254 IPs)`;
+            } else {
+                errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;
+                suggestion = `Try using a /24 subnet (e.g., 192.168.1.0/24)`;
+            }
+        } else if (error.message?.includes('ping') || error.message?.includes('Permission denied')) {
+            errorMessage = 'Network scan failed: Missing network permissions. Ensure Docker container has NET_RAW and NET_ADMIN capabilities.';
+        } else if (error.message?.includes('command not found') || error.message?.includes('ping')) {
+            errorMessage = 'Network scan failed: ping command not available. Ensure iputils-ping is installed in Docker container.';
+        }
+        
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Scan failed',
-                code: 'SCAN_ERROR'
+                message: errorMessage,
+                code: 'SCAN_ERROR',
+                suggestion,
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
             }
         });
     }

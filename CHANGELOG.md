@@ -2,6 +2,24 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.10] - 2025-12-21
+
+---
+
+## [0.1.10] - 2025-12-21
+
+### 🐛 Corrigé
+
+**Plugin Scan Réseau**
+- ✅ Correction de la détection automatique du réseau pour limiter à /24 (réseaux locaux standard)
+- ✅ Correction de l'erreur "CIDR /16 would scan 65536 IPs" lors de l'auto-détection
+- ✅ Amélioration de la gestion d'erreur avec messages plus détaillés et suggestions
+- ✅ Ajout de logs pour diagnostiquer les problèmes de permissions réseau (NET_RAW, ping)
+
+**API / Routes**
+- ✅ Amélioration des messages d'erreur pour le scan réseau avec suggestions de correction
+- ✅ Ajout de détails d'erreur en mode développement pour faciliter le débogage
+
 ## [0.1.9] - 2025-12-21
 
 ### ✨ Ajouté

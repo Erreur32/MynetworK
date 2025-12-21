@@ -240,7 +240,10 @@ export class NetworkScanService {
     /**
      * Get the local network range automatically
      * Returns the network range in CIDR notation (e.g., "192.168.1.0/24")
-     * Assumes /24 subnet if netmask cannot be determined
+     * Always limits to /24 subnet which is the standard for most local networks
+     * - Most home/office networks use /24 (192.168.x.0/24 or 10.0.x.0/24)
+     * - This limits scanning to 254 IPs max (safe and practical)
+     * - Prevents scanning overly large networks like /16 (65536 IPs) which would fail
      */
     getNetworkRange(): string | null {
         const interfaces = os.networkInterfaces();
@@ -250,19 +253,12 @@ export class NetworkScanService {
                 // Skip internal (loopback) and non-IPv4 addresses
                 if (iface.family === 'IPv4' && !iface.internal) {
                     const ip = iface.address;
-                    const netmask = iface.netmask;
+                    const parts = ip.split('.');
                     
-                    // If netmask is available, calculate CIDR
-                    if (netmask) {
-                        const cidr = this.netmaskToCidr(netmask);
-                        const networkIp = this.getNetworkAddress(ip, netmask);
-                        return `${networkIp}/${cidr}`;
-                    } else {
-                        // Default to /24 subnet
-                        const parts = ip.split('.');
-                        if (parts.length === 4) {
-                            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-                        }
+                    // Always use /24 subnet (standard for local networks)
+                    // Extract first 3 octets: 192.168.1.x -> 192.168.1.0/24
+                    if (parts.length === 4) {
+                        return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
                     }
                 }
             }
@@ -400,8 +396,14 @@ export class NetworkScanService {
                 success: true,
                 latency: latency || undefined
             };
-        } catch (error) {
+        } catch (error: any) {
             // Ping failed (host unreachable, timeout, etc.)
+            // Log permission errors for debugging
+            if (error.message?.includes('Permission denied') || error.message?.includes('Operation not permitted')) {
+                logger.warn('NetworkScanService', `Ping permission denied for ${ip}. Ensure NET_RAW capability is enabled.`);
+            } else if (error.message?.includes('command not found') || error.message?.includes('ping')) {
+                logger.warn('NetworkScanService', `Ping command not found. Ensure iputils-ping is installed.`);
+            }
             return { success: false };
         }
     }
