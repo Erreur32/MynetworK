@@ -24,7 +24,9 @@ WORKDIR /app
 
 # outils nécessaires pour modules natifs (COMME AVANT)
 # su-exec is needed for the entrypoint script to switch from root to node user
-RUN apk add --no-cache python3 make g++ wget su-exec
+# iputils-ping: Required for network scanning (ping command)
+# iproute2: Required for network scanning (ip neigh command for MAC detection)
+RUN apk add --no-cache python3 make g++ wget su-exec iputils-ping iproute2
 
 # data
 RUN mkdir -p /app/data && chown -R node:node /app

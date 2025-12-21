@@ -45,6 +45,18 @@ services:
       #  Mount Docker socket to enable Docker version detection
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+    # Network capabilities required for network scanning (ping, arp)
+    # NET_RAW: Required to send ICMP packets (ping)
+    # NET_ADMIN: Required for some network operations
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+    # Alternative: If network scanning still doesn't work, uncomment the line below
+    # This makes the container use the host's network directly (Linux only)
+    # WARNING: This changes port mapping - remove the "ports" section above if using this
+    # network_mode: host
+
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s

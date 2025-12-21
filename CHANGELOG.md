@@ -2,6 +2,21 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.9] - 2025-12-21
+
+### ✨ Ajouté
+
+**Docker / Scan Réseau**
+- 🔧 Ajout des capacités réseau `NET_RAW` et `NET_ADMIN` dans docker-compose.yml pour permettre le scan réseau
+- 📦 Ajout de `iputils-ping` et `iproute2` dans le Dockerfile pour les commandes ping et ip neigh
+- 📝 Documentation de l'option alternative `network_mode: host` dans docker-compose.yml (si le mode bridge ne fonctionne pas)
+
+### 🔧 Modifié
+
+**Docker**
+- 🔧 Configuration Docker mise à jour pour supporter le plugin Scan Réseau dans les conteneurs
+- 📋 Ajout de commentaires explicatifs dans docker-compose.yml pour les capacités réseau
+
 ## [0.1.8] - 2025-12-21
 
 ### 🐛 Corrigé
