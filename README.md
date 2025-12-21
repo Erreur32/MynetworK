@@ -25,7 +25,7 @@
 
 ## 🎯 Vue d'ensemble
 
-**MynetworK** est un dashboard unifié permettant de gérer et surveiller plusieurs sources de données réseau via un système de plugins modulaire :
+**MynetworK** est un dashboard unifié permettant de gérer et surveiller plusieurs sources de données réseau local via:
 
 - **Freebox** - Gestion complète de votre Freebox (Ultra, Delta, Pop)
 - **UniFi Controller** - Surveillance et gestion de votre infrastructure UniFi
