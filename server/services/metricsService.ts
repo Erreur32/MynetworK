@@ -181,6 +181,72 @@ export async function generatePrometheusMetrics(): Promise<string> {
                 lines.push(`# HELP mynetwork_plugin_devices_active Active number of devices`);
                 lines.push(`# TYPE mynetwork_plugin_devices_active gauge`);
                 lines.push(`mynetwork_plugin_devices_active${pluginLabels} ${activeDevices}`);
+                
+                // Count active clients (devices with type='client' or connectivity_type='wifi')
+                const activeClients = stats.devices.filter((d: any) => {
+                    const isActive = d.active !== false;
+                    const isClient = (d.type === 'client' || d.type === 'Client') || 
+                                    (d.connectivity_type === 'wifi' || d.access_point?.connectivity_type === 'wifi');
+                    return isActive && isClient;
+                }).length;
+                
+                lines.push(`# HELP mynetwork_plugin_clients_active Active clients count`);
+                lines.push(`# TYPE mynetwork_plugin_clients_active gauge`);
+                lines.push(`mynetwork_plugin_clients_active${pluginLabels} ${activeClients}`);
+                
+                // Count unique IPs detected
+                const uniqueIps = new Set<string>();
+                stats.devices.forEach((d: any) => {
+                    if (d.ip && typeof d.ip === 'string' && d.ip.trim() !== '') {
+                        uniqueIps.add(d.ip.trim());
+                    }
+                });
+                
+                lines.push(`# HELP mynetwork_plugin_ips_detected Number of unique IP addresses detected`);
+                lines.push(`# TYPE mynetwork_plugin_ips_detected gauge`);
+                lines.push(`mynetwork_plugin_ips_detected${pluginLabels} ${uniqueIps.size}`);
+            }
+            
+            // WiFi networks with source (Freebox or UniFi)
+            if (pluginId === 'freebox' && stats.system && (stats.system as any).wifiNetworks) {
+                const wifiNetworks = (stats.system as any).wifiNetworks as Array<{ ssid: string; band: string; enabled: boolean }>;
+                const enabledWifiNetworks = wifiNetworks.filter((w: any) => w.enabled !== false);
+                
+                lines.push(`# HELP mynetwork_wifi_networks_total Total WiFi networks count`);
+                lines.push(`# TYPE mynetwork_wifi_networks_total gauge`);
+                lines.push(`mynetwork_wifi_networks_total{source="freebox"} ${wifiNetworks.length}`);
+                
+                lines.push(`# HELP mynetwork_wifi_networks_enabled Enabled WiFi networks count`);
+                lines.push(`# TYPE mynetwork_wifi_networks_enabled gauge`);
+                lines.push(`mynetwork_wifi_networks_enabled{source="freebox"} ${enabledWifiNetworks.length}`);
+                
+                // Individual WiFi network metrics
+                enabledWifiNetworks.forEach((wifi: any) => {
+                    const ssid = (wifi.ssid || '').replace(/"/g, '\\"');
+                    const band = (wifi.band || 'unknown').replace(/"/g, '\\"');
+                    const wifiLabels = `{source="freebox",ssid="${ssid}",band="${band}"}`;
+                    lines.push(`mynetwork_wifi_network_enabled${wifiLabels} 1`);
+                });
+            }
+            
+            if (pluginId === 'unifi' && stats.wlans && Array.isArray(stats.wlans)) {
+                const wlans = stats.wlans as Array<{ name: string; enabled: boolean; ssid?: string }>;
+                const enabledWlans = wlans.filter((w: any) => w.enabled !== false);
+                
+                lines.push(`# HELP mynetwork_wifi_networks_total Total WiFi networks count`);
+                lines.push(`# TYPE mynetwork_wifi_networks_total gauge`);
+                lines.push(`mynetwork_wifi_networks_total{source="unifi"} ${wlans.length}`);
+                
+                lines.push(`# HELP mynetwork_wifi_networks_enabled Enabled WiFi networks count`);
+                lines.push(`# TYPE mynetwork_wifi_networks_enabled gauge`);
+                lines.push(`mynetwork_wifi_networks_enabled{source="unifi"} ${enabledWlans.length}`);
+                
+                // Individual WiFi network metrics
+                enabledWlans.forEach((wlan: any) => {
+                    const ssid = (wlan.ssid || wlan.name || 'unknown').replace(/"/g, '\\"');
+                    const wlanLabels = `{source="unifi",ssid="${ssid}"}`;
+                    lines.push(`mynetwork_wifi_network_enabled${wlanLabels} 1`);
+                });
             }
         }
     } catch (error) {
@@ -298,7 +364,52 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             // Device count
             if (stats.devices && Array.isArray(stats.devices)) {
                 const activeDevices = stats.devices.filter((d: any) => d.active !== false).length;
-                lines.push(`mynetwork,type=plugin_devices,plugin=${pluginTag} total=${stats.devices.length}i,active=${activeDevices}i ${timestamp}`);
+                
+                // Count active clients
+                const activeClients = stats.devices.filter((d: any) => {
+                    const isActive = d.active !== false;
+                    const isClient = (d.type === 'client' || d.type === 'Client') || 
+                                    (d.connectivity_type === 'wifi' || d.access_point?.connectivity_type === 'wifi');
+                    return isActive && isClient;
+                }).length;
+                
+                // Count unique IPs detected
+                const uniqueIps = new Set<string>();
+                stats.devices.forEach((d: any) => {
+                    if (d.ip && typeof d.ip === 'string' && d.ip.trim() !== '') {
+                        uniqueIps.add(d.ip.trim());
+                    }
+                });
+                
+                lines.push(`mynetwork,type=plugin_devices,plugin=${pluginTag} total=${stats.devices.length}i,active=${activeDevices}i,clients_active=${activeClients}i,ips_detected=${uniqueIps.size}i ${timestamp}`);
+            }
+            
+            // WiFi networks with source (Freebox or UniFi)
+            if (pluginId === 'freebox' && stats.system && (stats.system as any).wifiNetworks) {
+                const wifiNetworks = (stats.system as any).wifiNetworks as Array<{ ssid: string; band: string; enabled: boolean }>;
+                const enabledWifiNetworks = wifiNetworks.filter((w: any) => w.enabled !== false);
+                
+                lines.push(`mynetwork,type=wifi_networks,source=freebox total=${wifiNetworks.length}i,enabled=${enabledWifiNetworks.length}i ${timestamp}`);
+                
+                // Individual WiFi network metrics
+                enabledWifiNetworks.forEach((wifi: any) => {
+                    const ssid = (wifi.ssid || '').replace(/[ ,=]/g, '_');
+                    const band = (wifi.band || 'unknown').replace(/[ ,=]/g, '_');
+                    lines.push(`mynetwork,type=wifi_network,source=freebox,ssid=${ssid},band=${band} enabled=1 ${timestamp}`);
+                });
+            }
+            
+            if (pluginId === 'unifi' && stats.wlans && Array.isArray(stats.wlans)) {
+                const wlans = stats.wlans as Array<{ name: string; enabled: boolean; ssid?: string }>;
+                const enabledWlans = wlans.filter((w: any) => w.enabled !== false);
+                
+                lines.push(`mynetwork,type=wifi_networks,source=unifi total=${wlans.length}i,enabled=${enabledWlans.length}i ${timestamp}`);
+                
+                // Individual WiFi network metrics
+                enabledWlans.forEach((wlan: any) => {
+                    const ssid = (wlan.ssid || wlan.name || 'unknown').replace(/[ ,=]/g, '_');
+                    lines.push(`mynetwork,type=wifi_network,source=unifi,ssid=${ssid} enabled=1 ${timestamp}`);
+                });
             }
         }
     } catch (error) {

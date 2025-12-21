@@ -31,6 +31,112 @@ router.get('/prometheus', asyncHandler(async (_req, res) => {
     }
 }));
 
+// GET /api/metrics/prometheus/audit - Audit Prometheus endpoint functionality
+router.get('/prometheus/audit', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const auditResults: {
+            endpoint: string;
+            status: 'success' | 'error';
+            message: string;
+            metricsCount?: number;
+            sampleMetrics?: string[];
+            errors?: string[];
+        }[] = [];
+        
+        // Test 1: Generate Prometheus metrics
+        try {
+            const metrics = await generatePrometheusMetrics();
+            const metricsLines = metrics.split('\n').filter(line => line.trim() !== '' && !line.startsWith('#'));
+            const helpLines = metrics.split('\n').filter(line => line.startsWith('# HELP'));
+            const typeLines = metrics.split('\n').filter(line => line.startsWith('# TYPE'));
+            
+            // Count unique metric names (lines that start with mynetwork_ and don't start with #)
+            const metricNames = new Set<string>();
+            metricsLines.forEach(line => {
+                const match = line.match(/^(mynetwork_[a-z_]+)/);
+                if (match) {
+                    metricNames.add(match[1]);
+                }
+            });
+            
+            // Get sample metrics (first 10 unique metric names)
+            const sampleMetrics = Array.from(metricNames).slice(0, 10);
+            
+            auditResults.push({
+                endpoint: 'generatePrometheusMetrics',
+                status: 'success',
+                message: `Metrics generated successfully: ${metricNames.size} unique metrics, ${metricsLines.length} data points`,
+                metricsCount: metricNames.size,
+                sampleMetrics
+            });
+        } catch (error) {
+            auditResults.push({
+                endpoint: 'generatePrometheusMetrics',
+                status: 'error',
+                message: error instanceof Error ? error.message : 'Unknown error',
+                errors: [error instanceof Error ? error.stack || error.message : String(error)]
+            });
+        }
+        
+        // Test 2: Check if endpoint is accessible (self-test)
+        try {
+            const testUrl = `http://localhost:${process.env.PORT || 3003}/api/metrics/prometheus`;
+            const response = await fetch(testUrl);
+            
+            if (response.ok) {
+                const content = await response.text();
+                const lines = content.split('\n').filter(line => line.trim() !== '');
+                
+                auditResults.push({
+                    endpoint: '/api/metrics/prometheus',
+                    status: 'success',
+                    message: `Endpoint accessible: HTTP ${response.status}, ${lines.length} lines returned`,
+                    metricsCount: lines.filter(line => !line.startsWith('#') && line.trim() !== '').length
+                });
+            } else {
+                auditResults.push({
+                    endpoint: '/api/metrics/prometheus',
+                    status: 'error',
+                    message: `Endpoint returned HTTP ${response.status}`,
+                    errors: [`HTTP ${response.status}: ${response.statusText}`]
+                });
+            }
+        } catch (error) {
+            auditResults.push({
+                endpoint: '/api/metrics/prometheus',
+                status: 'error',
+                message: `Failed to access endpoint: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                errors: [error instanceof Error ? error.stack || error.message : String(error)]
+            });
+        }
+        
+        // Log audit action
+        await loggingService.logUserAction(
+            req.user!.userId,
+            req.user!.username,
+            'metrics.audit',
+            'metrics',
+            { details: { results: auditResults } }
+        );
+        
+        res.json({
+            success: true,
+            result: {
+                auditDate: new Date().toISOString(),
+                results: auditResults,
+                summary: {
+                    total: auditResults.length,
+                    success: auditResults.filter(r => r.status === 'success').length,
+                    errors: auditResults.filter(r => r.status === 'error').length
+                }
+            }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to audit Prometheus';
+        throw createError(message, 500, 'METRICS_AUDIT_ERROR');
+    }
+}), autoLog('metrics.audit', 'metrics'));
+
 // GET /api/metrics/influxdb - Export metrics in InfluxDB line protocol format
 router.get('/influxdb', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {

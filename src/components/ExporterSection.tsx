@@ -12,7 +12,7 @@ import { api } from '../api/client';
 interface MetricsConfig {
     prometheus: {
         enabled: boolean;
-        port?: number;
+        port?: number; // Port réel du serveur (3003 en dev, 3000 en prod)
         path?: string;
     };
     influxdb: {
@@ -26,8 +26,14 @@ interface MetricsConfig {
 }
 
 export const ExporterSection: React.FC = () => {
+    // Get default port based on environment
+    const getDefaultPort = () => {
+        const isDev = import.meta.env.DEV;
+        return isDev ? 3003 : 3000;
+    };
+    
     const [config, setConfig] = useState<MetricsConfig>({
-        prometheus: { enabled: false, port: 9090, path: '/metrics' },
+        prometheus: { enabled: false, port: getDefaultPort(), path: '/metrics' },
         influxdb: { enabled: false, url: 'http://localhost:8086', database: 'mynetwork', username: '', password: '', retention: '30d' }
     });
     const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +43,8 @@ export const ExporterSection: React.FC = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [isAuditing, setIsAuditing] = useState(false);
+    const [auditResult, setAuditResult] = useState<{ summary: { total: number; success: number; errors: number }; results: any[] } | null>(null);
 
     useEffect(() => {
         // Load config first
@@ -44,14 +52,30 @@ export const ExporterSection: React.FC = () => {
     }, []);
 
     // Update Prometheus URL when config changes
-    // Note: The actual endpoint is on the main server, but the port in config is for Prometheus scrape configuration
     useEffect(() => {
-        // In development, Vite proxies /api to backend on port 3003
-        // In production, backend is on the same port as frontend
-        const isDev = import.meta.env.DEV;
-        const backendPort = isDev ? '3003' : (window.location.port || '3003');
-        setPrometheusUrl(`http://${window.location.hostname}:${backendPort}/api/metrics/prometheus`);
-    }, []);
+        if (!config.prometheus.enabled) {
+            setPrometheusUrl('');
+            return;
+        }
+        
+        const hostname = window.location.hostname;
+        const configuredPort = config.prometheus.port || getDefaultPort();
+        
+        // Check if hostname is an IP address (IPv4 or IPv6)
+        const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(hostname);
+        
+        // If it's an IP address, use the configured port
+        // If it's a domain, don't include port (assumes standard HTTP/HTTPS ports)
+        if (isIpAddress) {
+            const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
+            setPrometheusUrl(url);
+        } else {
+            // For domains, use current origin (port is usually in the URL already)
+            // But if user configured a specific port, use it
+            const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
+            setPrometheusUrl(url);
+        }
+    }, [config.prometheus.port, config.prometheus.enabled]);
 
     const handleExportConfig = async () => {
         setIsExporting(true);
@@ -128,9 +152,14 @@ export const ExporterSection: React.FC = () => {
     const loadConfig = async () => {
         setIsLoading(true);
         try {
-            const response = await api.get('/api/metrics/config');
+            const response = await api.get<MetricsConfig>('/api/metrics/config');
             if (response.success && response.result) {
-                setConfig(response.result);
+                const loadedConfig = response.result;
+                // If port is 9090 (old default) or undefined, replace with current default
+                if (loadedConfig.prometheus && (!loadedConfig.prometheus.port || loadedConfig.prometheus.port === 9090)) {
+                    loadedConfig.prometheus.port = getDefaultPort();
+                }
+                setConfig(loadedConfig);
             }
         } catch (error) {
             console.error('Failed to load metrics config:', error);
@@ -159,6 +188,55 @@ export const ExporterSection: React.FC = () => {
 
     const testPrometheus = () => {
         window.open(prometheusUrl, '_blank');
+    };
+
+    const auditPrometheus = async () => {
+        setIsAuditing(true);
+        setAuditResult(null);
+        setMessage(null);
+        
+        try {
+            const response = await api.get<{
+                auditDate: string;
+                results: Array<{
+                    endpoint: string;
+                    status: 'success' | 'error';
+                    message: string;
+                    metricsCount?: number;
+                    sampleMetrics?: string[];
+                    errors?: string[];
+                }>;
+                summary: {
+                    total: number;
+                    success: number;
+                    errors: number;
+                };
+            }>('/api/metrics/prometheus/audit');
+            
+            if (response.success && response.result) {
+                setAuditResult(response.result);
+                if (response.result.summary.errors === 0) {
+                    setMessage({ 
+                        type: 'success', 
+                        text: `Audit réussi : ${response.result.summary.success}/${response.result.summary.total} tests passés` 
+                    });
+                } else {
+                    setMessage({ 
+                        type: 'error', 
+                        text: `Audit partiel : ${response.result.summary.errors} erreur(s) détectée(s)` 
+                    });
+                }
+            } else {
+                throw new Error(response.error?.message || 'Échec de l\'audit');
+            }
+        } catch (error) {
+            setMessage({ 
+                type: 'error', 
+                text: error instanceof Error ? error.message : 'Erreur lors de l\'audit Prometheus' 
+            });
+        } finally {
+            setIsAuditing(false);
+        }
     };
 
     const testInfluxDB = async () => {
@@ -221,25 +299,28 @@ export const ExporterSection: React.FC = () => {
                 {config.prometheus.enabled && (
                     <>
                         <SettingRow
-                            label="Port Prometheus"
-                            description="Port à configurer dans Prometheus pour scraper les métriques (utilisé dans la configuration Prometheus)"
+                            label="Port du serveur"
+                            description="Port a changer si vous le souhaitez. Utilisé pour l'URL des métriques Prometheus."
                         >
                             <div className="flex items-center gap-2">
                                 <input
                                     type="number"
                                     min="1024"
                                     max="65535"
-                                    value={config.prometheus.port || 9090}
+                                    value={config.prometheus.port || getDefaultPort()}
                                     onChange={(e) => {
-                                        const port = parseInt(e.target.value) || 9090;
+                                        const port = parseInt(e.target.value) || getDefaultPort();
                                         setConfig({
                                             ...config,
                                             prometheus: { ...config.prometheus, port }
                                         });
                                     }}
-                                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
+                                    className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                                 <span className="text-sm text-gray-400">port</span>
+                                <span className="text-xs text-gray-500">
+                                    (défaut: {getDefaultPort()})
+                                </span>
                             </div>
                         </SettingRow>
 
@@ -265,22 +346,84 @@ export const ExporterSection: React.FC = () => {
                             label="URL de l'endpoint"
                             description="URL complète pour récupérer les métriques Prometheus"
                         >
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={prometheusUrl}
-                                    readOnly
-                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm opacity-70 cursor-not-allowed"
-                                />
-                                <button
-                                    onClick={testPrometheus}
-                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm transition-colors flex items-center gap-2"
-                                >
-                                    <ExternalLink size={14} />
-                                    Tester
-                                </button>
+                            <div className="w-full">
+                                <div className="flex items-center gap-2 w-full">
+                                    <input
+                                        type="text"
+                                        value={prometheusUrl}
+                                        readOnly
+                                        className="flex-1 px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-base opacity-90 cursor-not-allowed font-mono"
+                                        style={{ width: '100%', minWidth: '600px' }}
+                                    />
+                                    <button
+                                        onClick={testPrometheus}
+                                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm transition-colors flex items-center gap-2 flex-shrink-0 whitespace-nowrap"
+                                    >
+                                        <ExternalLink size={16} />
+                                        Tester
+                                    </button>
+                                    <button
+                                        onClick={auditPrometheus}
+                                        disabled={isAuditing}
+                                        className="px-4 py-3 bg-orange-600 hover:bg-orange-700 rounded-lg text-white text-sm transition-colors flex items-center gap-2 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                        {isAuditing ? <Loader2 size={16} className="animate-spin" /> : <AlertCircle size={16} />}
+                                        Audit
+                                    </button>
+                                </div>
                             </div>
                         </SettingRow>
+                        
+                        {auditResult && (
+                            <div className="mt-4 p-4 bg-gray-900/50 border border-gray-700 rounded-lg">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-sm font-semibold text-gray-300">Résultats de l'audit</h4>
+                                    <span className={`text-xs px-2 py-1 rounded ${
+                                        auditResult.summary.errors === 0 
+                                            ? 'bg-green-900/40 text-green-400' 
+                                            : 'bg-orange-900/40 text-orange-400'
+                                    }`}>
+                                        {auditResult.summary.success}/{auditResult.summary.total} réussis
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    {auditResult.results.map((result, index) => (
+                                        <div key={index} className={`p-2 rounded text-xs ${
+                                            result.status === 'success' 
+                                                ? 'bg-green-900/20 border border-green-700/50' 
+                                                : 'bg-red-900/20 border border-red-700/50'
+                                        }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="font-medium text-gray-300">{result.endpoint}</span>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                                    result.status === 'success' 
+                                                        ? 'bg-green-700/50 text-green-300' 
+                                                        : 'bg-red-700/50 text-red-300'
+                                                }`}>
+                                                    {result.status === 'success' ? 'OK' : 'ERREUR'}
+                                                </span>
+                                            </div>
+                                            <p className="text-gray-400">{result.message}</p>
+                                            {result.metricsCount !== undefined && (
+                                                <p className="text-gray-500 mt-1">Métriques: {result.metricsCount}</p>
+                                            )}
+                                            {result.sampleMetrics && result.sampleMetrics.length > 0 && (
+                                                <div className="mt-1">
+                                                    <p className="text-gray-500 text-[10px]">Exemples: {result.sampleMetrics.slice(0, 5).join(', ')}</p>
+                                                </div>
+                                            )}
+                                            {result.errors && result.errors.length > 0 && (
+                                                <div className="mt-1 text-red-400 text-[10px]">
+                                                    {result.errors.map((err: string, i: number) => (
+                                                        <div key={i}>{err}</div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/50 rounded-lg">
                             <p className="text-xs text-blue-300 mb-2">
@@ -291,12 +434,12 @@ export const ExporterSection: React.FC = () => {
   - job_name: 'mynetwork'
     scrape_interval: 30s
     static_configs:
-      - targets: ['${window.location.hostname}:${config.prometheus.port || 9090}']
+      - targets: ['${window.location.hostname}:${config.prometheus.port || getDefaultPort()}']
     metrics_path: '/api/metrics/prometheus'`}
                             </pre>
                             <p className="text-xs text-blue-400 mt-2">
-                                <strong>Note :</strong> Le port configuré ({config.prometheus.port || 9090}) est utilisé pour la configuration Prometheus. 
-                                L'endpoint réel reste sur le serveur principal à <code className="text-blue-300">/api/metrics/prometheus</code>.
+                                <strong>Note :</strong> Le port configuré ({config.prometheus.port || getDefaultPort()}) correspond au port réel du serveur backend. 
+                                L'endpoint est accessible à <code className="text-blue-300">/api/metrics/prometheus</code>.
                             </p>
                         </div>
                     </>

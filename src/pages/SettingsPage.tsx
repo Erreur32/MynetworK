@@ -700,7 +700,7 @@ const GeneralNetworkSection: React.FC = () => {
         <p className="font-medium text-gray-400 mb-1">💡 Note :</p>
         <ul className="list-disc list-inside space-y-1 ml-2">
           <li>Format attendu : <code className="text-blue-400">https://votre-domaine.com</code> ou <code className="text-blue-400">http://votre-domaine.com</code></li>
- <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
+          <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
         </ul>
       </div>
     </div>

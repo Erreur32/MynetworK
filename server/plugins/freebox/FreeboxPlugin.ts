@@ -390,8 +390,9 @@ export class FreeboxPlugin extends BasePlugin {
                 console.log('[FreeboxPlugin] WiFi BSS list:', bssList.length, 'items');
                 for (const bss of bssList) {
                     // Check if BSS is enabled - check multiple possible locations
+                    // Default to enabled if not explicitly disabled (more permissive)
                     const enabled = bss.enabled !== undefined ? bss.enabled : (bss.config?.enabled !== undefined ? bss.config.enabled : true);
-                    const isEnabled = enabled === true || enabled === 1 || (enabled !== false && enabled !== 0);
+                    const isEnabled = enabled !== false && enabled !== 0; // More permissive: only exclude if explicitly false/0
                     
                     // Get SSID from multiple possible locations
                     // Priority: ssid > name > id (but skip if id looks like a MAC address)
@@ -408,8 +409,9 @@ export class FreeboxPlugin extends BasePlugin {
                         }
                     }
                     
-                    // Only add if we have a valid SSID (not a MAC address) and it's enabled
-                    if (isEnabled && ssid && ssid.trim() !== '') {
+                    // Only add if we have a valid SSID (not a MAC address)
+                    // Accept even if enabled status is unclear (more permissive)
+                    if (ssid && ssid.trim() !== '') {
                         // Determine frequency band from channel or type
                         let band = '';
                         if (bss.channel) {

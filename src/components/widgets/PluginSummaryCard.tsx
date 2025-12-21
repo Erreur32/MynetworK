@@ -263,6 +263,25 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
             (sys.player_version as string | undefined);
         freeboxUpdateAvailable =
             (sys.updateAvailable as boolean | undefined) ?? (sys.update_available as boolean | undefined);
+        
+        // Get WiFi networks from system stats
+        const wifiNetworks = sys.wifiNetworks || [];
+        if (Array.isArray(wifiNetworks) && wifiNetworks.length > 0) {
+            // Filter: only enabled networks with valid SSID (not MAC addresses)
+            freeboxWifiNetworks = wifiNetworks.filter((wlan: { enabled: boolean; ssid: string; band?: string }) => {
+                if (wlan.enabled === false) return false;
+                if (!wlan.ssid || wlan.ssid.trim() === '') return false;
+                // Skip if SSID looks like a MAC address
+                const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
+                return !macPattern.test(wlan.ssid);
+            });
+            // Debug: log WiFi networks in dev mode
+            if (import.meta.env.DEV && freeboxWifiNetworks.length > 0) {
+                console.log('[PluginSummaryCard] Freebox WiFi networks found:', freeboxWifiNetworks);
+            }
+        } else if (import.meta.env.DEV) {
+            console.log('[PluginSummaryCard] No WiFi networks in stats.system.wifiNetworks:', { wifiNetworks, hasSystem: !!sys });
+        }
     }
 
     // Current Freebox speed values (used for the "État de la Freebox" graph)
@@ -588,7 +607,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         )}
 
                         {/* Freebox controller / firmware / WAN IP / DHCP & Port forwarding summary */}
-                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding))) && (
+                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding || freeboxWifiNetworks.length > 0))) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
                                 {/* Freebox, Firmware and LAN Network - Labels on first line, data on second line */}
                                 <div className="space-y-1">
@@ -703,11 +722,15 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 </div>
                                 {/* DHCP and NAT summary - two columns layout */}
                                 {/* Only show DHCP and NAT data if plugin is active (authenticated) */}
-                                {(isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding)) && (
+                                {/* Also show if WiFi networks are available even without DHCP */}
+                                {(isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding || freeboxWifiNetworks.length > 0)) && (
                                     <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-800 mt-1 text-[11px]">
                                         {/* DHCP column */}
-                                        {isActive && stats.system && (stats.system as any).dhcp && (
+                                        {isActive && stats.system && ((stats.system as any).dhcp || freeboxWifiNetworks.length > 0) && (
                                             <div className="flex flex-col gap-1">
+                                                {/* DHCP Status - only show if DHCP data exists */}
+                                                {(stats.system as any).dhcp && (
+                                                    <>
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-gray-400">DHCP</span>
                                                     <span
@@ -736,6 +759,27 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                             </span>
                                                         </div>
                                                     </>
+                                                        )}
+                                                    </>
+                                                )}
+                                                {/* WiFi Networks in DHCP section */}
+                                                {freeboxWifiNetworks.length > 0 && (
+                                                    <div className={`pt-2 mt-2 ${(stats.system as any).dhcp ? 'border-t border-gray-800' : ''}`}>
+                                                        <div className="flex items-center justify-between mb-1.5">
+                                                            <span className="text-gray-400">Wi‑Fi</span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {freeboxWifiNetworks.map((wlan: { ssid: string; band: string }, index: number) => (
+                                                                <span
+                                                                    key={`wifi-${wlan.ssid}-${index}`}
+                                                                    className="px-1.5 py-0.5 rounded-full bg-cyan-900/40 border border-cyan-700 text-cyan-300 text-[10px] font-medium"
+                                                                    title={`${wlan.ssid} (${wlan.band})`}
+                                                                >
+                                                                    {wlan.ssid}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -869,35 +913,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         color={isFreeboxLoggedIn ? 'text-emerald-400' : 'text-red-400'}
                                     />
 
-                                    {/* WiFi Networks (SSIDs) with frequency bands */}
-                                    {(() => {
-                                        // Get WiFi networks from system stats
-                                        const wifiNetworks = (stats?.system as any)?.wifiNetworks || [];
-                                        if (wifiNetworks.length === 0) {
-                                            return null;
-                                        }
-                                        // Filter: only enabled networks with valid SSID (not MAC addresses)
-                                        const validNetworks = wifiNetworks.filter((wlan: { enabled: boolean; ssid: string }) => {
-                                            if (wlan.enabled === false) return false;
-                                            if (!wlan.ssid || wlan.ssid.trim() === '') return false;
-                                            // Skip if SSID looks like a MAC address
-                                            const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
-                                            return !macPattern.test(wlan.ssid);
-                                        });
-                                        
-                                        if (validNetworks.length === 0) {
-                                            return null;
-                                        }
-                                        
-                                        return validNetworks.map((wlan: { ssid: string; band: string }, index: number) => (
-                                            <StatusBadge
-                                                key={`wifi-${wlan.ssid}-${index}`}
-                                                icon={<Wifi size={14} />}
-                                                value={`${wlan.ssid} (${wlan.band})`}
-                                                color="text-cyan-400"
-                                            />
-                                        ));
-                                    })()}
                                 </div>
                             </div>
                         )}
