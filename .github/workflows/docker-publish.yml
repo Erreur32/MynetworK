@@ -56,7 +56,6 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ steps.package-version.outputs.version }},enable={{is_default_branch}}
 
       - name: Build and push Docker image

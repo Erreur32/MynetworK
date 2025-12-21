@@ -2,6 +2,17 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.8] - 2025-12-21
+
+### 🐛 Corrigé
+
+**Docker / CI/CD**
+- ✅ Correction du workflow GitHub Actions pour supprimer le tag Docker `0.1` indésirable lors du build/push
+- ✅ Suppression du pattern `{{major}}.{{minor}}` dans le workflow docker-publish.yml qui générait des tags incomplets
+
+**Scripts**
+- ✅ Suppression du template vide dans le script `update-version.sh` (message de commit minimal si CHANGELOG vide)
+
 ## [0.1.7] - 2025-12-21
 
 ### ✨ Ajouté
