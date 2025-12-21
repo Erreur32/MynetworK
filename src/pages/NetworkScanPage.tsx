@@ -51,9 +51,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [stats, setStats] = useState<ScanStats | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [scanRange, setScanRange] = useState<string>('');
-    const [autoDetect, setAutoDetect] = useState(true);
+    const [scanRange, setScanRange] = useState<string>('192.168.1.0/24');
+    const [autoDetect, setAutoDetect] = useState(false);
     const [scanType, setScanType] = useState<'full' | 'quick'>('full');
+    const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
     const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
     
     // Filters
@@ -78,6 +79,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         fetchHistory();
         fetchConfig();
     }, [fetchPlugins]);
+
+    // Cleanup polling interval on unmount
+    useEffect(() => {
+        return () => {
+            if (scanPollingInterval) {
+                clearInterval(scanPollingInterval);
+            }
+        };
+    }, [scanPollingInterval]);
 
     // Poll stats every 30 seconds if active
     usePolling(() => {
@@ -134,6 +144,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
     const handleScan = async () => {
         setIsScanning(true);
+        
+        // Start polling to refresh the list during scan
+        const interval = setInterval(() => {
+            fetchHistory();
+            fetchStats();
+        }, 2000); // Refresh every 2 seconds during scan
+        setScanPollingInterval(interval);
+        
         try {
             const response = await api.post<{
                 range: string;
@@ -149,7 +167,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             });
 
             if (response.success) {
-                // Refresh stats and history
+                // Final refresh after scan completes
                 await fetchStats();
                 await fetchHistory();
             } else {
@@ -160,15 +178,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             alert('Erreur lors du scan: ' + (error.message || 'Erreur inconnue'));
         } finally {
             setIsScanning(false);
+            // Stop polling when scan is done
+            clearInterval(interval);
+            setScanPollingInterval(null);
         }
     };
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
+        
+        // Start polling to refresh the list during refresh
+        const interval = setInterval(() => {
+            fetchHistory();
+            fetchStats();
+        }, 1500); // Refresh every 1.5 seconds during refresh
+        
         try {
             const response = await api.post('/api/network-scan/refresh', { scanType: 'quick' });
 
             if (response.success) {
+                // Final refresh after refresh completes
                 await fetchStats();
                 await fetchHistory();
             } else {
@@ -179,6 +208,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             alert('Erreur lors du rafraîchissement: ' + (error.message || 'Erreur inconnue'));
         } finally {
             setIsRefreshing(false);
+            clearInterval(interval);
         }
     };
 
@@ -379,7 +409,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 >
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-4">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input
                                         type="checkbox"
@@ -389,6 +419,27 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     />
                                     <span className="text-sm">Auto-détection</span>
                                 </label>
+                                {!autoDetect && (
+                                    <div className="flex-1">
+                                        <label className="block text-sm text-gray-400 mb-2">Plage IP</label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={scanRange}
+                                                onChange={(e) => setScanRange(e.target.value)}
+                                                placeholder="192.168.1.0/24"
+                                                className="flex-1 px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
+                                            />
+                                            <button
+                                                onClick={() => setShowHelpModal(true)}
+                                                className="p-2 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
+                                                title="Aide réseau"
+                                            >
+                                                <HelpCircle size={18} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div>
@@ -403,19 +454,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 </select>
                             </div>
                         </div>
-
-                        {!autoDetect && (
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-2">Plage IP (CIDR ou range)</label>
-                                <input
-                                    type="text"
-                                    value={scanRange}
-                                    onChange={(e) => setScanRange(e.target.value)}
-                                    placeholder="192.168.1.0/24 ou 192.168.1.1-254"
-                                    className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                />
-                            </div>
-                        )}
                     </div>
                 </Card>
 
@@ -499,6 +537,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs font-semibold">
                             {filteredScans.length}
                         </span>
+                        {(isScanning || isRefreshing) && (
+                            <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
+                                <RefreshCw size={12} className="animate-spin" />
+                                <span>{isScanning ? 'Scan en cours...' : 'Rafraîchissement...'}</span>
+                            </div>
+                        )}
                     </div>
                 }
                 actions={
@@ -562,12 +606,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             {filteredScans.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="text-center py-8 text-gray-500">
-                                        Aucun résultat
+                                        {isScanning || isRefreshing ? (
+                                            <div className="flex items-center justify-center gap-2">
+                                                <RefreshCw size={16} className="animate-spin text-blue-400" />
+                                                <span>Scan en cours...</span>
+                                            </div>
+                                        ) : (
+                                            'Aucun résultat'
+                                        )}
                                     </td>
                                 </tr>
                             ) : (
                                 filteredScans.map((scan) => (
-                                    <tr key={scan.id} className="border-b border-gray-800 hover:bg-[#1a1a1a]">
+                                    <tr 
+                                        key={scan.id} 
+                                        className={`border-b border-gray-800 hover:bg-[#1a1a1a] transition-colors ${
+                                            (isScanning || isRefreshing) && scan.status === 'online' 
+                                                ? 'animate-pulse bg-blue-500/5' 
+                                                : ''
+                                        }`}
+                                    >
                                         <td className="py-3 px-4 text-sm font-mono text-gray-200">{scan.ip}</td>
                                         <td className="py-3 px-4 text-sm font-mono text-gray-400">{scan.mac || '--'}</td>
                                         <td className="py-3 px-4 text-sm text-gray-300">
@@ -753,6 +811,46 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     <li><strong>Vérifications régulières :</strong> Utilisez "Rafraîchir" pour mettre à jour rapidement les statuts</li>
                                     <li><strong>Nouveaux appareils :</strong> Utilisez "Scanner" à nouveau si vous ajoutez de nouveaux équipements</li>
                                 </ol>
+                            </div>
+
+                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 bg-purple-500/20 rounded-lg mt-0.5">
+                                        <Network size={20} className="text-purple-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-lg font-semibold text-purple-400 mb-2">Format de plage réseau</h3>
+                                        <div className="space-y-3 text-sm text-gray-300">
+                                            <div>
+                                                <p className="font-semibold text-purple-300 mb-1">Notation CIDR (recommandé) :</p>
+                                                <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
+                                                    192.168.1.0/24
+                                                </code>
+                                                <p className="text-gray-400 text-xs">
+                                                    Scanne les IPs de 192.168.1.1 à 192.168.1.254 (254 IPs)
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-purple-300 mb-1">Notation par plage :</p>
+                                                <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
+                                                    192.168.1.1-254
+                                                </code>
+                                                <p className="text-gray-400 text-xs">
+                                                    Scanne les IPs de 192.168.1.1 à 192.168.1.254
+                                                </p>
+                                            </div>
+                                            <div className="bg-[#1a1a1a] rounded p-3 mt-3">
+                                                <p className="font-semibold text-yellow-400 mb-2 text-xs">Masques réseau courants :</p>
+                                                <ul className="space-y-1 text-xs text-gray-400">
+                                                    <li><code className="text-emerald-400">/24</code> = 254 IPs (192.168.1.1-254) - Réseau local standard</li>
+                                                    <li><code className="text-emerald-400">/16</code> = 65534 IPs (192.168.0.1-192.168.255.254) - Trop large, non supporté</li>
+                                                    <li><code className="text-emerald-400">/25</code> = 126 IPs (192.168.1.1-192.168.1.126)</li>
+                                                    <li><code className="text-emerald-400">/26</code> = 62 IPs (192.168.1.1-192.168.1.62)</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

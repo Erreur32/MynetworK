@@ -2,9 +2,30 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
-## [0.1.10] - 2025-12-21
+## [0.1.11] - 2025-12-21
 
----
+### ✨ Ajouté
+
+**Plugin Scan Réseau - Interface**
+- 🔄 Rafraîchissement en temps réel de la liste des IPs pendant le scan (polling toutes les 2 secondes)
+- 🎨 Animations dans le tableau : indicateur "Scan en cours..." dans l'en-tête avec icône animée
+- 🎨 Animation pulse sur les lignes des IPs "online" pendant le scan pour indiquer l'activité
+- 📋 Plage réseau par défaut : `192.168.1.0/24` pré-remplie (réseau local standard)
+- 📖 Aide réseau/mask dans le modal : explication des notations CIDR, plages et masques réseau courants
+- 🎨 Amélioration de la mise en page : plage IP sur la même ligne que la case à cocher "Auto-détection"
+- 🔘 Bouton d'aide à côté du champ de plage IP pour accès rapide
+
+**Docker / Scan Réseau**
+- 📝 Documentation améliorée des options Docker pour le scan réseau (network_mode: host, privileged)
+- 📝 Commentaires explicatifs sur les capacités réseau NET_RAW et NET_ADMIN
+- 🔧 Correction de la configuration Docker : suppression de l'option problématique /proc/net mount
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau**
+- 🔄 Polling automatique pendant le scan et le rafraîchissement pour voir les résultats en temps réel
+- 🎯 Auto-détection désactivée par défaut (plage manuelle préférée)
+- 🎨 Interface utilisateur améliorée avec animations et indicateurs visuels
 
 ## [0.1.10] - 2025-12-21
 

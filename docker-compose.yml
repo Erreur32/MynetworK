@@ -46,16 +46,38 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
     # Network capabilities required for network scanning (ping, arp)
-    # NET_RAW: Required to send ICMP packets (ping)
-    # NET_ADMIN: Required for some network operations
+    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
+    # NET_ADMIN: Required for some network operations and ARP table access
     cap_add:
       - NET_RAW
       - NET_ADMIN
 
-    # Alternative: If network scanning still doesn't work, uncomment the line below
-    # This makes the container use the host's network directly (Linux only)
+    # Note: /proc is already mounted at /host/proc (read-only)
+    # The ARP table can be accessed via /host/proc/net/arp if needed
+    # The network scan service should work with NET_RAW and NET_ADMIN capabilities
+
+    # Alternative Option 1: Use host network mode (Linux only)
+    # This makes the container use the host's network directly
     # WARNING: This changes port mapping - remove the "ports" section above if using this
+    # The app will listen directly on port 3000 of the host (or PORT env var)
     # network_mode: host
+
+    # Alternative Option 2: Run container in privileged mode (less secure, use with caution)
+    # This gives the container almost all capabilities of the host
+    # Only use if NET_RAW and NET_ADMIN are not sufficient
+    # privileged: true
+
+    # Resource limits (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.1'
+    #       memory: 256M
+
+
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
