@@ -1360,20 +1360,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                    model.includes('switch');
                                         });
 
-                                        // Debug: log all devices in dev mode
-                                        if (import.meta.env.DEV) {
-                                            console.log('[UniFiPage] All devices:', {
-                                                total: devicesArr.length,
-                                                deviceTypes: Array.from(new Set(devicesArr.map((d: any) => d.type || 'unknown'))),
-                                                switchesFound: switches.length,
-                                                switches: switches.map((s: any) => ({
-                                                    name: s.name,
-                                                    model: s.model,
-                                                    type: s.type,
-                                                    ip: s.ip
-                                                }))
-                                            });
-                                        }
 
                                         if (switches.length === 0) {
                                             return (
@@ -1419,22 +1405,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
 
                                             const ports = Array.isArray(rawPorts) ? rawPorts : [];
 
-                                            // Debug: log switch device info in dev mode
-                                            if (import.meta.env.DEV) {
-                                                console.log('[UniFiPage] Switch device:', {
-                                                    name: switchName,
-                                                    ip: switchIp,
-                                                    type: switchDevice.type,
-                                                    hasEthPortTable: !!switchDevice.eth_port_table,
-                                                    hasPortTable: !!switchDevice.port_table,
-                                                    hasPorts: !!switchDevice.ports,
-                                                    hasPortOverrides: !!switchDevice.port_overrides,
-                                                    portsLength: ports.length,
-                                                    numPort: switchDevice.num_port,
-                                                    rawPortsType: typeof rawPorts,
-                                                    rawPortsIsArray: Array.isArray(rawPorts)
-                                                });
-                                            }
 
                                             // If no ports array but num_port is defined, create placeholder entries
                                             if (ports.length === 0 && typeof switchDevice.num_port === 'number' && switchDevice.num_port > 0) {
@@ -1539,25 +1509,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             return a.port - b.port;
                                         });
 
-                                        // Debug: log port rows in dev mode
-                                        if (import.meta.env.DEV) {
-                                            console.log('[UniFiPage] Switch ports debug:', {
-                                                switchesCount: switches.length,
-                                                portRowsCount: portRows.length,
-                                                switches: switches.map((s: any) => ({
-                                                    name: s.name || s.model,
-                                                    ip: s.ip,
-                                                    type: s.type,
-                                                    hasEthPortTable: !!s.eth_port_table,
-                                                    hasPortTable: !!s.port_table,
-                                                    hasPorts: !!s.ports,
-                                                    numPort: s.num_port,
-                                                    ethPortTableLength: Array.isArray(s.eth_port_table) ? s.eth_port_table.length : 0,
-                                                    portTableLength: Array.isArray(s.port_table) ? s.port_table.length : 0
-                                                })),
-                                                firstPortRows: portRows.slice(0, 3)
-                                            });
-                                        }
 
                                         if (portRows.length === 0) {
                                             return (

@@ -117,42 +117,29 @@ feat: Version $NEW_VERSION - Mise à jour
 $FORMATTED_CONTENT
 EOF
 else
-    # Template par défaut si le CHANGELOG est vide
+    # Message minimal si le CHANGELOG est vide
     cat > "$COMMIT_MESSAGE_FILE" << EOF
 feat: Version $NEW_VERSION - Mise à jour
-
-✨ Ajouté
-- (À compléter)
-
-🔧 Modifié
-- (À compléter)
-
-🐛 Corrigé
-- (À compléter)
 EOF
 fi
 
 # Corriger les permissions des fichiers modifiés
 echo -e "${BLUE}  🔐 Correction des permissions...${NC}"
 if command -v chown &> /dev/null; then
-    # Chemin spécifique demandé par l'utilisateur
-    PROJECT_PATH="/home/tools/Project/MyNetwork"
-    if [ -d "$PROJECT_PATH" ]; then
-        if chown debian32:debian32 "$PROJECT_PATH" -R 2>/dev/null; then
-            echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_PATH${NC}"
+    # Détection automatique du chemin du projet à partir de l'emplacement du script
+    PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+    if [ -d "$PROJECT_ROOT" ]; then
+        if chown debian32:debian32 "$PROJECT_ROOT" -Rf 2>/dev/null; then
+            echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_ROOT${NC}"
+            echo -e "${GREEN}${BOLD}  ✓ Commande chown exécutée avec succès${NC}"
+            echo -e "${GREEN}     Propriétaire: ${CYAN}debian32:debian32${NC}"
+            echo -e "${GREEN}     Chemin: ${CYAN}$PROJECT_ROOT${NC}"
         else
             echo -e "${YELLOW}  ⚠️  Impossible d'exécuter chown (peut nécessiter les droits sudo)${NC}"
-            echo -e "${YELLOW}     Exécutez manuellement: ${CYAN}sudo chown debian32:debian32 $PROJECT_PATH -R${NC}"
+            echo -e "${YELLOW}     Exécutez manuellement: ${CYAN}sudo chown debian32:debian32 $PROJECT_ROOT -Rf${NC}"
         fi
     else
-        # Fallback: utiliser le répertoire racine du projet détecté automatiquement
-        PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-        if chown debian32:debian32 "$PROJECT_ROOT" -R 2>/dev/null; then
-            echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_ROOT${NC}"
-        else
-            echo -e "${YELLOW}  ⚠️  Impossible d'exécuter chown (peut nécessiter les droits sudo)${NC}"
-            echo -e "${YELLOW}     Exécutez manuellement: ${CYAN}sudo chown debian32:debian32 $PROJECT_ROOT -R${NC}"
-        fi
+        echo -e "${RED}  ❌ Répertoire du projet introuvable: ${CYAN}$PROJECT_ROOT${NC}"
     fi
 else
     echo -e "${YELLOW}  ⚠️  Commande chown non disponible${NC}"
@@ -169,9 +156,7 @@ echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"
 echo ""
 echo -e "${YELLOW}📝 Message de commit créé dans: ${MAGENTA}$COMMIT_MESSAGE_FILE${NC}"
 echo ""
-echo -e "${CYAN}${BOLD}⚠️  N'oubliez pas de:${NC}"
-echo -e "  ${YELLOW}1.${NC} Vérifier le contenu de ${BLUE}CHANGELOG.md${NC} et compléter les sections"
-echo ""
+ 
 echo -e "${GREEN}${BOLD}🚀 Commandes Git à exécuter:${NC}"
 echo ""
 echo -e "${CYAN}${BOLD}Option 1 - Avec fichier de message:${NC}"
@@ -181,6 +166,4 @@ echo -e "${CYAN}${BOLD}Option 2 - Avec message inline:${NC}"
 COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Mise à jour")
 echo -e "${CYAN}git add -A && git commit -m \"$COMMIT_MESSAGE_INLINE\" && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
 echo ""
-echo -e "${YELLOW}💡 Note:${NC} Le message de commit complet est dans ${MAGENTA}$COMMIT_MESSAGE_FILE${NC}"
-echo -e "${YELLOW}   Vous pouvez le modifier avant d'exécuter les commandes ci-dessus.${NC}"
-
+ 

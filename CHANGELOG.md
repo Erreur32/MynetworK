@@ -4,10 +4,6 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 ## [0.1.7] - 2025-12-21
 
----
-
-## [0.1.7] - 2025-12-21
-
 ### ✨ Ajouté
 
 **Plugin Scan Réseau**
