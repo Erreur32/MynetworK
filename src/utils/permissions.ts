@@ -30,6 +30,18 @@ export const getFreeboxSettingsUrl = (freeboxUrl: string): string => {
   }
 };
 
+// Build the Freebox backup/export configuration URL
+export const getFreeboxBackupUrl = (freeboxUrl: string): string => {
+  // URL to open the Import/Export configuration modal in Freebox OS
+  try {
+    const url = new URL(freeboxUrl);
+    return `${url.protocol}//${url.host}/#Fbx.os.app.settings.app`;
+  } catch {
+    // Fallback to default
+    return 'http://mafreebox.freebox.fr/#Fbx.os.app.settings.app';
+  }
+};
+
 export const getPermissionErrorMessage = (permission: string, freeboxUrl?: string): string => {
   const label = PERMISSION_LABELS[permission] || permission;
   const settingsUrl = freeboxUrl ? getFreeboxSettingsUrl(freeboxUrl) : null;

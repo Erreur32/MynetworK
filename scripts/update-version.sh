@@ -127,7 +127,7 @@ fi
 echo -e "${BLUE}  🔐 Correction des permissions...${NC}"
 if command -v chown &> /dev/null; then
     # Détection automatique du chemin du projet à partir de l'emplacement du script
-    PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+        PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
     if [ -d "$PROJECT_ROOT" ]; then
         if chown debian32:debian32 "$PROJECT_ROOT" -Rf 2>/dev/null; then
             echo -e "${GREEN}  ✅ Permissions corrigées pour ${CYAN}$PROJECT_ROOT${NC}"

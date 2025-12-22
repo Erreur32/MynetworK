@@ -4,7 +4,8 @@ import { Activity, ArrowDown, ArrowUp } from 'lucide-react';
 import { Card } from './Card';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useAuthStore } from '../../stores/authStore';
-import { formatSpeed } from '../../utils/constants';
+import { formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
+import { usePolling } from '../../hooks/usePolling';
 
 const COLORS = {
     blue: '#3b82f6',
@@ -32,6 +33,19 @@ export const BandwidthHistoryWidget: React.FC = () => {
             });
         }
     }, [fetchExtendedHistory, selectedRange]);
+
+    // Keep 1h / 6h / 24h / 7j ranges updated over time (RRD is a rolling window)
+    // This ensures that even en mode historique the graph continues to move, like live mode.
+    usePolling(() => {
+        if (selectedRange > 0) {
+            fetchExtendedHistory(selectedRange).catch(() => {
+                // If RRD not available, we will fallback to live history
+            });
+        }
+    }, {
+        enabled: selectedRange > 0,
+        interval: POLLING_INTERVALS.system
+    });
 
     const chartData =
         selectedRange === 0

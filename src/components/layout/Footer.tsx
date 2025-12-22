@@ -25,12 +25,13 @@ interface FooterProps {
   onPageChange?: (page: PageType) => void;
   onReboot?: () => void;
   onLogout?: () => void;
+  onFreeboxOptions?: () => void;
   userRole?: 'admin' | 'user' | 'viewer';
 }
 
 // Internal pages (handled within the dashboard)
 const allTabs: { id: PageType; label: string; icon: React.ElementType; adminOnly?: boolean }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: Home },
+  { id: 'dashboard', label: 'MynetworK', icon: Home },
   { id: 'freebox', label: 'Freebox', icon: Server },
   { id: 'unifi', label: 'UniFi', icon: BarChart2 },
   { id: 'tv', label: 'Télévision', icon: Tv },
@@ -49,6 +50,7 @@ export const Footer: React.FC<FooterProps> = ({
   onPageChange,
   onReboot,
   onLogout,
+  onFreeboxOptions,
   userRole
 }) => {
   const { capabilities } = useCapabilitiesStore();
@@ -89,11 +91,11 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Sur la page Freebox: montrer les onglets liés Freebox (tv, phone, files, vms, analytics)
-      if (currentPage === 'freebox') {
-        // Show Freebox-related tabs (tv, phone, files, vms, analytics) and dashboard
+      // Sur les pages Freebox (freebox, tv, phone, files, vms, analytics):
+      // montrer les onglets liés Freebox + Dashboard, pour pouvoir revenir facilement au dashboard Freebox
+      if (['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage)) {
         if (['tv', 'phone', 'files', 'vms', 'analytics', 'freebox', 'dashboard'].includes(tab.id)) {
-          // Continue with other filters below
+          // Continue avec les autres filtres (capabilities, rôle, etc.)
         } else if (tab.id !== 'settings' && tab.id !== 'plugins' && tab.id !== 'users' && tab.id !== 'logs') {
           return false;
         }
@@ -136,13 +138,12 @@ export const Footer: React.FC<FooterProps> = ({
       }
       
       // Freebox tab: visible only if plugin is enabled and connected AND we're on the Freebox page
-      // Never show as tab on dashboard or UniFi page (will show as button in actions instead)
+      // Ne jamais l'afficher sur le dashboard ou la page UniFi (bouton plugin à droite à la place)
       if (tab.id === 'freebox') {
         const freeboxPlugin = plugins.find(p => p.id === 'freebox');
         const isFreeboxActive = freeboxPlugin?.enabled && freeboxPlugin?.connectionStatus;
-        // Only show as tab when on Freebox page itself
-        // On dashboard and UniFi page, it will be shown as button in actions
-        if (currentPage !== 'freebox') {
+        // Afficher comme onglet sur toutes les pages Freebox (freebox, tv, phone, files, vms, analytics)
+        if (!['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage)) {
           return false;
         }
         return isFreeboxActive;
@@ -160,7 +161,7 @@ export const Footer: React.FC<FooterProps> = ({
   return (
     <footer className="fixed bottom-0 left-0 right-0 bg-theme-footer backdrop-blur-md border-t border-theme p-3 z-50" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
       <div className="flex items-center justify-between max-w-[1920px] mx-auto px-2">
-        {/* Navigation tabs */}
+        {/* Navigation tabs + Freebox actions (sur la gauche) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
@@ -215,9 +216,36 @@ export const Footer: React.FC<FooterProps> = ({
               <span className="text-sm font-medium whitespace-nowrap">Administration</span>
             </button>
           )}
+
+          {/* Freebox actions - Only show on Freebox page, à droite des onglets (après Analytique) */}
+          {currentPage === 'freebox' && (
+            <>
+              <button
+                onClick={() => onFreeboxOptions?.()}
+                className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-theme-tertiary text-theme-primary rounded-lg border-theme transition-colors"
+              >
+                <Settings size={18} />
+                <span className="hidden sm:inline text-sm font-medium">Options</span>
+              </button>
+              <button
+                onClick={onReboot}
+                className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-200 hover:bg-red-900/30 rounded-lg transition-colors"
+              >
+                <Power size={18} />
+                <span className="hidden sm:inline text-sm font-medium">Reboot</span>
+              </button>
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-4 py-2 border border-orange-500 text-orange-200 hover:bg-orange-900/30 rounded-lg transition-colors"
+              >
+                <LogOut size={18} />
+                <span className="hidden sm:inline text-sm font-medium">Déconnexion</span>
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Actions */}
+        {/* Actions (plugins rapides, résumé UniFi) */}
         <div className="flex items-center gap-2 pl-4">
           {/* Plugin buttons - toujours visibles à droite pour chaque plugin actif, avec icônes SVG custom */}
           {(() => {
@@ -344,25 +372,6 @@ export const Footer: React.FC<FooterProps> = ({
             );
           })()}
 
-          {/* Freebox actions - Only show on Freebox page */}
-          {currentPage === 'freebox' && (
-            <>
-              <button
-                onClick={onReboot}
-                className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-accent-error/20 text-theme-primary hover:text-accent-error rounded-lg border-theme transition-colors"
-              >
-                <Power size={18} />
-                <span className="hidden sm:inline text-sm font-medium">Reboot</span>
-              </button>
-              <button
-                onClick={onLogout}
-                className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-theme-tertiary text-theme-primary rounded-lg border-theme transition-colors"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline text-sm font-medium">Déconnexion</span>
-              </button>
-            </>
-          )}
         </div>
       </div>
     </footer>

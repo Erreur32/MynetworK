@@ -6,12 +6,13 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Settings, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Info, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
+import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 
 interface NetworkScanPageProps {
     onBack: () => void;
@@ -39,11 +40,6 @@ interface ScanStats {
     lastScan?: string;
 }
 
-interface AutoScanConfig {
-    enabled: boolean;
-    interval: number;
-    scanType: 'full' | 'quick';
-}
 
 export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const { plugins, fetchPlugins } = usePluginStore();
@@ -54,8 +50,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [scanRange, setScanRange] = useState<string>('192.168.1.0/24');
     const [autoDetect, setAutoDetect] = useState(false);
     const [scanType, setScanType] = useState<'full' | 'quick'>('full');
+    const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
     const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
-    const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
     
     // Filters
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
@@ -67,18 +63,39 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [editingHostname, setEditingHostname] = useState<string | null>(null);
     const [editedHostname, setEditedHostname] = useState<string>('');
     
-    // Modal state
+    // Config modal state
+    const [configModalOpen, setConfigModalOpen] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
 
     const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
     const isActive = scanReseauPlugin?.enabled && scanReseauPlugin?.connectionStatus;
 
+    const fetchDefaultConfig = async () => {
+        try {
+            const response = await api.get<{ defaultRange: string; defaultScanType: 'full' | 'quick'; defaultAutoDetect: boolean }>('/api/network-scan/default-config');
+            if (response.success && response.result) {
+                setScanRange(response.result.defaultRange);
+                setAutoDetect(response.result.defaultAutoDetect);
+                setScanType(response.result.defaultScanType);
+            }
+        } catch (error) {
+            console.error('Failed to fetch default config:', error);
+        } finally {
+            setDefaultConfigLoaded(true);
+        }
+    };
+
     useEffect(() => {
         fetchPlugins();
         fetchStats();
-        fetchHistory();
-        fetchConfig();
+        fetchDefaultConfig();
     }, [fetchPlugins]);
+
+    useEffect(() => {
+        if (defaultConfigLoaded) {
+            fetchHistory();
+        }
+    }, [defaultConfigLoaded, statusFilter, searchFilter, sortBy, sortOrder]);
 
     // Cleanup polling interval on unmount
     useEffect(() => {
@@ -131,16 +148,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         }
     };
 
-    const fetchConfig = async () => {
-        try {
-            const response = await api.get<AutoScanConfig>('/api/network-scan/config');
-            if (response.success && response.result) {
-                setAutoConfig(response.result);
-            }
-        } catch (error) {
-            console.error('Failed to fetch config:', error);
-        }
-    };
 
     const handleScan = async () => {
         setIsScanning(true);
@@ -231,21 +238,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         }
     };
 
-    const handleSaveAutoConfig = async () => {
-        try {
-            const response = await api.post<AutoScanConfig>('/api/network-scan/config', autoConfig);
-
-            if (response.success && response.result) {
-                setAutoConfig(response.result);
-                alert('Configuration sauvegardée');
-            } else {
-                alert(response.error?.message || 'Erreur lors de la sauvegarde');
-            }
-        } catch (error: any) {
-            console.error('Save config failed:', error);
-            alert('Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue'));
-        }
-    };
 
     const handleStartEditHostname = (ip: string, currentHostname: string) => {
         setEditingHostname(ip);
@@ -283,9 +275,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         return 'text-red-400';
     };
 
-    useEffect(() => {
-        fetchHistory();
-    }, [statusFilter, searchFilter, sortBy, sortOrder]);
+    // fetchHistory is now handled in the useEffect above that depends on defaultConfigLoaded
 
     const formatDate = (dateStr: string): string => {
         const date = new Date(dateStr);
@@ -337,14 +327,22 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <h1 className="text-2xl font-bold">Scan Réseau</h1>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
                 {isActive && (
-                    <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 text-green-400 text-sm">
                             <div className="w-2 h-2 rounded-full bg-green-400" />
                             <span>Actif</span>
                         </div>
+                    )}
+                    <button
+                        onClick={() => setConfigModalOpen(true)}
+                        className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 transition-colors flex items-center gap-2"
+                        title="Configuration du scan"
+                    >
+                        <Settings size={16} />
+                        <span>Configuration</span>
+                    </button>
                     </div>
-                )}
             </div>
 
             {/* Stats Cards */}
@@ -367,27 +365,27 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 </div>
             )}
 
-            {/* Scan Configuration - Two columns */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Configuration du scan */}
+            {/* Results Table */}
                 <Card
                     title={
                         <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-blue-500/20 rounded-lg">
-                                <Settings size={16} className="text-blue-400" />
+                        <div className="p-1.5 bg-cyan-500/20 rounded-lg">
+                            <Network size={16} className="text-cyan-400" />
+                        </div>
+                        
+                        <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs font-semibold">
+                            {filteredScans.length}
+                        </span>
+                        {(isScanning || isRefreshing) && (
+                            <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
+                                <RefreshCw size={12} className="animate-spin" />
+                                <span>{isScanning ? 'Scan en cours...' : 'Rafraîchissement...'}</span>
                             </div>
-                            <span>Configuration du scan</span>
+                        )}
                         </div>
                     }
                     actions={
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setShowHelpModal(true)}
-                                className="p-1.5 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
-                                title="Aide"
-                            >
-                                <HelpCircle size={16} />
-                            </button>
                             <button
                                 onClick={handleRefresh}
                                 disabled={isRefreshing}
@@ -404,149 +402,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 <Play size={16} className={isScanning ? 'animate-spin' : ''} />
                                 Scanner
                             </button>
-                        </div>
-                    }
-                >
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={autoDetect}
-                                        onChange={(e) => setAutoDetect(e.target.checked)}
-                                        className="w-4 h-4"
-                                    />
-                                    <span className="text-sm">Auto-détection</span>
-                                </label>
-                                {!autoDetect && (
-                                    <div className="flex-1">
-                                        <label className="block text-sm text-gray-400 mb-2">Plage IP</label>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={scanRange}
-                                                onChange={(e) => setScanRange(e.target.value)}
-                                                placeholder="192.168.1.0/24"
-                                                className="flex-1 px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                            />
-                                            <button
-                                                onClick={() => setShowHelpModal(true)}
-                                                className="p-2 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
-                                                title="Aide réseau"
-                                            >
-                                                <HelpCircle size={18} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-2">Type de scan</label>
-                                <select
-                                    value={scanType}
-                                    onChange={(e) => setScanType(e.target.value as 'full' | 'quick')}
-                                    className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                >
-                                    <option value="quick">Rapide (ping uniquement)</option>
-                                    <option value="full">Complet (ping + MAC + hostname)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Scan automatique */}
-                <Card
-                    title={
-                        <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-purple-500/20 rounded-lg">
-                                <Clock size={16} className="text-purple-400" />
-                            </div>
-                            <span>Scan automatique</span>
-                        </div>
-                    }
-                >
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={autoConfig.enabled}
-                                    onChange={(e) => setAutoConfig({ ...autoConfig, enabled: e.target.checked })}
-                                    className="w-4 h-4"
-                                />
-                                <span className="text-sm">Activer le scan automatique</span>
-                            </label>
-                        </div>
-
-                        {autoConfig.enabled && (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-2">Intervalle</label>
-                                        <select
-                                            value={autoConfig.interval}
-                                            onChange={(e) => setAutoConfig({ ...autoConfig, interval: parseInt(e.target.value) })}
-                                            className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                        >
-                                            <option value="15">15 minutes</option>
-                                            <option value="30">30 minutes</option>
-                                            <option value="60">1 heure</option>
-                                            <option value="120">2 heures</option>
-                                            <option value="360">6 heures</option>
-                                            <option value="720">12 heures</option>
-                                            <option value="1440">24 heures</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm text-gray-400 mb-2">Type de scan</label>
-                                        <select
-                                            value={autoConfig.scanType}
-                                            onChange={(e) => setAutoConfig({ ...autoConfig, scanType: e.target.value as 'full' | 'quick' })}
-                                            className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                        >
-                                            <option value="quick">Rapide</option>
-                                            <option value="full">Complet</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={handleSaveAutoConfig}
-                                    className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30"
-                                >
-                                    Sauvegarder
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </Card>
-            </div>
-
-            {/* Results Table */}
-            <Card
-                title={
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-cyan-500/20 rounded-lg">
-                            <Network size={16} className="text-cyan-400" />
-                        </div>
-                        <span>Résultats</span>
-                        <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs font-semibold">
-                            {filteredScans.length}
-                        </span>
-                        {(isScanning || isRefreshing) && (
-                            <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
-                                <RefreshCw size={12} className="animate-spin" />
-                                <span>{isScanning ? 'Scan en cours...' : 'Rafraîchissement...'}</span>
-                            </div>
-                        )}
-                    </div>
-                }
-                actions={
-                    <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowHelpModal(true)}
+                                className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 flex items-center justify-center"
+                                title="Aide sur les plages IP et le scan"
+                                type="button"
+                            >
+                                <HelpCircle size={16} />
+                            </button>
                         <div className="relative">
                             <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                             <input
@@ -707,148 +570,73 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 </div>
             </Card>
 
-            {/* Help Modal */}
+            {/* Config Modal */}
+            {configModalOpen && (
+                <NetworkScanConfigModal
+                    isOpen={configModalOpen}
+                    onClose={() => {
+                        setConfigModalOpen(false);
+                        // Reload default config after closing modal in case it was changed
+                        fetchDefaultConfig();
+                    }}
+                />
+            )}
+
+            {/* Help Modal for Network Range - tips displayed from the scan page */}
             {showHelpModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-[#121212] border border-gray-700 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-gray-800">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-500/20 rounded-lg">
-                                    <Info size={24} className="text-blue-400" />
+                                <div className="p-2 bg-purple-500/20 rounded-lg">
+                                    <Network size={24} className="text-purple-400" />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-semibold text-white">Aide - Scanner vs Rafraîchir</h2>
-                                    <p className="text-sm text-gray-400 mt-1">Différence entre les deux actions de scan</p>
+                                    <h2 className="text-xl font-semibold text-white">Aide - Format de plage réseau</h2>
+                                    <p className="text-sm text-gray-400 mt-1">Comment spécifier une plage d'IPs à scanner</p>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setShowHelpModal(false)}
                                 className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-gray-800 rounded-lg"
+                                type="button"
                             >
                                 <X size={20} />
                             </button>
                         </div>
 
                         {/* Content */}
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-4">
-                                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-green-500/20 rounded-lg mt-0.5">
-                                            <Play size={20} className="text-green-400" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <h3 className="text-lg font-semibold text-green-400 mb-2">Scanner</h3>
-                                            <p className="text-gray-300 text-sm leading-relaxed">
-                                                Effectue un <strong>scan complet</strong> d'une plage réseau (ex: 192.168.1.0/24).
-                                            </p>
-                                            <ul className="mt-3 space-y-2 text-sm text-gray-400">
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-green-400 mt-1">✓</span>
-                                                    <span><strong>Découvre de nouvelles IPs</strong> sur le réseau</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-green-400 mt-1">✓</span>
-                                                    <span>Met à jour les IPs existantes</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-green-400 mt-1">✓</span>
-                                                    <span>Peut scanner jusqu'à 254 IPs</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-yellow-400 mt-1">⏱</span>
-                                                    <span><strong>Plus lent</strong> (scan complet de la plage)</span>
-                                                </li>
-                                            </ul>
-                                            <p className="mt-3 text-xs text-gray-500 italic">
-                                                💡 Utilisez cette option pour découvrir tous les appareils sur votre réseau.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2 bg-blue-500/20 rounded-lg mt-0.5">
-                                            <RefreshCw size={20} className="text-blue-400" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <h3 className="text-lg font-semibold text-blue-400 mb-2">Rafraîchir</h3>
-                                            <p className="text-gray-300 text-sm leading-relaxed">
-                                                Re-ping <strong>uniquement les IPs déjà connues</strong> dans la base de données.
-                                            </p>
-                                            <ul className="mt-3 space-y-2 text-sm text-gray-400">
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-blue-400 mt-1">✓</span>
-                                                    <span>Met à jour le statut (online/offline) des IPs connues</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-blue-400 mt-1">✓</span>
-                                                    <span>Met à jour la latence des IPs actives</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-red-400 mt-1">✗</span>
-                                                    <span><strong>Ne découvre pas</strong> de nouvelles IPs</span>
-                                                </li>
-                                                <li className="flex items-start gap-2">
-                                                    <span className="text-green-400 mt-1">⚡</span>
-                                                    <span><strong>Plus rapide</strong> (seulement les IPs déjà trouvées)</span>
-                                                </li>
-                                            </ul>
-                                            <p className="mt-3 text-xs text-gray-500 italic">
-                                                💡 Utilisez cette option pour vérifier rapidement l'état des appareils déjà découverts.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-                                <h4 className="text-sm font-semibold text-gray-300 mb-2">Exemple d'utilisation :</h4>
-                                <ol className="space-y-2 text-sm text-gray-400 list-decimal list-inside">
-                                    <li><strong>Premier scan :</strong> Utilisez "Scanner" pour découvrir tous les appareils sur votre réseau</li>
-                                    <li><strong>Vérifications régulières :</strong> Utilisez "Rafraîchir" pour mettre à jour rapidement les statuts</li>
-                                    <li><strong>Nouveaux appareils :</strong> Utilisez "Scanner" à nouveau si vous ajoutez de nouveaux équipements</li>
-                                </ol>
-                            </div>
-
+                        <div className="p-6 space-y-4">
                             <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="p-2 bg-purple-500/20 rounded-lg mt-0.5">
-                                        <Network size={20} className="text-purple-400" />
+                                <h3 className="text-lg font-semibold text-purple-400 mb-3">Format de plage réseau</h3>
+                                <div className="space-y-3 text-sm text-gray-300">
+                                    <div>
+                                        <p className="font-semibold text-purple-300 mb-1">Notation CIDR (recommandé) :</p>
+                                        <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
+                                            192.168.1.0/24
+                                        </code>
+                                        <p className="text-gray-400 text-xs">
+                                            Scanne les IPs de 192.168.1.1 à 192.168.1.254 (254 IPs)
+                                        </p>
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-lg font-semibold text-purple-400 mb-2">Format de plage réseau</h3>
-                                        <div className="space-y-3 text-sm text-gray-300">
-                                            <div>
-                                                <p className="font-semibold text-purple-300 mb-1">Notation CIDR (recommandé) :</p>
-                                                <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
-                                                    192.168.1.0/24
-                                                </code>
-                                                <p className="text-gray-400 text-xs">
-                                                    Scanne les IPs de 192.168.1.1 à 192.168.1.254 (254 IPs)
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="font-semibold text-purple-300 mb-1">Notation par plage :</p>
-                                                <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
-                                                    192.168.1.1-254
-                                                </code>
-                                                <p className="text-gray-400 text-xs">
-                                                    Scanne les IPs de 192.168.1.1 à 192.168.1.254
-                                                </p>
-                                            </div>
-                                            <div className="bg-[#1a1a1a] rounded p-3 mt-3">
-                                                <p className="font-semibold text-yellow-400 mb-2 text-xs">Masques réseau courants :</p>
-                                                <ul className="space-y-1 text-xs text-gray-400">
-                                                    <li><code className="text-emerald-400">/24</code> = 254 IPs (192.168.1.1-254) - Réseau local standard</li>
-                                                    <li><code className="text-emerald-400">/16</code> = 65534 IPs (192.168.0.1-192.168.255.254) - Trop large, non supporté</li>
-                                                    <li><code className="text-emerald-400">/25</code> = 126 IPs (192.168.1.1-192.168.1.126)</li>
-                                                    <li><code className="text-emerald-400">/26</code> = 62 IPs (192.168.1.1-192.168.1.62)</li>
-                                                </ul>
-                                            </div>
-                                        </div>
+                                    <div>
+                                        <p className="font-semibold text-purple-300 mb-1">Notation par plage :</p>
+                                        <code className="block bg-[#1a1a1a] px-3 py-2 rounded text-emerald-400 font-mono text-xs my-2">
+                                            192.168.1.1-254
+                                        </code>
+                                        <p className="text-gray-400 text-xs">
+                                            Scanne les IPs de 192.168.1.1 à 192.168.1.254
+                                        </p>
+                                    </div>
+                                    <div className="bg-[#1a1a1a] rounded p-3 mt-3">
+                                        <p className="font-semibold text-yellow-400 mb-2 text-xs">Masques réseau courants :</p>
+                                        <ul className="space-y-1 text-xs text-gray-400">
+                                            <li><code className="text-emerald-400">/24</code> = 254 IPs (192.168.1.1-254) - Réseau local standard</li>
+                                            <li><code className="text-emerald-400">/25</code> = 126 IPs (192.168.1.1-192.168.1.126)</li>
+                                            <li><code className="text-emerald-400">/26</code> = 62 IPs (192.168.1.1-192.168.1.62)</li>
+                                            <li><code className="text-red-400">/16</code> = 65534 IPs - Trop large, non supporté</li>
+                                        </ul>
                                     </div>
                                 </div>
                             </div>
@@ -858,7 +646,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <div className="flex justify-end p-6 border-t border-gray-800">
                             <button
                                 onClick={() => setShowHelpModal(false)}
-                                className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 transition-colors"
+                                className="px-4 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 rounded-lg border border-gray-500/30 transition-colors"
+                                type="button"
                             >
                                 Fermer
                             </button>

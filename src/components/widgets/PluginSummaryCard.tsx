@@ -9,7 +9,7 @@ import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { StatusBadge } from '../ui';
 import { usePluginStore } from '../../stores/pluginStore';
-import { useConnectionStore } from '../../stores';
+import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
@@ -79,6 +79,7 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
 export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false }) => {
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
+    const { networks: wifiStoreNetworks } = useWifiStore();
     const { login: loginFreebox, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
     const { info: systemInfo } = useSystemStore();
     
@@ -427,22 +428,30 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         freeboxUpdateAvailable =
             (sys.updateAvailable as boolean | undefined) ?? (sys.update_available as boolean | undefined);
         
-        // Get WiFi networks from system stats
-        const wifiNetworks = sys.wifiNetworks || [];
-        if (Array.isArray(wifiNetworks) && wifiNetworks.length > 0) {
-            // Filter: only enabled networks with valid SSID (not MAC addresses)
-            freeboxWifiNetworks = wifiNetworks.filter((wlan: { enabled: boolean; ssid: string; band?: string }) => {
-                if (wlan.enabled === false) return false;
+        // Get WiFi networks from system stats (when exposed by backend plugin)
+        const pluginWifiNetworks = sys.wifiNetworks || [];
+        if (Array.isArray(pluginWifiNetworks) && pluginWifiNetworks.length > 0) {
+            // Filter: only networks with valid SSID (not MAC addresses)
+            // We keep both enabled and disabled networks to display them in separate columns.
+            freeboxWifiNetworks = pluginWifiNetworks.filter((wlan: { enabled: boolean; ssid: string; band?: string }) => {
                 if (!wlan.ssid || wlan.ssid.trim() === '') return false;
                 // Skip if SSID looks like a MAC address
                 const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
                 return !macPattern.test(wlan.ssid);
             });
-            // Debug: log WiFi networks in dev mode
-            if (import.meta.env.DEV && freeboxWifiNetworks.length > 0) {
-                console.log('[PluginSummaryCard] Freebox WiFi networks found:', freeboxWifiNetworks);
-            }
         }
+    }
+
+    // Fallback: if plugin stats do not expose wifiNetworks, reuse WiFi store networks
+    // This ensures the dashboard Freebox card shows the same SSIDs as the dedicated Freebox WiFi page.
+    if (pluginId === 'freebox' && freeboxWifiNetworks.length === 0 && wifiStoreNetworks && wifiStoreNetworks.length > 0) {
+        freeboxWifiNetworks = wifiStoreNetworks
+            .filter((net) => net.ssid && net.ssid.trim() !== '')
+            .map((net) => ({
+                ssid: net.ssid,
+                band: net.band,
+                enabled: net.active
+            }));
     }
 
     // Current Freebox speed values (used for the "État de la Freebox" graph)
@@ -1174,25 +1183,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                         )}
                                                     </>
                                                 )}
-                                                {/* WiFi Networks in DHCP section */}
-                                                {freeboxWifiNetworks.length > 0 && (
-                                                    <div className={`pt-2 mt-2 ${(stats.system as any).dhcp ? 'border-t border-gray-800' : ''}`}>
-                                                        <div className="flex items-center justify-between mb-1.5">
-                                                            <span className="text-gray-400">Wi‑Fi</span>
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {freeboxWifiNetworks.map((wlan: { ssid: string; band: string }, index: number) => (
-                                                                <span
-                                                                    key={`wifi-${wlan.ssid}-${index}`}
-                                                                    className="px-1.5 py-0.5 rounded-full bg-cyan-900/40 border border-cyan-700 text-cyan-300 text-[10px] font-medium"
-                                                                    title={`${wlan.ssid} (${wlan.band})`}
-                                                                >
-                                                                    {wlan.ssid}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
                                         {/* NAT column (renamed from Port Forwarding) */}
@@ -1250,8 +1240,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {pluginId === 'freebox' && connectionStatus && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
                                 <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">État système</div>
-                                
- 
 
                                 {/* System badges */}
                                 <div className="flex flex-wrap items-center gap-2">
@@ -1326,6 +1314,52 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     />
 
                                 </div>
+
+                                {/* Mini-carte Bornes Wi‑Fi Freebox / Répéteurs (neutre, sans fond coloré spécifique) */}
+                                {wifiStoreNetworks && wifiStoreNetworks.length > 0 && (
+                                    <div className="mt-2 border-t border-gray-800 pt-2 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] text-gray-400 font-medium">
+                                                Bornes Wi‑Fi Freebox
+                                            </span>
+                                            <span className="text-[11px] text-gray-500">
+                                                {wifiStoreNetworks.length} point{wifiStoreNetworks.length > 1 ? 's' : ''} d'accès
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            {wifiStoreNetworks.map((net, index) => (
+                                                <div
+                                                    key={`freebox-ap-${net.id}-${index}`}
+                                                    className="flex items-center justify-between px-2 py-1 rounded border border-gray-800 bg-[#111111]"
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span
+                                                            className={`w-2 h-2 rounded-full ${
+                                                                net.active ? 'bg-emerald-400' : 'bg-gray-500'
+                                                            }`}
+                                                        />
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-xs text-gray-200 truncate">
+                                                                {net.ssid}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-500">
+                                                                {net.band} • Canal {net.channel || 'n/a'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-0.5 ml-2">
+                                                        <span className="text-[10px] text-emerald-400 font-medium">
+                                                            {net.connectedDevices} appareils
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-500">
+                                                            Charge {Math.round(net.load)}%
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

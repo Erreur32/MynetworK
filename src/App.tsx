@@ -51,6 +51,7 @@ import { useUpdateStore } from './stores/updateStore';
 import { POLLING_INTERVALS, formatSpeed } from './utils/constants';
 import {
   MoreHorizontal,
+  Settings,
   Calendar,
   Sliders,
   Filter,
@@ -381,6 +382,14 @@ const App: React.FC = () => {
     setCurrentPage('users');
   };
 
+  // Navigate directly to Freebox plugin options in settings (Plugins tab)
+  const handleFreeboxOptionsClick = () => {
+    // Open Freebox settings page (mode Freebox, pas administration)
+    sessionStorage.removeItem('adminMode');
+    sessionStorage.removeItem('adminTab');
+    setCurrentPage('settings');
+  };
+
   // Show loading state while checking authentication
   if (userAuthLoading) {
     return (
@@ -420,6 +429,7 @@ const App: React.FC = () => {
         onPageChange={handlePageChange}
         onReboot={handleReboot}
         onLogout={handleLogout}
+        onFreeboxOptions={handleFreeboxOptionsClick}
         userRole={user?.role}
       />
     </div>
@@ -428,14 +438,14 @@ const App: React.FC = () => {
   // Render TV page
   if (currentPage === 'tv') {
     return renderPageWithFooter(
-      <TvPage onBack={() => setCurrentPage('dashboard')} />
+      <TvPage onBack={() => setCurrentPage('freebox')} />
     );
   }
 
   // Render Phone page
   if (currentPage === 'phone') {
     return renderPageWithFooter(
-      <PhonePage onBack={() => setCurrentPage('dashboard')} />
+      <PhonePage onBack={() => setCurrentPage('freebox')} />
     );
   }
 
@@ -444,7 +454,7 @@ const App: React.FC = () => {
     return renderPageWithFooter(
       <FilesPage
         onBack={() => {
-          setCurrentPage('dashboard');
+          setCurrentPage('freebox');
           setFilesPageInitialTab('files');
           setFilesPageInitialDownloadId(undefined);
         }}
@@ -457,14 +467,14 @@ const App: React.FC = () => {
   // Render VMs page
   if (currentPage === 'vms') {
     return renderPageWithFooter(
-      <VmsPage onBack={() => setCurrentPage('dashboard')} />
+      <VmsPage onBack={() => setCurrentPage('freebox')} />
     );
   }
 
   // Render Analytics page
   if (currentPage === 'analytics') {
     return renderPageWithFooter(
-      <AnalyticsPage onBack={() => setCurrentPage('dashboard')} />
+      <AnalyticsPage onBack={() => setCurrentPage('freebox')} />
     );
   }
 
@@ -478,7 +488,7 @@ const App: React.FC = () => {
     const showAdmin = sessionStorage.getItem('adminMode') === 'true' || false;
     // Check if we should open a specific admin tab (from sessionStorage)
     // Read it immediately to ensure it's available
-    const adminTab = sessionStorage.getItem('adminTab') as 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | undefined;
+    const adminTab = sessionStorage.getItem('adminTab') as 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | undefined;
     // Only clear if we're actually using it (to avoid clearing it before SettingsPage reads it)
     // We'll let SettingsPage handle clearing it via useEffect
     return renderPageWithFooter(
@@ -678,11 +688,18 @@ const App: React.FC = () => {
               <Card
                 title="État de la Freebox"
                 actions={
-                  <ActionButton
-                    label="Voir plus"
-                    icon={MoreHorizontal}
-                    onClick={() => setIsTrafficModalOpen(true)}
-                  />
+                  <div className="flex items-center gap-2">
+                    <ActionButton
+                      label="Options"
+                      icon={Settings}
+                      onClick={handleFreeboxOptionsClick}
+                    />
+                    <ActionButton
+                      label="Voir plus"
+                      icon={MoreHorizontal}
+                      onClick={() => setIsTrafficModalOpen(true)}
+                    />
+                  </div>
                 }
               >
                 <div className="flex flex-col gap-4">
@@ -1039,6 +1056,7 @@ const App: React.FC = () => {
         onPageChange={handlePageChange}
         onReboot={handleReboot}
         onLogout={handleLogout}
+        onFreeboxOptions={handleFreeboxOptionsClick}
         userRole={user?.role}
       />
       

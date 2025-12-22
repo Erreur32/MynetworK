@@ -33,7 +33,6 @@ services:
       # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
 
 
-
     volumes:
       #  Mount external configuration database and token file
       - ./data:/app/data
@@ -52,20 +51,7 @@ services:
       - NET_RAW
       - NET_ADMIN
 
-    # Note: /proc is already mounted at /host/proc (read-only)
-    # The ARP table can be accessed via /host/proc/net/arp if needed
-    # The network scan service should work with NET_RAW and NET_ADMIN capabilities
-
-    # Alternative Option 1: Use host network mode (Linux only)
-    # This makes the container use the host's network directly
-    # WARNING: This changes port mapping - remove the "ports" section above if using this
-    # The app will listen directly on port 3000 of the host (or PORT env var)
-    # network_mode: host
-
-    # Alternative Option 2: Run container in privileged mode (less secure, use with caution)
-    # This gives the container almost all capabilities of the host
-    # Only use if NET_RAW and NET_ADMIN are not sufficient
-    # privileged: true
+ 
 
     # Resource limits (optional)
     # deploy:

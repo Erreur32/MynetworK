@@ -33,7 +33,8 @@ import {
   EyeOff,
   Info,
   Github,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
@@ -44,7 +45,8 @@ import { RebootScheduleModal } from '../components/modals/RebootScheduleModal';
 import { useLanStore } from '../stores/lanStore';
 import { useAuthStore } from '../stores/authStore';
 import { useSystemStore } from '../stores/systemStore';
-import { getPermissionErrorMessage, getPermissionShortError, getFreeboxSettingsUrl } from '../utils/permissions';
+import { getPermissionErrorMessage, getPermissionShortError, getFreeboxSettingsUrl, getFreeboxBackupUrl } from '../utils/permissions';
+import { usePluginStore } from '../stores/pluginStore';
 import { useUserAuthStore, type User } from '../stores/userAuthStore';
 import { ExporterSection } from '../components/ExporterSection';
 import { PluginsManagementSection } from '../components/PluginsManagementSection';
@@ -59,7 +61,7 @@ import { UserMenu } from '../components/ui';
 interface SettingsPageProps {
   onBack: () => void;
   mode?: 'freebox' | 'administration';
-  initialAdminTab?: 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info';
+  initialAdminTab?: 'general' | 'users' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup';
   onNavigateToPage?: (page: 'plugins' | 'users' | 'logs') => void;
   onUsersClick?: () => void;
   onSettingsClick?: () => void;
@@ -69,7 +71,7 @@ interface SettingsPageProps {
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system';
-type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info';
+type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup';
 
 // Toggle component
 const Toggle: React.FC<{
@@ -599,6 +601,158 @@ const UpdateCheckSection: React.FC = () => {
         </>
       )}
     </>
+  );
+};
+
+// Backup Section Component (for Administration > Backup tab)
+const BackupSection: React.FC = () => {
+  const { freeboxUrl, isRegistered: isFreeboxRegistered } = useAuthStore();
+  const { plugins } = usePluginStore();
+  
+  // Get UniFi plugin configuration
+  const unifiPlugin = plugins.find(p => p.id === 'unifi');
+  const unifiUrl = unifiPlugin?.settings?.url as string | undefined;
+  const unifiSite = (unifiPlugin?.settings?.site as string) || 'default';
+  const unifiConfigured = unifiPlugin?.configured || false;
+  
+  // Build Freebox backup URL
+  const freeboxBackupUrl = freeboxUrl ? getFreeboxBackupUrl(freeboxUrl) : null;
+  
+  // Build UniFi backup URL: {controllerUrl}/manage/{site}/settings/system/backups
+  const getUnifiBackupUrl = (): string | null => {
+    if (!unifiUrl) return null;
+    try {
+      const url = new URL(unifiUrl);
+      // UniFi backup page format: /manage/{site}/settings/system/backups
+      const site = unifiSite || 'default';
+      const baseUrl = `${url.protocol}//${url.host}${url.port ? `:${url.port}` : ''}`;
+      return `${baseUrl}/manage/${site}/settings/system/backups`;
+    } catch {
+      return null;
+    }
+  };
+  
+  const unifiBackupUrl = getUnifiBackupUrl();
+
+  return (
+    <div className="space-y-6">
+      {/* Information Alert */}
+      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+        <div className="flex items-start gap-3">
+          <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-amber-400 mb-2">
+              Important : Sauvegardes manuelles recommandées
+            </h3>
+            <p className="text-sm text-gray-300 mb-2">
+              Il est difficile de créer des sauvegardes automatiques via cette application pour les équipements réseau (Freebox, UniFi Controller).
+              Les APIs de ces équipements ne fournissent pas d'endpoints officiels pour déclencher des exports de configuration de manière automatisée.
+            </p>
+            <p className="text-sm text-gray-300">
+              <strong className="text-amber-400">Recommandation :</strong> Pensez à effectuer régulièrement des sauvegardes manuelles de vos configurations d'équipements réseau
+              via les interfaces web natives. Les liens ci-dessous vous permettent d'accéder directement aux pages de sauvegarde.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Freebox Backup Section */}
+      <Section title="Sauvegarde Freebox" icon={Server} iconColor="cyan">
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p className="text-sm text-gray-300 mb-3">
+              La Freebox permet d'exporter et d'importer sa configuration via l'interface web native.
+              Cette fonctionnalité est disponible depuis la version 4.5.3 du firmware Freebox OS.
+            </p>
+            <p className="text-xs text-gray-400 mb-4">
+              <strong className="text-gray-300">Note :</strong> L'export contient une partie de la configuration de votre Freebox Server.
+              L'import nécessite un redémarrage de la Freebox Server.
+            </p>
+            {freeboxBackupUrl && isFreeboxRegistered ? (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-500 font-mono break-all">
+                  {freeboxBackupUrl}
+                </div>
+                <a
+                  href={freeboxBackupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  <ExternalLink size={16} />
+                  Ouvrir la page de backup Freebox
+                </a>
+ 
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-400">
+                  {!isFreeboxRegistered 
+                    ? 'La Freebox n\'est pas enregistrée. Veuillez vous connecter d\'abord.'
+                    : 'URL Freebox non disponible.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* UniFi Backup Section */}
+      <Section title="Sauvegarde UniFi Controller" icon={Network} iconColor="purple">
+        <div className="space-y-4">
+          <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <p className="text-sm text-gray-300 mb-3">
+              Le contrôleur UniFi permet de créer des sauvegardes de configuration via l'interface web.
+              Les sauvegardes incluent les paramètres du contrôleur, les sites, et les configurations réseau.
+            </p>
+            <p className="text-xs text-gray-400 mb-4">
+              <strong className="text-gray-300">Note :</strong> Accédez à la section "Maintenance" ou "Settings" de votre contrôleur UniFi
+              pour créer et télécharger des sauvegardes de configuration.
+            </p>
+            {unifiBackupUrl && unifiConfigured ? (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-500 font-mono break-all">
+                  {unifiBackupUrl}
+                </div>
+                <a
+                  href={unifiBackupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  <ExternalLink size={16} />
+                  Ouvrir la page de backup UniFi
+                </a>
+
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-400">
+                  {!unifiConfigured 
+                    ? 'Le plugin UniFi n\'est pas configuré. Configurez-le dans l\'onglet Plugins.'
+                    : 'URL du contrôleur UniFi non disponible.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* Information Section */}
+      <Section title="Informations" icon={Info} iconColor="teal">
+        <div className="space-y-3 text-sm text-gray-400">
+          <p>
+            <strong className="text-gray-300">Freebox :</strong> Les sauvegardes Freebox sont des fichiers <code className="text-xs bg-gray-800 px-1 py-0.5 rounded">.bin</code> qui contiennent
+            une partie de la configuration de votre Freebox Server. Stockez ces fichiers dans un endroit sûr.
+          </p>
+          <p>
+            <strong className="text-gray-300">UniFi :</strong> Les sauvegardes UniFi peuvent être créées depuis l'interface web du contrôleur.
+            Consultez la documentation UniFi pour plus d'informations sur la restauration de sauvegardes.
+          </p>
+ 
+        </div>
+      </Section>
+    </div>
   );
 };
 
@@ -1932,6 +2086,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
     { id: 'exporter', label: 'Exporter', icon: Share2, color: 'amber' },
     { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
+    { id: 'backup', label: 'Backup', icon: Download, color: 'orange' },
     { id: 'debug', label: 'Debug', icon: Monitor, color: 'violet' },
     { id: 'info', label: 'Info', icon: Info, color: 'teal' }
   ];
@@ -2267,6 +2422,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {activeAdminTab === 'exporter' && (
               <ExporterSection />
+            )}
+
+            {activeAdminTab === 'backup' && (
+              <BackupSection />
             )}
 
             {activeAdminTab === 'info' && (

@@ -12,6 +12,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { networkScanScheduler } from '../services/networkScanScheduler.js';
 
 const router = Router();
 
@@ -371,8 +372,8 @@ router.post('/config', requireAuth, autoLog('network-scan', 'config'), asyncHand
 
         AppConfigRepository.set('network_scan_auto', JSON.stringify(config));
 
-        // TODO: Update cron scheduler (will be implemented in networkScanScheduler.ts)
-        // For now, just save the config
+        // Update cron scheduler
+        networkScanScheduler.updateScanScheduler(config);
 
         res.json({
             success: true,
@@ -384,6 +385,211 @@ router.post('/config', requireAuth, autoLog('network-scan', 'config'), asyncHand
             success: false,
             error: {
                 message: error.message || 'Failed to save config',
+                code: 'CONFIG_SAVE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/refresh-config
+ * Get automatic refresh configuration
+ */
+router.get('/refresh-config', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const configStr = AppConfigRepository.get('network_scan_refresh_auto');
+        
+        if (!configStr) {
+            return res.json({
+                success: true,
+                result: {
+                    enabled: false,
+                    interval: 15
+                }
+            });
+        }
+
+        const config = JSON.parse(configStr);
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get refresh config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get refresh config',
+                code: 'CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/refresh-config
+ * Configure automatic refresh
+ * 
+ * Body:
+ * {
+ *   enabled: boolean
+ *   interval?: number (minutes: 5, 10, 15, 30, 60)
+ * }
+ */
+router.post('/refresh-config', requireAuth, autoLog('network-scan', 'refresh-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { enabled, interval = 15 } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'enabled must be a boolean',
+                code: 'INVALID_ENABLED'
+            }
+        });
+    }
+
+    // Validate interval
+    const validIntervals = [5, 10, 15, 30, 60];
+    if (!validIntervals.includes(interval)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: `interval must be one of: ${validIntervals.join(', ')} minutes`,
+                code: 'INVALID_INTERVAL'
+            }
+        });
+    }
+
+    try {
+        const config = {
+            enabled,
+            interval
+        };
+
+        AppConfigRepository.set('network_scan_refresh_auto', JSON.stringify(config));
+
+        // Update cron scheduler
+        networkScanScheduler.updateRefreshScheduler(config);
+
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save refresh config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save refresh config',
+                code: 'CONFIG_SAVE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/default-config
+ * Get default scan configuration (default IP range, scan type, etc.)
+ */
+router.get('/default-config', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const configStr = AppConfigRepository.get('network_scan_default');
+        
+        if (!configStr) {
+            return res.json({
+                success: true,
+                result: {
+                    defaultRange: '192.168.1.0/24',
+                    defaultScanType: 'full',
+                    defaultAutoDetect: false
+                }
+            });
+        }
+
+        const config = JSON.parse(configStr);
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get default config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get default config',
+                code: 'CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/default-config
+ * Save default scan configuration
+ * 
+ * Body:
+ * {
+ *   defaultRange?: string (e.g., "192.168.1.0/24")
+ *   defaultScanType?: 'full' | 'quick' (default: 'full')
+ *   defaultAutoDetect?: boolean (default: false)
+ * }
+ */
+router.post('/default-config', requireAuth, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { defaultRange = '192.168.1.0/24', defaultScanType = 'full', defaultAutoDetect = false } = req.body;
+
+    // Validate defaultScanType
+    if (defaultScanType !== 'full' && defaultScanType !== 'quick') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'defaultScanType must be "full" or "quick"',
+                code: 'INVALID_SCAN_TYPE'
+            }
+        });
+    }
+
+    // Validate defaultRange format (basic validation)
+    if (typeof defaultRange !== 'string' || defaultRange.trim() === '') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'defaultRange must be a non-empty string',
+                code: 'INVALID_RANGE'
+            }
+        });
+    }
+
+    // Validate defaultAutoDetect
+    if (typeof defaultAutoDetect !== 'boolean') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'defaultAutoDetect must be a boolean',
+                code: 'INVALID_AUTO_DETECT'
+            }
+        });
+    }
+
+    try {
+        const config = {
+            defaultRange: defaultRange.trim(),
+            defaultScanType,
+            defaultAutoDetect
+        };
+
+        AppConfigRepository.set('network_scan_default', JSON.stringify(config));
+
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save default config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save default config',
                 code: 'CONFIG_SAVE_ERROR'
             }
         });

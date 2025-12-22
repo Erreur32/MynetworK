@@ -11,6 +11,7 @@ import { useAuthStore } from '../stores/authStore';
 import { Section, SettingRow } from '../pages/SettingsPage';
 import { PluginConfigModal } from './modals/PluginConfigModal';
 import { LoginModal } from './modals/LoginModal';
+import { NetworkScanConfigModal } from './modals/NetworkScanConfigModal';
 import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
@@ -20,6 +21,7 @@ export const PluginsManagementSection: React.FC = () => {
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [selectedPluginId, setSelectedPluginId] = useState<string>('');
     const [freeboxLoginModalOpen, setFreeboxLoginModalOpen] = useState(false);
+    const [networkScanConfigModalOpen, setNetworkScanConfigModalOpen] = useState(false);
 
     useEffect(() => {
         fetchPlugins();
@@ -302,8 +304,17 @@ export const PluginsManagementSection: React.FC = () => {
                                         />
                                     </button>
                                 </div>
-                                {plugin.id !== 'scan-reseau' && (
                                 <div className="flex items-center gap-1.5">
+                                    {plugin.id === 'scan-reseau' ? (
+                                        <button
+                                            onClick={() => setNetworkScanConfigModalOpen(true)}
+                                            className="p-1.5 bg-theme-secondary border border-theme hover:bg-theme-primary hover:border-purple-500/50 rounded-lg text-theme-primary transition-all hover:shadow-lg hover:shadow-purple-500/10"
+                                            title="Configurer les scans automatiques"
+                                        >
+                                            <Settings size={12} />
+                                        </button>
+                                    ) : (
+                                        <>
                                     <button
                                         onClick={() => handleTest(plugin.id)}
                                         disabled={testingPlugin === plugin.id}
@@ -323,8 +334,9 @@ export const PluginsManagementSection: React.FC = () => {
                                     >
                                         <Settings size={12} />
                                     </button>
+                                        </>
+                                    )}
                                 </div>
-                                )}
                             </div>
                         </div>
                     ))}
@@ -345,6 +357,14 @@ export const PluginsManagementSection: React.FC = () => {
                 <LoginModal
                     isOpen={freeboxLoginModalOpen}
                     onClose={() => setFreeboxLoginModalOpen(false)}
+                />
+            )}
+
+            {/* Network Scan Config Modal */}
+            {networkScanConfigModalOpen && (
+                <NetworkScanConfigModal
+                    isOpen={networkScanConfigModalOpen}
+                    onClose={() => setNetworkScanConfigModalOpen(false)}
                 />
             )}
         </>

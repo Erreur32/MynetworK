@@ -212,6 +212,8 @@ import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
 import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
+// Initialize network scan scheduler (loads configs and starts cron jobs)
+import './services/networkScanScheduler.js';
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);

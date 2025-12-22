@@ -27,9 +27,10 @@ interface MetricsConfig {
 
 export const ExporterSection: React.FC = () => {
     // Get default port based on environment
+    // In production (Docker), default port is 7505 (mapped from container port 3000)
     const getDefaultPort = () => {
         const isDev = import.meta.env.DEV;
-        return isDev ? 3003 : 3000;
+        return isDev ? 3003 : 7505; // Docker default port is 7505
     };
     
     const [config, setConfig] = useState<MetricsConfig>({
@@ -46,11 +47,26 @@ export const ExporterSection: React.FC = () => {
     const [isAuditing, setIsAuditing] = useState(false);
     const [auditResult, setAuditResult] = useState<{ summary: { total: number; success: number; errors: number }; results: any[] } | null>(null);
     const [initialConfig, setInitialConfig] = useState<MetricsConfig | null>(null);
+    const [publicUrl, setPublicUrl] = useState<string>('');
 
     useEffect(() => {
         // Load config first
         loadConfig();
+        // Load public URL from system settings
+        loadPublicUrl();
     }, []);
+
+    // Load public URL from system settings
+    const loadPublicUrl = async () => {
+        try {
+            const response = await api.get<{ publicUrl: string }>('/api/system/general');
+            if (response.success && response.result) {
+                setPublicUrl(response.result.publicUrl || '');
+            }
+        } catch (error) {
+            console.error('Failed to load public URL:', error);
+        }
+    };
 
     // Check if there are unsaved changes
     const hasUnsavedChanges = initialConfig && JSON.stringify(config) !== JSON.stringify(initialConfig);
@@ -62,24 +78,36 @@ export const ExporterSection: React.FC = () => {
             return;
         }
         
-        const hostname = window.location.hostname;
         const configuredPort = config.prometheus.port || getDefaultPort();
         
-        // Check if hostname is an IP address (IPv4 or IPv6)
+        // If public URL (domain) is configured, use HTTPS + domain without port
+        if (publicUrl && publicUrl.trim()) {
+            try {
+                const url = new URL(publicUrl.trim());
+                // Remove port from domain URL (use standard HTTPS port 443)
+                const domain = url.hostname;
+                const prometheusUrl = `https://${domain}/api/metrics/prometheus`;
+                setPrometheusUrl(prometheusUrl);
+                return;
+            } catch {
+                // Invalid URL, fallback to IP + port
+            }
+        }
+        
+        // No public URL configured: use HTTP + IP + port
+        const hostname = window.location.hostname;
         const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(hostname);
         
-        // If it's an IP address, use the configured port
-        // If it's a domain, don't include port (assumes standard HTTP/HTTPS ports)
         if (isIpAddress) {
+            // Use IP address with configured port
             const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
             setPrometheusUrl(url);
         } else {
-            // For domains, use current origin (port is usually in the URL already)
-            // But if user configured a specific port, use it
+            // Fallback: use hostname with configured port (shouldn't happen if no publicUrl)
             const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
             setPrometheusUrl(url);
         }
-    }, [config.prometheus.port, config.prometheus.enabled]);
+    }, [config.prometheus.port, config.prometheus.enabled, publicUrl]);
 
     const handleExportConfig = async () => {
         setIsExporting(true);
@@ -160,7 +188,8 @@ export const ExporterSection: React.FC = () => {
             if (response.success && response.result) {
                 const loadedConfig = response.result;
                 // If port is 9090 (old default) or undefined, replace with current default
-                if (loadedConfig.prometheus && (!loadedConfig.prometheus.port || loadedConfig.prometheus.port === 9090)) {
+                // Update port to Docker default (7505) if not set or using old defaults
+                if (loadedConfig.prometheus && (!loadedConfig.prometheus.port || loadedConfig.prometheus.port === 9090 || loadedConfig.prometheus.port === 3000)) {
                     loadedConfig.prometheus.port = getDefaultPort();
                 }
                 setConfig(loadedConfig);

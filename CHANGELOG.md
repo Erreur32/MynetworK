@@ -2,6 +2,39 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.12] - 2025-12-22
+
+---
+
+## [0.1.12]- 2025-12-22
+
+### ✨ Ajouté
+
+**Administration - Onglet Backup**
+- 📦 Nouvel onglet "Backup" dans l'administration pour gérer les sauvegardes des équipements réseau
+- 🔗 Bouton pour ouvrir la page de backup Freebox (`#Fbx.os.app.settings.app`) avec affichage de l'URL
+- 🔗 Bouton pour ouvrir la page de backup UniFi Controller (`/manage/{site}/settings/system/backups`) avec affichage de l'URL
+- 📝 Section d'information expliquant les limitations techniques et recommandant les sauvegardes manuelles
+- 🔧 Fonction helper `getFreeboxBackupUrl()` pour construire l'URL de backup Freebox depuis la configuration
+
+**Métriques Prometheus**
+- 🔧 Port par défaut aligné avec Docker : `7505` en production (port exposé par Docker Compose)
+- 🌐 Gestion intelligente de l'URL Prometheus :
+  - Si URL publique (domaine) configurée : `https://domaine.com/api/metrics/prometheus` (sans port)
+  - Sinon : `http://IP:7505/api/metrics/prometheus` (avec port Docker)
+- 🔄 Migration automatique des anciens ports (9090, 3000) vers le nouveau port par défaut (7505)
+- 📡 Récupération automatique de l'URL publique depuis les paramètres système
+
+### 🔧 Modifié
+
+**Métriques Prometheus**
+- 🎯 Port par défaut en production changé de `3000` à `7505` (port Docker exposé)
+- 🔄 Mise à jour automatique de l'URL Prometheus lors du changement de l'URL publique
+- 📝 Amélioration de la logique de construction d'URL selon la configuration (domaine vs IP)
+
+ 
+---
+
 ## [0.1.11] - 2025-12-21
 
 ### ✨ Ajouté
