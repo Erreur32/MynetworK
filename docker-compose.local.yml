@@ -32,7 +32,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: mynetwork-local
+    #container_name: mynetwork-local
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:

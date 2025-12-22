@@ -2,6 +2,7 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+
 ## [0.1.13] - 2025-12-22
 
 ### ✨ Ajouté

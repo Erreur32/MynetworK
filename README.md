@@ -53,48 +53,40 @@
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    container_name: MynetworK
     restart: unless-stopped
 
     ports:
+      # Port externe du dashboard (par défaut : 7505)
       - "${DASHBOARD_PORT:-7505}:3000"
 
     environment:
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
-      # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
-      #
-      # Pour générer un secret sécurisé (minimum 32 caractères) :
-      #   Linux/Mac:   openssl rand -base64 32
-      #   PowerShell:  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+      # 🔐 SECRET OBLIGATOIRE (aucun fallback en production)
+      JWT_SECRET: ${JWT_SECRET}
 
-      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      #  Host root path used to read real host metrics when running in Docker
-      #  The corresponding filesystem mount is configured in the volumes section below.
-      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
-        
-      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
-      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json      
-      # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
-      # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
-      # - Sans nginx, l'application fonctionne sans cette variable
-      # - Décommentez et configurez si vous utilisez nginx :
-      # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
+      # Configuration
+      CONFIG_FILE_PATH: ${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      FREEBOX_HOST: ${FREEBOX_HOST:-mafreebox.freebox.fr}
+      FREEBOX_TOKEN_FILE: /app/data/freebox_token.json
 
+      # Accès métriques host
+      HOST_ROOT_PATH: ${HOST_ROOT_PATH:-/host}
+
+      # PUBLIC_URL (optionnel, uniquement avec reverse proxy)
+      # PUBLIC_URL: https://dashboard.example.com
 
     volumes:
-      #  Mount external configuration database and token file
+      # Données persistantes (token Freebox, base locale, etc.)
       - ./data:/app/data
+
+      # Accès métriques système (lecture seule)
       - /:/host:ro
-      #  Mount host filesystem (read-only) to access real host metrics
       - /proc:/host/proc:ro
-      #  Mount host filesystem (read-only) to access real host metrics
       - /sys:/host/sys:ro
-      #  Mount Docker socket to enable Docker version detection
+
+      # Accès Docker (lecture seule)
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-    # Network capabilities required for network scanning (ping, arp)
-    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
-    # NET_ADMIN: Required for some network operations and ARP table access
+    # Capacités réseau nécessaires au scan (ping / ARP)
     cap_add:
       - NET_RAW
       - NET_ADMIN

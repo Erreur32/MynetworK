@@ -1,57 +1,52 @@
 # MynetworK Dashboard - Docker Compose (Production)
-# Usage: docker-compose up -d
-# Environment variables: DASHBOARD_PORT (default: 7505), FREEBOX_HOST, JWT_SECRET
+# Usage:
+#   export JWT_SECRET=$(openssl rand -base64 32)
+#   docker compose up -d
 
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    container_name: MynetworK
+    # container_name: MynetworK   # optionnel (éviter en prod scalable)
     restart: unless-stopped
 
     ports:
       - "${DASHBOARD_PORT:-7505}:3000"
 
     environment:
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-please-use-strong-secret}
-      # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !
-      #
-      # Pour générer un secret sécurisé (minimum 32 caractères) :
-      #   Linux/Mac:   openssl rand -base64 32
-      #   PowerShell:  [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+      # 🔐 SECRET OBLIGATOIRE (AUCUN FALLBACK EN PROD)
+      JWT_SECRET: ${JWT_SECRET}
 
-      - CONFIG_FILE_PATH=${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      #  Host root path used to read real host metrics when running in Docker
-      #  The corresponding filesystem mount is configured in the volumes section below.
-      - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
+      # Config
+      CONFIG_FILE_PATH: ${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      FREEBOX_HOST: ${FREEBOX_HOST:-mafreebox.freebox.fr}
+      FREEBOX_TOKEN_FILE: /app/data/freebox_token.json
 
-      - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
-      - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
-      # PUBLIC_URL: Optionnel - URL publique d'accès au dashboard
-      # - Nécessaire uniquement si vous utilisez nginx (reverse proxy)
-      # - Sans nginx, l'application fonctionne sans cette variable
-      # - Décommentez et configurez si vous utilisez nginx :
-      # - PUBLIC_URL=${PUBLIC_URL:-http://domaine.com}
+      # Host metrics
+      HOST_ROOT_PATH: ${HOST_ROOT_PATH:-/host}
 
+      # PUBLIC_URL (uniquement si reverse proxy)
+      # PUBLIC_URL: https://dashboard.example.com
 
     volumes:
-      #  Mount external configuration database and token file
       - ./data:/app/data
       - /:/host:ro
-      #  Mount host filesystem (read-only) to access real host metrics
       - /proc:/host/proc:ro
-      #  Mount host filesystem (read-only) to access real host metrics
       - /sys:/host/sys:ro
-      #  Mount Docker socket to enable Docker version detection
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-    # Network capabilities required for network scanning (ping, arp)
-    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
-    # NET_ADMIN: Required for some network operations and ARP table access
+    # Capacités réseau nécessaires
     cap_add:
       - NET_RAW
       - NET_ADMIN
 
- 
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
 
     # Resource limits (optional)
     # deploy:
@@ -65,10 +60,4 @@ services:
 
 
 
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
+ 

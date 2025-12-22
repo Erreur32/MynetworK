@@ -29,7 +29,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: Mynetwork-dev
+    #container_name: Mynetwork-dev
     ports:
       - "${DASHBOARD_PORT:-3666}:5174"  # Vite dev server (frontend) - Port hôte 3666 → Port conteneur 5174
       - "${SERVER_PORT:-3668}:3003"    # API server (backend) - Port hôte 3668 → Port conteneur 3003
