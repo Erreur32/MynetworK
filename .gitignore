@@ -16,6 +16,8 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.cursor
+*.code-workspace
 .DS_Store
 *.suo
 *.ntvs*
@@ -34,9 +36,14 @@ data/
 *.db-shm
 *.db-wal
 
-# Environment variables
+# Environment variables (sensitive - contains secrets, tokens, API keys)
 .env
 .env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+.env.*
 commit-message.txt
 
 # Configuration files (contains sensitive data: passwords, tokens, API keys)
@@ -68,3 +75,25 @@ unitfi_test.sh
 *.backup
 *.bak
 *~
+
+# Secrets and sensitive files (additional patterns)
+*secret*
+*token*
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cert
+*.pwd
+*.passwd
+*.password
+
+# OS files
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+._*

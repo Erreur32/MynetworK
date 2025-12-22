@@ -9,9 +9,11 @@ dist
 dist-ssr
 *.local
 
-# Development files
+# Development files and IDE configurations
 .vscode
 .idea
+.cursor
+*.code-workspace
 .DS_Store
 *.suo
 *.ntvs*
@@ -19,10 +21,14 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment and config files
+# Environment and config files (sensitive - contains secrets, tokens, API keys)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+.env.test
+.env.*
 commit-message.txt
 
 # Database and data files
@@ -73,7 +79,29 @@ logs
 *.spec.ts
 *.spec.tsx
 
-# IDE
+# IDE and editor files
 .claude
 .reboot_schedule.json
+
+# Secrets and sensitive files (additional patterns)
+*secret*
+*token*
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cert
+*.pwd
+*.passwd
+*.password
+
+# OS files
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
 
