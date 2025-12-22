@@ -154,17 +154,25 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
         try {
             // Ensure we always send fullScan and refresh objects, even if disabled
             // This ensures the backend receives a complete configuration structure
+            // If master switch is disabled, we still send the configs but with enabled: false
             const configToSave: UnifiedAutoScanConfig = {
                 enabled: unifiedConfig.enabled,
                 fullScan: unifiedConfig.fullScan ? {
-                    enabled: unifiedConfig.fullScan.enabled || false,
+                    enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
                     interval: unifiedConfig.fullScan.interval || 1440,
                     scanType: unifiedConfig.fullScan.scanType || 'full'
-                } : undefined,
+                } : {
+                    enabled: false,
+                    interval: 1440,
+                    scanType: 'full'
+                },
                 refresh: unifiedConfig.refresh ? {
-                    enabled: unifiedConfig.refresh.enabled || false,
+                    enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
                     interval: unifiedConfig.refresh.interval || 10
-                } : undefined
+                } : {
+                    enabled: false,
+                    interval: 10
+                }
             };
             
             console.log('Saving unified config:', configToSave);
@@ -275,7 +283,16 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                         <input
                                             type="checkbox"
                                             checked={unifiedConfig.enabled}
-                                            onChange={(e) => setUnifiedConfig({ ...unifiedConfig, enabled: e.target.checked })}
+                                            onChange={(e) => {
+                                                const newEnabled = e.target.checked;
+                                                // When disabling master switch, preserve sub-configs but ensure they exist
+                                                setUnifiedConfig({ 
+                                                    ...unifiedConfig, 
+                                                    enabled: newEnabled,
+                                                    fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440, scanType: 'full' },
+                                                    refresh: unifiedConfig.refresh || { enabled: false, interval: 10 }
+                                                });
+                                            }}
                                             className="w-5 h-5 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500 focus:ring-2"
                                         />
                                         <span className="text-sm font-medium text-gray-300">
@@ -411,18 +428,18 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 </div>
                                             )}
                                         </div>
-
-                                        {/* Save button */}
-                                        <button
-                                            onClick={handleSaveUnifiedConfig}
-                                            disabled={isSaving}
-                                            className="w-full px-4 py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors"
-                                        >
-                                            <Save size={18} />
-                                            Sauvegarder la configuration
-                                        </button>
                                     </div>
                                 )}
+
+                                {/* Save button - Always visible, even when master switch is disabled */}
+                                <button
+                                    onClick={handleSaveUnifiedConfig}
+                                    disabled={isSaving}
+                                    className={`w-full px-4 py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors ${!unifiedConfig.enabled ? 'mt-4' : ''}`}
+                                >
+                                    <Save size={18} />
+                                    Sauvegarder la configuration
+                                </button>
                             </div>
                         </div>
 
@@ -445,7 +462,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                             onChange={(e) => setDefaultConfig({ ...defaultConfig, defaultAutoDetect: e.target.checked })}
                                             className="w-4 h-4"
                                         />
-                                        <span className="text-sm">Auto-détection par défaut</span>
+                                        <span className="text-sm">Auto-détection </span>
                                     </label>
                                 </div>
 
