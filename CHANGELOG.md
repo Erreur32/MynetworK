@@ -72,9 +72,6 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 - ✅ Correction de l'affichage du statut sur une seule ligne (suppression de `flex-wrap`)
 - ✅ Correction de l'erreur JSX (balise `<span>` non fermée) dans NetworkScanPage.tsx
 
----
-
-## [0.1.12] - 2025-12-22
 
 ---
 
