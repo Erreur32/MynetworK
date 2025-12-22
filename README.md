@@ -125,20 +125,19 @@ docker-compose pull
 docker-compose up -d
 ```
 
+**✅ Recommandation :** Utilisez le **[Fichier .env](#configuration-sécurisée-de-jwt_secret)** (fichier `.env` à la racine) qui fonctionne automatiquement sans configuration supplémentaire. Docker Compose lit le fichier `.env` et injecte `JWT_SECRET` dans `process.env.JWT_SECRET`.
+
+> 💡 **Plus d'informations :** Consultez la section [🔒 Configuration sécurisée de JWT_SECRET](#configuration-sécurisée-de-jwt_secret) ci-dessous pour toutes les méthodes de configuration, les bonnes pratiques de sécurité et la vérification.
+
 Le dashboard sera accessible sur :
 - **http://localhost:7505** - depuis la machine hôte
 - **http://IP_DU_SERVEUR:7505** - depuis un autre appareil du réseau
 
 <details>
 <summary><strong>⚙️ Configuration Avancées</strong></summary>
+ 
 
-#### Variables d'environnement
-
-Pour la configuration Docker, voir la section [Variables d'environnement Docker](#variables-denvironnement-docker) ci-dessous.
-
-Pour la configuration en mode développement, voir [DEV/README-DEV.md](DEV/README-DEV.md).
-
-#### Fichier de configuration externe (`.conf`)
+### Optionnel: Fichier de configuration externe (`.conf`)
 
 Vous pouvez utiliser un fichier `.conf` externe pour gérer la configuration :
 
@@ -217,84 +216,157 @@ Aucune configuration `PUBLIC_URL` nécessaire. L'application fonctionne directem
 **Note** : Le fichier `Docs/nginx.example.conf` contient une configuration complète avec support HTTP et HTTPS.
 
 </details>
-<details>
+<details id="configuration-sécurisée-de-jwt_secret">
 <summary><strong>🔒 Configuration sécurisée de JWT_SECRET</strong></summary>
 
-**⚠️ IMPORTANT : Sécurité** - Le secret JWT par défaut est utilisé uniquement pour le développement. En production, vous **DEVEZ** définir une variable d'environnement `JWT_SECRET` avec une valeur unique et sécurisée.
+**⚠️ CRITIQUE : Sécurité** - Le secret JWT par défaut (`change-me-in-production-please-use-strong-secret`) est utilisé **uniquement pour le développement**. En production, vous **DEVEZ** définir une variable d'environnement `JWT_SECRET` avec une valeur unique et sécurisée.
 
-#### Pourquoi c'est important ?
+#### 🔐 Pourquoi c'est important ?
 
-Le `JWT_SECRET` est utilisé pour signer et vérifier les tokens d'authentification. Si un secret faible ou par défaut est utilisé, un attaquant pourrait :
-- Forger des tokens JWT valides
-- Accéder à votre système sans authentification
-- Compromettre la sécurité de tous les utilisateurs
+Le `JWT_SECRET` est utilisé pour signer et vérifier les tokens d'authentification JWT. Si un secret faible ou par défaut est utilisé, un attaquant pourrait :
+- **Forger des tokens JWT valides** et se faire passer pour n'importe quel utilisateur
+- **Accéder à votre système sans authentification** (accès admin complet)
+- **Compromettre la sécurité de tous les utilisateurs** et leurs données
+- **Modifier les permissions** et accéder à des fonctionnalités restreintes
 
-#### Méthode 1 : Utiliser un fichier `.env` (Recommandé)
+#### 📍 Où le secret est utilisé dans l'application ?
 
-Créez un fichier `.env` à la racine du projet :
+Le `JWT_SECRET` est chargé au démarrage du serveur dans `server/services/authService.ts` :
+- Il est lu depuis la variable d'environnement `process.env.JWT_SECRET`
+- Si non défini, la valeur par défaut `change-me-in-production-please-use-strong-secret` est utilisée
+- L'application vérifie au démarrage si le secret par défaut est utilisé et affiche un avertissement dans les logs
+- Le secret est utilisé pour signer les tokens lors de la connexion et vérifier leur validité lors des requêtes authentifiées
 
-```bash
-# Générer un secret sécurisé (minimum 32 caractères)
-# Sur Linux/Mac :
-openssl rand -base64 32
+#### 🎯 Méthodes de configuration (par ordre de préférence)
 
-# Sur Windows PowerShell :
-[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+##### 1. **Fichier `.env` (Recommandé pour la production)** {#1-fichier-env-recommandé-pour-la-production}
 
-# Ajoutez dans votre fichier .env :
-JWT_SECRET=votre_secret_genere_aleatoirement_ici_minimum_32_caracteres
-```
+Docker Compose lit automatiquement le fichier `.env` à la racine du projet.
 
-Ensuite, lancez Docker Compose avec le fichier `.env` :
+**Étapes :**
 
-```bash
-docker-compose --env-file .env up -d
-```
+1. **Générer un secret sécurisé** (minimum 32 caractères) :
 
-#### Méthode 2 : Définir directement dans la ligne de commande
+   ```bash
+   # Linux/Mac :
+   openssl rand -base64 32
+   
+   # Windows PowerShell :
+   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+   ```
 
-```bash
-# Générer un secret (voir commandes ci-dessus)
-# Puis lancer avec :
-JWT_SECRET=votre_secret_genere_aleatoirement docker-compose up -d
-```
+2. **Créer un fichier `.env`** à la racine du projet :
 
-#### Méthode 3 : Utiliser les variables d'environnement système
+   ```bash
+   # .env
+   JWT_SECRET=votre_secret_genere_ici_minimum_32_caracteres
+   
+   # Autres variables optionnelles
+   DASHBOARD_PORT=7505
+   FREEBOX_HOST=mafreebox.freebox.fr
+   PUBLIC_URL=https://mynetwork.example.com
+   ```
 
-```bash
-# Sur Linux/Mac :
-export JWT_SECRET=$(openssl rand -base64 32)
-docker-compose up -d
+3. **Sécuriser le fichier `.env`** :
 
-# Sur Windows PowerShell :
-$env:JWT_SECRET = [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-docker-compose up -d
-```
+   ```bash
+   # Linux/Mac : Restreindre les permissions (lecture seule pour le propriétaire)
+   chmod 600 .env
 
-#### Exemple complet avec docker-compose.yml
+   ```
 
-```yaml
-services:
-  mynetwork:
-    image: ghcr.io/erreur32/mynetwork:latest
-    environment:
-      # ⚠️ SECURITE : Définissez JWT_SECRET via variable d'environnement
-      # Ne jamais utiliser la valeur par défaut en production !
-      # Exemple de génération : openssl rand -base64 32
-      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
-```
+4. **Démarrer avec Docker Compose** :
 
-**Note** : Le fichier `.env` ne doit **JAMAIS** être commité dans Git. Assurez-vous qu'il est dans votre `.gitignore`.
+   ```bash
+   docker-compose up -d
+   ```
 
-#### Vérification
+   Docker Compose lira automatiquement le fichier `.env` et injectera `JWT_SECRET` dans le conteneur.
 
-Après le démarrage, vérifiez les logs pour confirmer que le secret personnalisé est utilisé :
+##### 2. **Fichier `.env` avec `--env-file` (Alternative)**
+
+Si vous préférez utiliser un fichier avec un nom différent :
 
 ```bash
+# Créer un fichier .env.production
+echo "JWT_SECRET=$(openssl rand -base64 32)" > .env.production
+
+# Utiliser --env-file lors du démarrage
+docker-compose --env-file .env.production up -d
+```
+
+**✅ Recommandation :** Utilisez la **[méthode 1](#1-fichier-env-recommandé-pour-la-production)** (fichier `.env` à la racine) qui fonctionne automatiquement sans configuration supplémentaire. Docker Compose lit le fichier `.env` et injecte `JWT_SECRET` dans `process.env.JWT_SECRET`.
+
+#### ✅ Vérification de la configuration
+
+Après le démarrage, vérifiez que le secret personnalisé est utilisé :
+
+```bash
+# Vérifier les logs pour les avertissements
 docker-compose logs | grep -i "jwt\|secret"
+
+# Si vous voyez un avertissement comme :
+# "⚠️ Using default JWT secret. Please set JWT_SECRET environment variable in production!"
+# Cela signifie que JWT_SECRET n'a pas été correctement configuré.
 ```
 
-Si vous voyez un avertissement concernant le secret par défaut, cela signifie que `JWT_SECRET` n'a pas été correctement configuré.
+**Vérification dans l'interface web :**
+
+1. Connectez-vous au dashboard
+2. Allez dans **Administration > Sécurité**
+3. Vérifiez la section "Configuration JWT" - elle indiquera si le secret par défaut est utilisé
+
+#### 🛡️ Bonnes pratiques de sécurité
+
+1. **Longueur minimale** : Utilisez un secret d'au moins **32 caractères** (recommandé : 64 caractères)
+2. **Complexité** : Utilisez des caractères aléatoires (pas de mots de passe prévisibles)
+3. **Unicité** : Chaque instance de production doit avoir son propre secret unique
+4. **Stockage sécurisé** :
+   - ✅ Fichier `.env` avec permissions restreintes (`chmod 600`)
+   - ✅ Ajouter `.env` au `.gitignore` (ne jamais commiter le secret)
+   - ✅ Utiliser un gestionnaire de secrets (HashiCorp Vault, AWS Secrets Manager, etc.) pour les déploiements critiques
+5. **Rotation** : Changez le secret régulièrement (tous les 6-12 mois) ou en cas de compromission suspectée
+6. **Séparation dev/prod** : Utilisez des secrets différents pour le développement et la production
+7. **Backup sécurisé** : Si vous sauvegardez le secret, stockez-le dans un endroit sécurisé et chiffré
+
+#### 🔄 Rotation du secret JWT
+
+Si vous devez changer le secret JWT :
+
+1. **Générer un nouveau secret** :
+   ```bash
+   openssl rand -base64 32
+   ```
+
+2. **Mettre à jour le fichier `.env`** :
+   ```bash
+   JWT_SECRET=nouveau_secret_genere
+   ```
+
+3. **Redémarrer le conteneur** :
+   ```bash
+   docker-compose restart
+   ```
+
+4. **⚠️ Important** : Tous les utilisateurs devront se reconnecter car leurs tokens existants seront invalidés.
+
+#### 📝 Exemple de fichier `.env` complet
+
+```bash
+# .env - Configuration sécurisée pour la production
+ 
+# Secret JWT (généré avec : openssl rand -base64 32)
+JWT_SECRET=aB3xK9mP2vQ7wR5tY8uI0oP1aS6dF4gH7jK2lM9nB0vC3xZ6qW8eR1tY3uI5oP7aS9dF2gH4jK6lM8nB0vC2xZ4
+
+# Port du dashboard (optionnel, défaut: 7505)
+DASHBOARD_PORT=7505
+
+# Host Freebox (optionnel, défaut: mafreebox.freebox.fr)
+FREEBOX_HOST=mafreebox.freebox.fr
+
+# URL publique (optionnel, pour reverse proxy)
+PUBLIC_URL=https://mynetwork.example.com
+```
 
 </details>
 
