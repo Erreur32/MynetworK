@@ -217,123 +217,6 @@ Aucune configuration `PUBLIC_URL` nécessaire. L'application fonctionne directem
 **Note** : Le fichier `Docs/nginx.example.conf` contient une configuration complète avec support HTTP et HTTPS.
 
 </details>
-
-
-
-## 📋 Première connexion
-
-1. Accédez au dashboard (http://localhost:7505 ou votre IP)
-2. Connectez-vous avec les identifiants par défaut :
-   - **Username** : `admin`
-   - **Password** : `admin123`
-3. ⚠️ **Changez le mot de passe immédiatement après la première connexion !**
-4. Configurez vos plugins dans la page **Plugins**
-
-<details>
-<summary><strong>🎨 Fonctionnalités</strong></summary>
-
-### Dashboard Principal
-- **Statistiques multi-sources** - Visualisation unifiée des données de tous les plugins
-- **Graphiques en temps réel** - Débits, connexions, statistiques
-- **Vue d'ensemble réseau** - État global de votre infrastructure
-
-### Gestion des Plugins
-- **Configuration centralisée** - Interface pour configurer chaque plugin
-- **Activation/Désactivation** - Contrôle fin de chaque source de données
-- **Statut de connexion** - Vérification de l'état de chaque plugin
-
-### Freebox (Plugin)
-- **Dashboard complet** - Toutes les fonctionnalités Freebox (WiFi, LAN, Downloads, VMs, TV, Phone)
-- **Compatibilité** - Ultra, Delta, Pop
-- **API native** - Utilisation de l'API officielle Freebox OS
-
-### UniFi Controller (Plugin)
-- **Surveillance réseau** - Statistiques des points d'accès, clients, trafic
-- **Gestion des sites** - Support multi-sites UniFi
-- **Données en temps réel** - Mise à jour automatique des statistiques
-- **Support dual API** - Controller Local (node-unifi) et Site Manager API (cloud)
-- **Badges de stats** - Affichage des stats système dans le header (débit, uptime, devices)
-
-### Gestion des Utilisateurs (Admin)
-- **CRUD complet** - Création, modification, suppression d'utilisateurs
-- **Gestion des rôles** - Attribution des permissions (admin, user, viewer)
-- **Sécurité** - Mots de passe hashés avec bcrypt
-
-### Logs d'Activité (Admin)
-- **Traçabilité complète** - Toutes les actions sont enregistrées
-- **Filtres avancés** - Par utilisateur, plugin, action, niveau, période
-- **Export** - Possibilité d'exporter les logs (à venir)
-
-</details>
-
-
-## 🔌 Système de Plugins
-
-MynetworK utilise une architecture modulaire basée sur des plugins pour permettre l'ajout facile de nouvelles sources de données.
-
-### Plugins disponibles
-
-- **Freebox** - Intégration complète avec l'API Freebox OS
-- **UniFi Controller** - Surveillance et gestion UniFi
-- **Scan Réseau** - Scanner réseau (à venir)
-
-Pour créer un nouveau plugin ou comprendre l'architecture, voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
-
-
-<details>
-<summary><strong>🏗️ Architecture</strong></summary>
-
-MynetworK utilise une architecture modulaire avec :
-- **Frontend React** (TypeScript) - Interface utilisateur moderne
-- **Backend Express** (TypeScript) - API REST et WebSocket
-- **Base de données SQLite** - Stockage des configurations et données
-- **Système de plugins** - Architecture extensible pour ajouter de nouvelles sources
-
-Pour plus de détails sur l'architecture, voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
-
-</details>
-
-
-
-<details>
-<summary><strong>📚 Documentation</strong></summary>
-
-### Pour les Utilisateurs
-
-- **[CHANGELOG.md](CHANGELOG.md)** - Journal des changements et nouvelles fonctionnalités
-
-### Pour les Développeurs
-
-Consultez **[DEV/README-DEV.md](DEV/README-DEV.md)** pour toute la documentation de développement.
-
-**Documentation principale** :
-- **[DEV/DOCUMENTATION.md](DEV/DOCUMENTATION.md)** - Index complet de la documentation
-- **[DEV/GUIDE_DEVELOPPEMENT.md](DEV/GUIDE_DEVELOPPEMENT.md)** - Guide pour développeurs
-- **[DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md)** - Architecture détaillée du système de plugins
-
-</details>
-
-## 🔒 Sécurité
-
-- **Authentification JWT** - Tokens sécurisés avec expiration
-- **Hash des mots de passe** - bcrypt avec salt rounds
-- **Middleware d'authentification** - Protection des routes sensibles
-- **Logging des actions** - Traçabilité complète
-- **Gestion des rôles** - Permissions granulaires
-
-## 🐳 Docker
-
-### Variables d'environnement Docker
-
-| Variable | Défaut | Description |
-|----------|--------|-------------|
-| `DASHBOARD_PORT` | `7505` | Port d'accès au dashboard |
-| `PORT` | `3000` | Port du serveur backend (dans le conteneur) |
-| `JWT_SECRET` | (généré) | Secret JWT (changez en production !) |
-| `FREEBOX_HOST` | `mafreebox.freebox.fr` | Hostname Freebox |
-| `PUBLIC_URL` | - | URL publique d'accès (pour nginx, etc.) |
-| `HOST_ROOT_PATH` | `/host` | Chemin du système de fichiers hôte monté |
-
 <details>
 <summary><strong>🔒 Configuration sécurisée de JWT_SECRET</strong></summary>
 
@@ -415,22 +298,96 @@ Si vous voyez un avertissement concernant le secret par défaut, cela signifie q
 
 </details>
 
-### Commandes Docker utiles
 
-```bash
-# Voir les logs
-docker-compose logs -f
+## 📋 Première connexion
 
-# Redémarrer
-docker-compose restart
+1. Accédez au dashboard (http://localhost:7505 ou votre IP)
+2. Connectez-vous avec les identifiants par défaut :
+   - **Username** : `admin`
+   - **Password** : `admin123`
+3. ⚠️ **Changez le mot de passe immédiatement après la première connexion !**
+4. Configurez vos plugins dans la page **Plugins**
 
-# Arrêter
-docker-compose down
+<details>
+<summary><strong>🎨 Fonctionnalités</strong></summary>
 
-# Mettre à jour
-docker-compose pull
-docker-compose up -d
-```
+### Dashboard Principal
+- **Statistiques multi-sources** - Visualisation unifiée des données de tous les plugins
+- **Graphiques en temps réel** - Débits, connexions, statistiques
+- **Vue d'ensemble réseau** - État global de votre infrastructure
+
+### Gestion des Plugins
+- **Configuration centralisée** - Interface pour configurer chaque plugin
+- **Activation/Désactivation** - Contrôle fin de chaque source de données
+- **Statut de connexion** - Vérification de l'état de chaque plugin
+
+### Freebox (Plugin)
+- **Dashboard complet** - Toutes les fonctionnalités Freebox (WiFi, LAN, Downloads, VMs, TV, Phone)
+- **Compatibilité** - Ultra, Delta, Pop
+- **API native** - Utilisation de l'API officielle Freebox OS
+
+### UniFi Controller (Plugin)
+- **Surveillance réseau** - Statistiques des points d'accès, clients, trafic
+- **Gestion des sites** - Support multi-sites UniFi
+- **Données en temps réel** - Mise à jour automatique des statistiques
+- **Support dual API** - Controller Local (node-unifi) et Site Manager API (cloud)
+- **Badges de stats** - Affichage des stats système dans le header (débit, uptime, devices)
+
+### Gestion des Utilisateurs (Admin)
+- **CRUD complet** - Création, modification, suppression d'utilisateurs
+- **Gestion des rôles** - Attribution des permissions (admin, user, viewer)
+- **Sécurité** - Mots de passe hashés avec bcrypt
+
+### Logs d'Activité (Admin)
+- **Traçabilité complète** - Toutes les actions sont enregistrées
+- **Filtres avancés** - Par utilisateur, plugin, action, niveau, période
+- **Export** - Possibilité d'exporter les logs (à venir)
+
+</details>
+
+ 
+
+<details>
+<summary><strong>🏗️ Architecture</strong></summary>
+
+MynetworK utilise une architecture modulaire avec :
+- **Frontend React** (TypeScript) - Interface utilisateur moderne
+- **Backend Express** (TypeScript) - API REST et WebSocket
+- **Base de données SQLite** - Stockage des configurations et données
+- **Système de plugins** - Architecture extensible pour ajouter de nouvelles sources
+
+Pour plus de détails sur l'architecture, voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
+
+</details>
+
+
+
+<details>
+<summary><strong>📚 Documentation</strong></summary>
+
+### Pour les Utilisateurs
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Journal des changements et nouvelles fonctionnalités
+
+### Pour les Développeurs
+
+Consultez **[DEV/README-DEV.md](DEV/README-DEV.md)** pour toute la documentation de développement.
+
+**Documentation principale** :
+- **[DEV/DOCUMENTATION.md](DEV/DOCUMENTATION.md)** - Index complet de la documentation
+- **[DEV/GUIDE_DEVELOPPEMENT.md](DEV/GUIDE_DEVELOPPEMENT.md)** - Guide pour développeurs
+- **[DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md)** - Architecture détaillée du système de plugins
+
+</details>
+
+## 🔒 Sécurité
+
+- **Authentification JWT** - Tokens sécurisés avec expiration
+- **Hash des mots de passe** - bcrypt avec salt rounds
+- **Middleware d'authentification** - Protection des routes sensibles
+- **Logging des actions** - Traçabilité complète
+- **Gestion des rôles** - Permissions granulaires
+
 
 ## 🤝 Contribution
 
