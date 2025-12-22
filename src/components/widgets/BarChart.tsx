@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { NetworkStat } from '../../types';
 
 interface BarChartProps {
@@ -162,28 +162,67 @@ interface MiniBarChartProps {
   data: number[];
   color: string;
   height?: number;
+  labels?: string[]; // Optional labels for tooltips (dates/times)
+  valueLabel?: string; // Label for the value (e.g., "Online", "Total", "Offline")
 }
 
 export const MiniBarChart: React.FC<MiniBarChartProps> = ({
   data,
   color,
-  height = 24
+  height = 24,
+  labels,
+  valueLabel = 'Valeur'
 }) => {
   const maxValue = Math.max(...data, 1);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  
+  // Convert hex color to RGB for gradient effect
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  };
+  
+  const rgb = hexToRgb(color);
+  // Create darker version for bottom of gradient (reduce brightness by 50-60%)
+  // More subtle and elegant gradient
+  const darkerColor = rgb 
+    ? `rgba(${Math.max(0, Math.floor(rgb.r * 0.4))}, ${Math.max(0, Math.floor(rgb.g * 0.4))}, ${Math.max(0, Math.floor(rgb.b * 0.4))}, 0.95)`
+    : `#000000`;
 
   return (
-    <div className="flex items-end gap-[1px]" style={{ height }}>
+    <div className="relative flex items-end gap-[1px]" style={{ height }}>
       {data.map((value, idx) => {
         const barHeight = (value / maxValue) * 100;
+        const label = labels && labels[idx] ? labels[idx] : null;
+        const showTooltip = hoveredIndex === idx && label;
+        
         return (
           <div
             key={idx}
-            className="flex-1 rounded-t-sm"
+            className="flex-1 rounded-t-sm relative group"
             style={{
               height: `${Math.max(barHeight, 5)}%`,
-              backgroundColor: color
+              background: `linear-gradient(to bottom, ${color}FF, ${color}E6 20%, ${color}CC 50%, ${darkerColor} 100%)`,
+              boxShadow: `0 1px 3px rgba(0, 0, 0, 0.2), inset 0 -1px 2px rgba(0, 0, 0, 0.3)`,
+              cursor: label ? 'pointer' : 'default'
             }}
-          />
+            onMouseEnter={() => setHoveredIndex(idx)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            {showTooltip && (
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-50 pointer-events-none">
+                <div className="font-medium">{label}</div>
+                <div className="text-gray-300">{valueLabel}: {value}</div>
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            )}
+          </div>
         );
       })}
     </div>

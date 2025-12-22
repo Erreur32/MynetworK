@@ -174,6 +174,52 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     };
 
     // Format relative time helper
+    const formatNextExecution = (lastExecution: string | null, intervalMinutes: number): string => {
+        const now = new Date();
+        let nextDate: Date;
+        
+        if (!lastExecution) {
+            // Si pas de dernière exécution, le prochain scan est dans l'intervalle configuré
+            nextDate = new Date(now.getTime() + intervalMinutes * 60000);
+        } else {
+            const lastDate = new Date(lastExecution);
+            nextDate = new Date(lastDate.getTime() + intervalMinutes * 60000);
+        }
+        
+        const diffMs = nextDate.getTime() - now.getTime();
+        
+        // Si le prochain scan est déjà passé (retard), afficher quand même la date précise
+        if (diffMs <= 0) {
+            // Le scan est en retard, afficher la date/heure exacte prévue
+            return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+        
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        // Pour les prochains scans très proches (< 1h), afficher les minutes précises
+        if (diffMins < 60) {
+            if (diffMins < 1) {
+                return `Dans moins d'1min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+            }
+            return `Dans ${diffMins}min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+        }
+        
+        // Pour les prochains scans dans les prochaines heures, afficher l'heure précise
+        if (diffHours < 24) {
+            return `Dans ${diffHours}h (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+        }
+        
+        // Pour les prochains jours, afficher la date et l'heure
+        if (diffDays < 7) {
+            return `Dans ${diffDays}j (${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+        }
+        
+        // Pour les dates plus lointaines, afficher la date complète
+        return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
     const formatRelativeTime = (dateStr: string): string => {
         const date = new Date(dateStr);
         const now = new Date();
@@ -307,7 +353,9 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                                     </span>
                                                 </>
                                             ) : (
-                                                <span className="text-gray-500">Bientôt</span>
+                                                <span className="text-gray-500">
+                                                    {formatNextExecution(null, autoStatus.fullScan.config.interval)}
+                                                </span>
                                             )}
                                         </div>
                                     )}
@@ -326,7 +374,9 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                                     </span>
                                                 </>
                                             ) : (
-                                                <span className="text-gray-500">Bientôt</span>
+                                                <span className="text-gray-500">
+                                                    {formatNextExecution(null, autoStatus.refresh.config.interval)}
+                                                </span>
                                             )}
                                         </div>
                                     )}

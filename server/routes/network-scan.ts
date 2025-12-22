@@ -256,7 +256,7 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
     }
 
     // Validate sortBy
-    const validSortBy = ['ip', 'last_seen', 'first_seen', 'status', 'ping_latency'];
+    const validSortBy = ['ip', 'last_seen', 'first_seen', 'status', 'ping_latency', 'hostname', 'mac', 'vendor'];
     if (sortBy && !validSortBy.includes(sortBy as string)) {
         return res.status(400).json({
             success: false,
@@ -337,6 +337,33 @@ router.get('/stats', requireAuth, asyncHandler(async (req: AuthenticatedRequest,
             error: {
                 message: error.message || 'Failed to get stats',
                 code: 'STATS_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/stats-history
+ * Get historical statistics for charts
+ * Query params:
+ * - hours?: number (default: 24)
+ */
+router.get('/stats-history', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const hours = parseInt(req.query.hours as string) || 24;
+        const history = NetworkScanRepository.getHistoricalStats(Math.min(hours, 168)); // Max 7 days
+
+        res.json({
+            success: true,
+            result: history
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get stats history:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get stats history',
+                code: 'STATS_HISTORY_ERROR'
             }
         });
     }

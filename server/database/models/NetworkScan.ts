@@ -5,6 +5,7 @@
  */
 
 import { getDatabase } from '../connection.js';
+import { logger } from '../../utils/logger.js';
 
 export interface NetworkScan {
     id: number;
@@ -38,7 +39,7 @@ export interface NetworkScanFilters {
     endDate?: Date;
     limit?: number;
     offset?: number;
-    sortBy?: 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency';
+    sortBy?: 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor';
     sortOrder?: 'asc' | 'desc';
 }
 
@@ -163,13 +164,24 @@ export class NetworkScanRepository {
             query += ' WHERE ' + conditions.join(' AND ');
         }
         
-        // Sorting
+        // Sorting - for IP, we'll sort in JavaScript for proper numeric IPv4 sorting
         const sortBy = filters.sortBy || 'last_seen';
         const sortOrder = filters.sortOrder || 'desc';
-        query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
         
-        // Pagination
-        if (filters.limit !== undefined) {
+        // For IP and hostname sorting, we need to fetch ALL results first, sort them, then paginate
+        // IP: needs numeric sorting (192.168.1.1 before 192.168.1.100)
+        // Hostname: needs to put empty/null/-- values at the end
+        // For other columns, SQL ORDER BY works fine and can be done before LIMIT
+        const needsJavaScriptSorting = sortBy === 'ip' || sortBy === 'hostname' || sortBy === 'mac' || sortBy === 'vendor';
+        
+        if (!needsJavaScriptSorting) {
+            // For non-IP sorting, use SQL ORDER BY (more efficient)
+            query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+        }
+        
+        // For IP sorting, we need to fetch all results first (no LIMIT yet)
+        // For other sorting, we can apply LIMIT directly in SQL
+        if (!needsJavaScriptSorting && filters.limit !== undefined) {
             query += ' LIMIT ?';
             values.push(filters.limit);
             if (filters.offset !== undefined) {
@@ -181,7 +193,74 @@ export class NetworkScanRepository {
         const stmt = db.prepare(query);
         const rows = stmt.all(...values) as any[];
         
-        return rows.map(row => this.mapRowToNetworkScan(row));
+        let results = rows.map(row => this.mapRowToNetworkScan(row));
+        
+        // Special handling for custom sorting: IP (numeric), hostname/mac/vendor (empty values at end)
+        // IMPORTANT: This must be done on ALL results before pagination
+        if (needsJavaScriptSorting) {
+            if (sortBy === 'ip') {
+                // IP sorting: proper numeric IPv4 sorting
+                // This ensures 192.168.1.1 comes before 192.168.1.100 (not lexicographically)
+                const parseIp = (ip: string): number => {
+                    const parts = ip.split('.').map(p => parseInt(p, 10));
+                    if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
+                        return 0; // Invalid IP, sort to beginning
+                    }
+                    // Convert IP to numeric value: 192.168.1.1 -> 192168001001
+                    return parts[0] * 1000000000 + parts[1] * 1000000 + parts[2] * 1000 + parts[3];
+                };
+                
+                // Sort ALL results first
+                results.sort((a, b) => {
+                    const aVal = parseIp(a.ip);
+                    const bVal = parseIp(b.ip);
+                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+                });
+            } else if (sortBy === 'hostname' || sortBy === 'mac' || sortBy === 'vendor') {
+                // Hostname/MAC/Vendor sorting: put empty/null/-- values at the end
+                const getValue = (item: NetworkScan): string => {
+                    let value: string | undefined;
+                    if (sortBy === 'hostname') value = item.hostname;
+                    else if (sortBy === 'mac') value = item.mac;
+                    else if (sortBy === 'vendor') value = item.vendor;
+                    
+                    // Treat empty, null, undefined, or '--' as empty
+                    if (!value || value.trim() === '' || value.trim() === '--') {
+                        return ''; // Will be sorted to end
+                    }
+                    return value.toLowerCase();
+                };
+                
+                // Sort ALL results first
+                results.sort((a, b) => {
+                    const aVal = getValue(a);
+                    const bVal = getValue(b);
+                    
+                    // Empty values go to the end
+                    if (aVal === '' && bVal !== '') return 1; // a goes after b
+                    if (aVal !== '' && bVal === '') return -1; // a goes before b
+                    if (aVal === '' && bVal === '') return 0; // both empty, keep order
+                    
+                    // Both have values, sort alphabetically
+                    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+            
+            // Apply pagination AFTER sorting all results
+            if (filters.offset !== undefined || filters.limit !== undefined) {
+                const offset = filters.offset || 0;
+                const limit = filters.limit;
+                if (limit !== undefined) {
+                    results = results.slice(offset, offset + limit);
+                } else if (offset > 0) {
+                    results = results.slice(offset);
+                }
+            }
+        }
+        
+        return results;
     }
 
     /**
@@ -350,6 +429,92 @@ export class NetworkScanRepository {
         
         if (!result.last_scan) return null;
         return new Date(result.last_scan);
+    }
+
+    /**
+     * Get historical statistics with fine granularity (by scan time, not by hour)
+     * Returns an array of stats for each scan period (grouped by 15-minute intervals)
+     * Uses network_scan_history table to get real historical data
+     * This provides better visualization with proportional bars
+     */
+    static getHistoricalStats(hours: number = 24): Array<{
+        time: string;
+        total: number;
+        online: number;
+        offline: number;
+    }> {
+        const db = getDatabase();
+        const now = new Date();
+        const startDate = new Date(now.getTime() - hours * 60 * 60 * 1000);
+        
+        // Use network_scan_history table to get real historical data
+        // Group by 15-minute intervals for better granularity (instead of hourly)
+        // This allows us to see changes between scans (e.g., refresh every 30 min)
+        const stmt = db.prepare(`
+            SELECT 
+                strftime('%Y-%m-%d %H:%M', seen_at) as time_slot,
+                COUNT(DISTINCT ip) as total,
+                COUNT(DISTINCT CASE WHEN status = 'online' THEN ip END) as online,
+                COUNT(DISTINCT CASE WHEN status = 'offline' THEN ip END) as offline
+            FROM network_scan_history
+            WHERE seen_at >= ?
+            GROUP BY strftime('%Y-%m-%d %H', seen_at), (CAST(strftime('%M', seen_at) AS INTEGER) / 15)
+            ORDER BY time_slot ASC
+        `);
+        
+        const rows = stmt.all(startDate.toISOString()) as Array<{
+            time_slot: string;
+            total: number;
+            online: number;
+            offline: number;
+        }>;
+        
+        // Convert to result format
+        const result: Array<{
+            time: string;
+            total: number;
+            online: number;
+            offline: number;
+        }> = [];
+        
+        rows.forEach(row => {
+            if (row.time_slot) {
+                // Parse the time slot and format it nicely
+                const date = new Date(row.time_slot + ':00');
+                result.push({
+                    time: date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                    total: row.total || 0,
+                    online: row.online || 0,
+                    offline: row.offline || 0
+                });
+            }
+        });
+        
+        // If we have very few data points, limit to last 48 entries (roughly 12 hours at 15-min intervals)
+        // This ensures the graph shows recent activity
+        if (result.length > 48) {
+            return result.slice(-48);
+        }
+        
+        return result;
+    }
+
+    /**
+     * Add a history entry for when an IP was seen
+     * Records each occurrence of an IP being scanned
+     */
+    static addHistoryEntry(ip: string, status: 'online' | 'offline' | 'unknown', pingLatency?: number): void {
+        const db = getDatabase();
+        try {
+            const stmt = db.prepare(`
+                INSERT INTO network_scan_history (ip, status, ping_latency, seen_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            `);
+            stmt.run(ip, status, pingLatency || null);
+        } catch (error) {
+            // Log error but don't throw - history is optional
+            logger.error('NetworkScanRepository', `Failed to add history entry for ${ip}:`, error);
+        }
     }
 
     /**

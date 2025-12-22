@@ -3,6 +3,74 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.1.15] - 2025-12-22
+
+### ✨ Ajouté
+
+**Plugin Scan Réseau - Historique des Scans**
+- 📊 Nouvelle table `network_scan_history` pour enregistrer chaque occurrence de scan
+- 📝 Enregistrement automatique de chaque scan d'IP avec statut, latence et timestamp
+- 🔄 Historique complet des scans pour analyse des tendances
+- 📈 Support pour visualisation de l'évolution des IPs dans le temps
+
+**Plugin Scan Réseau - Mini Graphiques avec Tooltips**
+- 📊 Mini graphiques en barres pour Total IPs, Online et Offline
+- 🎨 Dégradé élégant sur les barres (clair en haut, sombre en bas)
+- 💡 Tooltips au survol affichant la date/heure exacte et la valeur
+- 📈 Granularité de 15 minutes pour une meilleure visualisation des tendances
+- 🎯 Affichage des dernières 48 périodes (environ 12 heures)
+
+**Plugin Scan Réseau - Badge Auto Scan**
+- 🏷️ Badge ON/OFF dans le titre "Info Scans" indiquant l'état du scan automatique
+- 📍 Affichage du texte "Auto" à côté du badge pour clarification
+- 🎨 Couleurs : vert (ON) / gris (OFF)
+
+**Plugin Scan Réseau - Formatage Amélioré**
+- ⏰ Formatage précis du prochain scan : affiche la date/heure exacte au lieu de "Bientôt"
+- 📅 Format intelligent : "Dans Xmin (HH:MM)" pour les scans proches, date complète pour les scans lointains
+- ⏱️ Formatage de la latence : conversion des grandes valeurs (ex: 766413121517ms → "X jours Y heures")
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau - Tri des Colonnes**
+- 🔄 Tri appliqué sur TOUS les résultats de la base de données (pas seulement la page affichée)
+- 📊 Tri spécial pour hostname/mac/vendor : valeurs vides (--, null) placées à la fin
+- 🔢 Tri numérique correct pour les IPs (192.168.1.1 avant 192.168.1.100)
+- ✅ Toutes les colonnes sont maintenant triables avec indicateurs visuels
+
+**Plugin Scan Réseau - Largeurs de Colonnes Fixes**
+- 📐 Largeurs fixes pour toutes les colonnes du tableau (table-fixed)
+- 🎯 Colonnes ne changent plus de taille lors du tri ou avec du contenu variable
+- ✂️ Texte tronqué avec tooltip au survol pour les valeurs longues
+- 📏 Largeurs optimisées : IP (144px), MAC (160px), Hostname (192px), Statut (96px), Latence (128px), Dernière vue (160px), Actions (96px)
+
+**Plugin Scan Réseau - Statistiques Historiques**
+- 📊 Granularité améliorée : groupement par tranches de 15 minutes au lieu d'heures
+- 🔍 Utilisation de la table `network_scan_history` pour des données historiques réelles
+- 📈 Affichage des dernières 48 périodes (environ 12 heures) pour une meilleure visualisation
+- 🎯 Comptage précis des IPs distinctes par période et par statut
+
+**Page Scan Réseau - Interface**
+- 🎨 Layout amélioré : "Info Scans" prend 2 colonnes, autres cartes 1 colonne chacune
+- 🎯 Centrage des résultats dans les cartes Total IPs, Online, Offline
+- 🔘 Boutons "Rafraîchir" et "Scanner" déplacés dans la carte "Info Scans"
+- 🗑️ Suppression du bouton "Help" à côté de la barre de recherche
+- 📊 Badge de résultats agrandi affichant le total d'IPs (pas seulement les filtrées)
+
+### 🐛 Corrigé
+
+**Plugin Scan Réseau - Erreurs React**
+- ✅ Correction de l'erreur "Adjacent JSX elements must be wrapped"
+- ✅ Correction de l'erreur whitespace dans `<colgroup>` (commentaires supprimés)
+- ✅ Correction de l'erreur "useState is not defined" dans MiniBarChart
+
+**Plugin Scan Réseau - Affichage**
+- ✅ Correction de l'affichage des mini graphiques (affichage garanti même sans historique)
+- ✅ Correction du tri IP pour s'appliquer à tous les résultats avant pagination
+- ✅ Correction de l'affichage des tooltips sur les barres des graphiques
+
+---
+
 ## [0.1.14] - 2025-12-22
 
 ### 🐛 Corrigé

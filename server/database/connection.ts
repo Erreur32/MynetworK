@@ -189,6 +189,18 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Network scan history table (tracks each time an IP is seen)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS network_scan_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('online', 'offline', 'unknown')),
+            ping_latency INTEGER,
+            seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ip) REFERENCES network_scans(ip) ON DELETE CASCADE
+        )
+    `);
+
     // Create indexes for better performance
     database.exec(`
         CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
@@ -200,6 +212,9 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_network_scans_ip ON network_scans(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scans_last_seen ON network_scans(last_seen);
         CREATE INDEX IF NOT EXISTS idx_network_scans_status ON network_scans(status);
+        CREATE INDEX IF NOT EXISTS idx_network_scan_history_ip ON network_scan_history(ip);
+        CREATE INDEX IF NOT EXISTS idx_network_scan_history_seen_at ON network_scan_history(seen_at);
+        CREATE INDEX IF NOT EXISTS idx_network_scan_history_status ON network_scan_history(status);
     `);
 
     logger.success('Database', 'Schema initialized');
