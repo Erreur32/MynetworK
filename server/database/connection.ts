@@ -58,6 +58,22 @@ export function closeDatabase(): void {
 }
 
 /**
+ * Force a WAL checkpoint to ensure all changes are written to the main database file
+ * This is important in Docker environments where WAL files might not be properly synchronized
+ */
+export function checkpointWAL(): void {
+    try {
+        if (db) {
+            // Checkpoint the WAL file to ensure all changes are written to the main database
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            logger.debug('Database', 'WAL checkpoint completed');
+        }
+    } catch (error) {
+        logger.error('Database', 'Failed to checkpoint WAL:', error);
+    }
+}
+
+/**
  * Initialize database schema (create tables if they don't exist)
  */
 export function initializeDatabase(): void {

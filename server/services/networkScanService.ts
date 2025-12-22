@@ -10,8 +10,36 @@ import os from 'os';
 import dns from 'dns';
 import { NetworkScanRepository, type NetworkScan, type CreateNetworkScanInput } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
+import { vendorDetectionService } from './vendorDetection.js';
 
-const execAsync = promisify(exec);
+// Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
+// ping returns non-zero exit code on packet loss, which is normal for offline hosts
+const execAsync = (command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }> => {
+    return new Promise((resolve, reject) => {
+        const childProcess = exec(command, {
+            timeout: options?.timeout,
+            killSignal: 'SIGTERM'
+        }, (error, stdout, stderr) => {
+            // Don't reject on non-zero exit code - ping returns non-zero on packet loss
+            // Only reject on real errors (timeout, spawn errors, etc.)
+            if (error) {
+                // Check if it's a real error (timeout, spawn error) or just exit code
+                if (error.signal === 'SIGTERM' || 
+                    error.message?.includes('timeout') ||
+                    error.code === 'ENOENT' ||
+                    error.message?.includes('spawn')) {
+                    reject(error);
+                } else {
+                    // Non-zero exit code but command executed - this is normal for ping
+                    resolve({ stdout: stdout || '', stderr: stderr || '' });
+                }
+            } else {
+                resolve({ stdout: stdout || '', stderr: stderr || '' });
+            }
+        });
+    });
+};
+
 const dnsReverseAsync = promisify(dns.reverse);
 
 const isWindows = process.platform === 'win32';
@@ -78,11 +106,23 @@ export class NetworkScanService {
                         pingLatency: latency
                     };
                     
-                    // If full scan, get MAC and hostname
+                    // If full scan, get MAC, vendor, and hostname
                     if (scanType === 'full') {
                         try {
                             const mac = await this.getMacAddress(ip);
-                            if (mac) scanData.mac = mac;
+                            if (mac) {
+                                scanData.mac = mac;
+                                
+                                // Detect vendor from MAC address (inspired by WatchYourLAN)
+                                try {
+                                    const vendor = vendorDetectionService.detectVendor(mac);
+                                    if (vendor) {
+                                        scanData.vendor = vendor;
+                                    }
+                                } catch (error) {
+                                    logger.debug('NetworkScanService', `Failed to detect vendor for ${ip}:`, error);
+                                }
+                            }
                         } catch (error) {
                             // MAC detection may fail, continue without it
                             logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
@@ -191,11 +231,23 @@ export class NetworkScanService {
                         lastSeen: new Date()
                     };
                     
-                    // If full scan, update MAC and hostname
+                    // If full scan, update MAC, vendor, and hostname
                     if (scanType === 'full') {
                         try {
                             const mac = await this.getMacAddress(ip);
-                            if (mac) updateData.mac = mac;
+                            if (mac) {
+                                updateData.mac = mac;
+                                
+                                // Detect vendor from MAC address (inspired by WatchYourLAN)
+                                try {
+                                    const vendor = vendorDetectionService.detectVendor(mac);
+                                    if (vendor) {
+                                        updateData.vendor = vendor;
+                                    }
+                                } catch (error) {
+                                    logger.debug('NetworkScanService', `Failed to detect vendor for ${ip}:`, error);
+                                }
+                            }
                         } catch (error) {
                             logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
                         }
@@ -379,38 +431,123 @@ export class NetworkScanService {
             return { success: false };
         }
         
+        // Detect if running in Docker
+        const isDockerEnv = ((): boolean => {
+            try {
+                const fsSync = require('fs').readFileSync;
+                const cgroup = fsSync('/proc/self/cgroup', 'utf8');
+                if (cgroup.includes('docker') || cgroup.includes('containerd')) {
+                    return true;
+                }
+            } catch {
+                // Not Linux or file doesn't exist
+            }
+            
+            if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
+                return true;
+            }
+            
+            try {
+                const fsSync = require('fs').accessSync;
+                fsSync('/.dockerenv');
+                return true;
+            } catch {
+                return false;
+            }
+        })();
+        
+        // Determine ping command based on environment
+        let pingCommand = 'ping';
+        if (!isWindows) {
+            // On Linux (Docker or npm), try to find ping command dynamically
+            // This works for both Docker and npm dev mode
+            try {
+                const { stdout: whichOutput } = await execAsync('which ping', { timeout: 1000 });
+                const foundPath = whichOutput.trim();
+                if (foundPath) {
+                    pingCommand = foundPath;
+                } else {
+                    // If 'which' doesn't return a path, try common paths
+                    throw new Error('which ping returned empty');
+                }
+            } catch {
+                // If 'which' fails, try common paths
+                try {
+                    await execAsync('test -x /bin/ping', { timeout: 100 });
+                    pingCommand = '/bin/ping';
+                } catch {
+                    try {
+                        await execAsync('test -x /usr/bin/ping', { timeout: 100 });
+                        pingCommand = '/usr/bin/ping';
+                    } catch {
+                        // Fallback to 'ping' and let the system PATH find it
+                        pingCommand = 'ping';
+                    }
+                }
+            }
+        }
+        
         try {
             // Use single ping with timeout
+            // Note: On some systems, ping requires NET_RAW capability or root permissions
             const command = isWindows
                 ? `ping ${PING_FLAG} 1 -w ${PING_TIMEOUT} ${ip}`
-                : `ping ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
+                : `${pingCommand} ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
             
-            const { stdout } = await execAsync(command, {
+            // Execute ping command - our custom execAsync doesn't reject on non-zero exit codes
+            const { stdout, stderr } = await execAsync(command, {
                 timeout: PING_TIMEOUT + 500 // Add 500ms buffer
             });
             
-            // Parse latency from ping output
+            // Check if ping was successful by looking for latency in output
+            // If stdout contains latency info, ping succeeded
             const latency = this.parsePingLatency(stdout);
             
-            return {
-                success: true,
-                latency: latency || undefined
-            };
-        } catch (error: any) {
-            // Ping failed (host unreachable, timeout, etc.)
-            // Log permission errors for debugging
-            if (error.message?.includes('Permission denied') || error.message?.includes('Operation not permitted')) {
-                logger.warn('NetworkScanService', `Ping permission denied for ${ip}. Ensure NET_RAW capability is enabled.`);
-            } else if (error.message?.includes('command not found') || error.message?.includes('ping')) {
-                logger.warn('NetworkScanService', `Ping command not found. Ensure iputils-ping is installed.`);
+            if (latency !== null) {
+                return {
+                    success: true,
+                    latency: latency
+                };
             }
+            
+            // No latency found - ping failed (host unreachable, timeout, etc.)
+            // This is normal and shouldn't be logged as an error
+            return { success: false };
+        } catch (error: any) {
+            // Only real errors reach here (timeout, permission, command not found, spawn errors)
+            const errorMessage = error.message || String(error);
+            const errorStderr = error.stderr || '';
+            
+            // Check for permission errors
+            if (errorMessage.includes('Permission denied') || 
+                errorMessage.includes('Operation not permitted') ||
+                errorStderr.includes('Permission denied') ||
+                errorStderr.includes('Operation not permitted')) {
+                logger.warn('NetworkScanService', `Ping permission denied for ${ip}. Ensure NET_RAW capability is enabled or run with appropriate permissions.`);
+                logger.debug('NetworkScanService', `Ping error details: ${errorMessage}, stderr: ${errorStderr}`);
+            } 
+            // Check for command not found
+            else if (errorMessage.includes('command not found') || 
+                     errorMessage.includes('ENOENT') ||
+                     errorMessage.includes('spawn') ||
+                     errorStderr.includes('command not found')) {
+                const envType = isDockerEnv ? 'Docker' : 'npm';
+                logger.error('NetworkScanService', `Ping command not found. Tried: ${pingCommand}. In ${envType} mode, ensure ping is available.`);
+                logger.error('NetworkScanService', `Error details: ${errorMessage}, stderr: ${errorStderr}`);
+            }
+            // Timeout errors are also normal for offline hosts, but we log them at debug level
+            else if (errorMessage.includes('ETIMEDOUT') || errorMessage.includes('timeout') || error.signal === 'SIGTERM') {
+                // Timeout is normal for offline hosts, don't log as error
+                logger.debug('NetworkScanService', `Ping timeout for ${ip} (host may be offline)`);
+            }
+            
             return { success: false };
         }
     }
 
     /**
-     * Get MAC address for an IP using ARP table
-     * May not work in Docker environments
+     * Get MAC address for an IP using ARP table or arp-scan
+     * Inspired by WatchYourLAN's approach - uses multiple methods for better detection
      * 
      * @param ip IP address
      * @returns MAC address or null if not found
@@ -425,30 +562,89 @@ export class NetworkScanService {
                     return match[0].toLowerCase().replace(/-/g, ':');
                 }
             } else {
-                // Linux/Mac: arp -n or ip neigh
+                // Linux/Mac: Try multiple methods for better detection (like WatchYourLAN)
+                
+                // Method 1: Try ip neigh first (most reliable, works in Docker)
                 try {
-                    // Try ip neigh first (more reliable)
-                    const { stdout } = await execAsync(`ip neigh show ${ip}`);
+                    const { stdout } = await execAsync(`ip neigh show ${ip}`, { timeout: 2000 });
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
-                        return match[0].toLowerCase().replace(/-/g, ':');
+                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                        logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using ip neigh`);
+                        return mac;
                     }
-                } catch {
-                    // Fallback to arp
-                    try {
-                        const { stdout } = await execAsync(`arp -n ${ip}`);
+                } catch (error) {
+                    logger.debug('NetworkScanService', `ip neigh failed for ${ip}:`, error);
+                }
+                
+                // Method 2: Try arp-scan if available (like WatchYourLAN)
+                // arp-scan is more reliable for network scanning but requires root/privileges
+                try {
+                    // Get network interface for arp-scan
+                    const networkInterface = this.getNetworkInterface();
+                    if (networkInterface) {
+                        // arp-scan -l -q -x (local network, quiet, exit after first match)
+                        // Note: arp-scan scans entire network, so we parse output for our IP
+                        const { stdout } = await execAsync(
+                            `arp-scan -l -q -x -I ${networkInterface} 2>/dev/null | grep ${ip}`,
+                            { timeout: 5000 }
+                        );
                         const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                         if (match) {
-                            return match[0].toLowerCase().replace(/-/g, ':');
+                            const mac = match[0].toLowerCase().replace(/-/g, ':');
+                            logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
+                            return mac;
                         }
-                    } catch {
-                        // ARP not available
+                    }
+                } catch (error) {
+                    // arp-scan not available or failed (may require root privileges)
+                    logger.debug('NetworkScanService', `arp-scan not available or failed for ${ip}:`, error);
+                }
+                
+                // Method 3: Fallback to traditional arp command
+                try {
+                    const { stdout } = await execAsync(`arp -n ${ip}`, { timeout: 2000 });
+                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                    if (match) {
+                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                        logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
+                        return mac;
+                    }
+                } catch {
+                    // ARP not available
+                }
+            }
+        } catch (error) {
+            // All methods failed
+            logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get the primary network interface name
+     * Used for arp-scan command
+     */
+    private getNetworkInterface(): string | null {
+        try {
+            const interfaces = os.networkInterfaces();
+            
+            for (const name of Object.keys(interfaces)) {
+                // Skip loopback and Docker interfaces
+                if (name.startsWith('lo') || name.startsWith('docker') || name.startsWith('veth') || name.startsWith('br-')) {
+                    continue;
+                }
+                
+                for (const iface of interfaces[name] || []) {
+                    // Return first IPv4 non-internal interface
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        return name;
                     }
                 }
             }
         } catch (error) {
-            // ARP command failed or MAC not found
-            logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
+            logger.debug('NetworkScanService', 'Failed to get network interface:', error);
         }
         
         return null;

@@ -26,7 +26,10 @@ WORKDIR /app
 # su-exec is needed for the entrypoint script to switch from root to node user
 # iputils-ping: Required for network scanning (ping command)
 # iproute2: Required for network scanning (ip neigh command for MAC detection)
-RUN apk add --no-cache python3 make g++ wget su-exec iputils-ping iproute2
+# arp-scan: Required for improved MAC address detection (like WatchYourLAN)
+# Note: arp-scan needs to be built from source on Alpine, but we'll try to use it if available
+# For now, we use ip neigh as primary method and arp-scan as optional enhancement
+RUN apk add --no-cache python3 make g++ wget su-exec iputils-ping iproute2 libpcap-dev libpcap
 
 # data
 RUN mkdir -p /app/data && chown -R node:node /app

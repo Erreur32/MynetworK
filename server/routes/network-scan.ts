@@ -12,7 +12,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
-import { networkScanScheduler } from '../services/networkScanScheduler.js';
+import { networkScanScheduler, type UnifiedAutoScanConfig } from '../services/networkScanScheduler.js';
 
 const router = Router();
 
@@ -62,6 +62,15 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
 
     try {
         const result = await networkScanService.scanNetwork(scanRange, scanType);
+
+        // Track last manual scan
+        AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
+            type: 'full',
+            scanType: scanType,
+            range: scanRange,
+            timestamp: new Date().toISOString(),
+            result: result
+        }));
 
         res.json({
             success: true,
@@ -138,6 +147,14 @@ router.post('/refresh', requireAuth, autoLog('network-scan', 'refresh'), asyncHa
 
     try {
         const result = await networkScanService.refreshExistingIps(scanType);
+
+        // Track last manual refresh
+        AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
+            type: 'refresh',
+            scanType: scanType,
+            timestamp: new Date().toISOString(),
+            result: result
+        }));
 
         res.json({
             success: true,
@@ -597,6 +614,208 @@ router.post('/default-config', requireAuth, autoLog('network-scan', 'default-con
 }));
 
 /**
+ * GET /api/network-scan/unified-config
+ * Get unified automatic scan configuration (new unified structure)
+ * IMPORTANT: This route must be defined BEFORE /:id route to avoid route conflicts
+ */
+router.get('/unified-config', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        // Try to get unified config first
+        const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
+        
+        if (unifiedConfigStr) {
+            // New unified config exists
+            const config: UnifiedAutoScanConfig = JSON.parse(unifiedConfigStr);
+            res.json({
+                success: true,
+                result: config
+            });
+            return;
+        }
+
+        // Fallback: migrate from old configs
+        const scanConfigStr = AppConfigRepository.get('network_scan_auto');
+        const refreshConfigStr = AppConfigRepository.get('network_scan_refresh_auto');
+        
+        const scanConfig = scanConfigStr ? JSON.parse(scanConfigStr) : null;
+        const refreshConfig = refreshConfigStr ? JSON.parse(refreshConfigStr) : null;
+        
+        // Build unified config from old configs
+        const unifiedConfig: UnifiedAutoScanConfig = {
+            enabled: (scanConfig?.enabled || refreshConfig?.enabled) ?? false,
+            fullScan: scanConfig?.enabled ? {
+                enabled: true,
+                interval: scanConfig.interval,
+                scanType: scanConfig.scanType
+            } : undefined,
+            refresh: refreshConfig?.enabled ? {
+                enabled: true,
+                interval: refreshConfig.interval
+            } : undefined
+        };
+
+        res.json({
+            success: true,
+            result: unifiedConfig
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get unified config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get unified config',
+                code: 'CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/auto-status
+ * Get automatic scan and refresh status (config + scheduler status + last execution)
+ * IMPORTANT: This route must be defined BEFORE /:id to avoid route conflicts
+ */
+router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        // Try to get unified config first
+        const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
+        let unifiedConfig: UnifiedAutoScanConfig | null = null;
+        
+        logger.info('NetworkScan', `Loading unified config from DB: exists=${!!unifiedConfigStr}`);
+        
+        if (unifiedConfigStr) {
+            try {
+                unifiedConfig = JSON.parse(unifiedConfigStr);
+                logger.info('NetworkScan', `Parsed unified config: ${JSON.stringify(unifiedConfig)}`);
+            } catch (e) {
+                logger.error('NetworkScan', `Failed to parse unified config: ${e}`);
+                unifiedConfig = null;
+            }
+        }
+        
+        if (!unifiedConfig) {
+            // Fallback to old configs
+            const scanConfigStr = AppConfigRepository.get('network_scan_auto');
+            const refreshConfigStr = AppConfigRepository.get('network_scan_refresh_auto');
+            const scanConfig = scanConfigStr ? JSON.parse(scanConfigStr) : { enabled: false, interval: 30, scanType: 'quick' };
+            const refreshConfig = refreshConfigStr ? JSON.parse(refreshConfigStr) : { enabled: false, interval: 15 };
+            
+            unifiedConfig = {
+                enabled: scanConfig.enabled || refreshConfig.enabled,
+                fullScan: scanConfig.enabled ? {
+                    enabled: true,
+                    interval: scanConfig.interval,
+                    scanType: scanConfig.scanType
+                } : undefined,
+                refresh: refreshConfig.enabled ? {
+                    enabled: true,
+                    interval: refreshConfig.interval
+                } : undefined
+            };
+        }
+        
+        // Get scheduler status
+        const scanStatus = networkScanScheduler.getScanStatus();
+        const refreshStatus = networkScanScheduler.getRefreshStatus();
+        
+        // Get last scan dates (manual and auto)
+        const lastManualStr = AppConfigRepository.get('network_scan_last_manual');
+        const lastAutoStr = AppConfigRepository.get('network_scan_last_auto');
+        
+        let lastManual: { type: string; scanType: string; timestamp: string; range?: string } | null = null;
+        let lastAuto: { type: string; scanType: string; timestamp: string; range?: string } | null = null;
+        
+        if (lastManualStr) {
+            try {
+                lastManual = JSON.parse(lastManualStr);
+            } catch (e) {
+                logger.warn('NetworkScan', 'Failed to parse last manual scan');
+            }
+        }
+        
+        if (lastAutoStr) {
+            try {
+                lastAuto = JSON.parse(lastAutoStr);
+            } catch (e) {
+                logger.warn('NetworkScan', 'Failed to parse last auto scan');
+            }
+        }
+        
+        // Determine last full scan and last refresh (manual or auto)
+        const lastFullScan = lastManual?.type === 'full' ? lastManual : (lastAuto?.type === 'full' ? lastAuto : null);
+        const lastRefresh = lastManual?.type === 'refresh' ? lastManual : (lastAuto?.type === 'refresh' ? lastAuto : null);
+        
+        // Ensure fullScan and refresh objects exist with defaults
+        const fullScanConfig = unifiedConfig.fullScan || { enabled: false, interval: 1440, scanType: 'full' };
+        const refreshConfig = unifiedConfig.refresh || { enabled: false, interval: 10 };
+        
+        // Calculate enabled status: true if master switch is enabled AND at least one sub-config is enabled
+        // This ensures the status reflects the actual state of the schedulers
+        const isEnabled = unifiedConfig.enabled && (fullScanConfig.enabled || refreshConfig.enabled);
+        
+        // Log the calculation for debugging (use info level so it's always visible)
+        logger.info('NetworkScan', `Auto-status calculation: master=${unifiedConfig.enabled}, fullScan=${fullScanConfig.enabled}, refresh=${refreshConfig.enabled}, result=${isEnabled}`);
+        logger.info('NetworkScan', `Full unified config: ${JSON.stringify(unifiedConfig)}`);
+        
+        const result = {
+            enabled: isEnabled,
+            fullScan: {
+                config: fullScanConfig,
+                scheduler: scanStatus,
+                lastExecution: lastFullScan ? {
+                    timestamp: lastFullScan.timestamp,
+                    type: lastManual?.type === 'full' ? 'manual' : 'auto',
+                    scanType: lastFullScan.scanType,
+                    range: lastFullScan.range
+                } : null
+            },
+            refresh: {
+                config: refreshConfig,
+                scheduler: refreshStatus,
+                lastExecution: lastRefresh ? {
+                    timestamp: lastRefresh.timestamp,
+                    type: lastManual?.type === 'refresh' ? 'manual' : 'auto',
+                    scanType: lastRefresh.scanType
+                } : null
+            },
+            lastScan: (() => {
+                // Get the most recent scan (manual or auto, full or refresh)
+                const scans = [lastManual, lastAuto].filter(Boolean) as Array<{ timestamp: string; type: string; scanType: string; range?: string }>;
+                if (scans.length === 0) return null;
+                scans.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                const mostRecent = scans[0];
+                return {
+                    timestamp: mostRecent.timestamp,
+                    type: mostRecent.type,
+                    scanType: mostRecent.scanType,
+                    isManual: lastManual?.timestamp === mostRecent.timestamp,
+                    range: mostRecent.range
+                };
+            })()
+        };
+        
+        // Log the complete result being sent
+        logger.info('NetworkScan', `Auto-status result: enabled=${result.enabled}, fullScan.config.enabled=${result.fullScan.config.enabled}, refresh.config.enabled=${result.refresh.config.enabled}`);
+        
+        res.json({
+            success: true,
+            result: result
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get auto status:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get auto status',
+                code: 'STATUS_ERROR'
+            }
+        });
+    }
+}));
+
+// Route /auto-status moved above - see definition before /:id route (line 678)
+
+/**
  * GET /api/network-scan/:id
  * Get details of a specific IP
  */
@@ -741,6 +960,203 @@ router.delete('/clear', requireAuth, requireAdmin, autoLog('network-scan', 'clea
             error: {
                 message: error.message || 'Failed to clear history',
                 code: 'CLEAR_ERROR'
+            }
+        });
+    }
+}));
+
+// Route /auto-status moved above - see definition before /:id route
+
+/**
+ * POST /api/network-scan/unified-config
+ * Save unified automatic scan configuration (new unified structure)
+ * 
+ * Body:
+ * {
+ *   enabled: boolean (master switch)
+ *   fullScan?: {
+ *     enabled: boolean
+ *     interval: number (minutes: 15, 30, 60, 120, 360, 720, 1440)
+ *     scanType: 'full' | 'quick'
+ *   }
+ *   refresh?: {
+ *     enabled: boolean
+ *     interval: number (minutes: 5, 10, 15, 30, 60)
+ *   }
+ * }
+ */
+router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { enabled, fullScan, refresh } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'enabled must be a boolean',
+                code: 'INVALID_ENABLED'
+            }
+        });
+    }
+
+    // Validate fullScan if provided
+    if (fullScan) {
+        if (typeof fullScan.enabled !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'fullScan.enabled must be a boolean',
+                    code: 'INVALID_FULLSCAN_ENABLED'
+                }
+            });
+        }
+        if (fullScan.enabled) {
+            const validIntervals = [15, 30, 60, 120, 360, 720, 1440];
+            if (!validIntervals.includes(fullScan.interval)) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: `fullScan.interval must be one of: ${validIntervals.join(', ')} minutes`,
+                        code: 'INVALID_FULLSCAN_INTERVAL'
+                    }
+                });
+            }
+            if (fullScan.scanType !== 'full' && fullScan.scanType !== 'quick') {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: 'fullScan.scanType must be "full" or "quick"',
+                        code: 'INVALID_FULLSCAN_TYPE'
+                    }
+                });
+            }
+        }
+    }
+
+    // Validate refresh if provided
+    if (refresh) {
+        if (typeof refresh.enabled !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'refresh.enabled must be a boolean',
+                    code: 'INVALID_REFRESH_ENABLED'
+                }
+            });
+        }
+        if (refresh.enabled) {
+            const validIntervals = [5, 10, 15, 30, 60];
+            if (!validIntervals.includes(refresh.interval)) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: `refresh.interval must be one of: ${validIntervals.join(', ')} minutes`,
+                        code: 'INVALID_REFRESH_INTERVAL'
+                    }
+                });
+            }
+        }
+    }
+
+    try {
+        // Build unified config - always include fullScan and refresh objects even if disabled
+        // This ensures the configuration structure is consistent
+        const config: UnifiedAutoScanConfig = {
+            enabled,
+            fullScan: fullScan ? {
+                enabled: fullScan.enabled || false,
+                interval: fullScan.interval || 1440,
+                scanType: fullScan.scanType || 'full'
+            } : undefined,
+            refresh: refresh ? {
+                enabled: refresh.enabled || false,
+                interval: refresh.interval || 10
+            } : undefined
+        };
+
+        // Debug: Log the config being saved
+        logger.info('NetworkScan', `Saving unified config: enabled=${config.enabled}, fullScan=${config.fullScan?.enabled || false}, refresh=${config.refresh?.enabled || false}`);
+        logger.debug('NetworkScan', `Full config being saved: ${JSON.stringify(config)}`);
+
+        // Save unified config and verify it was saved successfully
+        const unifiedConfigSaved = AppConfigRepository.set('network_scan_unified_auto', JSON.stringify(config));
+        if (!unifiedConfigSaved) {
+            logger.error('NetworkScan', 'Failed to save unified config to database');
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Failed to save unified config to database',
+                    code: 'CONFIG_SAVE_ERROR'
+                }
+            });
+        }
+        logger.info('NetworkScan', `Saved unified config: enabled=${config.enabled}, fullScan=${config.fullScan?.enabled || false}, refresh=${config.refresh?.enabled || false}`);
+
+        // Also update old configs for backward compatibility
+        if (config.fullScan) {
+            const oldConfigSaved = AppConfigRepository.set('network_scan_auto', JSON.stringify({
+                enabled: config.enabled && config.fullScan.enabled,
+                interval: config.fullScan.interval,
+                scanType: config.fullScan.scanType
+            }));
+            if (!oldConfigSaved) {
+                logger.warn('NetworkScan', 'Failed to save old scan config (backward compatibility)');
+            }
+        } else {
+            AppConfigRepository.set('network_scan_auto', JSON.stringify({ enabled: false, interval: 30, scanType: 'quick' }));
+        }
+
+        if (config.refresh) {
+            const refreshConfigSaved = AppConfigRepository.set('network_scan_refresh_auto', JSON.stringify({
+                enabled: config.enabled && config.refresh.enabled,
+                interval: config.refresh.interval
+            }));
+            if (!refreshConfigSaved) {
+                logger.warn('NetworkScan', 'Failed to save refresh config (backward compatibility)');
+            }
+        } else {
+            AppConfigRepository.set('network_scan_refresh_auto', JSON.stringify({ enabled: false, interval: 15 }));
+        }
+
+        // Verify the config was persisted by reading it back
+        const savedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
+        if (!savedConfigStr) {
+            logger.error('NetworkScan', 'Config was not found after saving - persistence issue detected');
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Configuration was not persisted correctly',
+                    code: 'CONFIG_PERSISTENCE_ERROR'
+                }
+            });
+        }
+
+        const savedConfig: UnifiedAutoScanConfig = JSON.parse(savedConfigStr);
+        if (savedConfig.enabled !== config.enabled) {
+            logger.error('NetworkScan', `Config persistence mismatch: expected enabled=${config.enabled}, got enabled=${savedConfig.enabled}`);
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Configuration was not persisted correctly',
+                    code: 'CONFIG_PERSISTENCE_ERROR'
+                }
+            });
+        }
+
+        // Update schedulers immediately
+        networkScanScheduler.updateUnifiedConfig(config);
+        logger.info('NetworkScan', 'Schedulers updated with new unified config');
+
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save unified config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save unified config',
+                code: 'CONFIG_SAVE_ERROR'
             }
         });
     }

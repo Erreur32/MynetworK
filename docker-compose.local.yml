@@ -34,10 +34,10 @@ services:
       dockerfile: Dockerfile
     container_name: mynetwork-local
     ports:
-      - "${DASHBOARD_PORT:-7505}:3000"
+      - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      #- NODE_ENV=production
+      #- PORT=3000
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
       # ⚠️ SECURITE CRITIQUE : JWT_SECRET - Secret pour signer les tokens JWT
@@ -67,9 +67,23 @@ services:
     volumes:
       # Persistent storage for Freebox authentication token and database
       - mynetwork_data_local:/app/data
+      # Mount host filesystem (read-only) to access real host metrics
+      - /:/host:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # Mount Docker socket to enable Docker version detection
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
+
+    # Network capabilities required for network scanning (ping, arp)
+    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
+    # NET_ADMIN: Required for some network operations and ARP table access
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
     restart: unless-stopped
     # Health check (use 127.0.0.1 instead of localhost to avoid IPv6 issues)
     healthcheck:

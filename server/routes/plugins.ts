@@ -11,6 +11,7 @@ import { loggingService } from '../services/loggingService.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
+import { logger } from '../utils/logger.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 
 const router = Router();
@@ -227,6 +228,18 @@ router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: A
 
     // Update plugin configuration
     await pluginManager.updatePluginConfig(pluginId, newConfig);
+
+    // If scan-reseau plugin was enabled/disabled, update network scan schedulers
+    if (pluginId === 'scan-reseau') {
+        try {
+            const { networkScanScheduler } = await import('../services/networkScanScheduler.js');
+            networkScanScheduler.checkPluginStatusAndUpdate();
+            logger.info('Plugin', 'Network scan schedulers updated after scan-reseau plugin state change');
+        } catch (error) {
+            logger.error('Plugin', 'Failed to update network scan schedulers:', error);
+            // Don't fail the request if scheduler update fails
+        }
+    }
 
     await loggingService.logUserAction(
         req.user!.userId,

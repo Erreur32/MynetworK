@@ -5,7 +5,7 @@
  * Used for settings like PUBLIC_URL, timezone, language, etc.
  */
 
-import { getDatabase } from '../connection.js';
+import { getDatabase, checkpointWAL } from '../connection.js';
 import { logger } from '../../utils/logger.js';
 
 export interface AppConfig {
@@ -36,6 +36,7 @@ export class AppConfigRepository {
 
     /**
      * Set a configuration value
+     * Forces a WAL checkpoint after saving to ensure persistence in Docker environments
      */
     static set(key: string, value: string): boolean {
         try {
@@ -45,14 +46,33 @@ export class AppConfigRepository {
                 return false;
             }
 
-            db.prepare(`
+            const stmt = db.prepare(`
                 INSERT INTO app_config (key, value, updated_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(key) DO UPDATE SET
                     value = excluded.value,
                     updated_at = CURRENT_TIMESTAMP
-            `).run(key, value);
+            `);
+            
+            const result = stmt.run(key, value);
+            
+            // Verify the write was successful
+            if (result.changes === 0) {
+                logger.warn('AppConfig', `No changes made when setting config ${key}`);
+                return false;
+            }
 
+            // Force WAL checkpoint to ensure changes are persisted (important in Docker)
+            checkpointWAL();
+
+            // Verify the value was actually saved by reading it back
+            const savedValue = this.get(key);
+            if (savedValue !== value) {
+                logger.error('AppConfig', `Config ${key} was not saved correctly. Expected: ${value}, Got: ${savedValue}`);
+                return false;
+            }
+
+            logger.debug('AppConfig', `Config ${key} saved and verified successfully`);
             return true;
         } catch (error) {
             logger.error('AppConfig', `Failed to set config ${key}:`, error);

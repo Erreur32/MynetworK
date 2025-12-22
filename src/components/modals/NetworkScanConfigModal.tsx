@@ -19,6 +19,20 @@ interface AutoRefreshConfig {
     interval: number;
 }
 
+// New unified configuration structure
+interface UnifiedAutoScanConfig {
+    enabled: boolean; // Master switch
+    fullScan?: {
+        enabled: boolean;
+        interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
+        scanType: 'full' | 'quick';
+    };
+    refresh?: {
+        enabled: boolean;
+        interval: number; // minutes: 5, 10, 15, 30, 60
+    };
+}
+
 interface DefaultScanConfig {
     defaultRange: string;
     defaultScanType: 'full' | 'quick';
@@ -31,12 +45,21 @@ interface NetworkScanConfigModalProps {
 }
 
 export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose }) => {
+    // New unified config
+    const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
+        enabled: false,
+        fullScan: { enabled: false, interval: 1440, scanType: 'full' },
+        refresh: { enabled: false, interval: 10 }
+    });
+    
+    // Keep old configs for backward compatibility during transition
     const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
     const [refreshConfig, setRefreshConfig] = useState<AutoRefreshConfig>({ enabled: false, interval: 15 });
     const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultScanType: 'full', defaultAutoDetect: false });
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [useUnifiedConfig, setUseUnifiedConfig] = useState(true); // Use new unified config by default
 
     useEffect(() => {
         if (isOpen) {
@@ -47,9 +70,22 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const fetchConfigs = async () => {
         setIsLoading(true);
         try {
+            // Try to fetch unified config first
+            try {
+                const unifiedResponse = await api.get<UnifiedAutoScanConfig>('/api/network-scan/unified-config');
+                if (unifiedResponse.success && unifiedResponse.result) {
+                    setUnifiedConfig(unifiedResponse.result);
+                    setUseUnifiedConfig(true);
+                }
+            } catch {
+                // Fallback to old configs if unified doesn't exist
+                setUseUnifiedConfig(false);
+            }
+
+            // Always fetch old configs for backward compatibility
             const [scanResponse, refreshResponse, defaultResponse] = await Promise.all([
-                api.get<AutoScanConfig>('/api/network-scan/config'),
-                api.get<AutoRefreshConfig>('/api/network-scan/refresh-config'),
+                api.get<AutoScanConfig>('/api/network-scan/config').catch(() => ({ success: false, result: null })),
+                api.get<AutoRefreshConfig>('/api/network-scan/refresh-config').catch(() => ({ success: false, result: null })),
                 api.get<DefaultScanConfig>('/api/network-scan/default-config')
             ]);
 
@@ -105,6 +141,50 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             }
         } catch (error: any) {
             console.error('Save refresh config failed:', error);
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // New unified save handler
+    const handleSaveUnifiedConfig = async () => {
+        setIsSaving(true);
+        setSaveMessage(null);
+        try {
+            // Ensure we always send fullScan and refresh objects, even if disabled
+            // This ensures the backend receives a complete configuration structure
+            const configToSave: UnifiedAutoScanConfig = {
+                enabled: unifiedConfig.enabled,
+                fullScan: unifiedConfig.fullScan ? {
+                    enabled: unifiedConfig.fullScan.enabled || false,
+                    interval: unifiedConfig.fullScan.interval || 1440,
+                    scanType: unifiedConfig.fullScan.scanType || 'full'
+                } : undefined,
+                refresh: unifiedConfig.refresh ? {
+                    enabled: unifiedConfig.refresh.enabled || false,
+                    interval: unifiedConfig.refresh.interval || 10
+                } : undefined
+            };
+            
+            console.log('Saving unified config:', configToSave);
+            const response = await api.post<UnifiedAutoScanConfig>('/api/network-scan/unified-config', configToSave);
+            if (response.success && response.result) {
+                console.log('Config saved successfully:', response.result);
+                setUnifiedConfig(response.result);
+                setSaveMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
+                // Re-fetch configs to ensure we have the latest data
+                await fetchConfigs();
+                setTimeout(() => {
+                    setSaveMessage(null);
+                    onClose(); // Auto-close on success
+                }, 1500);
+            } else {
+                console.error('Save failed:', response.error);
+                setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+            }
+        } catch (error: any) {
+            console.error('Save unified config failed:', error);
             setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
@@ -177,122 +257,171 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                         </div>
                     ) : (
                         <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Scan automatique */}
-                            <div className="space-y-4 bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-                                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-                                    <Play size={14} className="text-green-400" />
-                                    Scan automatique
-                                </h3>
-                                <p className="text-xs text-gray-500">
-                                    Découvre de nouvelles IPs sur le réseau (scan complet de la plage choisie)
-                                </p>
-                                <div className="flex items-center gap-2">
+                        {/* Nouvelle interface unifiée */}
+                        <div className="space-y-6">
+                            {/* Master switch - Scan automatique */}
+                            <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-purple-500/20 rounded-lg">
+                                            <Play size={18} className="text-purple-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-base font-semibold text-white">Scan automatique</h3>
+                                            <p className="text-xs text-gray-400 mt-1">Activez les scans automatiques du réseau</p>
+                                        </div>
+                                    </div>
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
                                             type="checkbox"
-                                            checked={autoConfig.enabled}
-                                            onChange={(e) => setAutoConfig({ ...autoConfig, enabled: e.target.checked })}
-                                            className="w-4 h-4"
+                                            checked={unifiedConfig.enabled}
+                                            onChange={(e) => setUnifiedConfig({ ...unifiedConfig, enabled: e.target.checked })}
+                                            className="w-5 h-5 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500 focus:ring-2"
                                         />
-                                        <span className="text-sm">Activer</span>
+                                        <span className="text-sm font-medium text-gray-300">
+                                            {unifiedConfig.enabled ? 'Activé' : 'Désactivé'}
+                                        </span>
                                     </label>
                                 </div>
 
-                                {autoConfig.enabled && (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm text-gray-400 mb-2">Intervalle</label>
-                                            <select
-                                                value={autoConfig.interval}
-                                                onChange={(e) => setAutoConfig({ ...autoConfig, interval: parseInt(e.target.value) })}
-                                                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-green-500"
-                                            >
-                                                <option value="15">15 minutes</option>
-                                                <option value="30">30 minutes</option>
-                                                <option value="60">1 heure</option>
-                                                <option value="120">2 heures</option>
-                                                <option value="360">6 heures</option>
-                                                <option value="720">12 heures</option>
-                                                <option value="1440">24 heures</option>
-                                            </select>
+                                {unifiedConfig.enabled && (
+                                    <div className="space-y-4 pt-4 border-t border-gray-800">
+                                        {/* Full Scan Section */}
+                                        <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Play size={14} className="text-green-400" />
+                                                    <h4 className="text-sm font-semibold text-gray-300">Full Scan</h4>
+                                                </div>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={unifiedConfig.fullScan?.enabled ?? false}
+                                                        onChange={(e) => setUnifiedConfig({
+                                                            ...unifiedConfig,
+                                                            fullScan: {
+                                                                ...unifiedConfig.fullScan,
+                                                                enabled: e.target.checked,
+                                                                interval: unifiedConfig.fullScan?.interval ?? 1440,
+                                                                scanType: unifiedConfig.fullScan?.scanType ?? 'full'
+                                                            }
+                                                        })}
+                                                        className="w-4 h-4"
+                                                    />
+                                                    <span className="text-xs text-gray-400">Activer</span>
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mb-3">
+                                                Découvre de nouvelles IPs sur le réseau (scan complet de la plage choisie)
+                                            </p>
+                                            
+                                            {unifiedConfig.fullScan?.enabled && (
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
+                                                        <select
+                                                            value={unifiedConfig.fullScan.interval}
+                                                            onChange={(e) => setUnifiedConfig({
+                                                                ...unifiedConfig,
+                                                                fullScan: {
+                                                                    ...unifiedConfig.fullScan!,
+                                                                    interval: parseInt(e.target.value)
+                                                                }
+                                                            })}
+                                                            className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-green-500"
+                                                        >
+                                                            <option value="15">15 minutes</option>
+                                                            <option value="30">30 minutes</option>
+                                                            <option value="60">1 heure</option>
+                                                            <option value="120">2 heures</option>
+                                                            <option value="360">6 heures</option>
+                                                            <option value="720">12 heures</option>
+                                                            <option value="1440">24 heures (1 fois par jour)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-400 mb-1.5">Type de scan</label>
+                                                        <select
+                                                            value={unifiedConfig.fullScan.scanType}
+                                                            onChange={(e) => setUnifiedConfig({
+                                                                ...unifiedConfig,
+                                                                fullScan: {
+                                                                    ...unifiedConfig.fullScan!,
+                                                                    scanType: e.target.value as 'full' | 'quick'
+                                                                }
+                                                            })}
+                                                            className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-green-500"
+                                                        >
+                                                            <option value="quick">Rapide (ping uniquement)</option>
+                                                            <option value="full">Complet (ping + MAC + hostname)</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        <div>
-                                            <label className="block text-sm text-gray-400 mb-2">Type de scan</label>
-                                            <select
-                                                value={autoConfig.scanType}
-                                                onChange={(e) => setAutoConfig({ ...autoConfig, scanType: e.target.value as 'full' | 'quick' })}
-                                                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-green-500"
-                                            >
-                                                <option value="quick">Rapide (ping uniquement)</option>
-                                                <option value="full">Complet (ping + MAC + hostname)</option>
-                                            </select>
+                                        {/* Refresh Section */}
+                                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <RefreshCw size={14} className="text-blue-400" />
+                                                    <h4 className="text-sm font-semibold text-gray-300">Rafraîchissement</h4>
+                                                </div>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={unifiedConfig.refresh?.enabled ?? false}
+                                                        onChange={(e) => setUnifiedConfig({
+                                                            ...unifiedConfig,
+                                                            refresh: {
+                                                                ...unifiedConfig.refresh,
+                                                                enabled: e.target.checked,
+                                                                interval: unifiedConfig.refresh?.interval ?? 10
+                                                            }
+                                                        })}
+                                                        className="w-4 h-4"
+                                                    />
+                                                    <span className="text-xs text-gray-400">Activer</span>
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mb-3">
+                                                Met à jour uniquement les IPs déjà connues (plus rapide, ne découvre pas de nouvelles IPs)
+                                            </p>
+                                            
+                                            {unifiedConfig.refresh?.enabled && (
+                                                <div>
+                                                    <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
+                                                    <select
+                                                        value={unifiedConfig.refresh.interval}
+                                                        onChange={(e) => setUnifiedConfig({
+                                                            ...unifiedConfig,
+                                                            refresh: {
+                                                                ...unifiedConfig.refresh!,
+                                                                interval: parseInt(e.target.value)
+                                                            }
+                                                        })}
+                                                        className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
+                                                    >
+                                                        <option value="5">5 minutes</option>
+                                                        <option value="10">10 minutes</option>
+                                                        <option value="15">15 minutes</option>
+                                                        <option value="30">30 minutes</option>
+                                                        <option value="60">1 heure</option>
+                                                    </select>
+                                                </div>
+                                            )}
                                         </div>
 
+                                        {/* Save button */}
                                         <button
-                                            onClick={handleSaveScanConfig}
+                                            onClick={handleSaveUnifiedConfig}
                                             disabled={isSaving}
-                                            className="w-full px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                            className="w-full px-4 py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors"
                                         >
-                                            <Save size={16} />
-                                            Sauvegarder
+                                            <Save size={18} />
+                                            Sauvegarder la configuration
                                         </button>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Rafraîchissement automatique */}
-                            <div className="space-y-4 bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-                                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-                                    <RefreshCw size={14} className="text-blue-400" />
-                                    Rafraîchissement automatique
-                                </h3>
-                                <p className="text-xs text-gray-500">
-                                    Met à jour uniquement les IPs déjà connues (plus rapide, ne découvre pas de nouvelles IPs)
-                                </p>
-                                <div className="flex items-center gap-2">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={refreshConfig.enabled}
-                                            onChange={(e) => setRefreshConfig({ ...refreshConfig, enabled: e.target.checked })}
-                                            className="w-4 h-4"
-                                        />
-                                        <span className="text-sm">Activer</span>
-                                    </label>
-                                </div>
-
-                                {refreshConfig.enabled && (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm text-gray-400 mb-2">Intervalle</label>
-                                            <select
-                                                value={refreshConfig.interval}
-                                                onChange={(e) => setRefreshConfig({ ...refreshConfig, interval: parseInt(e.target.value) })}
-                                                className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                            >
-                                                <option value="5">5 minutes</option>
-                                                <option value="10">10 minutes</option>
-                                                <option value="15">15 minutes</option>
-                                                <option value="30">30 minutes</option>
-                                                <option value="60">1 heure</option>
-                                            </select>
-                                        </div>
-
-                                        <div className="text-xs text-gray-500 bg-[#1a1a1a] rounded p-2">
-                                            ⚡ Rafraîchit uniquement les IPs déjà découvertes (ne découvre pas de nouvelles IPs)
-                                        </div>
-
-                                        <button
-                                            onClick={handleSaveRefreshConfig}
-                                            disabled={isSaving}
-                                            className="w-full px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                        >
-                                            <Save size={16} />
-                                            Sauvegarder
-                                        </button>
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </div>

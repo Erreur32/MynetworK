@@ -212,7 +212,8 @@ import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
 import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
-// Initialize network scan scheduler (loads configs and starts cron jobs)
+// Import network scan scheduler (initialized automatically when imported)
+// The scheduler loads configs from database, so database must be initialized first
 import './services/networkScanScheduler.js';
 
 app.use('/api/users', usersRoutes);
@@ -484,14 +485,15 @@ server.listen(port, host, () => {
   } else {
     // NPM dev mode: frontend is on Vite dev server, backend on configured port
     // Use environment variables if set, otherwise defaults
+    // IMPORTANT: Use config.port (actual server port) not SERVER_PORT env var for display
     const vitePort = process.env.VITE_PORT || '5173';
-    const serverPort = process.env.SERVER_PORT || process.env.PORT || '3003';
+    const actualServerPort = port.toString(); // Use the actual port the server is listening on
     const networkIP = getNetworkIP();
     
     frontendLocalUrl = `http://localhost:${vitePort}`;
     frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
-    apiUrl = `http://localhost:${serverPort}`;
-    wsUrl = `ws://localhost:${serverPort}/ws/connection`;
+    apiUrl = `http://localhost:${actualServerPort}`;
+    wsUrl = `ws://localhost:${actualServerPort}/ws/connection`;
   }
   
   // ANSI color codes for terminal output
@@ -542,7 +544,7 @@ server.listen(port, host, () => {
   // Determine version label based on environment
   let versionLabel: string;
   if (isNpmDev) {
-    versionLabel = `NPM Docker DEV v${appVersion}`;
+    versionLabel = `NPM DEV v${appVersion}`;
   } else if (isDockerDev) {
     versionLabel = `Docker DEV v${appVersion}`;
   } else if (isDockerProd) {

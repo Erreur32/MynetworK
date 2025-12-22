@@ -2,6 +2,78 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [0.1.13] - 2025-12-22
+
+### ✨ Ajouté
+
+**Plugin Scan Réseau - Détection de Vendor**
+- 🏷️ Nouveau service de détection de fabricant (vendor) à partir des adresses MAC (OUI)
+- 📦 Base de données locale OUI avec les fabricants courants (Apple, Samsung, TP-Link, etc.)
+- 🌐 Fallback vers l'API macvendors.com si le vendor n'est pas dans la base locale
+- 📊 Enrichissement automatique des résultats de scan avec le fabricant du matériel
+
+**Plugin Scan Réseau - Scan Initial au Démarrage**
+- 🚀 Lancement automatique d'un scan initial au démarrage du serveur si le scan automatique est activé
+- ⚙️ Utilise la plage réseau par défaut configurée dans les paramètres
+- 📝 Logs détaillés pour le suivi du scan initial
+
+**Dashboard - Widget Scan Réseau**
+- 📊 Affichage des mêmes informations que "Info Scans" dans la carte du dashboard
+- 📅 Affichage du dernier scan avec type (Manuel/Auto, Full Scan/Refresh), date exacte et temps relatif
+- 🔄 Affichage des scans auto activés (Full scan auto et Refresh auto) avec dates et temps relatifs
+- 🎨 Format compact sur une seule ligne pour un affichage optimal
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau - Détection MAC**
+- 🔍 Amélioration de la détection MAC : utilisation de `ip neigh` et `arp-scan` en priorité (comme WatchYourLAN)
+- 📋 Ordre de priorité : `ip neigh` → `arp-scan` → `arp` (fallback)
+- 🐳 Support amélioré pour Docker avec détection automatique des outils disponibles
+
+**Plugin Scan Réseau - Gestion du Ping**
+- 🔧 Détection automatique de l'environnement (Docker vs npm) pour utiliser le bon chemin de ping
+- 🐧 En mode npm : utilisation de `ping` via PATH système avec recherche automatique du chemin complet
+- 🐳 En mode Docker : recherche dans `/bin/ping` et `/usr/bin/ping`
+- ⚙️ Gestion améliorée des codes de sortie non-zéro (normaux pour ping en cas de perte de paquets)
+- 📝 Logs d'erreur uniquement pour les vraies erreurs système (permissions, commande introuvable)
+
+**Plugin Scan Réseau - Configuration Automatique**
+- 🎯 Calcul correct du statut `enabled` : vérifie que le master switch ET au moins un sous-config sont activés
+- 📊 Affichage du statut corrigé dans l'interface (plus de "désactivé" alors que les options sont activées)
+- 🔄 Synchronisation automatique avec l'état du plugin "Scan Réseau" (pause si plugin désactivé)
+
+**Plugin Scan Réseau - Affichage**
+- 🎨 Affichage compact sur une seule ligne pour les scans auto (Auto Refresh (quick) 22/12/2025 15:10 Il y a 9min)
+- 📱 Support du responsive avec `whitespace-nowrap` et `overflow-x-auto` pour petits écrans
+- 🎯 Uniformisation de l'affichage entre la page Scan Réseau et le widget dashboard
+
+**Configuration Serveur**
+- 🔧 Port par défaut en mode npm : `3003` (défini explicitement dans package.json)
+- 📝 Correction de l'affichage des ports dans les logs de démarrage
+
+### 🐛 Corrigé
+
+**API / Routes**
+- ✅ Correction de l'erreur 404 pour `/api/network-scan/auto-status` (route définie avant `/:id` pour éviter les conflits)
+- ✅ Suppression des routes dupliquées `/auto-status` dans `server/routes/network-scan.ts`
+- ✅ Correction de l'ordre des routes Express (routes spécifiques avant routes paramétrées)
+
+**Plugin Scan Réseau - Statut**
+- ✅ Correction du calcul du statut `enabled` : vérifie maintenant correctement les sous-configs (fullScan et refresh)
+- ✅ Correction de l'affichage "Scan automatique désactivé" alors que les options sont activées
+- ✅ Ajout de logs de débogage pour tracer le calcul du statut
+
+**Plugin Scan Réseau - Ping**
+- ✅ Correction du problème de ping en mode npm (détection correcte de l'environnement)
+- ✅ Correction de la gestion des erreurs : ne log plus les échecs normaux de ping (hôte hors ligne)
+- ✅ Amélioration de la détection des vraies erreurs système (permissions, commande introuvable)
+
+**Interface Utilisateur**
+- ✅ Correction de l'affichage du statut sur une seule ligne (suppression de `flex-wrap`)
+- ✅ Correction de l'erreur JSX (balise `<span>` non fermée) dans NetworkScanPage.tsx
+
+---
+
 ## [0.1.12] - 2025-12-22
 
 ---
