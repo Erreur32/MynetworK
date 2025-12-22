@@ -1,7 +1,5 @@
 # MynetworK Dashboard - Docker Compose (Production)
-# Usage:
-#   export JWT_SECRET=$(openssl rand -base64 32)
-#   docker compose up -d
+ 
 
 services:
   mynetwork:
@@ -13,7 +11,7 @@ services:
       - "${DASHBOARD_PORT:-7505}:3000"
 
     environment:
-      # 🔐 SECRET OBLIGATOIRE (AUCUN FALLBACK EN PROD)
+      # 🔐 SECRET OBLIGATOIRE  , enregistrez le fichier .env pour le secret
       JWT_SECRET: ${JWT_SECRET}
 
       # Config

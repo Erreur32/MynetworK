@@ -3,6 +3,26 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.1.14] - 2025-12-22
+
+### 🐛 Corrigé
+
+**Plugin Scan Réseau - Détection Réseau Docker**
+- ✅ Correction de la détection réseau en Docker : utilise maintenant la configuration par défaut (`network_scan_default`) en priorité avant l'auto-détection
+- ✅ Amélioration du filtrage des réseaux Docker (172.17-31.x.x) dans l'auto-détection
+- ✅ Priorisation intelligente des réseaux : 192.168.x.x > 10.x.x.x > 172.16-31.x.x (évite les réseaux Docker)
+- ✅ Filtrage explicite des interfaces Docker (`docker`, `veth`, `br-`) dans `getNetworkRange()`
+- ✅ Utilisation de la plage configurée dans "Configuration par défaut du scan" au lieu de l'auto-détection qui détectait le réseau Docker
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau - Détection Réseau**
+- 🔍 Amélioration de `getNetworkRange()` : filtrage des interfaces Docker et priorisation des réseaux privés
+- 📋 Route `/api/network-scan/scan` : utilise la configuration par défaut en priorité si disponible
+- 🎯 Logs améliorés pour tracer l'utilisation de la configuration par défaut vs auto-détection
+
+---
+
 ## [0.1.13] - 2025-12-22
 
 ### ✨ Ajouté

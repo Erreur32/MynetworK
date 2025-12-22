@@ -300,20 +300,70 @@ export class NetworkScanService {
     getNetworkRange(): string | null {
         const interfaces = os.networkInterfaces();
         
+        // Priority order: prefer 192.168.x.x, then 10.x.x.x, then 172.16-31.x.x (but skip Docker networks 172.17-31.x.x)
+        const preferredRanges: Array<{ pattern: RegExp; priority: number }> = [
+            { pattern: /^192\.168\./, priority: 1 },      // Highest priority: 192.168.x.x
+            { pattern: /^10\./, priority: 2 },             // Second: 10.x.x.x
+            { pattern: /^172\.(1[6-9]|2[0-9]|3[0-1])\./, priority: 3 } // Third: 172.16-31.x.x (private range, but may be Docker)
+        ];
+        
+        const foundInterfaces: Array<{ ip: string; priority: number; name: string }> = [];
+        
         for (const name of Object.keys(interfaces)) {
+            // Skip Docker interfaces explicitly
+            if (name.startsWith('lo') || 
+                name.startsWith('docker') || 
+                name.startsWith('veth') || 
+                name.startsWith('br-') ||
+                name.startsWith('eth0') && name.includes('docker')) {
+                continue;
+            }
+            
             for (const iface of interfaces[name] || []) {
                 // Skip internal (loopback) and non-IPv4 addresses
                 if (iface.family === 'IPv4' && !iface.internal) {
                     const ip = iface.address;
-                    const parts = ip.split('.');
                     
-                    // Always use /24 subnet (standard for local networks)
-                    // Extract first 3 octets: 192.168.1.x -> 192.168.1.0/24
+                    // Skip Docker networks (172.17.0.0/16 to 172.31.255.255)
+                    // Docker uses 172.17.0.0/16 by default, but can use other ranges
+                    // We'll prefer 192.168.x.x and 10.x.x.x over 172.x.x.x
+                    if (ip.startsWith('172.')) {
+                        const parts = ip.split('.').map(Number);
+                        // Docker typically uses 172.17-31.x.x, skip these
+                        if (parts.length === 4 && parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
+                            logger.debug('NetworkScanService', `Skipping Docker network interface ${name} with IP ${ip}`);
+                            continue;
+                        }
+                    }
+                    
+                    const parts = ip.split('.');
                     if (parts.length === 4) {
-                        return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                        // Find priority for this IP
+                        let priority = 99; // Default low priority
+                        for (const pref of preferredRanges) {
+                            if (pref.pattern.test(ip)) {
+                                priority = pref.priority;
+                                break;
+                            }
+                        }
+                        
+                        foundInterfaces.push({
+                            ip: `${parts[0]}.${parts[1]}.${parts[2]}.0/24`,
+                            priority,
+                            name
+                        });
                     }
                 }
             }
+        }
+        
+        // Sort by priority (lower number = higher priority)
+        foundInterfaces.sort((a, b) => a.priority - b.priority);
+        
+        if (foundInterfaces.length > 0) {
+            const selected = foundInterfaces[0];
+            logger.debug('NetworkScanService', `Auto-detected network range: ${selected.ip} from interface ${selected.name}`);
+            return selected.ip;
         }
         
         return null;

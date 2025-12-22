@@ -44,18 +44,63 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
     let scanRange: string;
 
     if (autoDetect || !range) {
-        // Auto-detect network range
-        const detectedRange = networkScanService.getNetworkRange();
-        if (!detectedRange) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'Could not auto-detect network range. Please specify a range manually.',
-                    code: 'AUTO_DETECT_FAILED'
+        // First, try to use default config if available (user preference)
+        const defaultConfigStr = AppConfigRepository.get('network_scan_default');
+        if (defaultConfigStr) {
+            try {
+                const defaultConfig = JSON.parse(defaultConfigStr);
+                if (defaultConfig.defaultRange && !defaultConfig.defaultAutoDetect) {
+                    // User has configured a default range and doesn't want auto-detect
+                    scanRange = defaultConfig.defaultRange;
+                    logger.info('NetworkScan', `Using configured default range: ${scanRange}`);
+                } else if (defaultConfig.defaultRange && defaultConfig.defaultAutoDetect) {
+                    // User wants auto-detect, but we'll still prefer their configured range if auto-detect fails
+                    const detectedRange = networkScanService.getNetworkRange();
+                    scanRange = detectedRange || defaultConfig.defaultRange;
+                    logger.info('NetworkScan', `Auto-detect preferred, using: ${scanRange}`);
+                } else {
+                    // No default range configured, use auto-detect
+                    const detectedRange = networkScanService.getNetworkRange();
+                    if (!detectedRange) {
+                        return res.status(400).json({
+                            success: false,
+                            error: {
+                                message: 'Could not auto-detect network range. Please specify a range manually or configure a default range.',
+                                code: 'AUTO_DETECT_FAILED'
+                            }
+                        });
+                    }
+                    scanRange = detectedRange;
                 }
-            });
+            } catch (e) {
+                logger.warn('NetworkScan', 'Failed to parse default config, falling back to auto-detect');
+                // Fallback to auto-detect
+                const detectedRange = networkScanService.getNetworkRange();
+                if (!detectedRange) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            message: 'Could not auto-detect network range. Please specify a range manually.',
+                            code: 'AUTO_DETECT_FAILED'
+                        }
+                    });
+                }
+                scanRange = detectedRange;
+            }
+        } else {
+            // No default config, use auto-detect
+            const detectedRange = networkScanService.getNetworkRange();
+            if (!detectedRange) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: 'Could not auto-detect network range. Please specify a range manually or configure a default range.',
+                        code: 'AUTO_DETECT_FAILED'
+                    }
+                });
+            }
+            scanRange = detectedRange;
         }
-        scanRange = detectedRange;
     } else {
         scanRange = range;
     }
