@@ -1,42 +1,93 @@
+# ===========================================
 # MynetworK Dashboard - Docker Compose (Production)
- 
+# ===========================================
+#
+# Docker Compose configuration for PRODUCTION
+# 
+# Usage:
+#   docker-compose up -d
+#   docker-compose pull && docker-compose up -d  # Update and restart
+#
+# Environment variables:
+#   DASHBOARD_PORT - Dashboard port (default: 7505)
+#   JWT_SECRET     - JWT secret for authentication (REQUIRED - use .env file)
+#   FREEBOX_HOST   - Freebox server hostname (default: mafreebox.freebox.fr)
+#   PUBLIC_URL     - Public URL if using reverse proxy (optional)
+#
+# IMPORTANT: Create a .env file with JWT_SECRET before starting:
+#   JWT_SECRET=$(openssl rand -base64 32)
+#   echo "JWT_SECRET=$JWT_SECRET" > .env
 
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    # container_name: MynetworK   # optionnel (éviter en prod scalable)
+    # container_name: MynetworK   # Optional (avoid in scalable production)
     restart: unless-stopped
 
     ports:
+      # Dashboard port mapping: host port → container port 3000
       - "${DASHBOARD_PORT:-7505}:3000"
 
     environment:
-      # 🔐 SECRET OBLIGATOIRE  , enregistrez le fichier .env pour le secret
+      # 🔐 SECRET OBLIGATOIRE - JWT secret for authentication
+      # ⚠️ CRITICAL SECURITY: Never use default secret in production!
+      # Generate with: openssl rand -base64 32
+      # Store in .env file: JWT_SECRET=votre_secret_genere
       JWT_SECRET: ${JWT_SECRET}
 
-      # Config
+      # Configuration file path (optional external config file)
       CONFIG_FILE_PATH: ${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
+      
+      # Freebox configuration
       FREEBOX_HOST: ${FREEBOX_HOST:-mafreebox.freebox.fr}
       FREEBOX_TOKEN_FILE: /app/data/freebox_token.json
 
-      # Host metrics
+      # Host metrics access (read-only mount of host filesystem)
+      # Used to read hostname, disk usage, and system info from the host
       HOST_ROOT_PATH: ${HOST_ROOT_PATH:-/host}
 
-      # PUBLIC_URL (uniquement si reverse proxy)
+      # PUBLIC_URL (only if using reverse proxy like nginx)
+      # Uncomment and set if accessing via domain name instead of IP:port
       # PUBLIC_URL: https://dashboard.example.com
 
     volumes:
+      # Persistent storage for:
+      # - Freebox authentication token (freebox_token.json)
+      # - SQLite database (dashboard.db)
+      # - Wireshark vendor database file (manuf.txt)
+      # - Application configuration
       - ./data:/app/data
+      
+      # Mount host filesystem (read-only) to access real host metrics
+      # This allows the app to read hostname, disk usage, and other system info from the host
       - /:/host:ro
+      
+      # Mount host /proc and /sys separately for better compatibility
+      # These are used to read CPU, memory, network stats, and hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      
+      # Mount Docker socket (read-only) to enable Docker version detection and stats
+      # Required for system server widget to display Docker information
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      
+      # Optional: Mount external configuration file
+      # Uncomment the line below to use an external config file
+      # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
 
-    # Capacités réseau nécessaires
+    # Network capabilities required for network scanning (Plugin Scan Réseau)
+    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
+    # NET_ADMIN: Required for some network operations and ARP table access (ip neigh)
+    # These capabilities enable:
+    # - Network scanning (ping, MAC detection via ip neigh)
+    # - Vendor detection via Wireshark database
+    # - Hostname resolution
     cap_add:
       - NET_RAW
       - NET_ADMIN
 
+    # Health check: verify container is responding to API requests
+    # Uses wget (available in Alpine base image) to check /api/health endpoint
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
