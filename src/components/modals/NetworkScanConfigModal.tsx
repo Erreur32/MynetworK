@@ -5,8 +5,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle } from 'lucide-react';
+import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download } from 'lucide-react';
 import { api } from '../../api/client';
+import { usePluginStore } from '../../stores/pluginStore';
 
 interface AutoScanConfig {
     enabled: boolean;
@@ -45,12 +46,24 @@ interface NetworkScanConfigModalProps {
 }
 
 export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose }) => {
+    const { plugins } = usePluginStore();
     // New unified config
     const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
         enabled: false,
         fullScan: { enabled: false, interval: 1440, scanType: 'full' },
         refresh: { enabled: false, interval: 10 }
     });
+    
+    // Plugin priority config
+    const [pluginPriorityConfig, setPluginPriorityConfig] = useState({
+        hostnamePriority: ['freebox', 'unifi', 'scanner'] as ('freebox' | 'unifi' | 'scanner')[],
+        vendorPriority: ['freebox', 'unifi', 'scanner'] as ('freebox' | 'unifi' | 'scanner')[],
+        overwriteExisting: {
+            hostname: true,
+            vendor: true
+        }
+    });
+    const [isLoadingPriority, setIsLoadingPriority] = useState(false);
     
     // Keep old configs for backward compatibility during transition
     const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
@@ -60,12 +73,172 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const [isSaving, setIsSaving] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [useUnifiedConfig, setUseUnifiedConfig] = useState(true); // Use new unified config by default
+    const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    
+    // Wireshark vendor database stats
+    const [wiresharkVendorStats, setWiresharkVendorStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
+    const [isUpdatingVendors, setIsUpdatingVendors] = useState(false);
+    const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+
+    // Initial states for change detection
+    const [initialUnifiedConfig, setInitialUnifiedConfig] = useState<UnifiedAutoScanConfig | null>(null);
+    const [initialDefaultConfig, setInitialDefaultConfig] = useState<DefaultScanConfig | null>(null);
+    const [initialPluginPriorityConfig, setInitialPluginPriorityConfig] = useState<any>(null);
+    const [initialAutoUpdateEnabled, setInitialAutoUpdateEnabled] = useState<boolean | null>(null);
+
+    // Check if there are unsaved changes
+    const hasUnsavedChanges = (): boolean => {
+        if (!initialUnifiedConfig || !initialDefaultConfig || initialPluginPriorityConfig === null || initialAutoUpdateEnabled === null) {
+            return false;
+        }
+        
+        // Check unified config changes
+        const unifiedChanged = JSON.stringify(unifiedConfig) !== JSON.stringify(initialUnifiedConfig);
+        
+        // Check default config changes
+        const defaultChanged = JSON.stringify(defaultConfig) !== JSON.stringify(initialDefaultConfig);
+        
+        // Check plugin priority config changes
+        const pluginPriorityChanged = JSON.stringify(pluginPriorityConfig) !== JSON.stringify(initialPluginPriorityConfig);
+        
+        // Check auto-update enabled changes
+        const autoUpdateChanged = autoUpdateEnabled !== initialAutoUpdateEnabled;
+        
+        return unifiedChanged || defaultChanged || pluginPriorityChanged || autoUpdateChanged;
+    };
 
     useEffect(() => {
         if (isOpen) {
             fetchConfigs();
+            fetchPluginPriorityConfig();
+            fetchWiresharkVendorStats();
+            loadAutoUpdateConfig();
         }
     }, [isOpen]);
+    
+    const loadAutoUpdateConfig = async () => {
+        try {
+            const response = await api.get('/api/database/config');
+            if (response.success && response.result?.wiresharkAutoUpdate !== undefined) {
+                setAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
+                setInitialAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
+            }
+        } catch (error) {
+            console.error('Failed to load auto-update config:', error);
+        }
+    };
+    
+    const handleToggleAutoUpdate = () => {
+        const newValue = !autoUpdateEnabled;
+        setAutoUpdateEnabled(newValue);
+        // Don't save automatically, wait for global save
+    };
+    
+    const fetchWiresharkVendorStats = async () => {
+        try {
+            const response = await api.get('/api/network-scan/wireshark-vendor-stats');
+            if (response.success && response.result) {
+                setWiresharkVendorStats(response.result);
+            }
+        } catch (error) {
+            console.error('Failed to load Wireshark vendor stats:', error);
+        }
+    };
+    
+    const handleUpdateWiresharkVendors = async () => {
+        setIsUpdatingVendors(true);
+        setSaveMessage(null);
+        try {
+            const response = await api.post('/api/network-scan/update-wireshark-vendors');
+            if (response.success) {
+                const source = response.result?.updateSource || 'unknown';
+                const vendorCount = response.result?.vendorCount || response.result?.stats?.totalVendors || 0;
+                
+                let message = '';
+                if (source === 'downloaded') {
+                    message = `Base téléchargée depuis GitHub/GitLab : ${vendorCount} vendors chargés`;
+                } else if (source === 'local') {
+                    message = `Base chargée depuis le fichier local : ${vendorCount} vendors chargés`;
+                } else if (source === 'plugins') {
+                    message = `Base chargée depuis les plugins : ${vendorCount} vendors chargés`;
+                } else {
+                    message = `Base mise à jour : ${vendorCount} vendors chargés`;
+                }
+                
+                setSaveMessage({ 
+                    type: 'success', 
+                    text: message
+                });
+                await fetchWiresharkVendorStats();
+                setTimeout(() => setSaveMessage(null), 5000);
+            } else {
+                setSaveMessage({ 
+                    type: 'error', 
+                    text: response.error?.message || 'Erreur lors de la mise à jour' 
+                });
+            }
+        } catch (error: any) {
+            console.error('Failed to update Wireshark vendors:', error);
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la mise à jour' });
+        } finally {
+            setIsUpdatingVendors(false);
+        }
+    };
+    
+    const fetchPluginPriorityConfig = async () => {
+        setIsLoadingPriority(true);
+        try {
+            const response = await api.get('/api/network-scan/plugin-priority-config');
+            if (response.success && response.result) {
+                setPluginPriorityConfig(response.result);
+                setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(response.result))); // Deep copy
+            }
+        } catch (error) {
+            console.error('Failed to load plugin priority config:', error);
+        } finally {
+            setIsLoadingPriority(false);
+        }
+    };
+    
+    const handleSavePluginPriority = async () => {
+        setIsSaving(true);
+        try {
+            const response = await api.post('/api/network-scan/plugin-priority-config', pluginPriorityConfig);
+            if (response.success) {
+                setSaveMessage({ type: 'success', text: 'Configuration de priorité sauvegardée' });
+                setTimeout(() => setSaveMessage(null), 3000);
+            } else {
+                setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+            }
+        } catch (error: any) {
+            console.error('Save plugin priority failed:', error);
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    
+    const movePriority = (type: 'hostname' | 'vendor', index: number, direction: 'up' | 'down') => {
+        const priority = [...pluginPriorityConfig[`${type}Priority`]];
+        if (direction === 'up' && index > 0) {
+            [priority[index], priority[index - 1]] = [priority[index - 1], priority[index]];
+        } else if (direction === 'down' && index < priority.length - 1) {
+            [priority[index], priority[index + 1]] = [priority[index + 1], priority[index]];
+        }
+        setPluginPriorityConfig({ ...pluginPriorityConfig, [`${type}Priority`]: priority });
+    };
+    
+    const getPluginLabel = (pluginId: string): string => {
+        if (pluginId === 'scanner') return 'Scanner système';
+        const plugin = plugins.find(p => p.id === pluginId);
+        return plugin?.name || pluginId;
+    };
+    
+    const isPluginEnabled = (pluginId: string): boolean => {
+        if (pluginId === 'scanner') return true;
+        const plugin = plugins.find(p => p.id === pluginId);
+        return plugin?.enabled || false;
+    };
 
     const fetchConfigs = async () => {
         setIsLoading(true);
@@ -75,6 +248,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 const unifiedResponse = await api.get<UnifiedAutoScanConfig>('/api/network-scan/unified-config');
                 if (unifiedResponse.success && unifiedResponse.result) {
                     setUnifiedConfig(unifiedResponse.result);
+                    setInitialUnifiedConfig(JSON.parse(JSON.stringify(unifiedResponse.result))); // Deep copy
                     setUseUnifiedConfig(true);
                 }
             } catch {
@@ -97,6 +271,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             }
             if (defaultResponse.success && defaultResponse.result) {
                 setDefaultConfig(defaultResponse.result);
+                setInitialDefaultConfig(JSON.parse(JSON.stringify(defaultResponse.result))); // Deep copy
             }
         } catch (error) {
             console.error('Failed to fetch configs:', error);
@@ -104,8 +279,6 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             setIsLoading(false);
         }
     };
-
-    const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const handleSaveScanConfig = async () => {
         setIsSaving(true);
@@ -219,11 +392,110 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
         }
     };
 
+    // Global save function that saves all configurations
+    const handleSaveAll = async () => {
+        setIsSaving(true);
+        setSaveMessage(null);
+        const errors: string[] = [];
+
+        try {
+            // Save unified config
+            try {
+                const configToSave: UnifiedAutoScanConfig = {
+                    enabled: unifiedConfig.enabled,
+                    fullScan: unifiedConfig.fullScan ? {
+                        enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
+                        interval: unifiedConfig.fullScan.interval || 1440,
+                        scanType: unifiedConfig.fullScan.scanType || 'full'
+                    } : {
+                        enabled: false,
+                        interval: 1440,
+                        scanType: 'full'
+                    },
+                    refresh: unifiedConfig.refresh ? {
+                        enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
+                        interval: unifiedConfig.refresh.interval || 10
+                    } : {
+                        enabled: false,
+                        interval: 10
+                    }
+                };
+                const unifiedResponse = await api.post<UnifiedAutoScanConfig>('/api/network-scan/unified-config', configToSave);
+                if (unifiedResponse.success && unifiedResponse.result) {
+                    setUnifiedConfig(unifiedResponse.result);
+                    setInitialUnifiedConfig(JSON.parse(JSON.stringify(unifiedResponse.result)));
+                } else {
+                    errors.push('Configuration de scan automatique');
+                }
+            } catch (error: any) {
+                console.error('Save unified config failed:', error);
+                errors.push('Configuration de scan automatique');
+            }
+
+            // Save default config
+            try {
+                const defaultResponse = await api.post<DefaultScanConfig>('/api/network-scan/default-config', defaultConfig);
+                if (defaultResponse.success && defaultResponse.result) {
+                    setDefaultConfig(defaultResponse.result);
+                    setInitialDefaultConfig(JSON.parse(JSON.stringify(defaultResponse.result)));
+                } else {
+                    errors.push('Configuration par défaut');
+                }
+            } catch (error: any) {
+                console.error('Save default config failed:', error);
+                errors.push('Configuration par défaut');
+            }
+
+            // Save plugin priority config
+            try {
+                const priorityResponse = await api.post('/api/network-scan/plugin-priority-config', pluginPriorityConfig);
+                if (priorityResponse.success) {
+                    setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(pluginPriorityConfig)));
+                } else {
+                    errors.push('Priorité des plugins');
+                }
+            } catch (error: any) {
+                console.error('Save plugin priority failed:', error);
+                errors.push('Priorité des plugins');
+            }
+
+            // Save auto-update config
+            try {
+                const autoUpdateResponse = await api.post('/api/database/config', {
+                    wiresharkAutoUpdate: autoUpdateEnabled
+                });
+                if (autoUpdateResponse.success) {
+                    setInitialAutoUpdateEnabled(autoUpdateEnabled);
+                } else {
+                    errors.push('Mise à jour automatique vendors');
+                }
+            } catch (error: any) {
+                console.error('Save auto-update config failed:', error);
+                errors.push('Mise à jour automatique vendors');
+            }
+
+            if (errors.length === 0) {
+                setSaveMessage({ type: 'success', text: 'Toutes les configurations ont été sauvegardées avec succès' });
+                setTimeout(() => {
+                    setSaveMessage(null);
+                    onClose(); // Auto-close on success
+                }, 1500);
+            } else {
+                setSaveMessage({ type: 'error', text: `Erreurs lors de la sauvegarde: ${errors.join(', ')}` });
+            }
+        } catch (error: any) {
+            console.error('Save all failed:', error);
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-[#121212] border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-[#121212] border border-gray-700 rounded-lg w-full max-w-7xl max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-800">
                     <div className="flex items-center gap-3">
@@ -259,14 +531,22 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                             <div className="flex-1 text-sm">{saveMessage.text}</div>
                         </div>
                     )}
+                    {hasUnsavedChanges() && (
+                        <div className="mb-4 px-4 py-3 rounded-lg border-2 border-orange-600 bg-orange-900/40 text-orange-100 flex items-center gap-3">
+                            <XCircle size={18} className="text-orange-400 flex-shrink-0" />
+                            <div className="flex-1 text-sm">Vous avez des modifications non sauvegardées. N'oubliez pas de sauvegarder avant de fermer.</div>
+                        </div>
+                    )}
                     {isLoading ? (
                         <div className="flex items-center justify-center py-16">
                             <RefreshCw size={32} className="text-gray-400 animate-spin" />
                         </div>
                     ) : (
                         <>
-                        {/* Nouvelle interface unifiée */}
-                        <div className="space-y-6">
+                        {/* Nouvelle interface unifiée - Layout en colonnes */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Colonne gauche - Scan automatique */}
+                            <div className="space-y-6">
                             {/* Master switch - Scan automatique */}
                             <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-5">
                                 <div className="flex items-center justify-between mb-4">
@@ -430,21 +710,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                         </div>
                                     </div>
                                 )}
-
-                                {/* Save button - Always visible, even when master switch is disabled */}
-                                <button
-                                    onClick={handleSaveUnifiedConfig}
-                                    disabled={isSaving}
-                                    className={`w-full px-4 py-3 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium transition-colors ${!unifiedConfig.enabled ? 'mt-4' : ''}`}
-                                >
-                                    <Save size={18} />
-                                    Sauvegarder la configuration
-                                </button>
                             </div>
-                        </div>
 
-                        {/* Configuration par défaut du scan */}
-                        <div className="mt-6 bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                            {/* Configuration par défaut du scan */}
+                            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                             <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-4">
                                 <Network size={14} className="text-blue-400" />
                                 <span>Configuration par défaut du scan</span>
@@ -499,15 +768,238 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                         <option value="full">Complet (ping + MAC + hostname)</option>
                                     </select>
                                 </div>
-
-                                <button
-                                    onClick={handleSaveDefaultConfig}
-                                    disabled={isSaving}
-                                    className="w-full px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                >
-                                    <Save size={16} />
-                                    Sauvegarder
-                                </button>
+                            </div>
+                            </div>
+                            </div>
+                            
+                            {/* Colonne droite - Priorité plugins et Base vendors */}
+                            <div className="space-y-6">
+                            {/* Plugin Priority Configuration */}
+                            <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-5">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-purple-500/20 rounded-lg">
+                                    <Plug size={18} className="text-purple-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-semibold text-white">Priorité des plugins</h3>
+                                    <p className="text-xs text-gray-400 mt-1">Configurez l'ordre de priorité pour la détection hostname/vendor</p>
+                                </div>
+                            </div>
+                            
+                            {isLoadingPriority ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <RefreshCw size={20} className="text-gray-400 animate-spin" />
+                                </div>
+                            ) : (
+                                <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Hostname Priority */}
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                                            <Network size={14} />
+                                            Priorité Hostname
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {pluginPriorityConfig.hostnamePriority.map((pluginId, index) => (
+                                                <div key={pluginId} className="flex items-center gap-2 p-2 bg-[#0f0f0f] rounded border border-gray-800">
+                                                    <span className="text-xs text-gray-500 w-6">{index + 1}.</span>
+                                                    <span className={`text-sm flex-1 ${isPluginEnabled(pluginId) ? 'text-gray-200' : 'text-gray-500'}`}>
+                                                        {getPluginLabel(pluginId)}
+                                                        {!isPluginEnabled(pluginId) && pluginId !== 'scanner' && (
+                                                            <span className="text-xs text-orange-400 ml-2">(désactivé)</span>
+                                                        )}
+                                                    </span>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => movePriority('hostname', index, 'up')}
+                                                            disabled={index === 0}
+                                                            className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Monter"
+                                                        >
+                                                            <ArrowUp size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => movePriority('hostname', index, 'down')}
+                                                            disabled={index === pluginPriorityConfig.hostnamePriority.length - 1}
+                                                            className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Descendre"
+                                                        >
+                                                            <ArrowDown size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Vendor Priority */}
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                                            <HardDrive size={14} />
+                                            Priorité Vendor
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {pluginPriorityConfig.vendorPriority.map((pluginId, index) => (
+                                                <div key={pluginId} className="flex items-center gap-2 p-2 bg-[#0f0f0f] rounded border border-gray-800">
+                                                    <span className="text-xs text-gray-500 w-6">{index + 1}.</span>
+                                                    <span className={`text-sm flex-1 ${isPluginEnabled(pluginId) ? 'text-gray-200' : 'text-gray-500'}`}>
+                                                        {getPluginLabel(pluginId)}
+                                                        {!isPluginEnabled(pluginId) && pluginId !== 'scanner' && (
+                                                            <span className="text-xs text-orange-400 ml-2">(désactivé)</span>
+                                                        )}
+                                                    </span>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => movePriority('vendor', index, 'up')}
+                                                            disabled={index === 0}
+                                                            className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Monter"
+                                                        >
+                                                            <ArrowUp size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => movePriority('vendor', index, 'down')}
+                                                            disabled={index === pluginPriorityConfig.vendorPriority.length - 1}
+                                                            className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            title="Descendre"
+                                                        >
+                                                            <ArrowDown size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                    
+                                {/* Overwrite Options */}
+                                <div className="pt-4 border-t border-gray-800 mt-4">
+                                    <h4 className="text-sm font-semibold text-gray-300 mb-3">Écrasement des données</h4>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={pluginPriorityConfig.overwriteExisting.hostname}
+                                                onChange={(e) => setPluginPriorityConfig({
+                                                    ...pluginPriorityConfig,
+                                                    overwriteExisting: { ...pluginPriorityConfig.overwriteExisting, hostname: e.target.checked }
+                                                })}
+                                                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm text-gray-300">Écraser les hostnames existants</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={pluginPriorityConfig.overwriteExisting.vendor}
+                                                onChange={(e) => setPluginPriorityConfig({
+                                                    ...pluginPriorityConfig,
+                                                    overwriteExisting: { ...pluginPriorityConfig.overwriteExisting, vendor: e.target.checked }
+                                                })}
+                                                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm text-gray-300">Écraser les vendors existants</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                </>
+                            )}
+                            </div>
+                            
+                            {/* Base vendors Wireshark */}
+                            <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-4">
+                                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-3">
+                                    <HardDrive size={14} className="text-cyan-400" />
+                                    <span>Base vendors Wireshark</span>
+                                </h3>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Base de données complète des vendors depuis Wireshark. Mise à jour automatique tous les 7 jours si activée.
+                                </p>
+                                
+                                {/* Option auto-update */}
+                                <div className="mb-3 pb-3 border-b border-gray-800">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={autoUpdateEnabled}
+                                            onChange={handleToggleAutoUpdate}
+                                            className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-cyan-500 focus:ring-cyan-500"
+                                        />
+                                        <div>
+                                            <span className="text-sm text-gray-300">Mise à jour automatique</span>
+                                            <p className="text-xs text-gray-500">Mise à jour automatique tous les 7 jours depuis GitHub</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                {wiresharkVendorStats ? (
+                                    <div className="space-y-2 mb-3">
+                                        <div className="flex items-center justify-between text-xs">
+                                            <span className="text-gray-400">Vendors chargés:</span>
+                                            <span className="text-emerald-400 font-medium">
+                                                {wiresharkVendorStats.totalVendors > 0 ? wiresharkVendorStats.totalVendors.toLocaleString() : 'Aucun'}
+                                            </span>
+                                        </div>
+                                        {wiresharkVendorStats.lastUpdate && (
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-gray-400">Dernière mise à jour:</span>
+                                                <span className="text-gray-300">
+                                                    {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString('fr-FR', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-xs text-orange-400 mb-3">Chargement...</div>
+                                )}
+                                
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={handleUpdateWiresharkVendors}
+                                        disabled={isUpdatingVendors}
+                                        className="w-full px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg border border-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm transition-colors"
+                                    >
+                                        {isUpdatingVendors ? (
+                                            <>
+                                                <RefreshCw size={14} className="animate-spin" />
+                                                <span>Mise à jour en cours...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Download size={14} />
+                                                <span>Mettre à jour maintenant</span>
+                                            </>
+                                        )}
+                                    </button>
+                                    
+                                    <div className="space-y-2 pt-2 border-t border-gray-800">
+                                        <a
+                                            href="https://raw.githubusercontent.com/wireshark/wireshark/master/manuf"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                                        >
+                                            <ExternalLink size={12} />
+                                            <span className="truncate">Source: GitHub Wireshark</span>
+                                        </a>
+                                        <a
+                                            href="https://gitlab.com/wireshark/wireshark/-/raw/master/manuf"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                                        >
+                                            <ExternalLink size={12} />
+                                            <span className="truncate">Alternative: GitLab Wireshark</span>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                             </div>
                         </div>
                         </>
@@ -515,12 +1007,29 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end p-6 border-t border-gray-800">
+                <div className="flex justify-end gap-3 p-6 border-t border-gray-800">
                     <button
                         onClick={onClose}
                         className="px-4 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 rounded-lg border border-gray-500/30 transition-colors"
                     >
                         Fermer
+                    </button>
+                    <button
+                        onClick={handleSaveAll}
+                        disabled={isSaving || !hasUnsavedChanges()}
+                        className="px-6 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors font-medium"
+                    >
+                        {isSaving ? (
+                            <>
+                                <RefreshCw size={18} className="animate-spin" />
+                                Sauvegarde...
+                            </>
+                        ) : (
+                            <>
+                                <Save size={18} />
+                                Enregistrer toutes les modifications
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

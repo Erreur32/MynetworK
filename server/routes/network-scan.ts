@@ -18,8 +18,14 @@ import {
     getRetentionConfig, 
     saveRetentionConfig, 
     executePurge,
-    initializePurgeService 
+    initializePurgeService,
+    purgeHistoryOnly,
+    purgeScansOnly,
+    purgeOfflineOnly,
+    clearAllScanData
 } from '../services/databasePurgeService.js';
+import { PluginPriorityConfigService } from '../services/pluginPriorityConfig.js';
+import { WiresharkVendorService } from '../services/wiresharkVendorService.js';
 
 const router = Router();
 
@@ -113,6 +119,11 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
     }
 
     try {
+        // Pause auto scans during manual scan to avoid conflicts
+        const { networkScanScheduler } = await import('../services/networkScanScheduler.js');
+        networkScanScheduler.pauseAutoScans();
+
+    try {
         const result = await networkScanService.scanNetwork(scanRange, scanType);
 
         // Track last manual scan
@@ -129,9 +140,14 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
             result: {
                 range: scanRange,
                 scanType,
-                ...result
+                    ...result,
+                    detectionSummary: result.detectionSummary // Include detection summary in response
             }
         });
+        } finally {
+            // Always resume auto scans after manual scan completes (success or failure)
+            networkScanScheduler.resumeAutoScans();
+        }
     } catch (error: any) {
         logger.error('NetworkScan', 'Scan failed:', error);
         logger.error('NetworkScan', 'Error details:', {
@@ -175,6 +191,26 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
 }));
 
 /**
+ * GET /api/network-scan/progress
+ * Get current scan progress (if a scan is in progress)
+ */
+router.get('/progress', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const progress = networkScanService.getScanProgress();
+    
+    if (!progress) {
+        return res.json({
+            success: true,
+            result: null
+        });
+    }
+    
+    res.json({
+        success: true,
+        result: progress
+    });
+}));
+
+/**
  * POST /api/network-scan/refresh
  * Refresh existing IPs (re-ping known IPs)
  * 
@@ -198,6 +234,11 @@ router.post('/refresh', requireAuth, autoLog('network-scan', 'refresh'), asyncHa
     }
 
     try {
+        // Pause auto scans during manual refresh to avoid conflicts
+        const { networkScanScheduler } = await import('../services/networkScanScheduler.js');
+        networkScanScheduler.pauseAutoScans();
+
+    try {
         const result = await networkScanService.refreshExistingIps(scanType);
 
         // Track last manual refresh
@@ -215,6 +256,10 @@ router.post('/refresh', requireAuth, autoLog('network-scan', 'refresh'), asyncHa
                 ...result
             }
         });
+        } finally {
+            // Always resume auto scans after manual refresh completes (success or failure)
+            networkScanScheduler.resumeAutoScans();
+        }
     } catch (error: any) {
         logger.error('NetworkScan', 'Refresh failed:', error);
         return res.status(500).json({
@@ -895,6 +940,272 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
 // Route /auto-status moved above - see definition before /:id route (line 678)
 
 /**
+ * GET /api/network-scan/retention-config
+ * Get current retention configuration
+ * IMPORTANT: Must be defined BEFORE /:id route to avoid route conflicts
+ */
+router.get('/retention-config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const config = getRetentionConfig();
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get retention config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get retention config',
+                code: 'RETENTION_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/retention-config
+ * Update retention configuration
+ * IMPORTANT: Must be defined BEFORE /:id route to avoid route conflicts
+ */
+router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-scan', 'retention-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const {
+            historyRetentionDays,
+            scanRetentionDays,
+            offlineRetentionDays,
+            autoPurgeEnabled,
+            purgeSchedule
+        } = req.body;
+
+        const config: any = {};
+        if (historyRetentionDays !== undefined) config.historyRetentionDays = historyRetentionDays;
+        if (scanRetentionDays !== undefined) config.scanRetentionDays = scanRetentionDays;
+        if (offlineRetentionDays !== undefined) config.offlineRetentionDays = offlineRetentionDays;
+        if (autoPurgeEnabled !== undefined) config.autoPurgeEnabled = autoPurgeEnabled;
+        if (purgeSchedule !== undefined) config.purgeSchedule = purgeSchedule;
+
+        const success = saveRetentionConfig(config);
+        
+        if (success) {
+            res.json({
+                success: true,
+                result: getRetentionConfig()
+            });
+        } else {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Failed to save retention config',
+                    code: 'RETENTION_CONFIG_SAVE_ERROR'
+                }
+            });
+        }
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save retention config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save retention config',
+                code: 'RETENTION_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/database-stats
+ * Get database statistics for scan tables
+ * IMPORTANT: Must be defined BEFORE /:id route to avoid route conflicts
+ */
+router.get('/database-stats', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const stats = NetworkScanRepository.getDatabaseStats();
+        const retentionConfig = getRetentionConfig();
+        
+        res.json({
+            success: true,
+            result: {
+                scansCount: stats.scansCount,
+                historyCount: stats.historyCount,
+                oldestScan: stats.oldestScan ? stats.oldestScan.toISOString() : null,
+                oldestHistory: stats.oldestHistory ? stats.oldestHistory.toISOString() : null,
+                totalSize: stats.totalSize,
+                retentionConfig
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get database stats:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get database stats',
+                code: 'DATABASE_STATS_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/plugin-priority-config
+ * Get plugin priority configuration for hostname and vendor detection
+ */
+router.get('/plugin-priority-config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const config = PluginPriorityConfigService.getConfig();
+            res.json({
+                success: true,
+                result: config
+            });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get plugin priority config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get plugin priority config',
+                code: 'PLUGIN_PRIORITY_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/plugin-priority-config
+ * Save plugin priority configuration for hostname and vendor detection
+ */
+router.post('/plugin-priority-config', requireAuth, requireAdmin, autoLog('network-scan', 'plugin-priority-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const { hostnamePriority, vendorPriority, overwriteExisting } = req.body;
+        
+        // Validate input
+        if (!Array.isArray(hostnamePriority) || !Array.isArray(vendorPriority)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'hostnamePriority and vendorPriority must be arrays',
+                    code: 'INVALID_CONFIG'
+                }
+            });
+        }
+        
+        // Validate that all plugins are present
+        const allPlugins = ['freebox', 'unifi', 'scanner'];
+        const hasAllHostname = allPlugins.every(p => hostnamePriority.includes(p));
+        const hasAllVendor = allPlugins.every(p => vendorPriority.includes(p));
+        
+        if (!hasAllHostname || !hasAllVendor) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Priority arrays must include all plugins: freebox, unifi, scanner',
+                    code: 'INVALID_CONFIG'
+                }
+            });
+        }
+        
+        const config = {
+            hostnamePriority,
+            vendorPriority,
+            overwriteExisting: overwriteExisting || {
+                hostname: true,
+                vendor: true
+            }
+        };
+        
+        const success = PluginPriorityConfigService.setConfig(config);
+        
+        if (success) {
+        res.json({
+            success: true,
+                result: config
+        });
+        } else {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Failed to save plugin priority config',
+                    code: 'SAVE_ERROR'
+                }
+            });
+        }
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save plugin priority config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save plugin priority config',
+                code: 'PLUGIN_PRIORITY_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/wireshark-vendor-stats
+ * Get Wireshark vendor database statistics
+ */
+router.get('/wireshark-vendor-stats', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        let stats = WiresharkVendorService.getStats();
+        
+        // If database is empty, try to initialize it (safety check)
+        if (stats.totalVendors === 0) {
+            logger.warn('NetworkScan', 'Vendor database is empty, attempting to initialize...');
+            try {
+                await WiresharkVendorService.initialize();
+                // Get stats again after initialization
+                stats = WiresharkVendorService.getStats();
+            } catch (initError: any) {
+                logger.error('NetworkScan', `Failed to initialize vendor database: ${initError.message}`);
+            }
+        }
+        
+        res.json({
+            success: true,
+            result: stats
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get Wireshark vendor stats:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get Wireshark vendor stats',
+                code: 'WIRESHARK_STATS_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/update-wireshark-vendors
+ * Manually update Wireshark vendor database
+ */
+router.post('/update-wireshark-vendors', requireAuth, requireAdmin, autoLog('network-scan', 'update-wireshark-vendors'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const updateResult = await WiresharkVendorService.updateDatabase();
+        const stats = WiresharkVendorService.getStats();
+        res.json({
+            success: true,
+            result: {
+                message: 'Vendor database updated successfully',
+                stats: stats,
+                updateSource: updateResult.source,
+                vendorCount: updateResult.vendorCount
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to update Wireshark vendor database:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to update vendor database',
+                code: 'WIRESHARK_UPDATE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
  * GET /api/network-scan/:id
  * Get details of a specific IP
  */
@@ -975,7 +1286,7 @@ router.delete('/:id', requireAuth, autoLog('network-scan', 'delete'), asyncHandl
  */
 router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostname'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.id;
-    const { hostname } = req.body;
+    const { hostname, hostnameSource } = req.body;
 
     if (hostname !== undefined && typeof hostname !== 'string' && hostname !== null) {
         return res.status(400).json({
@@ -988,9 +1299,20 @@ router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostna
     }
 
     try {
-        const updated = NetworkScanRepository.update(ip, {
+        const updateData: any = {
             hostname: hostname && hostname.trim() ? hostname.trim() : undefined
-        });
+        };
+        
+        // If hostnameSource is provided, use it; otherwise set to 'manual' if hostname is set
+        if (hostnameSource) {
+            updateData.hostnameSource = hostnameSource;
+        } else if (hostname && hostname.trim()) {
+            updateData.hostnameSource = 'manual';
+        } else {
+            updateData.hostnameSource = null; // Clear source if hostname is cleared
+        }
+        
+        const updated = NetworkScanRepository.update(ip, updateData);
 
         if (!updated) {
             return res.status(404).json({
@@ -1024,20 +1346,32 @@ router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostna
  */
 router.delete('/clear', requireAuth, requireAdmin, autoLog('network-scan', 'clear'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const deletedCount = NetworkScanRepository.deleteAll();
+        // Delete all scan entries
+        const deletedScans = NetworkScanRepository.deleteAll();
+        
+        // Also purge all history entries (history is linked via foreign key, but we'll clean it explicitly)
+        const deletedHistory = NetworkScanRepository.purgeHistory(0); // 0 days = delete all
+        
+        // Optimize database after purge
+        NetworkScanRepository.optimizeDatabase();
+
+        logger.info('NetworkScan', `Cleared all scan data: ${deletedScans} scans, ${deletedHistory} history entries deleted`);
 
         res.json({
             success: true,
             result: {
-                deleted: deletedCount
-            }
+                deletedScans,
+                deletedHistory,
+                totalDeleted: deletedScans + deletedHistory
+            },
+            message: `All scan data cleared: ${deletedScans} scans and ${deletedHistory} history entries deleted`
         });
     } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to clear history:', error);
+        logger.error('NetworkScan', 'Failed to clear scan data:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Failed to clear history',
+                message: error.message || 'Failed to clear scan data',
                 code: 'CLEAR_ERROR'
             }
         });
@@ -1241,123 +1575,8 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
     }
 }));
 
-/**
- * GET /api/network-scan/retention-config
- * Get current retention configuration
- */
-router.get('/retention-config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-        const config = getRetentionConfig();
-        res.json({
-            success: true,
-            result: config
-        });
-    } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to get retention config:', error);
-        return res.status(500).json({
-            success: false,
-            error: {
-                message: error.message || 'Failed to get retention config',
-                code: 'RETENTION_CONFIG_ERROR'
-            }
-        });
-    }
-}));
-
-/**
- * POST /api/network-scan/retention-config
- * Update retention configuration
- */
-router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-scan', 'retention-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-        const {
-            historyRetentionDays,
-            scanRetentionDays,
-            offlineRetentionDays,
-            autoPurgeEnabled,
-            purgeSchedule
-        } = req.body;
-
-        // Validate retention days
-        if (historyRetentionDays !== undefined && (historyRetentionDays < 1 || historyRetentionDays > 365)) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'historyRetentionDays must be between 1 and 365',
-                    code: 'INVALID_RETENTION_DAYS'
-                }
-            });
-        }
-
-        if (scanRetentionDays !== undefined && (scanRetentionDays < 1 || scanRetentionDays > 365)) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'scanRetentionDays must be between 1 and 365',
-                    code: 'INVALID_RETENTION_DAYS'
-                }
-            });
-        }
-
-        if (offlineRetentionDays !== undefined && (offlineRetentionDays < 1 || offlineRetentionDays > 365)) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'offlineRetentionDays must be between 1 and 365',
-                    code: 'INVALID_RETENTION_DAYS'
-                }
-            });
-        }
-
-        // Validate cron schedule if provided
-        if (purgeSchedule !== undefined) {
-            try {
-                cron.validate(purgeSchedule);
-            } catch (e) {
-                return res.status(400).json({
-                    success: false,
-                    error: {
-                        message: 'Invalid cron schedule format',
-                        code: 'INVALID_CRON_SCHEDULE'
-                    }
-                });
-            }
-        }
-
-        const configUpdate: any = {};
-        if (historyRetentionDays !== undefined) configUpdate.historyRetentionDays = historyRetentionDays;
-        if (scanRetentionDays !== undefined) configUpdate.scanRetentionDays = scanRetentionDays;
-        if (offlineRetentionDays !== undefined) configUpdate.offlineRetentionDays = offlineRetentionDays;
-        if (autoPurgeEnabled !== undefined) configUpdate.autoPurgeEnabled = Boolean(autoPurgeEnabled);
-        if (purgeSchedule !== undefined) configUpdate.purgeSchedule = purgeSchedule;
-
-        const success = saveRetentionConfig(configUpdate);
-        if (!success) {
-            return res.status(500).json({
-                success: false,
-                error: {
-                    message: 'Failed to save retention configuration',
-                    code: 'CONFIG_SAVE_ERROR'
-                }
-            });
-        }
-
-        const updatedConfig = getRetentionConfig();
-        res.json({
-            success: true,
-            result: updatedConfig
-        });
-    } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to save retention config:', error);
-        return res.status(500).json({
-            success: false,
-            error: {
-                message: error.message || 'Failed to save retention config',
-                code: 'RETENTION_CONFIG_ERROR'
-            }
-        });
-    }
-}));
+// Routes /retention-config and /database-stats moved above - see definitions before /:id route (around line 900)
+// Duplicate routes removed - they are already defined before /:id route
 
 /**
  * POST /api/network-scan/purge
@@ -1387,32 +1606,127 @@ router.post('/purge', requireAuth, requireAdmin, autoLog('network-scan', 'purge'
 }));
 
 /**
- * GET /api/network-scan/database-stats
- * Get database statistics for scan tables
+ * POST /api/network-scan/purge/history
+ * Purge only history entries
+ * Body: { retentionDays?: number } (0 = delete all, default: use config)
  */
-router.get('/database-stats', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/purge/history', requireAuth, requireAdmin, autoLog('network-scan', 'purge-history'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const stats = NetworkScanRepository.getDatabaseStats();
-        const retentionConfig = getRetentionConfig();
+        const { retentionDays } = req.body;
+        const days = retentionDays !== undefined ? retentionDays : getRetentionConfig().historyRetentionDays;
+        const deleted = purgeHistoryOnly(days);
         
         res.json({
             success: true,
             result: {
-                ...stats,
-                retentionConfig
-            }
+                deleted,
+                retentionDays: days
+            },
+            message: `History purge completed: ${deleted} entries deleted`
         });
     } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to get database stats:', error);
+        logger.error('NetworkScan', 'Failed to purge history:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Failed to get database stats',
-                code: 'DATABASE_STATS_ERROR'
+                message: error.message || 'Failed to purge history',
+                code: 'PURGE_HISTORY_ERROR'
             }
         });
     }
 }));
+
+/**
+ * POST /api/network-scan/purge/scans
+ * Purge only scan entries (all scans older than retention)
+ * Body: { retentionDays?: number } (0 = delete all, default: use config)
+ */
+router.post('/purge/scans', requireAuth, requireAdmin, autoLog('network-scan', 'purge-scans'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const { retentionDays } = req.body;
+        const days = retentionDays !== undefined ? retentionDays : getRetentionConfig().scanRetentionDays;
+        const deleted = purgeScansOnly(days);
+        
+        res.json({
+            success: true,
+            result: {
+                deleted,
+                retentionDays: days
+            },
+            message: `Scan purge completed: ${deleted} entries deleted`
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to purge scans:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to purge scans',
+                code: 'PURGE_SCANS_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/purge/offline
+ * Purge only offline scan entries
+ * Body: { retentionDays?: number } (0 = delete all, default: use config)
+ */
+router.post('/purge/offline', requireAuth, requireAdmin, autoLog('network-scan', 'purge-offline'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const { retentionDays } = req.body;
+        const days = retentionDays !== undefined ? retentionDays : getRetentionConfig().offlineRetentionDays;
+        const deleted = purgeOfflineOnly(days);
+        
+        res.json({
+            success: true,
+            result: {
+                deleted,
+                retentionDays: days
+            },
+            message: `Offline purge completed: ${deleted} entries deleted`
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to purge offline scans:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to purge offline scans',
+                code: 'PURGE_OFFLINE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/purge/clear-all
+ * Clear ALL scan data (for dev/testing)
+ * WARNING: This deletes everything!
+ */
+router.post('/purge/clear-all', requireAuth, requireAdmin, autoLog('network-scan', 'clear-all'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const result = clearAllScanData();
+        
+        res.json({
+            success: true,
+            result: {
+                ...result,
+                message: `All scan data cleared: ${result.scansDeleted} scans, ${result.historyDeleted} history entries`
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to clear all scan data:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to clear all scan data',
+                code: 'CLEAR_ALL_ERROR'
+            }
+        });
+    }
+}));
+
+// Route /database-stats moved above - see definition before /:id route
 
 /**
  * POST /api/network-scan/optimize-database

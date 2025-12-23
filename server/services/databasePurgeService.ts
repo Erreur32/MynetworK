@@ -31,7 +31,7 @@ const DEFAULT_RETENTION_CONFIG: RetentionConfig = {
     historyRetentionDays: 30,
     scanRetentionDays: 90,
     offlineRetentionDays: 7,
-    autoPurgeEnabled: true,
+    autoPurgeEnabled: false, // Disabled by default - must be enabled manually in admin
     purgeSchedule: '0 2 * * *' // Daily at 2 AM
 };
 
@@ -129,6 +129,89 @@ export function executePurge(): {
         };
     } catch (error) {
         logger.error('DatabasePurgeService', 'Purge execution failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Purge only history entries (for manual purge)
+ * @param retentionDays Number of days to keep (0 = delete all)
+ */
+export function purgeHistoryOnly(retentionDays: number = 0): number {
+    logger.info('DatabasePurgeService', `Purging history entries (retention: ${retentionDays} days)`);
+    try {
+        const deleted = NetworkScanRepository.purgeHistory(retentionDays);
+        logger.info('DatabasePurgeService', `History purge completed: ${deleted} entries deleted`);
+        return deleted;
+    } catch (error) {
+        logger.error('DatabasePurgeService', 'History purge failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Purge only scan entries (for manual purge)
+ * @param retentionDays Number of days to keep (0 = delete all)
+ */
+export function purgeScansOnly(retentionDays: number = 0): number {
+    logger.info('DatabasePurgeService', `Purging scan entries (retention: ${retentionDays} days)`);
+    try {
+        const deleted = NetworkScanRepository.purgeOldScans(retentionDays);
+        logger.info('DatabasePurgeService', `Scan purge completed: ${deleted} entries deleted`);
+        return deleted;
+    } catch (error) {
+        logger.error('DatabasePurgeService', 'Scan purge failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Purge only offline scan entries (for manual purge)
+ * @param retentionDays Number of days to keep (0 = delete all)
+ */
+export function purgeOfflineOnly(retentionDays: number = 0): number {
+    logger.info('DatabasePurgeService', `Purging offline scan entries (retention: ${retentionDays} days)`);
+    try {
+        const deleted = NetworkScanRepository.purgeOfflineScans(retentionDays);
+        logger.info('DatabasePurgeService', `Offline purge completed: ${deleted} entries deleted`);
+        return deleted;
+    } catch (error) {
+        logger.error('DatabasePurgeService', 'Offline purge failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Clear all scan data (for dev/testing)
+ * Deletes ALL entries from both tables
+ */
+export function clearAllScanData(): {
+    scansDeleted: number;
+    historyDeleted: number;
+    totalDeleted: number;
+} {
+    logger.info('DatabasePurgeService', 'Clearing ALL scan data (dev mode)');
+    try {
+        // Delete all history first (due to foreign key constraint)
+        const historyDeleted = NetworkScanRepository.purgeHistory(0);
+        
+        // Delete all scans
+        const scansDeleted = NetworkScanRepository.deleteAll();
+        
+        const totalDeleted = historyDeleted + scansDeleted;
+        
+        logger.info('DatabasePurgeService', `All scan data cleared: ${scansDeleted} scans, ${historyDeleted} history entries`);
+        
+        // Optimize database after complete clear
+        NetworkScanRepository.optimizeDatabase();
+        
+        return {
+            scansDeleted,
+            historyDeleted,
+            totalDeleted
+        };
+    } catch (error) {
+        logger.error('DatabasePurgeService', 'Clear all failed:', error);
         throw error;
     }
 }

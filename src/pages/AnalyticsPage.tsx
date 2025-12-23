@@ -531,7 +531,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                         const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
                         return [
                             <span key="value" style={{ color }}>{formatKBSpeed(value)}</span>,
-                            label
+                          label
                         ];
                       }) as any}
                     />

@@ -189,6 +189,8 @@ export function initializeDatabase(): void {
             mac TEXT,
             hostname TEXT,
             vendor TEXT,
+            hostname_source TEXT,
+            vendor_source TEXT,
             status TEXT NOT NULL DEFAULT 'unknown' CHECK(status IN ('online', 'offline', 'unknown')),
             ping_latency INTEGER,
             first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -197,6 +199,29 @@ export function initializeDatabase(): void {
             additional_info TEXT
         )
     `);
+    
+    // Migration: Add hostname_source and vendor_source columns if they don't exist
+    try {
+        database.exec(`
+            ALTER TABLE network_scans ADD COLUMN hostname_source TEXT;
+        `);
+    } catch (error: any) {
+        // Column already exists, ignore
+        if (!error.message?.includes('duplicate column')) {
+            logger.debug('Database', 'Migration: hostname_source column may already exist');
+        }
+    }
+    
+    try {
+        database.exec(`
+            ALTER TABLE network_scans ADD COLUMN vendor_source TEXT;
+        `);
+    } catch (error: any) {
+        // Column already exists, ignore
+        if (!error.message?.includes('duplicate column')) {
+            logger.debug('Database', 'Migration: vendor_source column may already exist');
+        }
+    }
 
     // Network scan history table (tracks each time an IP is seen)
     database.exec(`

@@ -1350,12 +1350,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                     <div className="flex flex-col items-end gap-0.5 ml-2">
                                                         {net.active ? (
                                                             <>
-                                                                <span className="text-[10px] text-emerald-400 font-medium">
-                                                                    {net.connectedDevices} appareils
-                                                                </span>
-                                                                <span className="text-[10px] text-gray-500">
-                                                                    Charge {Math.round(net.load)}%
-                                                                </span>
+                                                        <span className="text-[10px] text-emerald-400 font-medium">
+                                                            {net.connectedDevices} appareils
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-500">
+                                                            Charge {Math.round(net.load)}%
+                                                        </span>
                                                             </>
                                                         ) : (
                                                             <span className="text-[10px] text-gray-500">

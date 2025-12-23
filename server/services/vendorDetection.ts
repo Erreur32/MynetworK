@@ -6,6 +6,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { WiresharkVendorService } from './wiresharkVendorService.js';
 
 /**
  * OUI Database - Common vendor prefixes
@@ -602,9 +603,22 @@ export class VendorDetectionService {
                 return null;
             }
             
+            // Priority 1: Try Wireshark database (most complete)
+            try {
+                const wiresharkVendor = WiresharkVendorService.lookupVendor(oui);
+                if (wiresharkVendor) {
+                    logger.debug('VendorDetection', `Detected vendor ${wiresharkVendor} for MAC ${mac} (OUI: ${oui}) from Wireshark DB`);
+                    return wiresharkVendor;
+                }
+            } catch (error) {
+                // Wireshark DB might not be initialized yet, continue to local DB
+                logger.debug('VendorDetection', `Wireshark lookup failed for ${mac}, trying local DB`);
+            }
+            
+            // Priority 2: Try local OUI database (fallback)
             const vendor = OUI_DATABASE[oui];
             if (vendor) {
-                logger.debug('VendorDetection', `Detected vendor ${vendor} for MAC ${mac} (OUI: ${oui})`);
+                logger.debug('VendorDetection', `Detected vendor ${vendor} for MAC ${mac} (OUI: ${oui}) from local DB`);
                 return vendor;
             }
             
@@ -624,27 +638,84 @@ export class VendorDetectionService {
      * @returns Vendor name or null if not found
      */
     async detectVendorFromApi(mac: string): Promise<string | null> {
-        // First try local database
+        // First try local database (fast check)
         const localVendor = this.detectVendor(mac);
-        if (localVendor) return localVendor;
+        if (localVendor) {
+            logger.debug('VendorDetection', `Found vendor ${localVendor} in local DB for MAC ${mac}`);
+            return localVendor;
+        }
         
         try {
             const normalized = this.normalizeMac(mac);
-            if (!normalized) return null;
-            
-            // Use macvendors.com API (free, no API key required)
-            const oui = normalized.substring(0, 8).replace(/:/g, '');
-            const response = await fetch(`https://api.macvendors.com/${oui}`);
-            
-            if (response.ok) {
-                const vendor = await response.text();
-                if (vendor && !vendor.includes('Not Found')) {
-                    logger.debug('VendorDetection', `Detected vendor ${vendor} from API for MAC ${mac}`);
-                    return vendor.trim();
-                }
+            if (!normalized) {
+                logger.debug('VendorDetection', `Invalid MAC format for API lookup: ${mac}`);
+                return null;
             }
-        } catch (error) {
-            logger.debug('VendorDetection', `API lookup failed for MAC ${mac}:`, error);
+            
+            // Extract OUI (first 3 bytes = 6 hex chars)
+            const oui = normalized.substring(0, 8).replace(/:/g, '');
+            if (oui.length !== 6) {
+                logger.debug('VendorDetection', `Invalid OUI extracted from MAC ${mac}: ${oui}`);
+                return null;
+            }
+            
+            // Try multiple free APIs for better reliability
+            // API 1: macvendors.com (free, no API key required)
+            try {
+                const response = await fetch(`https://api.macvendors.com/${oui}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/plain',
+                    },
+                    // Add timeout to avoid hanging
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (response.ok) {
+                    const vendor = await response.text();
+                    if (vendor && 
+                        vendor.trim().length > 0 && 
+                        !vendor.includes('Not Found') &&
+                        !vendor.includes('error') &&
+                        !vendor.includes('Error')) {
+                        const cleanedVendor = vendor.trim();
+                        logger.debug('VendorDetection', `✓ Detected vendor ${cleanedVendor} from macvendors.com for MAC ${mac} (OUI: ${oui})`);
+                        return cleanedVendor;
+                    }
+                } else {
+                    logger.debug('VendorDetection', `macvendors.com API returned status ${response.status} for MAC ${mac}`);
+                }
+            } catch (error: any) {
+                logger.debug('VendorDetection', `macvendors.com API failed for MAC ${mac}: ${error.message || error}`);
+            }
+            
+            // API 2: macaddress.io (alternative, requires API key but has free tier)
+            // We'll skip this for now as it requires registration
+            
+            // API 3: maclookup.app (free alternative)
+            try {
+                const response = await fetch(`https://api.maclookup.app/v2/macs/${oui}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    signal: AbortSignal.timeout(3000)
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.company && data.company.trim().length > 0) {
+                        const vendor = data.company.trim();
+                        logger.debug('VendorDetection', `✓ Detected vendor ${vendor} from maclookup.app for MAC ${mac} (OUI: ${oui})`);
+                        return vendor;
+                    }
+                }
+            } catch (error: any) {
+                logger.debug('VendorDetection', `maclookup.app API failed for MAC ${mac}: ${error.message || error}`);
+            }
+            
+        } catch (error: any) {
+            logger.debug('VendorDetection', `API lookup failed for MAC ${mac}: ${error.message || error}`);
         }
         
         return null;

@@ -5,7 +5,7 @@
  * Allows scanning network ranges, viewing history, and configuring automatic scans
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
@@ -25,6 +25,8 @@ interface NetworkScan {
     mac?: string;
     hostname?: string;
     vendor?: string;
+    hostnameSource?: string; // 'freebox' | 'unifi' | 'scanner' | 'system' | 'manual'
+    vendorSource?: string; // 'freebox' | 'unifi' | 'scanner' | 'api' | 'manual'
     status: 'online' | 'offline' | 'unknown';
     pingLatency?: number;
     firstSeen: string;
@@ -82,6 +84,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [isScanning, setIsScanning] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [scanRange, setScanRange] = useState<string>('192.168.1.0/24');
+    const [currentScanRange, setCurrentScanRange] = useState<string>('');
+    const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; found: number; updated: number } | null>(null);
+    const [lastScanSummary, setLastScanSummary] = useState<{ range: string; scanned: number; found: number; updated: number; duration: number; detectionSummary?: { mac: number; vendor: number; hostname: number } } | null>(null);
     const [autoDetect, setAutoDetect] = useState(false);
     const [scanType, setScanType] = useState<'full' | 'quick'>('full');
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
@@ -90,8 +95,18 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     // Filters
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
     const [searchFilter, setSearchFilter] = useState<string>('');
+    const [debouncedSearchFilter, setDebouncedSearchFilter] = useState<string>('');
     const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor'>('ip');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    
+    // Debounce search filter to avoid too many API calls
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchFilter(searchFilter);
+        }, 300); // Wait 300ms after user stops typing
+        
+        return () => clearTimeout(timer);
+    }, [searchFilter]);
     
     // Results per page - Load from localStorage or default to 20
     const [resultsPerPage, setResultsPerPage] = useState<number>(() => {
@@ -108,11 +123,76 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     // Config modal state
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    
+    // Wireshark vendor database stats
+    const [wiresharkVendorStats, setWiresharkVendorStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
 
     const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
     const isActive = scanReseauPlugin?.enabled && scanReseauPlugin?.connectionStatus;
 
-    const fetchDefaultConfig = async () => {
+    // Declare all fetch functions before useEffect hooks that use them
+    const fetchStats = useCallback(async () => {
+        try {
+            const response = await api.get<ScanStats>('/api/network-scan/stats');
+            if (response.success && response.result) {
+                setStats(response.result);
+            }
+        } catch (error) {
+            console.error('Failed to fetch stats:', error);
+        }
+    }, []);
+
+    const fetchStatsHistory = useCallback(async () => {
+        try {
+            const response = await api.get<Array<{ time: string; total: number; online: number; offline: number }>>('/api/network-scan/stats-history?hours=24');
+            if (response.success && response.result) {
+                // Ensure we have valid data (filter out any invalid entries)
+                const validData = response.result.filter(h => 
+                    typeof h.total === 'number' && 
+                    typeof h.online === 'number' && 
+                    typeof h.offline === 'number'
+                );
+                setStatsHistory(validData);
+            } else {
+                console.warn('Stats history response:', response);
+            }
+        } catch (error) {
+            console.error('Failed to fetch stats history:', error);
+        }
+    }, []);
+
+    const fetchWiresharkVendorStats = useCallback(async () => {
+        try {
+            const response = await api.get<{ totalVendors: number; lastUpdate: string | null }>('/api/network-scan/wireshark-vendor-stats');
+            if (response.success && response.result) {
+                setWiresharkVendorStats(response.result);
+            }
+        } catch (error) {
+            console.error('Failed to fetch Wireshark vendor stats:', error);
+        }
+    }, []);
+
+    const fetchHistory = useCallback(async () => {
+        try {
+            const params: any = {
+                limit: resultsPerPage.toString(),
+                sortBy: sortBy,
+                sortOrder: sortOrder
+            };
+            if (statusFilter !== 'all') params.status = statusFilter;
+            if (debouncedSearchFilter) params.search = debouncedSearchFilter;
+
+            const queryString = new URLSearchParams(params).toString();
+            const response = await api.get<{ items: NetworkScan[]; total: number; limit: number; offset: number }>(`/api/network-scan/history?${queryString}`);
+            if (response.success && response.result) {
+                setScans(response.result.items || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch history:', error);
+        }
+    }, [resultsPerPage, sortBy, sortOrder, statusFilter, debouncedSearchFilter]);
+
+    const fetchDefaultConfig = useCallback(async () => {
         try {
             const response = await api.get<{ defaultRange: string; defaultScanType: 'full' | 'quick'; defaultAutoDetect: boolean }>('/api/network-scan/default-config');
             if (response.success && response.result) {
@@ -125,15 +205,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         } finally {
             setDefaultConfigLoaded(true);
         }
-    };
+    }, []);
 
-    const fetchAutoStatus = async () => {
+    const fetchAutoStatus = useCallback(async () => {
         try {
             setAutoStatusLoading(true);
             const response = await api.get<AutoStatus>('/api/network-scan/auto-status');
             if (response.success && response.result) {
-                console.log('Auto-status received:', response.result);
-                console.log('Enabled status:', response.result.enabled);
                 setAutoStatus(response.result);
             } else {
                 // Si pas de réponse, initialiser avec des valeurs par défaut
@@ -170,21 +248,22 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         } finally {
             setAutoStatusLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchPlugins();
         fetchStats();
         fetchStatsHistory();
+        fetchWiresharkVendorStats();
         fetchDefaultConfig();
         fetchAutoStatus();
-    }, [fetchPlugins]);
+    }, [fetchPlugins, fetchStats, fetchStatsHistory, fetchWiresharkVendorStats, fetchDefaultConfig, fetchAutoStatus]);
 
     useEffect(() => {
         if (defaultConfigLoaded) {
             fetchHistory();
         }
-    }, [defaultConfigLoaded, statusFilter, searchFilter, sortBy, sortOrder, resultsPerPage]);
+    }, [defaultConfigLoaded, fetchHistory]);
 
     // Cleanup polling interval on unmount
     useEffect(() => {
@@ -196,69 +275,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     }, [scanPollingInterval]);
 
     // Poll stats every 30 seconds if active
+    // Optimized: Only fetch essential data, stagger requests to avoid blocking
     usePolling(() => {
-        if (isActive) {
+        if (isActive && !isScanning && !isRefreshing) {
+            // Fetch stats first (lightweight)
             fetchStats();
-            fetchStatsHistory();
-            fetchHistory();
-            fetchAutoStatus();
+            // Then fetch history and stats history after a short delay to avoid blocking
+            setTimeout(() => {
+                fetchHistory();
+                fetchStatsHistory();
+            }, 100);
+            // Fetch auto status less frequently (every other poll)
+            setTimeout(() => {
+                fetchAutoStatus();
+            }, 200);
         }
     }, {
-        enabled: isActive,
+        enabled: isActive && !isScanning && !isRefreshing,
         interval: POLLING_INTERVALS.system
     });
-
-    const fetchStats = async () => {
-        try {
-            const response = await api.get<ScanStats>('/api/network-scan/stats');
-            if (response.success && response.result) {
-                setStats(response.result);
-            }
-        } catch (error) {
-            console.error('Failed to fetch stats:', error);
-        }
-    };
-
-    const fetchStatsHistory = async () => {
-        try {
-            const response = await api.get<Array<{ time: string; total: number; online: number; offline: number }>>('/api/network-scan/stats-history?hours=24');
-            if (response.success && response.result) {
-                console.log('Stats history received:', response.result.length, 'hours');
-                console.log('Sample data:', response.result.slice(0, 3));
-                // Ensure we have valid data (filter out any invalid entries)
-                const validData = response.result.filter(h => 
-                    typeof h.total === 'number' && 
-                    typeof h.online === 'number' && 
-                    typeof h.offline === 'number'
-                );
-                setStatsHistory(validData);
-            } else {
-                console.warn('Stats history response:', response);
-            }
-        } catch (error) {
-            console.error('Failed to fetch stats history:', error);
-        }
-    };
-
-    const fetchHistory = async () => {
-        try {
-            const params: any = {
-                limit: resultsPerPage.toString(),
-                sortBy: sortBy,
-                sortOrder: sortOrder
-            };
-            if (statusFilter !== 'all') params.status = statusFilter;
-            if (searchFilter) params.search = searchFilter;
-
-            const queryString = new URLSearchParams(params).toString();
-            const response = await api.get<{ items: NetworkScan[]; total: number; limit: number; offset: number }>(`/api/network-scan/history?${queryString}`);
-            if (response.success && response.result) {
-                setScans(response.result.items || []);
-            }
-        } catch (error) {
-            console.error('Failed to fetch history:', error);
-        }
-    };
     
     const handleResultsPerPageChange = (value: string) => {
         if (value === 'custom') {
@@ -284,29 +319,59 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
     const handleScan = async () => {
         setIsScanning(true);
+        setCurrentScanRange(scanRange || (autoDetect ? 'Auto-détection' : '192.168.1.0/24'));
+        setScanProgress(null);
+        setLastScanSummary(null);
         
-        // Start polling to refresh the list during scan
-        const interval = setInterval(() => {
+        // Start polling to refresh the list and progress during scan
+        // Reduced frequency to 2 seconds to improve performance
+        const interval = setInterval(async () => {
             fetchHistory();
             fetchStats();
-        }, 2000); // Refresh every 2 seconds during scan
+            
+            // Fetch scan progress
+            try {
+                const progressResponse = await api.get('/api/network-scan/progress');
+                if (progressResponse.success && progressResponse.result) {
+                    setScanProgress(progressResponse.result);
+                } else if (progressResponse.success && !progressResponse.result) {
+                    // Scan completed, clear progress
+                    setScanProgress(null);
+                }
+            } catch (error) {
+                // Ignore errors, progress is optional
+            }
+        }, 2000); // Refresh every 2 seconds during scan (reduced from 1s for better performance)
         setScanPollingInterval(interval);
         
         try {
             const response = await api.post<{
+                result?: {
                 range: string;
                 scanType: string;
                 scanned: number;
                 found: number;
                 updated: number;
                 duration: number;
+                    detectionSummary?: { mac: number; vendor: number; hostname: number };
+                };
             }>('/api/network-scan/scan', {
                 range: scanRange || undefined,
                 autoDetect: autoDetect || !scanRange,
                 scanType
             });
 
-            if (response.success) {
+            if (response.success && response.result) {
+                // Store scan summary
+                setLastScanSummary({
+                    range: response.result.range || scanRange || 'Auto-détection',
+                    scanned: response.result.scanned || 0,
+                    found: response.result.found || 0,
+                    updated: response.result.updated || 0,
+                    duration: response.result.duration || 0,
+                    detectionSummary: response.result.detectionSummary
+                });
+                
                 // Final refresh after scan completes
                 await fetchStats();
                 await fetchHistory();
@@ -318,6 +383,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             alert('Erreur lors du scan: ' + (error.message || 'Erreur inconnue'));
         } finally {
             setIsScanning(false);
+            setCurrentScanRange('');
+            setScanProgress(null);
             // Stop polling when scan is done
             clearInterval(interval);
             setScanPollingInterval(null);
@@ -326,17 +393,50 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
+        setCurrentScanRange('Rafraîchissement des IPs existantes');
+        setScanProgress(null);
+        setLastScanSummary(null);
         
         // Start polling to refresh the list during refresh
-        const interval = setInterval(() => {
+        // Reduced frequency to 2 seconds to improve performance
+        const interval = setInterval(async () => {
             fetchHistory();
             fetchStats();
-        }, 1500); // Refresh every 1.5 seconds during refresh
+            
+            // Fetch scan progress (refresh also uses the same progress system)
+            try {
+                const progressResponse = await api.get('/api/network-scan/progress');
+                if (progressResponse.success && progressResponse.result) {
+                    setScanProgress(progressResponse.result);
+                } else if (progressResponse.success && !progressResponse.result) {
+                    // Refresh completed, clear progress
+                    setScanProgress(null);
+                }
+            } catch (error) {
+                // Ignore errors, progress is optional
+            }
+        }, 2000); // Refresh every 2 seconds during refresh (reduced from 1s for better performance)
         
         try {
-            const response = await api.post('/api/network-scan/refresh', { scanType: 'quick' });
+            const response = await api.post<{
+                result?: {
+                    scanned: number;
+                    online: number;
+                    offline: number;
+                    duration: number;
+                };
+            }>('/api/network-scan/refresh', { scanType: 'quick' });
 
-            if (response.success) {
+            if (response.success && response.result) {
+                // Store refresh summary
+                setLastScanSummary({
+                    range: 'IPs existantes',
+                    scanned: response.result.scanned || 0,
+                    found: response.result.online || 0,
+                    updated: response.result.offline || 0,
+                    duration: response.result.duration || 0
+                });
+                
                 // Final refresh after refresh completes
                 await fetchStats();
                 await fetchHistory();
@@ -348,6 +448,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             alert('Erreur lors du rafraîchissement: ' + (error.message || 'Erreur inconnue'));
         } finally {
             setIsRefreshing(false);
+            setCurrentScanRange('');
+            setScanProgress(null);
             clearInterval(interval);
         }
     };
@@ -380,6 +482,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const handleCancelEditHostname = () => {
         setEditingHostname(null);
         setEditedHostname('');
+    };
+
+    // Helper function to get badge info for source
+    const getSourceBadge = (source?: string, type: 'hostname' | 'vendor' = 'hostname') => {
+        if (!source) return null;
+        
+        // Don't show badge for scanner - if no badge, it's from scanner by default
+        if (source === 'scanner') return null;
+        
+        const badges: Record<string, { label: string; color: string; bgColor: string }> = {
+            freebox: { label: 'Freebox', color: 'text-blue-300', bgColor: 'bg-blue-500/20' },
+            unifi: { label: 'UniFi', color: 'text-purple-300', bgColor: 'bg-purple-500/20' },
+            api: { label: 'API', color: 'text-yellow-300', bgColor: 'bg-yellow-500/20' },
+            system: { label: 'Système', color: 'text-gray-300', bgColor: 'bg-gray-500/20' },
+            manual: { label: 'Manuel', color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
+        };
+        
+        return badges[source] || null;
     };
 
     const handleSaveHostname = async (ip: string) => {
@@ -517,18 +637,145 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
     };
 
-    const filteredScans = scans.filter(scan => {
-        if (statusFilter !== 'all' && scan.status !== statusFilter) return false;
-        if (searchFilter) {
-            const searchLower = searchFilter.toLowerCase();
-            return (
-                scan.ip.toLowerCase().includes(searchLower) ||
-                (scan.mac && scan.mac.toLowerCase().includes(searchLower)) ||
-                (scan.hostname && scan.hostname.toLowerCase().includes(searchLower))
-            );
+    // Note: Filtering is done server-side, but we keep client-side filtering as a fallback
+    // This ensures that even if server-side filtering has issues, client-side will catch it
+    // Optimized with useMemo to avoid recalculating on every render
+    const filteredScans = useMemo(() => {
+        return scans.filter(scan => {
+            if (statusFilter !== 'all' && scan.status !== statusFilter) return false;
+            if (searchFilter) {
+                const searchLower = searchFilter.toLowerCase().trim();
+                if (!searchLower) return true; // Empty search shows all
+                
+                // Check all fields, handling null/undefined/empty/-- values
+                const ipMatch = scan.ip?.toLowerCase().includes(searchLower) || false;
+                
+                // Handle MAC: check if it exists and is not empty/--
+                const macValue = scan.mac?.trim();
+                const macMatch = macValue && macValue !== '--' ? macValue.toLowerCase().includes(searchLower) : false;
+                
+                // Handle hostname: check if it exists and is not empty/--
+                const hostnameValue = scan.hostname?.trim();
+                const hostnameMatch = hostnameValue && hostnameValue !== '--' ? hostnameValue.toLowerCase().includes(searchLower) : false;
+                
+                // Handle vendor: check if it exists and is not empty/--
+                const vendorValue = scan.vendor?.trim();
+                const vendorMatch = vendorValue && vendorValue !== '--' ? vendorValue.toLowerCase().includes(searchLower) : false;
+                
+                return ipMatch || macMatch || hostnameMatch || vendorMatch;
+            }
+            return true;
+        });
+    }, [scans, statusFilter, searchFilter]);
+
+    // Optimize chart data calculations with useMemo
+    const totalChartData = useMemo(() => {
+        if (!stats) return { data: [], labels: [] };
+        
+        let chartData: number[];
+        if (statsHistory.length > 0) {
+            chartData = statsHistory.map(h => h.total || 0).filter(v => v >= 0);
+            if (chartData.length === 0 || chartData.every(v => v === 0)) {
+                chartData = Array(24).fill(stats.total || 0);
+            }
+        } else {
+            chartData = Array(24).fill(stats.total || 0);
         }
-        return true;
-    });
+        
+        const displayData = chartData.slice(-48);
+        if (displayData.length < 12) {
+            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.total || 0;
+            while (displayData.length < 12) {
+                displayData.unshift(fillValue);
+            }
+        }
+        
+        const timeLabels = statsHistory.length > 0 
+            ? statsHistory.map(h => h.time).slice(-48)
+            : [];
+        const labels = timeLabels.length === displayData.length 
+            ? timeLabels 
+            : displayData.map((_, i) => {
+                const now = new Date();
+                const hoursAgo = displayData.length - i - 1;
+                const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            });
+        
+        return { data: displayData, labels };
+    }, [stats, statsHistory]);
+
+    const onlineChartData = useMemo(() => {
+        if (!stats) return { data: [], labels: [] };
+        
+        let chartData: number[];
+        if (statsHistory.length > 0) {
+            chartData = statsHistory.map(h => h.online || 0).filter(v => v >= 0);
+            if (chartData.length === 0 || chartData.every(v => v === 0)) {
+                chartData = Array(24).fill(stats.online || 0);
+            }
+        } else {
+            chartData = Array(24).fill(stats.online || 0);
+        }
+        
+        const displayData = chartData.slice(-48);
+        if (displayData.length < 12) {
+            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.online || 0;
+            while (displayData.length < 12) {
+                displayData.unshift(fillValue);
+            }
+        }
+        
+        const timeLabels = statsHistory.length > 0 
+            ? statsHistory.map(h => h.time).slice(-48)
+            : [];
+        const labels = timeLabels.length === displayData.length 
+            ? timeLabels 
+            : displayData.map((_, i) => {
+                const now = new Date();
+                const hoursAgo = displayData.length - i - 1;
+                const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            });
+        
+        return { data: displayData, labels };
+    }, [stats, statsHistory]);
+
+    const offlineChartData = useMemo(() => {
+        if (!stats) return { data: [], labels: [] };
+        
+        let chartData: number[];
+        if (statsHistory.length > 0) {
+            chartData = statsHistory.map(h => h.offline || 0).filter(v => v >= 0);
+            if (chartData.length === 0 || chartData.every(v => v === 0)) {
+                chartData = Array(24).fill(stats.offline || 0);
+            }
+        } else {
+            chartData = Array(24).fill(stats.offline || 0);
+        }
+        
+        const displayData = chartData.slice(-48);
+        if (displayData.length < 12) {
+            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.offline || 0;
+            while (displayData.length < 12) {
+                displayData.unshift(fillValue);
+            }
+        }
+        
+        const timeLabels = statsHistory.length > 0 
+            ? statsHistory.map(h => h.time).slice(-48)
+            : [];
+        const labels = timeLabels.length === displayData.length 
+            ? timeLabels 
+            : displayData.map((_, i) => {
+                const now = new Date();
+                const hoursAgo = displayData.length - i - 1;
+                const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            });
+        
+        return { data: displayData, labels };
+    }, [stats, statsHistory]);
 
     return (
         <div className="space-y-6">
@@ -698,6 +945,27 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     Aucun scan auto configuré
                                 </div>
                             ) : null}
+                            
+                            {/* Info base vendors Wireshark */}
+                            {wiresharkVendorStats && (
+                                <div className="pt-2 border-t border-gray-800 space-y-1">
+                                    <div className="flex items-center gap-2 text-xs">
+                                        <span className="text-gray-400">Base vendors:</span>
+                                        {wiresharkVendorStats.totalVendors > 0 ? (
+                                            <>
+                                                <span className="text-emerald-400 font-medium">{wiresharkVendorStats.totalVendors.toLocaleString()}</span>
+                                                {wiresharkVendorStats.lastUpdate && (
+                                                    <span className="text-gray-500">
+                                                        (mise à jour: {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })})
+                                                    </span>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <span className="text-orange-400">Non chargée</span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             </div>
                             
                             {/* Colonne 2 : Boutons d'action */}
@@ -706,25 +974,19 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 <button
                                     onClick={handleRefresh}
                                     disabled={isRefreshing}
-                                    className="w-full px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                                    className="w-full px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                                 >
-                                    <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                                    <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
                                     Rafraîchir
                                 </button>
                                 <button
                                     onClick={handleScan}
                                     disabled={isScanning}
-                                    className="w-full px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                                    className="w-full px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                                 >
-                                    <Play size={16} className={isScanning ? 'animate-spin' : ''} />
+                                    <Play size={14} className={isScanning ? 'animate-spin' : ''} />
                                     Scanner
                                 </button>
-                                {isScanning || isRefreshing ? (
-                                    <div className="flex items-center justify-center gap-2 px-2 py-1.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
-                                        <RefreshCw size={12} className="animate-spin" />
-                                        <span>{isScanning ? 'Scan en cours...' : 'Rafraîchissement...'}</span>
-                                    </div>
-                                ) : null}
                             </div>
                         </div>
                     </Card>
@@ -733,43 +995,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     <Card title="Total IPs">
                         <div className="text-3xl font-bold text-gray-200 text-center mb-2">{stats.total}</div>
                         <div className="h-12 mt-2">
-                            {(() => {
-                                let chartData: number[];
-                                if (statsHistory.length > 0) {
-                                    // Use historical data, filter out invalid values
-                                    chartData = statsHistory.map(h => h.total || 0).filter(v => v >= 0);
-                                    // If all values are 0, use current value for all bars
-                                    if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                                        chartData = Array(24).fill(stats.total || 0);
-                                    }
-                                } else {
-                                    // No history, show current value repeated
-                                    chartData = Array(24).fill(stats.total || 0);
-                                }
-                                // Limit to last 48 bars (for 15-min intervals = 12 hours max)
-                                // This ensures we see recent activity with good granularity
-                                const displayData = chartData.slice(-48);
-                                // Ensure at least 12 bars are shown for visibility
-                                if (displayData.length < 12) {
-                                    const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.total || 0;
-                                    while (displayData.length < 12) {
-                                        displayData.unshift(fillValue);
-                                    }
-                                }
-                                const timeLabels = statsHistory.length > 0 
-                                    ? statsHistory.map(h => h.time).slice(-48)
-                                    : [];
-                                // Ensure labels array matches data array length
-                                const labels = timeLabels.length === displayData.length 
-                                    ? timeLabels 
-                                    : displayData.map((_, i) => {
-                                        const now = new Date();
-                                        const hoursAgo = displayData.length - i - 1;
-                                        const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                                        return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                                    });
-                                return <MiniBarChart data={displayData} color="#9ca3af" labels={labels} valueLabel="Total IPs" />;
-                            })()}
+                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel="Total IPs" />
                         </div>
                     </Card>
                     
@@ -777,43 +1003,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     <Card title="Online">
                         <div className="text-3xl font-bold text-emerald-400 text-center mb-2">{stats.online}</div>
                         <div className="h-12 mt-2">
-                            {(() => {
-                                let chartData: number[];
-                                if (statsHistory.length > 0) {
-                                    // Use historical data, filter out invalid values
-                                    chartData = statsHistory.map(h => h.online || 0).filter(v => v >= 0);
-                                    // If all values are 0, use current value for all bars
-                                    if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                                        chartData = Array(24).fill(stats.online || 0);
-                                    }
-                                } else {
-                                    // No history, show current value repeated
-                                    chartData = Array(24).fill(stats.online || 0);
-                                }
-                                // Limit to last 48 bars (for 15-min intervals = 12 hours max)
-                                // This ensures we see recent activity with good granularity
-                                const displayData = chartData.slice(-48);
-                                // Ensure at least 12 bars are shown for visibility
-                                if (displayData.length < 12) {
-                                    const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.online || 0;
-                                    while (displayData.length < 12) {
-                                        displayData.unshift(fillValue);
-                                    }
-                                }
-                                const timeLabels = statsHistory.length > 0 
-                                    ? statsHistory.map(h => h.time).slice(-48)
-                                    : [];
-                                // Ensure labels array matches data array length
-                                const labels = timeLabels.length === displayData.length 
-                                    ? timeLabels 
-                                    : displayData.map((_, i) => {
-                                        const now = new Date();
-                                        const hoursAgo = displayData.length - i - 1;
-                                        const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                                        return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                                    });
-                                return <MiniBarChart data={displayData} color="#10b981" labels={labels} valueLabel="Online" />;
-                            })()}
+                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel="Online" />
                         </div>
                     </Card>
                     
@@ -821,43 +1011,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     <Card title="Offline">
                         <div className="text-3xl font-bold text-red-400 text-center mb-2">{stats.offline}</div>
                         <div className="h-12 mt-2">
-                            {(() => {
-                                let chartData: number[];
-                                if (statsHistory.length > 0) {
-                                    // Use historical data, filter out invalid values
-                                    chartData = statsHistory.map(h => h.offline || 0).filter(v => v >= 0);
-                                    // If all values are 0, use current value for all bars
-                                    if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                                        chartData = Array(24).fill(stats.offline || 0);
-                                    }
-                                } else {
-                                    // No history, show current value repeated
-                                    chartData = Array(24).fill(stats.offline || 0);
-                                }
-                                // Limit to last 48 bars (for 15-min intervals = 12 hours max)
-                                // This ensures we see recent activity with good granularity
-                                const displayData = chartData.slice(-48);
-                                // Ensure at least 12 bars are shown for visibility
-                                if (displayData.length < 12) {
-                                    const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.offline || 0;
-                                    while (displayData.length < 12) {
-                                        displayData.unshift(fillValue);
-                                    }
-                                }
-                                const timeLabels = statsHistory.length > 0 
-                                    ? statsHistory.map(h => h.time).slice(-48)
-                                    : [];
-                                // Ensure labels array matches data array length
-                                const labels = timeLabels.length === displayData.length 
-                                    ? timeLabels 
-                                    : displayData.map((_, i) => {
-                                        const now = new Date();
-                                        const hoursAgo = displayData.length - i - 1;
-                                        const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                                        return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                                    });
-                                return <MiniBarChart data={displayData} color="#ef4444" labels={labels} valueLabel="Offline" />;
-                            })()}
+                            <MiniBarChart data={offlineChartData.data} color="#ef4444" labels={offlineChartData.labels} valueLabel="Offline" />
                         </div>
                     </Card>
                 </div>
@@ -866,7 +1020,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             {/* Results Table */}
                 <Card
                     title={
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                         <div className="p-1.5 bg-cyan-500/20 rounded-lg">
                             <Network size={16} className="text-cyan-400" />
                         </div>
@@ -874,10 +1028,81 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-bold">
                             {stats?.total || 0}
                         </span>
+                        
+                        {/* Scan en cours */}
                         {(isScanning || isRefreshing) && (
-                            <div className="flex items-center gap-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
+                            <>
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
                                 <RefreshCw size={12} className="animate-spin" />
-                                <span>{isScanning ? 'Scan en cours...' : 'Rafraîchissement...'}</span>
+                                    <span>{isScanning ? 'Scan' : 'Refresh'}</span>
+                                </div>
+                                {currentScanRange && (
+                                    <div className="text-xs text-gray-400 px-2 py-0.5 bg-gray-800/50 rounded">
+                                        Range: <span className="text-gray-300 font-medium">{currentScanRange}</span>
+                                    </div>
+                                )}
+                                {scanProgress && scanProgress.total > 0 && (
+                                    <div className="flex items-center gap-2 px-2 py-1 bg-blue-500/10 rounded border border-blue-500/30">
+                                        <div className="flex-1 min-w-[150px]">
+                                            <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                                                <div 
+                                                    className="bg-blue-500 h-full transition-all duration-300 ease-out"
+                                                    style={{ width: `${Math.min(100, (scanProgress.scanned / scanProgress.total) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-blue-300 font-semibold whitespace-nowrap">
+                                            {scanProgress.scanned}/{scanProgress.total} ({Math.round((scanProgress.scanned / scanProgress.total) * 100)}%)
+                                        </span>
+                                        {(scanProgress.found > 0 || scanProgress.updated > 0) && (
+                                            <span className="text-xs text-gray-300 whitespace-nowrap">
+                                                +{scanProgress.found} ↑{scanProgress.updated}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        
+                        {/* Résumé du scan terminé */}
+                        {lastScanSummary && !isScanning && !isRefreshing && (
+                            <div className="flex items-center gap-2 flex-wrap text-xs">
+                                <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                    <span className="text-gray-400">Range:</span>
+                                    <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.range}</span>
+                                </div>
+                                <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                    <span className="text-gray-400">Durée:</span>
+                                    <span className="text-gray-200 ml-1 font-medium">{(lastScanSummary.duration / 1000).toFixed(1)}s</span>
+                                </div>
+                                <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                    <span className="text-gray-400">Scannés:</span>
+                                    <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.scanned}</span>
+                                </div>
+                                <div className="px-2 py-0.5 bg-emerald-500/20 rounded border border-emerald-500/30">
+                                    <span className="text-gray-400">Trouvés:</span>
+                                    <span className="text-emerald-400 ml-1 font-medium">{lastScanSummary.found}</span>
+                                </div>
+                                <div className="px-2 py-0.5 bg-blue-500/20 rounded border border-blue-500/30">
+                                    <span className="text-gray-400">Mis à jour:</span>
+                                    <span className="text-blue-400 ml-1 font-medium">{lastScanSummary.updated}</span>
+                                </div>
+                                {lastScanSummary.detectionSummary && (
+                                    <>
+                                        <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                            <span className="text-gray-400">MAC:</span>
+                                            <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.mac}</span>
+                                        </div>
+                                        <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                            <span className="text-gray-400">Vendor:</span>
+                                            <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.vendor}</span>
+                                        </div>
+                                        <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
+                                            <span className="text-gray-400">Hostname:</span>
+                                            <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.hostname}</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                         </div>
@@ -966,6 +1191,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <colgroup>
                             <col className="w-36" />
                             <col className="w-40" />
+                            <col className="w-40" />
                             <col className="w-48" />
                             <col className="w-24" />
                             <col className="w-32" />
@@ -997,6 +1223,17 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     </div>
                                 </th>
                                 <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                    if (sortBy === 'vendor') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('vendor'); setSortOrder('asc'); }
+                                }}>
+                                    <div className="flex items-center gap-2">
+                                        <span>Vendor</span>
+                                        {sortBy === 'vendor' && (
+                                            sortOrder === 'asc' ? <ArrowDown size={14} className="text-blue-400" /> : <ArrowUp size={14} className="text-blue-400" />
+                                        )}
+                                    </div>
+                                </th>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors min-w-[300px] w-[30%] max-w-[500px]" onClick={() => {
                                     if (sortBy === 'hostname') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('hostname'); setSortOrder('asc'); }
                                 }}>
@@ -1040,13 +1277,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400">Actions</th>
+                                <th className="text-right py-3 pr-2 pl-0 text-sm text-gray-400 w-1 whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredScans.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-8 text-gray-500">
+                                    <td colSpan={8} className="text-center py-8 text-gray-500">
                                         {isScanning || isRefreshing ? (
                                             <div className="flex items-center justify-center gap-2">
                                                 <RefreshCw size={16} className="animate-spin text-blue-400" />
@@ -1072,6 +1309,19 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         }`} title={scan.ip}>{scan.ip}</td>
                                         <td className="py-3 px-4 text-sm font-mono text-gray-400 truncate" title={scan.mac || '--'}>{scan.mac || '--'}</td>
                                         <td className="py-3 px-4 text-sm text-gray-300 truncate">
+                                            <div className="flex items-center gap-2">
+                                                <span className="truncate" title={scan.vendor || '--'}>{scan.vendor || '--'}</span>
+                                                {scan.vendorSource && (() => {
+                                                    const badge = getSourceBadge(scan.vendorSource, 'vendor');
+                                                    return badge ? (
+                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap`} title={`Source: ${badge.label}`}>
+                                                            {badge.label}
+                                                        </span>
+                                                    ) : null;
+                                                })()}
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-4 text-sm text-gray-300 min-w-[300px] w-[30%] max-w-[500px]">
                                             {editingHostname === scan.ip ? (
                                                 <div className="flex items-center gap-2">
                                                     <input
@@ -1103,6 +1353,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             ) : (
                                                 <div className="flex items-center gap-2 group">
                                                     <span className="truncate" title={scan.hostname || '--'}>{scan.hostname || '--'}</span>
+                                                    {scan.hostnameSource && (() => {
+                                                        const badge = getSourceBadge(scan.hostnameSource, 'hostname');
+                                                        return badge ? (
+                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap`} title={`Source: ${badge.label}`}>
+                                                                {badge.label}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                     <button
                                                         onClick={() => handleStartEditHostname(scan.ip, scan.hostname || '')}
                                                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-500/10 text-blue-400 rounded transition-all flex-shrink-0"
@@ -1133,7 +1391,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         <td className="py-3 px-4 text-sm text-gray-400 truncate" title={formatRelativeTime(scan.lastSeen)}>
                                             {formatRelativeTime(scan.lastSeen)}
                                         </td>
-                                        <td className="py-3 px-4">
+                                        <td className="py-3 pr-2 pl-0 text-right w-1 whitespace-nowrap">
                                             <button
                                                 onClick={() => handleDelete(scan.ip)}
                                                 className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"

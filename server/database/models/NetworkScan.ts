@@ -13,6 +13,8 @@ export interface NetworkScan {
     mac?: string;
     hostname?: string;
     vendor?: string;
+    hostnameSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'system', 'manual'
+    vendorSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'api', 'manual'
     status: 'online' | 'offline' | 'unknown';
     pingLatency?: number; // Latency in milliseconds
     firstSeen: Date;
@@ -26,6 +28,8 @@ export interface CreateNetworkScanInput {
     mac?: string;
     hostname?: string;
     vendor?: string;
+    hostnameSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'system', 'manual'
+    vendorSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'api', 'manual'
     status?: 'online' | 'offline' | 'unknown';
     pingLatency?: number;
     additionalInfo?: Record<string, unknown>;
@@ -63,6 +67,8 @@ export class NetworkScanRepository {
                 mac: input.mac,
                 hostname: input.hostname,
                 vendor: input.vendor,
+                hostnameSource: input.hostnameSource,
+                vendorSource: input.vendorSource,
                 status: input.status,
                 pingLatency: input.pingLatency,
                 additionalInfo: input.additionalInfo,
@@ -82,8 +88,8 @@ export class NetworkScanRepository {
         const db = getDatabase();
         const stmt = db.prepare(`
             INSERT INTO network_scans (
-                ip, mac, hostname, vendor, status, ping_latency, additional_info
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ip, mac, hostname, vendor, hostname_source, vendor_source, status, ping_latency, additional_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         
         const result = stmt.run(
@@ -91,6 +97,8 @@ export class NetworkScanRepository {
             input.mac || null,
             input.hostname || null,
             input.vendor || null,
+            input.hostnameSource || null,
+            input.vendorSource || null,
             input.status || 'unknown',
             input.pingLatency || null,
             input.additionalInfo ? JSON.stringify(input.additionalInfo) : null
@@ -144,9 +152,11 @@ export class NetworkScanRepository {
         }
         
         if (filters.search !== undefined) {
-            conditions.push('(ip LIKE ? OR mac LIKE ? OR hostname LIKE ?)');
+            // Search in IP, MAC, hostname, and vendor fields
+            // Use COALESCE to handle NULL values (treat them as empty strings for LIKE comparison)
+            conditions.push('(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
             const searchPattern = `%${filters.search}%`;
-            values.push(searchPattern, searchPattern, searchPattern);
+            values.push(searchPattern, searchPattern, searchPattern, searchPattern);
         }
         
         if (filters.startDate !== undefined) {
@@ -176,7 +186,7 @@ export class NetworkScanRepository {
         
         if (!needsJavaScriptSorting) {
             // For non-IP sorting, use SQL ORDER BY (more efficient)
-            query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+        query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
         }
         
         // For IP sorting, we need to fetch all results first (no LIMIT yet)
@@ -282,9 +292,11 @@ export class NetworkScanRepository {
         }
         
         if (filters.search !== undefined) {
-            conditions.push('(ip LIKE ? OR mac LIKE ? OR hostname LIKE ?)');
+            // Search in IP, MAC, hostname, and vendor fields
+            // Use COALESCE to handle NULL values (treat them as empty strings for LIKE comparison)
+            conditions.push('(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
             const searchPattern = `%${filters.search}%`;
-            values.push(searchPattern, searchPattern, searchPattern);
+            values.push(searchPattern, searchPattern, searchPattern, searchPattern);
         }
         
         if (filters.startDate !== undefined) {
@@ -327,9 +339,17 @@ export class NetworkScanRepository {
             updateFields.push('hostname = ?');
             values.push(updates.hostname || null);
         }
+        if (updates.hostnameSource !== undefined) {
+            updateFields.push('hostname_source = ?');
+            values.push(updates.hostnameSource || null);
+        }
         if (updates.vendor !== undefined) {
             updateFields.push('vendor = ?');
             values.push(updates.vendor || null);
+        }
+        if (updates.vendorSource !== undefined) {
+            updateFields.push('vendor_source = ?');
+            values.push(updates.vendorSource || null);
         }
         if (updates.status !== undefined) {
             updateFields.push('status = ?');
@@ -524,17 +544,26 @@ export class NetworkScanRepository {
      */
     static purgeHistory(retentionDays: number = 30): number {
         const db = getDatabase();
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
         
         try {
-            const stmt = db.prepare(`
-                DELETE FROM network_scan_history
-                WHERE seen_at < ?
-            `);
-            const result = stmt.run(cutoffDate.toISOString());
-            logger.info('NetworkScanRepository', `Purged ${result.changes} history entries older than ${retentionDays} days`);
-            return result.changes;
+            let stmt;
+            if (retentionDays === 0) {
+                // Delete all history entries (for dev/testing)
+                stmt = db.prepare('DELETE FROM network_scan_history');
+                const result = stmt.run();
+                logger.info('NetworkScanRepository', `Purged all ${result.changes} history entries`);
+                return result.changes;
+            } else {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+                stmt = db.prepare(`
+                    DELETE FROM network_scan_history
+                    WHERE seen_at < ?
+                `);
+                const result = stmt.run(cutoffDate.toISOString());
+                logger.info('NetworkScanRepository', `Purged ${result.changes} history entries older than ${retentionDays} days`);
+                return result.changes;
+            }
         } catch (error) {
             logger.error('NetworkScanRepository', `Failed to purge history:`, error);
             throw error;
@@ -543,22 +572,31 @@ export class NetworkScanRepository {
 
     /**
      * Purge old scan entries that haven't been seen recently
-     * @param retentionDays Number of days to keep entries that haven't been seen (default: 90)
+     * @param retentionDays Number of days to keep entries that haven't been seen (default: 90, 0 = delete all)
      * @returns Number of deleted entries
      */
     static purgeOldScans(retentionDays: number = 90): number {
         const db = getDatabase();
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
         
         try {
-            const stmt = db.prepare(`
-                DELETE FROM network_scans
-                WHERE last_seen < ?
-            `);
-            const result = stmt.run(cutoffDate.toISOString());
-            logger.info('NetworkScanRepository', `Purged ${result.changes} scan entries older than ${retentionDays} days`);
-            return result.changes;
+            let stmt;
+            if (retentionDays === 0) {
+                // Delete all scan entries (for dev/testing)
+                stmt = db.prepare('DELETE FROM network_scans');
+                const result = stmt.run();
+                logger.info('NetworkScanRepository', `Purged all ${result.changes} scan entries`);
+                return result.changes;
+            } else {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+                stmt = db.prepare(`
+                    DELETE FROM network_scans
+                    WHERE last_seen < ?
+                `);
+                const result = stmt.run(cutoffDate.toISOString());
+                logger.info('NetworkScanRepository', `Purged ${result.changes} scan entries older than ${retentionDays} days`);
+                return result.changes;
+            }
         } catch (error) {
             logger.error('NetworkScanRepository', `Failed to purge old scans:`, error);
             throw error;
@@ -567,22 +605,31 @@ export class NetworkScanRepository {
 
     /**
      * Purge offline entries that haven't been seen recently
-     * @param retentionDays Number of days to keep offline entries (default: 7)
+     * @param retentionDays Number of days to keep offline entries (default: 7, 0 = delete all offline)
      * @returns Number of deleted entries
      */
     static purgeOfflineScans(retentionDays: number = 7): number {
         const db = getDatabase();
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
         
         try {
-            const stmt = db.prepare(`
-                DELETE FROM network_scans
-                WHERE status = 'offline' AND last_seen < ?
-            `);
-            const result = stmt.run(cutoffDate.toISOString());
-            logger.info('NetworkScanRepository', `Purged ${result.changes} offline scan entries older than ${retentionDays} days`);
-            return result.changes;
+            let stmt;
+            if (retentionDays === 0) {
+                // Delete all offline entries
+                stmt = db.prepare("DELETE FROM network_scans WHERE status = 'offline'");
+                const result = stmt.run();
+                logger.info('NetworkScanRepository', `Purged all ${result.changes} offline scan entries`);
+                return result.changes;
+            } else {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+                stmt = db.prepare(`
+                    DELETE FROM network_scans
+                    WHERE status = 'offline' AND last_seen < ?
+                `);
+                const result = stmt.run(cutoffDate.toISOString());
+                logger.info('NetworkScanRepository', `Purged ${result.changes} offline scan entries older than ${retentionDays} days`);
+                return result.changes;
+            }
         } catch (error) {
             logger.error('NetworkScanRepository', `Failed to purge offline scans:`, error);
             throw error;
@@ -661,6 +708,8 @@ export class NetworkScanRepository {
             mac: row.mac || undefined,
             hostname: row.hostname || undefined,
             vendor: row.vendor || undefined,
+            hostnameSource: row.hostname_source || undefined,
+            vendorSource: row.vendor_source || undefined,
             status: row.status as 'online' | 'offline' | 'unknown',
             pingLatency: row.ping_latency || undefined,
             firstSeen: new Date(row.first_seen),

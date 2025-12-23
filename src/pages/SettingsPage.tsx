@@ -185,6 +185,11 @@ const DatabaseManagementSection: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
+  const [isPurgingHistory, setIsPurgingHistory] = useState(false);
+  const [isPurgingScans, setIsPurgingScans] = useState(false);
+  const [isPurgingOffline, setIsPurgingOffline] = useState(false);
+  const [isPurgingAll, setIsPurgingAll] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -196,12 +201,17 @@ const DatabaseManagementSection: React.FC = () => {
   const loadRetentionConfig = async () => {
     try {
       const response = await api.get('/api/network-scan/retention-config');
-      if (response.data.success) {
-        setRetentionConfig(response.data.result);
+      if (response.success && response.result) {
+        setRetentionConfig(response.result);
+        setMessage(null); // Clear any previous error
+      } else {
+        const errorMsg = response.error?.message || response.error?.code || 'Erreur lors du chargement de la configuration';
+        setMessage({ type: 'error', text: errorMsg });
       }
     } catch (error: any) {
       console.error('Failed to load retention config:', error);
-      setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
+      const errorMsg = error?.response?.data?.error?.message || error?.message || 'Erreur lors du chargement de la configuration';
+      setMessage({ type: 'error', text: errorMsg });
     }
   };
 
@@ -209,11 +219,22 @@ const DatabaseManagementSection: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await api.get('/api/network-scan/database-stats');
-      if (response.data.success) {
-        setDatabaseStats(response.data.result);
+      if (response.success && response.result) {
+        setDatabaseStats({
+          scansCount: response.result.scansCount || 0,
+          historyCount: response.result.historyCount || 0,
+          oldestScan: response.result.oldestScan || null,
+          oldestHistory: response.result.oldestHistory || null,
+          totalSize: response.result.totalSize || 0
+        });
+      } else {
+        console.error('Failed to load database stats:', response.error);
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement des statistiques' });
       }
     } catch (error: any) {
       console.error('Failed to load database stats:', error);
+      const errorMsg = error?.response?.data?.error?.message || error?.message || 'Erreur lors du chargement des statistiques';
+      setMessage({ type: 'error', text: errorMsg });
     } finally {
       setIsLoading(false);
     }
@@ -224,38 +245,179 @@ const DatabaseManagementSection: React.FC = () => {
     setMessage(null);
     try {
       const response = await api.post('/api/network-scan/retention-config', retentionConfig);
-      if (response.data.success) {
-        setRetentionConfig(response.data.result);
+      if (response.success && response.result) {
+        setRetentionConfig(response.result);
         setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
         setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la sauvegarde' });
+      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handlePurge = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir purger les données anciennes ? Cette action est irréversible.')) {
+    if (!confirm('Êtes-vous sûr de vouloir purger les données anciennes selon la rétention configurée ? Cette action est irréversible.')) {
       return;
     }
     setIsPurging(true);
     setMessage(null);
     try {
       const response = await api.post('/api/network-scan/purge');
-      if (response.data.success) {
+      if (response.success && response.result) {
+        const totalDeleted = response.result.totalDeleted || 
+          (response.result.historyDeleted || 0) + 
+          (response.result.scansDeleted || 0) + 
+          (response.result.offlineDeleted || 0);
         setMessage({ 
           type: 'success', 
-          text: `Purge terminée : ${response.data.result.totalDeleted} entrées supprimées` 
+          text: `Purge terminée : ${totalDeleted} entrées supprimées (History: ${response.result.historyDeleted || 0}, Scans: ${response.result.scansDeleted || 0}, Offline: ${response.result.offlineDeleted || 0})` 
         });
         loadDatabaseStats();
         setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la purge' });
+      setMessage({ type: 'error', text: 'Erreur lors de la purge' });
     } finally {
       setIsPurging(false);
+    }
+  };
+
+  const handlePurgeHistory = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir purger l\'historique selon la rétention configurée ? Cette action est irréversible.')) {
+      return;
+    }
+    setIsPurgingHistory(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/purge/history', { retentionDays: retentionConfig.historyRetentionDays });
+      if (response.success && response.result) {
+        setMessage({ 
+          type: 'success', 
+          text: `Historique purgé : ${response.result.deleted} entrées supprimées` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge de l\'historique' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la purge de l\'historique' });
+    } finally {
+      setIsPurgingHistory(false);
+    }
+  };
+
+  const handlePurgeScans = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir purger les scans selon la rétention configurée ? Cette action est irréversible.')) {
+      return;
+    }
+    setIsPurgingScans(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/purge/scans', { retentionDays: retentionConfig.scanRetentionDays });
+      if (response.success && response.result) {
+        setMessage({ 
+          type: 'success', 
+          text: `Scans purgés : ${response.result.deleted} entrées supprimées` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des scans' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la purge des scans' });
+    } finally {
+      setIsPurgingScans(false);
+    }
+  };
+
+  const handlePurgeOffline = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir purger les IPs offline selon la rétention configurée ? Cette action est irréversible.')) {
+      return;
+    }
+    setIsPurgingOffline(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/purge/offline', { retentionDays: retentionConfig.offlineRetentionDays });
+      if (response.success && response.result) {
+        setMessage({ 
+          type: 'success', 
+          text: `IPs offline purgées : ${response.result.deleted} entrées supprimées` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des IPs offline' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la purge des IPs offline' });
+    } finally {
+      setIsPurgingOffline(false);
+    }
+  };
+
+  const handlePurgeAll = async () => {
+    if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment supprimer TOUTES les données (historique + scans) sans tenir compte de la rétention ? Cette action est irréversible.')) {
+      return;
+    }
+    setIsPurgingAll(true);
+    setMessage(null);
+    try {
+      // Purge avec 0 jours = tout supprimer
+      const historyResponse = await api.post('/api/network-scan/purge/history', { retentionDays: 0 });
+      const scansResponse = await api.post('/api/network-scan/purge/scans', { retentionDays: 0 });
+      const offlineResponse = await api.post('/api/network-scan/purge/offline', { retentionDays: 0 });
+      
+      if (historyResponse.success && scansResponse.success && offlineResponse.success) {
+        const totalDeleted = (historyResponse.result?.deleted || 0) + (scansResponse.result?.deleted || 0) + (offlineResponse.result?.deleted || 0);
+        setMessage({ 
+          type: 'success', 
+          text: `Toutes les données supprimées : ${scansResponse.result?.deleted || 0} scans, ${historyResponse.result?.deleted || 0} historique, ${offlineResponse.result?.deleted || 0} offline (Total: ${totalDeleted})` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: 'Erreur lors de la purge complète' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la purge complète' });
+    } finally {
+      setIsPurgingAll(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('⚠️ DANGER : Voulez-vous vraiment supprimer TOUTES les données de scan (historique + scans) ? Cette action est irréversible et ne peut être annulée !')) {
+      return;
+    }
+    if (!confirm('Dernière confirmation : Supprimer TOUTES les données de scan ?')) {
+      return;
+    }
+    setIsClearingAll(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/purge/clear-all');
+      if (response.success && response.result) {
+        setMessage({ 
+          type: 'success', 
+          text: `Toutes les données supprimées : ${response.result.scansDeleted} scans, ${response.result.historyDeleted} historique` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la suppression complète' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la suppression complète' });
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -267,13 +429,15 @@ const DatabaseManagementSection: React.FC = () => {
     setMessage(null);
     try {
       const response = await api.post('/api/network-scan/optimize-database');
-      if (response.data.success) {
+      if (response.success) {
         setMessage({ type: 'success', text: 'Optimisation de la base de données terminée' });
         loadDatabaseStats();
         setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de l\'optimisation' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de l\'optimisation' });
+      setMessage({ type: 'error', text: 'Erreur lors de l\'optimisation' });
     } finally {
       setIsOptimizing(false);
     }
@@ -445,33 +609,114 @@ const DatabaseManagementSection: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={handlePurge}
-              disabled={isPurging}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-            >
-              {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-              Purger les données anciennes
-            </button>
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Purge selon rétention configurée</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                Supprime uniquement les données plus anciennes que la rétention configurée ({retentionConfig.scanRetentionDays} jours pour scans, {retentionConfig.historyRetentionDays} jours pour historique)
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handlePurge}
+                  disabled={isPurging}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  Purge complète (selon rétention)
+                </button>
+              </div>
+            </div>
 
-            <button
-              onClick={handleOptimize}
-              disabled={isOptimizing}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-            >
-              {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-              Optimiser la base de données
-            </button>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Purge indépendante</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                Purge séparée pour chaque type de données (selon rétention configurée)
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handlePurgeHistory}
+                  disabled={isPurgingHistory}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurgingHistory ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
+                  Purge Historique ({retentionConfig.historyRetentionDays}j)
+                </button>
+                <button
+                  onClick={handlePurgeScans}
+                  disabled={isPurgingScans}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurgingScans ? <Loader2 size={16} className="animate-spin" /> : <Network size={16} />}
+                  Purge Scans ({retentionConfig.scanRetentionDays}j)
+                </button>
+                <button
+                  onClick={handlePurgeOffline}
+                  disabled={isPurgingOffline}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurgingOffline ? <Loader2 size={16} className="animate-spin" /> : <Power size={16} />}
+                  Purge Offline ({retentionConfig.offlineRetentionDays}j)
+                </button>
+              </div>
+            </div>
 
-            <button
-              onClick={loadDatabaseStats}
-              disabled={isLoading}
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-            >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-              Actualiser les statistiques
-            </button>
+            <div>
+              <h4 className="text-sm font-semibold text-red-400 mb-2">Purge complète (tout supprimer)</h4>
+              <p className="text-xs text-red-400 mb-3">
+                ⚠️ Supprime TOUTES les données sans tenir compte de la rétention
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handlePurgeAll}
+                  disabled={isPurgingAll}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurgingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  Purge TOUT (0 jours)
+                </button>
+              </div>
+            </div>
+
+            {(process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') && (
+              <div>
+                <h4 className="text-sm font-semibold text-red-400 mb-2">Mode Développement - Purge complète</h4>
+                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg mb-3">
+                  <p className="text-xs text-red-400">
+                    <strong>⚠️ DANGER :</strong> Cette action supprime TOUTES les données de scan (historique + scans). Utilisé uniquement pour les tests.
+                  </p>
+                </div>
+                <button
+                  onClick={handleClearAll}
+                  disabled={isClearingAll}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isClearingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  Vider TOUT (Dev)
+                </button>
+              </div>
+            )}
+
+            <div>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Optimisation</h4>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleOptimize}
+                  disabled={isOptimizing}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                  Optimiser la DB (VACUUM)
+                </button>
+                <button
+                  onClick={loadDatabaseStats}
+                  disabled={isLoading}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                  Actualiser les stats
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </Section>
@@ -479,6 +724,441 @@ const DatabaseManagementSection: React.FC = () => {
       <Section title="Performance de la base de données (Docker)" icon={Sparkles} iconColor="blue">
         <DatabasePerformanceSection />
       </Section>
+
+      <Section title="Priorité des plugins (Hostname/Vendor)" icon={Plug} iconColor="purple">
+        <PluginPrioritySection />
+      </Section>
+
+      <Section title="Base de vendors Wireshark" icon={HardDrive} iconColor="cyan">
+        <WiresharkVendorSection />
+      </Section>
+    </div>
+  );
+};
+
+// Wireshark Vendor Database Section Component
+const WiresharkVendorSection: React.FC = () => {
+  const [stats, setStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadStats();
+    loadAutoUpdateConfig();
+  }, []);
+
+  const loadStats = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/api/network-scan/wireshark-vendor-stats');
+      if (response.success && response.result) {
+        setStats(response.result);
+        setMessage(null);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement des statistiques' });
+      }
+    } catch (error: any) {
+      console.error('Failed to load Wireshark vendor stats:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement des statistiques' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadAutoUpdateConfig = async () => {
+    try {
+      const response = await api.get('/api/database/config');
+      if (response.success && response.result?.wiresharkAutoUpdate !== undefined) {
+        setAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
+      }
+    } catch (error) {
+      console.error('Failed to load auto-update config:', error);
+    }
+  };
+
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/update-wireshark-vendors');
+      if (response.success) {
+        const source = response.result?.updateSource || 'unknown';
+        const vendorCount = response.result?.vendorCount || response.result?.stats?.totalVendors || 0;
+        
+        let message = '';
+        if (source === 'downloaded') {
+          message = `Base téléchargée depuis GitHub/GitLab : ${vendorCount} vendors chargés`;
+        } else if (source === 'local') {
+          message = `Base chargée depuis le fichier local : ${vendorCount} vendors chargés`;
+        } else if (source === 'plugins') {
+          message = `Base chargée depuis les plugins : ${vendorCount} vendors chargés`;
+        } else {
+          message = `Base mise à jour : ${vendorCount} vendors chargés`;
+        }
+        
+        setMessage({ type: 'success', text: message });
+        await loadStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la mise à jour' });
+      }
+    } catch (error: any) {
+      console.error('Failed to update Wireshark vendors:', error);
+      setMessage({ type: 'error', text: 'Erreur lors de la mise à jour' });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleToggleAutoUpdate = async () => {
+    const newValue = !autoUpdateEnabled;
+    setAutoUpdateEnabled(newValue);
+    try {
+      const response = await api.post('/api/database/config', {
+        wiresharkAutoUpdate: newValue
+      });
+      if (response.success) {
+        setMessage({ type: 'success', text: `Mise à jour automatique ${newValue ? 'activée' : 'désactivée'}` });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        setAutoUpdateEnabled(!newValue); // Revert on error
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+      }
+    } catch (error: any) {
+      console.error('Failed to save auto-update config:', error);
+      setAutoUpdateEnabled(!newValue); // Revert on error
+      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {message && (
+        <div className={`p-3 rounded-lg ${
+          message.type === 'success' ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400' : 'bg-red-500/20 border border-red-500/50 text-red-400'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-800">
+        <p className="text-sm text-gray-400 mb-4">
+          Base de données complète des vendors depuis Wireshark. Mise à jour automatique tous les 7 jours depuis GitHub.
+        </p>
+
+        {/* Stats */}
+        <div className="mb-6">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3">Statistiques</h4>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-gray-400">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm">Chargement...</span>
+            </div>
+          ) : stats ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 bg-[#0f0f0f] rounded border border-gray-800">
+                <span className="text-sm text-gray-400">Vendors chargés:</span>
+                <span className="text-emerald-400 font-medium text-sm">
+                  {stats.totalVendors > 0 ? stats.totalVendors.toLocaleString() : 'Aucun'}
+                </span>
+              </div>
+              {stats.lastUpdate && (
+                <div className="flex items-center justify-between p-3 bg-[#0f0f0f] rounded border border-gray-800">
+                  <span className="text-sm text-gray-400">Dernière mise à jour:</span>
+                  <span className="text-gray-300 text-sm">
+                    {new Date(stats.lastUpdate).toLocaleDateString('fr-FR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-orange-400 p-3 bg-[#0f0f0f] rounded border border-gray-800">
+              Base non chargée
+            </div>
+          )}
+        </div>
+
+        {/* Auto Update Option */}
+        <div className="mb-6">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3">Mise à jour automatique</h4>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoUpdateEnabled}
+              onChange={handleToggleAutoUpdate}
+              className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-cyan-500 focus:ring-cyan-500"
+            />
+            <div>
+              <span className="text-sm text-gray-200">Activer la mise à jour automatique</span>
+              <p className="text-xs text-gray-400">Mise à jour automatique tous les 7 jours depuis GitHub</p>
+            </div>
+          </label>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleUpdate}
+            disabled={isUpdating || isLoading}
+            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+          >
+            {isUpdating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Mettre à jour maintenant
+          </button>
+          <button
+            onClick={loadStats}
+            disabled={isLoading}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+          >
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Actualiser les stats
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Plugin Priority Configuration Section Component
+const PluginPrioritySection: React.FC = () => {
+  const { plugins } = usePluginStore();
+  const [config, setConfig] = useState({
+    hostnamePriority: ['freebox', 'unifi', 'scanner'] as ('freebox' | 'unifi' | 'scanner')[],
+    vendorPriority: ['freebox', 'unifi', 'scanner'] as ('freebox' | 'unifi' | 'scanner')[],
+    overwriteExisting: {
+      hostname: true,
+      vendor: true
+    }
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/api/network-scan/plugin-priority-config');
+      if (response.success && response.result) {
+        setConfig(response.result);
+        setMessage(null);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement de la configuration' });
+      }
+    } catch (error: any) {
+      console.error('Failed to load plugin priority config:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/plugin-priority-config', config);
+      if (response.success) {
+        setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+      }
+    } catch (error: any) {
+      console.error('Failed to save plugin priority config:', error);
+      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const movePriority = (type: 'hostname' | 'vendor', index: number, direction: 'up' | 'down') => {
+    const priority = [...config[`${type}Priority`]];
+    if (direction === 'up' && index > 0) {
+      [priority[index], priority[index - 1]] = [priority[index - 1], priority[index]];
+    } else if (direction === 'down' && index < priority.length - 1) {
+      [priority[index], priority[index + 1]] = [priority[index + 1], priority[index]];
+    }
+    setConfig({ ...config, [`${type}Priority`]: priority });
+  };
+
+  const getPluginLabel = (pluginId: string): string => {
+    const plugin = plugins.find(p => p.id === pluginId);
+    return plugin?.name || pluginId;
+  };
+
+  const isPluginEnabled = (pluginId: string): boolean => {
+    if (pluginId === 'scanner') return true; // Scanner is always available
+    const plugin = plugins.find(p => p.id === pluginId);
+    return plugin?.enabled || false;
+  };
+
+  return (
+    <div className="space-y-6">
+      {message && (
+        <div className={`p-3 rounded-lg ${
+          message.type === 'success' ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400' : 'bg-red-500/20 border border-red-500/50 text-red-400'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-800">
+        <p className="text-sm text-gray-400 mb-4">
+          Configurez l'ordre de priorité des plugins pour la détection des hostnames et vendors.
+          Le plugin en première position a la priorité la plus élevée.
+        </p>
+
+        {/* Hostname Priority */}
+        <div className="mb-6">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+            <Network size={16} />
+            Priorité Hostname
+          </h4>
+          <div className="space-y-2">
+            {config.hostnamePriority.map((pluginId, index) => (
+              <div key={pluginId} className="flex items-center gap-2 p-2 bg-[#0f0f0f] rounded border border-gray-800">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xs text-gray-500 w-6">{index + 1}.</span>
+                  <span className={`text-sm ${isPluginEnabled(pluginId) ? 'text-gray-200' : 'text-gray-500'}`}>
+                    {getPluginLabel(pluginId)}
+                  </span>
+                  {!isPluginEnabled(pluginId) && pluginId !== 'scanner' && (
+                    <span className="text-xs text-orange-400">(désactivé)</span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => movePriority('hostname', index, 'up')}
+                    disabled={index === 0}
+                    className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Monter"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => movePriority('hostname', index, 'down')}
+                    disabled={index === config.hostnamePriority.length - 1}
+                    className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Descendre"
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Vendor Priority */}
+        <div className="mb-6">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+            <HardDrive size={16} />
+            Priorité Vendor
+          </h4>
+          <div className="space-y-2">
+            {config.vendorPriority.map((pluginId, index) => (
+              <div key={pluginId} className="flex items-center gap-2 p-2 bg-[#0f0f0f] rounded border border-gray-800">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xs text-gray-500 w-6">{index + 1}.</span>
+                  <span className={`text-sm ${isPluginEnabled(pluginId) ? 'text-gray-200' : 'text-gray-500'}`}>
+                    {getPluginLabel(pluginId)}
+                  </span>
+                  {!isPluginEnabled(pluginId) && pluginId !== 'scanner' && (
+                    <span className="text-xs text-orange-400">(désactivé)</span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => movePriority('vendor', index, 'up')}
+                    disabled={index === 0}
+                    className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Monter"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => movePriority('vendor', index, 'down')}
+                    disabled={index === config.vendorPriority.length - 1}
+                    className="p-1 hover:bg-blue-500/10 text-blue-400 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Descendre"
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Overwrite Options */}
+        <div className="mb-6">
+          <h4 className="text-sm font-semibold text-gray-300 mb-3">Écrasement des données existantes</h4>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.overwriteExisting.hostname}
+                onChange={(e) => setConfig({
+                  ...config,
+                  overwriteExisting: { ...config.overwriteExisting, hostname: e.target.checked }
+                })}
+                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-blue-500 focus:ring-blue-500"
+              />
+              <div>
+                <span className="text-sm text-gray-200">Écraser les hostnames existants</span>
+                <p className="text-xs text-gray-400">Si activé, les données des plugins écrasent les hostnames déjà détectés</p>
+              </div>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.overwriteExisting.vendor}
+                onChange={(e) => setConfig({
+                  ...config,
+                  overwriteExisting: { ...config.overwriteExisting, vendor: e.target.checked }
+                })}
+                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-blue-500 focus:ring-blue-500"
+              />
+              <div>
+                <span className="text-sm text-gray-200">Écraser les vendors existants</span>
+                <p className="text-xs text-gray-400">Si activé, les données des plugins écrasent les vendors déjà détectés</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isLoading}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+          >
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            Sauvegarder
+          </button>
+          <button
+            onClick={loadConfig}
+            disabled={isLoading}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+          >
+            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Actualiser
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -517,8 +1197,10 @@ const DatabasePerformanceSection: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await api.get('/api/database/config');
-      if (response.data.success) {
-        setDbConfig(response.data.result);
+      if (response.success && response.result) {
+        setDbConfig(response.result);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement de la configuration' });
       }
     } catch (error: any) {
       console.error('Failed to load DB config:', error);
@@ -531,8 +1213,8 @@ const DatabasePerformanceSection: React.FC = () => {
   const loadDbStats = async () => {
     try {
       const response = await api.get('/api/database/stats');
-      if (response.data.success) {
-        setDbStats(response.data.result);
+      if (response.success && response.result) {
+        setDbStats(response.result);
       }
     } catch (error: any) {
       console.error('Failed to load DB stats:', error);
@@ -544,14 +1226,16 @@ const DatabasePerformanceSection: React.FC = () => {
     setMessage(null);
     try {
       const response = await api.post('/api/database/config', dbConfig);
-      if (response.data.success) {
-        setDbConfig(response.data.result);
+      if (response.success && response.result) {
+        setDbConfig(response.result);
         setMessage({ type: 'success', text: 'Configuration de performance sauvegardée' });
         loadDbStats();
         setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la sauvegarde' });
+      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
     } finally {
       setIsSaving(false);
     }

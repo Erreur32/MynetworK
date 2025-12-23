@@ -57,7 +57,7 @@ router.post('/config', requireAuth, requireAdmin, autoLog('database', 'update-co
         }
         
         // Save and apply configuration
-        const success = saveDatabaseConfig(config);
+        const success = await saveDatabaseConfig(config);
         
         if (!success) {
             throw createError('Failed to save database configuration', 500, 'DB_CONFIG_SAVE_ERROR');

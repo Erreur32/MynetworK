@@ -11,7 +11,10 @@ import * as dns from 'dns';
 import { NetworkScanRepository, type NetworkScan, type CreateNetworkScanInput } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
 import { vendorDetectionService } from './vendorDetection.js';
+import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { metricsCollector } from './metricsCollector.js';
+import { pluginManager } from './pluginManager.js';
+import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -47,7 +50,7 @@ const dnsReverseAsync = promisify(dns.reverse);
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
-const PING_TIMEOUT = isWindows ? 2000 : 2000; // 2 seconds timeout
+const PING_TIMEOUT = isWindows ? 3000 : 3000; // 3 seconds timeout (increased for Docker)
 const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operations
 
 /**
@@ -105,6 +108,14 @@ function getHostPathPrefix(): string {
  * Provides methods to scan network ranges, ping hosts, detect MAC addresses, and resolve hostnames
  */
 export class NetworkScanService {
+    // Current scan progress (in-memory, cleared after scan completes)
+    private currentScanProgress: {
+        scanned: number;
+        total: number;
+        found: number;
+        updated: number;
+        isActive: boolean;
+    } | null = null;
     /**
      * Scan a network range for active IP addresses
      * 
@@ -117,6 +128,7 @@ export class NetworkScanService {
         found: number;
         updated: number;
         duration: number;
+        detectionSummary?: { mac: number; vendor: number; hostname: number };
     }> {
         const startTime = Date.now();
         
@@ -129,9 +141,34 @@ export class NetworkScanService {
 
         logger.info('NetworkScanService', `Starting scan of ${ipsToScan.length} IPs (type: ${scanType})`);
 
+        // Check Wireshark vendor database status at start of scan
+        if (scanType === 'full') {
+            try {
+                const vendorStats = WiresharkVendorService.getStats();
+                logger.info('NetworkScanService', `Wireshark vendor database: ${vendorStats.totalVendors} vendors available, last update: ${vendorStats.lastUpdate || 'never'}`);
+                if (vendorStats.totalVendors === 0) {
+                    logger.error('NetworkScanService', '⚠️ Wireshark vendor database is EMPTY! Vendor detection will FAIL. Please update the vendor database in Admin settings.');
+                } else if (vendorStats.totalVendors < 1000) {
+                    logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
+                }
+            } catch (error: any) {
+                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
+            }
+        }
+
+        // Initialize progress tracking
+        this.currentScanProgress = {
+            scanned: 0,
+            total: ipsToScan.length,
+            found: 0,
+            updated: 0,
+            isActive: true
+        };
+
         let found = 0;
         let updated = 0;
         let scanned = 0;
+        let vendorsFound = 0; // Track vendors found during this scan
         const latencies: number[] = []; // Collect latencies for metrics
 
         // Process IPs in batches to limit concurrent operations
@@ -152,60 +189,152 @@ export class NetworkScanService {
                     const latency = result.value.latency;
                     if (latency !== undefined && latency > 0) {
                         latencies.push(latency);
+                    } else {
+                        // IP is online but no latency - log for debugging (only first few to avoid spam)
+                        if (scanned < 5) {
+                            logger.debug('NetworkScanService', `[${ip}] IP is online but latency is ${latency} (may be blocked by firewall or parsing issue)`);
+                        }
                     }
                     const existing = NetworkScanRepository.findByIp(ip);
                     const wasNew = !existing;
                     
+                    // Update progress tracking
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.found = found;
+                        this.currentScanProgress.updated = updated;
+                    }
+                    
+                    // Log progress for every 10th online IP
+                    if (scanned % 10 === 0) {
+                        logger.info('NetworkScanService', `Scan progress: ${scanned}/${ipsToScan.length} scanned, ${found} found, ${updated} updated`);
+                    }
+                    
                     // Prepare scan data
+                    // Note: pingLatency can be undefined if ping succeeded but no latency was parsed
                     const scanData: CreateNetworkScanInput = {
                         ip,
                         status: 'online',
-                        pingLatency: latency
+                        pingLatency: latency // Can be undefined if ping succeeded but latency parsing failed
                     };
                     
                     // If full scan, get MAC, vendor, and hostname
                     if (scanType === 'full') {
+                        let macToUse: string | null = null;
                         try {
                             const mac = await this.getMacAddress(ip);
                             if (mac) {
+                                macToUse = mac;
                                 scanData.mac = mac;
-                                
-                                // Detect vendor from MAC address (inspired by WatchYourLAN)
-                                try {
-                                    const vendor = vendorDetectionService.detectVendor(mac);
-                                    if (vendor) {
-                                        scanData.vendor = vendor;
-                                    }
-                                } catch (error) {
-                                    logger.debug('NetworkScanService', `Failed to detect vendor for ${ip}:`, error);
+                                logger.info('NetworkScanService', `[${ip}] Found MAC: ${mac}`);
+                            } else {
+                                logger.debug('NetworkScanService', `[${ip}] No MAC detected by getMacAddress`);
+                                if (existing?.mac) {
+                                    // Preserve existing MAC if detection failed
+                                    macToUse = existing.mac;
+                                    scanData.mac = existing.mac;
+                                    logger.info('NetworkScanService', `[${ip}] Using existing MAC: ${existing.mac}`);
                                 }
-                            } else if (existing?.mac) {
-                                // Preserve existing MAC if detection failed
-                                scanData.mac = existing.mac;
-                                logger.debug('NetworkScanService', `Preserving existing MAC ${existing.mac} for ${ip}`);
                             }
-                        } catch (error) {
+                            
+                            // Detect vendor from MAC address using priority configuration
+                            // IMPORTANT: Always try to detect vendor if we have a MAC (new or existing)
+                            if (macToUse) {
+                                try {
+                                    const vendorResult = await this.getVendorWithSource(macToUse, ip, existing);
+                                    if (vendorResult) {
+                                        scanData.vendor = vendorResult.vendor;
+                                        scanData.vendorSource = vendorResult.source;
+                                        vendorsFound++;
+                                        logger.info('NetworkScanService', `[${ip}] ✓ Vendor saved: ${vendorResult.vendor} (MAC: ${macToUse}, source: ${vendorResult.source})`);
+                                    } else {
+                                        // Preserve existing vendor if available and valid, otherwise log
+                                        const existingVendor = existing?.vendor?.trim() || '';
+                                        if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
+                                            scanData.vendor = existing.vendor;
+                                            scanData.vendorSource = existing.vendorSource || 'manual';
+                                            logger.debug('NetworkScanService', `[${ip}] Preserving existing vendor: ${existingVendor} (source: ${scanData.vendorSource})`);
+                                        } else {
+                                            logger.info('NetworkScanService', `[${ip}] ✗ No vendor found for MAC: ${macToUse} (tried all plugins in priority order)`);
+                                        }
+                                    }
+                                } catch (error: any) {
+                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${error.message || error}`);
+                                    // Preserve existing vendor if detection failed
+                                    const existingVendor = existing?.vendor?.trim() || '';
+                                    if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
+                                        scanData.vendor = existing.vendor;
+                                        scanData.vendorSource = existing.vendorSource || 'manual';
+                                    }
+                                }
+                            } else {
+                                logger.debug('NetworkScanService', `[${ip}] No MAC available, skipping vendor detection`);
+                                // Preserve existing vendor if no MAC
+                                if (existing?.vendor && existing.vendor.trim().length > 0 && existing.vendor.trim() !== '--') {
+                                    scanData.vendor = existing.vendor;
+                                    scanData.vendorSource = existing.vendorSource || 'manual';
+                                }
+                            }
+                        } catch (error: any) {
+                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${error.message || error}`);
                             // MAC detection may fail, preserve existing if available
-                            logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
                             if (existing?.mac) {
                                 scanData.mac = existing.mac;
+                            }
+                            if (existing?.vendor && existing.vendor.trim().length > 0 && existing.vendor.trim() !== '--') {
+                                scanData.vendor = existing.vendor;
+                                scanData.vendorSource = existing.vendorSource || 'manual';
                             }
                         }
                         
                         try {
-                            const hostname = await this.getHostname(ip);
-                            if (hostname) {
-                                scanData.hostname = hostname;
-                            } else if (existing?.hostname) {
-                                // Preserve existing hostname if detection failed
-                                scanData.hostname = existing.hostname;
-                                logger.debug('NetworkScanService', `Preserving existing hostname ${existing.hostname} for ${ip}`);
+                            logger.debug('NetworkScanService', `[${ip}] Starting hostname detection...`);
+                            const hostnameResult = await this.getHostnameWithSource(ip, existing);
+                            // Double-check that hostname is not an IP before saving
+                            if (hostnameResult && hostnameResult.hostname) {
+                                const cleanedHostname = hostnameResult.hostname.trim();
+                                // Final validation: ensure it's not an IP address
+                                if (cleanedHostname && 
+                                    cleanedHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(cleanedHostname) &&
+                                    cleanedHostname.length > 0 &&
+                                    cleanedHostname.length < 64) {
+                                    scanData.hostname = cleanedHostname;
+                                    scanData.hostnameSource = hostnameResult.source;
+                                    logger.info('NetworkScanService', `[${ip}] ✓ Found hostname: ${cleanedHostname} (source: ${hostnameResult.source})`);
+                                } else {
+                                    logger.debug('NetworkScanService', `[${ip}] ✗ Rejected invalid hostname: ${cleanedHostname}`);
+                                }
+                            } else {
+                                logger.debug('NetworkScanService', `[${ip}] ✗ No hostname detected after trying all methods`);
                             }
-                        } catch (error) {
-                            // Hostname resolution may fail, preserve existing if available
-                            logger.debug('NetworkScanService', `Failed to get hostname for ${ip}:`, error);
-                            if (existing?.hostname) {
-                                scanData.hostname = existing.hostname;
+                            // Only preserve existing hostname if new detection failed AND it's valid
+                            if (!scanData.hostname && existing?.hostname) {
+                                const existingHostname = existing.hostname.trim();
+                                // Check if existing hostname is not an IP address
+                                if (existingHostname && 
+                                    existingHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname) &&
+                                    existingHostname.length > 0 &&
+                                    existingHostname.length < 64) {
+                                    scanData.hostname = existing.hostname;
+                                    scanData.hostnameSource = existing.hostnameSource || 'manual';
+                                    logger.debug('NetworkScanService', `[${ip}] Preserving existing hostname: ${existingHostname} (source: ${scanData.hostnameSource})`);
+                                }
+                            }
+                        } catch (error: any) {
+                            // Hostname resolution may fail, preserve existing if available (but not if it's an IP)
+                            if (!scanData.hostname && existing?.hostname) {
+                                const existingHostname = existing.hostname.trim();
+                                if (existingHostname && 
+                                    existingHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname) &&
+                                    existingHostname.length > 0 &&
+                                    existingHostname.length < 64) {
+                                    scanData.hostname = existing.hostname;
+                                    scanData.hostnameSource = existing.hostnameSource || 'manual';
+                                    logger.debug('NetworkScanService', `[${ip}] Preserving existing hostname after error: ${existingHostname} (source: ${scanData.hostnameSource})`);
+                                }
                             }
                         }
                     } else {
@@ -232,6 +361,13 @@ export class NetworkScanService {
                     } else {
                         updated++;
                     }
+                    
+                    // Update progress tracking (already done above, but ensure it's updated after found/updated increment)
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.found = found;
+                        this.currentScanProgress.updated = updated;
+                    }
                 } else {
                     // IP is offline - update existing entry if it exists
                     const existing = NetworkScanRepository.findByIp(ip);
@@ -246,6 +382,12 @@ export class NetworkScanService {
                         }
                         updated++;
                     }
+                    
+                    // Update progress tracking for offline IPs too
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.updated = updated;
+                    }
                 }
             }
             
@@ -257,6 +399,39 @@ export class NetworkScanService {
 
         const duration = Date.now() - startTime;
         logger.info('NetworkScanService', `Scan completed: ${scanned} scanned, ${found} found, ${updated} updated in ${duration}ms`);
+        if (scanType === 'full') {
+            logger.info('NetworkScanService', `Vendors found during this scan: ${vendorsFound} (out of ${scanned} scanned IPs)`);
+        }
+        
+        // Generate detection summary (only for full scans)
+        let detectionSummary: { mac: number; vendor: number; hostname: number } | undefined;
+        if (scanType === 'full') {
+            try {
+                const allScans = NetworkScanRepository.find({ limit: 10000 });
+                const scansWithMac = allScans.filter(s => s.mac && s.mac.trim().length > 0 && s.mac !== '00:00:00:00:00:00');
+                // Filter out empty vendors, "--", "unknown", and IP addresses
+                const scansWithVendor = allScans.filter(s => {
+                    const vendor = s.vendor?.trim() || '';
+                    return vendor.length > 0 && 
+                           vendor !== '--' && 
+                           vendor.toLowerCase() !== 'unknown' &&
+                           !/^\d+\.\d+\.\d+\.\d+$/.test(vendor);
+                });
+                const scansWithHostname = allScans.filter(s => {
+                    const hostname = s.hostname?.trim() || '';
+                    return hostname.length > 0 && 
+                           !/^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+                });
+                detectionSummary = {
+                    mac: scansWithMac.length,
+                    vendor: scansWithVendor.length,
+                    hostname: scansWithHostname.length
+                };
+                logger.info('NetworkScanService', `Detection summary: ${detectionSummary.mac} with MAC, ${detectionSummary.vendor} with vendor, ${detectionSummary.hostname} with hostname`);
+            } catch (error: any) {
+                logger.debug('NetworkScanService', `Failed to generate detection summary: ${error.message || error}`);
+            }
+        }
 
         // Record metrics AFTER scan completes (not during, to avoid performance impact)
         metricsCollector.recordScanComplete(duration, scanned, found, updated, latencies);
@@ -265,7 +440,8 @@ export class NetworkScanService {
             scanned,
             found,
             updated,
-            duration
+            duration,
+            detectionSummary
         };
     }
 
@@ -298,9 +474,25 @@ export class NetworkScanService {
 
         logger.info('NetworkScanService', `Refreshing ${ipsToRefresh.length} existing IPs (type: ${scanType})`);
 
+        // Check Wireshark vendor database status at start of refresh
+        if (scanType === 'full') {
+            try {
+                const vendorStats = WiresharkVendorService.getStats();
+                logger.info('NetworkScanService', `Wireshark vendor database: ${vendorStats.totalVendors} vendors available, last update: ${vendorStats.lastUpdate || 'never'}`);
+                if (vendorStats.totalVendors === 0) {
+                    logger.error('NetworkScanService', '⚠️ Wireshark vendor database is EMPTY! Vendor detection will FAIL. Please update the vendor database in Admin settings.');
+                } else if (vendorStats.totalVendors < 1000) {
+                    logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
+                }
+            } catch (error: any) {
+                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
+            }
+        }
+
         let online = 0;
         let offline = 0;
         let scanned = 0;
+        let vendorsFound = 0; // Track vendors found during this refresh
 
         // Process IPs in batches
         for (let i = 0; i < ipsToRefresh.length; i += MAX_CONCURRENT_PINGS) {
@@ -328,59 +520,147 @@ export class NetworkScanService {
                     
                     // If full scan, update MAC, vendor, and hostname
                     if (scanType === 'full') {
+                        let macToUse: string | null = null;
                         try {
                             const mac = await this.getMacAddress(ip);
                             if (mac) {
+                                macToUse = mac;
                                 updateData.mac = mac;
-                                
-                                // Detect vendor from MAC address (inspired by WatchYourLAN)
-                                try {
-                                    const vendor = vendorDetectionService.detectVendor(mac);
-                                    if (vendor) {
-                                        updateData.vendor = vendor;
-                                    }
-                                } catch (error) {
-                                    logger.debug('NetworkScanService', `Failed to detect vendor for ${ip}:`, error);
+                                logger.info('NetworkScanService', `[${ip}] Found MAC: ${mac}`);
+                            } else {
+                                logger.debug('NetworkScanService', `[${ip}] No MAC detected by getMacAddress`);
+                                if (existing?.mac) {
+                                    // Preserve existing MAC if detection failed
+                                    macToUse = existing.mac;
+                                    updateData.mac = existing.mac;
+                                    logger.info('NetworkScanService', `[${ip}] Using existing MAC: ${existing.mac}`);
                                 }
-                            } else if (existing?.mac) {
-                                // Preserve existing MAC if detection failed
-                                updateData.mac = existing.mac;
-                                logger.debug('NetworkScanService', `Preserving existing MAC ${existing.mac} for ${ip}`);
                             }
-                        } catch (error) {
-                            logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
-                            // Preserve existing MAC if detection failed
+                            
+                            // Detect vendor from MAC address using priority configuration
+                            // IMPORTANT: Always try to detect vendor if we have a MAC (new or existing)
+                            if (macToUse) {
+                                try {
+                                    const vendorResult = await this.getVendorWithSource(macToUse, ip, existing);
+                                    if (vendorResult) {
+                                        updateData.vendor = vendorResult.vendor;
+                                        updateData.vendorSource = vendorResult.source;
+                                        vendorsFound++;
+                                        logger.info('NetworkScanService', `[${ip}] ✓ Vendor updated: ${vendorResult.vendor} (MAC: ${macToUse}, source: ${vendorResult.source})`);
+                                    } else {
+                                        // Preserve existing vendor if available and valid, otherwise log
+                                        const existingVendor = existing?.vendor?.trim() || '';
+                                        if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
+                                            updateData.vendor = existing.vendor;
+                                            updateData.vendorSource = existing.vendorSource || 'manual';
+                                            logger.debug('NetworkScanService', `[${ip}] Preserving existing vendor: ${existingVendor} (source: ${updateData.vendorSource})`);
+                                        } else {
+                                            logger.info('NetworkScanService', `[${ip}] ✗ No vendor found for MAC: ${macToUse} (tried all plugins in priority order)`);
+                                        }
+                                    }
+                                } catch (error: any) {
+                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${error.message || error}`);
+                                    // Preserve existing vendor if detection failed
+                                    const existingVendor = existing?.vendor?.trim() || '';
+                                    if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
+                                        updateData.vendor = existing.vendor;
+                                        updateData.vendorSource = existing.vendorSource || 'manual';
+                                    }
+                                }
+                            } else {
+                                logger.debug('NetworkScanService', `[${ip}] No MAC available, skipping vendor detection`);
+                                // Preserve existing vendor if no MAC
+                                if (existing?.vendor && existing.vendor.trim().length > 0 && existing.vendor.trim() !== '--') {
+                                    updateData.vendor = existing.vendor;
+                                    updateData.vendorSource = existing.vendorSource || 'manual';
+                                }
+                            }
+                        } catch (error: any) {
+                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${error.message || error}`);
+                            // Preserve existing MAC/vendor if detection failed
                             if (existing?.mac) {
                                 updateData.mac = existing.mac;
+                            }
+                            if (existing?.vendor && existing.vendor.trim().length > 0 && existing.vendor.trim() !== '--') {
+                                updateData.vendor = existing.vendor;
+                                updateData.vendorSource = existing.vendorSource || 'manual';
                             }
                         }
                         
                         try {
-                            const hostname = await this.getHostname(ip);
-                            if (hostname) {
-                                updateData.hostname = hostname;
-                            } else if (existing?.hostname) {
-                                // Preserve existing hostname if detection failed
-                                updateData.hostname = existing.hostname;
-                                logger.debug('NetworkScanService', `Preserving existing hostname ${existing.hostname} for ${ip}`);
+                            const hostnameResult = await this.getHostnameWithSource(ip, existing);
+                            // Double-check that hostname is not an IP before saving
+                            if (hostnameResult && hostnameResult.hostname) {
+                                const cleanedHostname = hostnameResult.hostname.trim();
+                                // Final validation: ensure it's not an IP address
+                                if (cleanedHostname && 
+                                    cleanedHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(cleanedHostname) &&
+                                    cleanedHostname.length > 0 &&
+                                    cleanedHostname.length < 64) {
+                                    updateData.hostname = cleanedHostname;
+                                    updateData.hostnameSource = hostnameResult.source;
+                                    logger.debug('NetworkScanService', `Set hostname ${cleanedHostname} for ${ip} (source: ${hostnameResult.source})`);
+                                } else {
+                                    logger.debug('NetworkScanService', `Rejected invalid hostname (IP) ${cleanedHostname} for ${ip}`);
+                                }
+                            }
+                            // Only preserve existing hostname if new detection failed AND it's valid
+                            if (!updateData.hostname && existing?.hostname) {
+                                const existingHostname = existing.hostname.trim();
+                                // Check if existing hostname is not an IP address
+                                if (existingHostname && 
+                                    existingHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname) &&
+                                    existingHostname.length > 0 &&
+                                    existingHostname.length < 64) {
+                                    updateData.hostname = existing.hostname;
+                                    updateData.hostnameSource = existing.hostnameSource || 'manual';
+                                    logger.debug('NetworkScanService', `Preserving existing hostname ${existingHostname} for ${ip} (source: ${updateData.hostnameSource})`);
+                                } else {
+                                    // Existing hostname is invalid, don't preserve it
+                                    logger.debug('NetworkScanService', `Skipping invalid existing hostname (IP) ${existingHostname} for ${ip}`);
+                                }
                             }
                         } catch (error) {
                             logger.debug('NetworkScanService', `Failed to get hostname for ${ip}:`, error);
-                            // Preserve existing hostname if detection failed
-                            if (existing?.hostname) {
-                                updateData.hostname = existing.hostname;
-                            }
+                            // Preserve existing hostname if detection failed (but not if it's an IP)
+                            if (!updateData.hostname && existing?.hostname) {
+                                const existingHostname = existing.hostname.trim();
+                                // Check if existing hostname is not an IP address
+                                if (existingHostname && 
+                                    existingHostname !== ip && 
+                                    !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname) &&
+                                    existingHostname.length > 0 &&
+                                    existingHostname.length < 64) {
+                                    updateData.hostname = existing.hostname;
+                                    updateData.hostnameSource = existing.hostnameSource || 'manual';
+                        }
+                    }
                         }
                     } else {
-                        // In quick scan mode, preserve existing MAC and hostname
+                        // In quick scan mode, preserve existing MAC, vendor, and hostname (but clean invalid hostnames)
                         if (existing?.mac) {
                             updateData.mac = existing.mac;
                         }
-                        if (existing?.hostname) {
-                            updateData.hostname = existing.hostname;
-                        }
                         if (existing?.vendor) {
                             updateData.vendor = existing.vendor;
+                        }
+                        // Preserve hostname only if it's valid (not an IP address)
+                        if (existing?.hostname) {
+                            const existingHostname = existing.hostname.trim();
+                            // Check if existing hostname is not an IP address
+                            if (existingHostname && 
+                                existingHostname !== ip && 
+                                !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname)) {
+                                // Valid hostname, preserve it
+                                updateData.hostname = existing.hostname;
+                            } else {
+                                // Invalid hostname (IP), remove it by setting to undefined
+                                // This will clear the invalid hostname in the database (converted to NULL)
+                                updateData.hostname = undefined;
+                                logger.debug('NetworkScanService', `Clearing invalid hostname (IP) ${existing.hostname} for ${ip} during quick refresh`);
+                            }
                         }
                     }
                     
@@ -412,6 +692,9 @@ export class NetworkScanService {
 
         const duration = Date.now() - startTime;
         logger.info('NetworkScanService', `Refresh completed: ${scanned} scanned, ${online} online, ${offline} offline in ${duration}ms`);
+        if (scanType === 'full') {
+            logger.info('NetworkScanService', `Vendors found during this refresh: ${vendorsFound} (out of ${scanned} scanned IPs)`);
+        }
 
         return {
             scanned,
@@ -655,23 +938,49 @@ export class NetworkScanService {
                 : `${pingCommand} ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
             
             // Execute ping command - our custom execAsync doesn't reject on non-zero exit codes
+            // Increase timeout buffer for Docker environments
             const { stdout, stderr } = await execAsync(command, {
-                timeout: PING_TIMEOUT + 500 // Add 500ms buffer
+                timeout: PING_TIMEOUT + 1000 // Add 1 second buffer for Docker
             });
             
             // Check if ping was successful by looking for latency in output
             // If stdout contains latency info, ping succeeded
             const latency = this.parsePingLatency(stdout);
             
-            if (latency !== null) {
-                return {
-                    success: true,
+            if (latency !== null && latency > 0) {
+                // Log first few successful pings for debugging
+                if (Math.random() < 0.05) { // Log ~5% of successful pings
+                    logger.debug('NetworkScanService', `[${ip}] Ping successful, latency: ${latency}ms`);
+                }
+            return {
+                success: true,
                     latency: latency
                 };
             }
             
             // No latency found - ping failed (host unreachable, timeout, etc.)
-            // This is normal and shouldn't be logged as an error
+            // This is normal if devices block ICMP or are offline
+            // Only log if we got output but no latency (parsing issue) - reduce logging
+            if (stdout && stdout.length > 0 && stdout.includes('PING')) {
+                // Check if ping started but didn't receive response (timeout)
+                // This is normal behavior for devices blocking ICMP
+                const hasTimeout = stdout.includes('no answer') || 
+                                 stdout.includes('timeout') || 
+                                 stdout.includes('100% packet loss') ||
+                                 (stdout.includes('PING') && !stdout.includes('time=') && !stdout.includes('time<'));
+                
+                if (hasTimeout) {
+                    // Normal timeout - device may be blocking ICMP, don't log
+                    return { success: false };
+                }
+                
+                // If we got output but no latency and it's not a timeout, log for debugging (first 5 only)
+                const logCount = Math.floor(Math.random() * 100);
+                if (logCount < 5) {
+                    logger.debug('NetworkScanService', `[${ip}] Ping output without latency (may be parsing issue). Command: ${command}`);
+                    logger.debug('NetworkScanService', `[${ip}] Output: ${stdout.substring(0, 200)}`);
+                }
+            }
             return { success: false };
         } catch (error: any) {
             // Only real errors reach here (timeout, permission, command not found, spawn errors)
@@ -726,19 +1035,42 @@ export class NetworkScanService {
                 
                 // Method 1: Try ip neigh get (forces ARP request if not in table)
                 // This is more reliable than 'show' as it will query if needed
+                // In Docker, we need to ensure we can access the host's network namespace
                 try {
+                    // First try to force an ARP request
+                    logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip}...`);
                     const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: 3000 });
+                    logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${stdout.substring(0, 100)}`);
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
                         // Filter out invalid MACs (00:00:00:00:00:00)
-                        if (mac !== '00:00:00:00:00:00') {
-                            logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using ip neigh`);
+                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
+                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
                             return mac;
+                        } else {
+                            logger.debug('NetworkScanService', `[MAC] Invalid MAC found for ${ip}: ${mac}`);
                         }
+                    } else {
+                        logger.debug('NetworkScanService', `[MAC] No MAC pattern found in ip neigh output for ${ip}`);
                     }
-                } catch (error) {
-                    logger.debug('NetworkScanService', `ip neigh failed for ${ip}:`, error);
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${error.message || error}`);
+                    // Try alternative: ip neigh show (read-only, faster)
+                    try {
+                        logger.debug('NetworkScanService', `[MAC] Trying ip neigh show (fallback) for ${ip}...`);
+                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: 1000 });
+                        const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                        if (match) {
+                            const mac = match[0].toLowerCase().replace(/-/g, ':');
+                            if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
+                                logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh show`);
+                                return mac;
+                            }
+                        }
+                    } catch (error2: any) {
+                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
+                    }
                 }
                 
                 // Method 2: Try reading /proc/net/arp (Linux only)
@@ -750,17 +1082,23 @@ export class NetworkScanService {
                 
                 for (const arpPath of arpPaths) {
                     try {
+                        logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip}...`);
                         const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
+                        logger.debug('NetworkScanService', `[MAC] ${arpPath} output for ${ip}: ${stdout.substring(0, 100)}`);
                         const parts = stdout.trim().split(/\s+/);
                         if (parts.length >= 4 && parts[3] !== '00:00:00:00:00:00') {
                             const mac = parts[3].toLowerCase().replace(/-/g, ':');
                             if (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
-                                logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using ${arpPath}`);
+                                logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ${arpPath}`);
                                 return mac;
+                            } else {
+                                logger.debug('NetworkScanService', `[MAC] Invalid MAC format from ${arpPath} for ${ip}: ${mac}`);
                             }
+                        } else {
+                            logger.debug('NetworkScanService', `[MAC] No valid MAC found in ${arpPath} for ${ip}`);
                         }
-                    } catch (error) {
-                        logger.debug('NetworkScanService', `${arpPath} failed for ${ip}:`, error);
+                    } catch (error: any) {
+                        logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${error.message || error}`);
                         // Continue to next path
                     }
                 }
@@ -801,9 +1139,9 @@ export class NetworkScanService {
                             logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
                             return mac;
                         }
-                    }
-                } catch {
-                    // ARP not available
+                        }
+                    } catch {
+                        // ARP not available
                 }
             }
         } catch (error) {
@@ -843,26 +1181,473 @@ export class NetworkScanService {
     }
 
     /**
-     * Get hostname for an IP using multiple methods
-     * Tries reverse DNS, getent hosts, /etc/hosts, and NetBIOS/SMB
+     * Get hostname for an IP using multiple methods with priority configuration
+     * Returns hostname and its source
+     * 
+     * @param ip IP address
+     * @param existingScan Optional existing scan data to check for conflicts
+     * @returns Object with hostname and source, or null if not found
+     */
+    async getHostnameWithSource(ip: string, existingScan?: NetworkScan): Promise<{ hostname: string; source: string } | null> {
+        const config = PluginPriorityConfigService.getConfig();
+        const priority = config.hostnamePriority;
+        const overwrite = config.overwriteExisting.hostname;
+        
+        // Try each plugin in priority order
+        for (const pluginName of priority) {
+            if (pluginName === 'freebox') {
+                const result = await this.getHostnameFromFreebox(ip);
+                if (result) {
+                    // Check if we should overwrite existing data
+                    if (existingScan?.hostname && !overwrite && existingScan.hostname.trim().length > 0) {
+                        logger.debug('NetworkScanService', `[${ip}] Keeping existing hostname (overwrite disabled): ${existingScan.hostname}`);
+                        continue; // Skip to next plugin
+                    }
+                    return { hostname: result, source: 'freebox' };
+                }
+            } else if (pluginName === 'unifi') {
+                const result = await this.getHostnameFromUniFi(ip);
+                if (result) {
+                    if (existingScan?.hostname && !overwrite && existingScan.hostname.trim().length > 0) {
+                        logger.debug('NetworkScanService', `[${ip}] Keeping existing hostname (overwrite disabled): ${existingScan.hostname}`);
+                        continue;
+                    }
+                    return { hostname: result, source: 'unifi' };
+                }
+            } else if (pluginName === 'scanner') {
+                // Scanner methods (reverse DNS, NetBIOS, etc.)
+                const result = await this.getHostnameFromSystem(ip);
+                if (result) {
+                    if (existingScan?.hostname && !overwrite && existingScan.hostname.trim().length > 0) {
+                        logger.debug('NetworkScanService', `[${ip}] Keeping existing hostname (overwrite disabled): ${existingScan.hostname}`);
+                        continue;
+                    }
+                    return { hostname: result, source: 'scanner' };
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get hostname from Freebox plugin
+     */
+    private async getHostnameFromFreebox(ip: string): Promise<string | null> {
+        try {
+            const freeboxPlugin = pluginManager.getPlugin('freebox');
+            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) return null;
+            
+            const stats = await freeboxPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) return null;
+            
+            // Try by IP first
+            const device = stats.devices.find((d: any) => d.ip === ip);
+            if (device) {
+                const hostname = (device.hostname || device.name) as string | undefined;
+                if (this.isValidHostname(hostname, ip)) {
+                    return hostname!.split('.')[0];
+                }
+            }
+            
+            // Try by MAC
+            const existingScan = NetworkScanRepository.findByIp(ip);
+            if (existingScan?.mac) {
+                const deviceByMac = stats.devices.find((d: any) => {
+                    const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                    const scanMac = existingScan.mac.toLowerCase().replace(/[:-]/g, '');
+                    return deviceMac === scanMac;
+                });
+                if (deviceByMac) {
+                    const hostname = (deviceByMac.hostname || deviceByMac.name) as string | undefined;
+                    if (this.isValidHostname(hostname, ip)) {
+                        return hostname!.split('.')[0];
+                    }
+                }
+            }
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `Freebox hostname lookup failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+    
+    /**
+     * Get hostname from UniFi plugin
+     */
+    private async getHostnameFromUniFi(ip: string): Promise<string | null> {
+        try {
+            const unifiPlugin = pluginManager.getPlugin('unifi');
+            if (!unifiPlugin || !unifiPlugin.isEnabled()) return null;
+            
+            const stats = await unifiPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) return null;
+            
+            // Try by IP first
+            const device = stats.devices.find((d: any) => d.ip === ip);
+            if (device) {
+                const hostname = (device.hostname || device.name) as string | undefined;
+                if (this.isValidHostname(hostname, ip)) {
+                    return hostname!.split('.')[0];
+                }
+            }
+            
+            // Try by MAC
+            const existingScan = NetworkScanRepository.findByIp(ip);
+            if (existingScan?.mac) {
+                const deviceByMac = stats.devices.find((d: any) => {
+                    const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                    const scanMac = existingScan.mac.toLowerCase().replace(/[:-]/g, '');
+                    return deviceMac === scanMac;
+                });
+                if (deviceByMac) {
+                    const hostname = (deviceByMac.hostname || deviceByMac.name) as string | undefined;
+                    if (this.isValidHostname(hostname, ip)) {
+                        return hostname!.split('.')[0];
+                    }
+                }
+            }
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `UniFi hostname lookup failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+    
+    /**
+     * Get hostname from system methods (reverse DNS, NetBIOS, etc.)
+     */
+    private async getHostnameFromSystem(ip: string): Promise<string | null> {
+        // This will call the existing getHostname method but skip plugins
+        // For now, we'll use the existing logic but skip plugin parts
+        return await this.getHostnameSystemOnly(ip);
+    }
+    
+    /**
+     * Get hostname for an IP (backward compatibility)
+     * Uses priority configuration and returns just the hostname
      * 
      * @param ip IP address
      * @returns Hostname or null if not found
      */
     async getHostname(ip: string): Promise<string | null> {
-        // Method 1: Try reverse DNS lookup (PTR record)
+        const result = await this.getHostnameWithSource(ip);
+        return result?.hostname || null;
+    }
+
+    /**
+     * Get vendor for a MAC address using multiple methods with priority configuration
+     * Returns vendor and its source
+     * @param mac MAC address
+     * @param ip IP address (for plugin lookup)
+     * @param existingScan Optional existing scan data to check for conflicts
+     * @returns Object with vendor and source, or null if not found
+     */
+    async getVendorWithSource(mac: string, ip: string, existingScan?: NetworkScan): Promise<{ vendor: string; source: string } | null> {
+        if (!mac) {
+            logger.debug('NetworkScanService', `[${ip}] No MAC address provided for vendor detection`);
+            return null;
+        }
+
+        const config = PluginPriorityConfigService.getConfig();
+        const priority = config.vendorPriority;
+        const overwrite = config.overwriteExisting.vendor;
+        
+        // Check if existing vendor should be considered as "empty" (empty string, "--", null, undefined, or "unknown")
+        // If empty, we ALWAYS try to find a vendor (overwrite empty values)
+        const existingVendor = existingScan?.vendor?.trim() || '';
+        const isEmptyVendor = !existingVendor || 
+            existingVendor === '' || 
+            existingVendor === '--' || 
+            existingVendor.toLowerCase() === 'unknown';
+        
+        const hasValidExistingVendor = !isEmptyVendor;
+        
+        logger.info('NetworkScanService', `[${ip}] Starting vendor detection for MAC ${mac}, priority: [${priority.join(', ')}], overwrite: ${overwrite}, existing: "${existingVendor || '(empty)'}"`);
+        
+        // If vendor exists and is valid AND overwrite is disabled, keep existing
+        if (hasValidExistingVendor && !overwrite) {
+            logger.info('NetworkScanService', `[${ip}] Keeping existing vendor (overwrite disabled): ${existingVendor} (source: ${existingScan?.vendorSource || 'unknown'})`);
+            return null; // Return null to preserve existing vendor
+        }
+        
+        // If vendor is empty, always try to find one (even if overwrite is disabled)
+        if (isEmptyVendor) {
+            logger.info('NetworkScanService', `[${ip}] Existing vendor is empty, will search for vendor (overwrite empty values)`);
+        }
+        
+        // Try each plugin in priority order
+        for (const pluginName of priority) {
+            logger.info('NetworkScanService', `[${ip}] Trying vendor detection with plugin: ${pluginName}`);
+            
+            if (pluginName === 'freebox') {
+                const result = await this.getVendorFromFreebox(mac, ip);
+                if (result) {
+                    logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from Freebox: ${result}`);
+                    return { vendor: result, source: 'freebox' };
+                } else {
+                    logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from Freebox`);
+                }
+            } else if (pluginName === 'unifi') {
+                const result = await this.getVendorFromUniFi(mac, ip);
+                if (result) {
+                    logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from UniFi: ${result}`);
+                    return { vendor: result, source: 'unifi' };
+                } else {
+                    logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from UniFi`);
+                }
+            } else if (pluginName === 'scanner') {
+                // Scanner methods (Wireshark DB, local DB, API)
+                const result = await this.getVendorFromScanner(mac);
+                if (result) {
+                    logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from Scanner (${result.source}): ${result.vendor}`);
+                    return { vendor: result.vendor, source: result.source };
+                } else {
+                    logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from Scanner`);
+                }
+            }
+        }
+        
+        logger.info('NetworkScanService', `[${ip}] ✗ No vendor found after trying all plugins in priority order`);
+        return null;
+    }
+
+    /**
+     * Get vendor from Freebox plugin
+     */
+    private async getVendorFromFreebox(mac: string, ip: string): Promise<string | null> {
         try {
+            logger.debug('NetworkScanService', `[VENDOR] Freebox: Looking up vendor for MAC ${mac}, IP ${ip}`);
+            
+            const freeboxPlugin = pluginManager.getPlugin('freebox');
+            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: Plugin not available or disabled`);
+                return null;
+            }
+            
+            const stats = await freeboxPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) {
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: No devices found in stats`);
+                return null;
+            }
+            
+            logger.debug('NetworkScanService', `[VENDOR] Freebox: Checking ${stats.devices.length} devices`);
+            
+            // Try by MAC first (more reliable)
+            const normalizedMac = mac.toLowerCase().replace(/[:-]/g, '');
+            const device = stats.devices.find((d: any) => {
+                const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                return deviceMac === normalizedMac;
+            });
+            
+            if (!device) {
+                // Try by IP as fallback
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: Device not found by MAC, trying IP ${ip}`);
+                const deviceByIp = stats.devices.find((d: any) => d.ip === ip);
+                if (deviceByIp && deviceByIp.mac) {
+                    const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
+                    if (deviceMac === normalizedMac) {
+                        const vendor = deviceByIp.type || deviceByIp.vendor_name;
+                        if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
+                            logger.debug('NetworkScanService', `[VENDOR] Freebox: ✓ Found vendor ${vendor} (via IP)`);
+                            return vendor.trim();
+                        }
+                    }
+                }
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✗ Device not found for MAC ${mac} or IP ${ip}`);
+                return null;
+            }
+            
+            // Freebox provides vendor_name in the 'type' field
+            const vendor = device.type || device.vendor_name;
+            if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✓ Found vendor ${vendor} (via MAC)`);
+                return vendor.trim();
+            } else {
+                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✗ No vendor field found in device data`);
+            }
+        } catch (error: any) {
+            logger.error('NetworkScanService', `[VENDOR] Freebox: Vendor lookup failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+
+    /**
+     * Get vendor from UniFi plugin
+     */
+    private async getVendorFromUniFi(mac: string, ip: string): Promise<string | null> {
+        try {
+            logger.debug('NetworkScanService', `[VENDOR] UniFi: Looking up vendor for MAC ${mac}, IP ${ip}`);
+            
+            const unifiPlugin = pluginManager.getPlugin('unifi');
+            if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: Plugin not available or disabled`);
+                return null;
+            }
+            
+            const stats = await unifiPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) {
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: No devices found in stats`);
+                return null;
+            }
+            
+            logger.debug('NetworkScanService', `[VENDOR] UniFi: Checking ${stats.devices.length} devices`);
+            
+            // Try by MAC first (more reliable)
+            const normalizedMac = mac.toLowerCase().replace(/[:-]/g, '');
+            const device = stats.devices.find((d: any) => {
+                const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                return deviceMac === normalizedMac;
+            });
+            
+            if (!device) {
+                // Try by IP as fallback
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: Device not found by MAC, trying IP ${ip}`);
+                const deviceByIp = stats.devices.find((d: any) => d.ip === ip);
+                if (deviceByIp && deviceByIp.mac) {
+                    const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
+                    if (deviceMac === normalizedMac) {
+                        const vendor = deviceByIp.vendor || deviceByIp.vendor_name || deviceByIp.type;
+                        if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
+                            logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via IP)`);
+                            return vendor.trim();
+                        }
+                    }
+                }
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✗ Device not found for MAC ${mac} or IP ${ip}`);
+                return null;
+            }
+            
+            const vendor = device.vendor || device.vendor_name || device.type;
+            if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via MAC)`);
+                return vendor.trim();
+            } else {
+                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✗ No vendor field found in device data`);
+            }
+        } catch (error: any) {
+            logger.error('NetworkScanService', `[VENDOR] UniFi: Vendor lookup failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+
+    /**
+     * Get vendor from scanner methods (Wireshark DB, local DB, API)
+     */
+    private async getVendorFromScanner(mac: string): Promise<{ vendor: string; source: string } | null> {
+        try {
+            // Normalize MAC address and extract OUI (first 3 octets)
+            // MAC can be in format XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
+            // OUI needs to be in format XX:XX:XX (with colons)
+            const normalizedMac = mac.toLowerCase().trim();
+            let oui: string;
+            
+            if (normalizedMac.includes(':')) {
+                // Format: XX:XX:XX:XX:XX:XX
+                oui = normalizedMac.split(':').slice(0, 3).join(':');
+            } else if (normalizedMac.includes('-')) {
+                // Format: XX-XX-XX-XX-XX-XX
+                oui = normalizedMac.split('-').slice(0, 3).join(':');
+            } else {
+                // Format: XXXXXXXXXXXX (no separators)
+                oui = `${normalizedMac.substring(0, 2)}:${normalizedMac.substring(2, 4)}:${normalizedMac.substring(4, 6)}`;
+            }
+            
+            logger.debug('NetworkScanService', `[VENDOR] Scanner: Looking up OUI ${oui} for MAC ${mac}`);
+            
+            // First try Wireshark database
+            try {
+                const wiresharkVendor = WiresharkVendorService.lookupVendor(oui);
+                if (wiresharkVendor) {
+                    logger.debug('NetworkScanService', `[VENDOR] Scanner: ✓ Found vendor from Wireshark DB: ${wiresharkVendor}`);
+                    return { vendor: wiresharkVendor, source: 'scanner' };
+                } else {
+                    logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found in Wireshark DB for OUI ${oui}`);
+                }
+            } catch (error: any) {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: Wireshark lookup failed for OUI ${oui}: ${error.message || error}`);
+            }
+            
+            // Then try local database (vendorDetectionService includes local OUI DB)
+            let vendor = vendorDetectionService.detectVendor(mac);
+            if (vendor) {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: ✓ Found vendor from local OUI DB: ${vendor}`);
+                return { vendor, source: 'scanner' };
+            } else {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found in local OUI DB for MAC ${mac}`);
+            }
+            
+            // If not found locally, try API
+            logger.debug('NetworkScanService', `[VENDOR] Scanner: Trying API lookup for MAC ${mac}...`);
+            vendor = await vendorDetectionService.detectVendorFromApi(mac);
+            if (vendor) {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: ✓ Found vendor from API: ${vendor}`);
+                return { vendor, source: 'api' };
+            } else {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found from API for MAC ${mac}`);
+            }
+        } catch (error: any) {
+            logger.error('NetworkScanService', `[VENDOR] Scanner: Vendor detection failed for MAC ${mac}: ${error.message || error}`);
+        }
+        
+        logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found for MAC ${mac} after trying all methods`);
+        return null;
+    }
+    
+    /**
+     * Validate hostname format
+     */
+    private isValidHostname(hostname: string | undefined, ip: string): boolean {
+        return !!(
+            hostname &&
+            typeof hostname === 'string' &&
+            hostname !== ip &&
+            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
+            hostname.length > 0 &&
+            hostname.length < 64
+        );
+    }
+    
+    /**
+     * Get hostname for an IP using multiple methods (system only, no plugins)
+     * Tries reverse DNS, getent hosts, /etc/hosts, and NetBIOS/SMB
+     * 
+     * @param ip IP address
+     * @returns Hostname or null if not found
+     */
+    private async getHostnameSystemOnly(ip: string): Promise<string | null> {
+        logger.info('NetworkScanService', `[HOSTNAME] Starting system hostname detection for ${ip}...`);
+        
+        // Method 1: Try reverse DNS lookup (PTR record)
+        // Note: Reverse DNS often doesn't work for local network IPs, but worth trying
+        try {
+            logger.info('NetworkScanService', `[HOSTNAME] Method 1: Trying reverse DNS (PTR) for ${ip}...`);
             const hostnames = await dnsReverseAsync(ip);
             if (hostnames && hostnames.length > 0 && hostnames[0]) {
                 const hostname = hostnames[0].trim();
-                // Filter out generic reverse DNS entries
-                if (hostname && !hostname.includes('in-addr.arpa') && hostname.length > 0) {
-                    logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using reverse DNS`);
-                    return hostname;
+                logger.info('NetworkScanService', `[HOSTNAME] Reverse DNS returned: ${hostname}`);
+                // Filter out generic reverse DNS entries and IP addresses
+                // Also filter out hostnames that are just IPs or invalid
+                if (hostname && 
+                    !hostname.includes('in-addr.arpa') && 
+                    hostname.length > 0 &&
+                    hostname.length < 64 && // Max hostname length
+                    hostname !== ip && // Don't return IP as hostname
+                    !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
+                    !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
+                    /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
+                    // Extract first part before dot (hostname, not FQDN)
+                    const shortHostname = hostname.split('.')[0];
+                    if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
+                        logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using reverse DNS`);
+                        return shortHostname;
+                    }
+                } else {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS returned invalid hostname: ${hostname}`);
                 }
+            } else {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS returned no results for ${ip}`);
             }
-        } catch (error) {
-            logger.debug('NetworkScanService', `Reverse DNS failed for ${ip}:`, error);
+        } catch (error: any) {
+            logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS failed for ${ip}: ${error.message || error}`);
         }
         
         if (isWindows) {
@@ -873,31 +1658,74 @@ export class NetworkScanService {
                 const nameMatch = stdout.match(/<00>\s+UNIQUE\s+([A-Z0-9-]+)/i);
                 if (nameMatch && nameMatch[1]) {
                     const hostname = nameMatch[1].trim();
-                    if (hostname && hostname.length > 0) {
+                    // Filter out IP addresses
+                    if (hostname && 
+                        hostname.length > 0 &&
+                        hostname !== ip && // Don't return IP as hostname
+                        !/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) { // Don't return IP-like strings
                         logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using NetBIOS`);
                         return hostname;
                     }
-                }
-            } catch (error) {
+            }
+        } catch (error) {
                 logger.debug('NetworkScanService', `NetBIOS lookup failed for ${ip}:`, error);
             }
         } else {
             // Linux/Mac: Try multiple methods
             
             // Method 2: Try getent hosts (checks /etc/hosts and DNS)
+            // Note: getent may not be available in Alpine Linux (uses musl libc)
+            // If getent fails, we'll fall back to reading /etc/hosts directly (Method 3)
             try {
-                const { stdout } = await execAsync(`getent hosts ${ip} 2>/dev/null`, { timeout: 2000 });
+                logger.info('NetworkScanService', `[HOSTNAME] Method 2: Trying getent hosts for ${ip}...`);
+                // Try to find getent command (may be in /usr/glibc-compat/bin/getent if glibc is installed)
+                let getentCommand = 'getent';
+                try {
+                    // Check if getent exists in standard locations
+                    await execAsync('which getent 2>/dev/null || test -x /usr/glibc-compat/bin/getent', { timeout: 500 });
+                    // If glibc-compat is installed, getent might be there
+                    try {
+                        await execAsync('test -x /usr/glibc-compat/bin/getent', { timeout: 100 });
+                        getentCommand = '/usr/glibc-compat/bin/getent';
+                    } catch {
+                        // Use default getent
+                    }
+                } catch {
+                    // getent not found, skip this method
+                    logger.debug('NetworkScanService', `[HOSTNAME] ✗ getent command not found, skipping Method 2`);
+                    throw new Error('getent not available');
+                }
+                
+                const { stdout } = await execAsync(`${getentCommand} hosts ${ip} 2>/dev/null`, { timeout: 2000 });
+                logger.info('NetworkScanService', `[HOSTNAME] getent hosts output for ${ip}: ${stdout.substring(0, 200)}`);
                 const parts = stdout.trim().split(/\s+/);
                 if (parts.length >= 2) {
                     // getent hosts returns: IP hostname [aliases...]
                     const hostname = parts[1].trim();
-                    if (hostname && hostname.length > 0 && !hostname.includes('in-addr.arpa')) {
-                        logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using getent hosts`);
-                        return hostname;
+                    logger.info('NetworkScanService', `[HOSTNAME] getent hosts parsed hostname: ${hostname}`);
+                    // Filter out IP addresses and generic entries
+                    if (hostname && 
+                        hostname.length > 0 &&
+                        hostname.length < 64 && // Max hostname length
+                        !hostname.includes('in-addr.arpa') &&
+                        hostname !== ip && // Don't return IP as hostname
+                        !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
+                        !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
+                        /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
+                        // Extract first part before dot (hostname, not FQDN)
+                        const shortHostname = hostname.split('.')[0];
+                        if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
+                            logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using getent hosts`);
+                            return shortHostname;
+                        }
+                    } else {
+                        logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts returned invalid hostname for ${ip}: ${hostname}`);
                     }
+                } else {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts returned insufficient data for ${ip} (parts: ${parts.length})`);
                 }
-            } catch (error) {
-                logger.debug('NetworkScanService', `getent hosts failed for ${ip}:`, error);
+            } catch (error: any) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts failed for ${ip}: ${error.message || error}`);
             }
             
             // Method 3: Try reading /etc/hosts directly
@@ -907,41 +1735,227 @@ export class NetworkScanService {
                 ? [`${hostPathPrefix}/etc/hosts`, '/etc/hosts']  // Try host first, then container
                 : ['/etc/hosts'];  // Only container path
             
+            logger.info('NetworkScanService', `[HOSTNAME] Method 3: Trying /etc/hosts files for ${ip} (paths: ${hostsPaths.join(', ')})...`);
+            
             for (const hostsPath of hostsPaths) {
                 try {
+                    logger.info('NetworkScanService', `[HOSTNAME] Trying ${hostsPath} for ${ip}...`);
                     const { stdout } = await execAsync(`grep "^${ip.replace(/\./g, '\\.')}\\s" ${hostsPath} 2>/dev/null | head -1`, { timeout: 1000 });
+                    logger.info('NetworkScanService', `[HOSTNAME] ${hostsPath} output for ${ip}: ${stdout.substring(0, 100)}`);
                     const parts = stdout.trim().split(/\s+/);
                     if (parts.length >= 2) {
                         const hostname = parts[1].trim();
-                        if (hostname && hostname.length > 0 && !hostname.startsWith('#')) {
-                            logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using ${hostsPath}`);
-                            return hostname;
+                        // Filter out comments, IP addresses, and ensure it's a valid hostname
+                        if (hostname && 
+                            hostname.length > 0 &&
+                            hostname.length < 64 && // Max hostname length
+                            !hostname.startsWith('#') &&
+                            hostname !== ip && // Don't return IP as hostname
+                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
+                            !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
+                            /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
+                            // Extract first part before dot (hostname, not FQDN)
+                            const shortHostname = hostname.split('.')[0];
+                            if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
+                                logger.info('NetworkScanService', `[HOSTNAME] Found hostname ${shortHostname} for ${ip} using ${hostsPath}`);
+                                return shortHostname;
+                            }
+                        } else {
+                            logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} returned invalid hostname for ${ip}: ${hostname}`);
                         }
+                    } else {
+                        logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} returned insufficient data for ${ip}`);
                     }
-                } catch (error) {
-                    logger.debug('NetworkScanService', `${hostsPath} lookup failed for ${ip}:`, error);
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} lookup failed for ${ip}: ${error.message || error}`);
                     // Continue to next path
                 }
             }
             
             // Method 4: Try SMB/NetBIOS (smbclient or nmblookup)
+            // NetBIOS is very effective for Windows and Samba devices
             try {
+                logger.info('NetworkScanService', `[HOSTNAME] Method 4: Trying nmblookup (NetBIOS) for ${ip}...`);
                 // Try nmblookup first (faster, no authentication needed)
-                const { stdout } = await execAsync(`nmblookup -A ${ip} 2>/dev/null | grep "<00>" | head -1`, { timeout: 3000 });
-                const nameMatch = stdout.match(/([A-Z0-9-]+)\s+<00>/i);
-                if (nameMatch && nameMatch[1]) {
-                    const hostname = nameMatch[1].trim();
-                    if (hostname && hostname.length > 0) {
-                        logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using nmblookup`);
-                        return hostname;
+                // Use -A for node status query (more reliable)
+                const { stdout, stderr } = await execAsync(`nmblookup -A ${ip} 2>&1`, { timeout: 5000 });
+                logger.info('NetworkScanService', `[HOSTNAME] nmblookup output for ${ip}: ${stdout.substring(0, 300)}`);
+                if (stderr && !stderr.includes('name_query')) {
+                    logger.info('NetworkScanService', `[HOSTNAME] nmblookup stderr for ${ip}: ${stderr.substring(0, 200)}`);
+                }
+                
+                // Look for NetBIOS name in output with multiple patterns
+                // Format examples:
+                //   NAME <00> UNIQUE
+                //   NAME <20> UNIQUE
+                //   NAME <03> UNIQUE
+                //   NAME GROUP
+                const patterns = [
+                    /([A-Z0-9-]{1,15})\s+<00>\s+UNIQUE/i,  // Workstation service
+                    /([A-Z0-9-]{1,15})\s+<20>\s+UNIQUE/i,  // File server service
+                    /([A-Z0-9-]{1,15})\s+<03>\s+UNIQUE/i,  // Messenger service
+                    /([A-Z0-9-]{1,15})\s+<00>\s+GROUP/i,    // Domain name
+                    /([A-Z0-9-]{1,15})\s+UNIQUE/i,          // Generic UNIQUE
+                ];
+                
+                let hostname: string | null = null;
+                for (const pattern of patterns) {
+                    const match = stdout.match(pattern);
+                    if (match && match[1]) {
+                        const candidate = match[1].trim();
+                        // NetBIOS names are max 15 chars, filter out common invalid patterns
+                        if (candidate && 
+                            candidate.length > 0 &&
+                            candidate.length <= 15 &&
+                            candidate !== ip &&
+                            !/^\d+\.\d+\.\d+\.\d+$/.test(candidate) &&
+                            !candidate.match(/^[0-9]+$/) && // Not just numbers
+                            /^[A-Z0-9-]+$/i.test(candidate)) {
+                            hostname = candidate;
+                            break;
+                        }
                     }
                 }
-            } catch (error) {
-                logger.debug('NetworkScanService', `nmblookup failed for ${ip}:`, error);
+                
+                if (hostname) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${hostname} for ${ip} using nmblookup`);
+                    return hostname;
+                } else {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ nmblookup returned no valid hostname for ${ip}`);
+                }
+            } catch (error: any) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ nmblookup failed for ${ip}: ${error.message || error}`);
+            }
+            
+            // Method 5: Try to extract hostname from ARP table (some systems store hostnames there)
+            try {
+                logger.info('NetworkScanService', `[HOSTNAME] Method 5: Trying ARP table for ${ip}...`);
+                const hostPathPrefix = getHostPathPrefix();
+                const arpPaths = hostPathPrefix 
+                    ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']
+                    : ['/proc/net/arp'];
+                
+                for (const arpPath of arpPaths) {
+                    try {
+                        // Read ARP table and look for hostname in comments or additional fields
+                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
+                        const parts = stdout.trim().split(/\s+/);
+                        // ARP table format: IP HWtype HWaddress Flags Mask IFace [hostname]
+                        // Some systems add hostname as last field
+                        if (parts.length >= 6) {
+                            const possibleHostname = parts[parts.length - 1].trim();
+                            if (possibleHostname && 
+                                possibleHostname !== ip &&
+                                !/^\d+\.\d+\.\d+\.\d+$/.test(possibleHostname) &&
+                                /^[a-zA-Z0-9.-]+$/.test(possibleHostname) &&
+                                possibleHostname.length > 0 &&
+                                possibleHostname.length < 64) {
+                                const shortHostname = possibleHostname.split('.')[0];
+                                logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using ARP table`);
+                                return shortHostname;
+                            }
+                        }
+                    } catch (error: any) {
+                        logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table lookup failed for ${ip} in ${arpPath}: ${error.message || error}`);
+                    }
+                }
+            } catch (error: any) {
+                logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table method failed for ${ip}: ${error.message || error}`);
+            }
+            
+            // Method 6: Try mDNS/Bonjour (avahi-resolve/avahi-browse) if available
+            // mDNS is very effective for Apple devices, IoT devices, and Linux machines
+            try {
+                logger.info('NetworkScanService', `[HOSTNAME] Method 6: Trying mDNS/Bonjour for ${ip}...`);
+                
+                // Method 6a: Try avahi-resolve (reverse lookup)
+                try {
+                    const { stdout } = await execAsync(`avahi-resolve -a ${ip} 2>/dev/null`, { timeout: 3000 });
+                    const parts = stdout.trim().split(/\s+/);
+                    if (parts.length >= 2) {
+                        const hostname = parts[1].trim();
+                        if (hostname && 
+                            hostname !== ip &&
+                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
+                            /^[a-zA-Z0-9.-]+$/.test(hostname) &&
+                            hostname.length > 0 &&
+                            hostname.length < 64) {
+                            const shortHostname = hostname.split('.')[0];
+                            logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using avahi-resolve`);
+                            return shortHostname;
+                        }
+                    }
+                } catch (error: any) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-resolve failed for ${ip}: ${error.message || error}`);
+                }
+                
+                // Method 6b: Try avahi-browse (browse all services and match IP)
+                // This is slower but more comprehensive
+                try {
+                    // Browse all services and grep for our IP
+                    const { stdout } = await execAsync(`timeout 2 avahi-browse -atr 2>/dev/null | grep "${ip}" | head -1`, { timeout: 3000 });
+                    if (stdout.trim()) {
+                        // Format: hostname [IP] port ...
+                        const escapedIp = ip.replace(/\./g, '\\.');
+                        const match = stdout.match(new RegExp(`([a-zA-Z0-9.-]+)\\s+\\[${escapedIp}\\]`));
+                        if (match && match[1]) {
+                            const hostname = match[1].trim();
+                            if (hostname && 
+                                hostname !== ip &&
+                                !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
+                                /^[a-zA-Z0-9.-]+$/.test(hostname) &&
+                                hostname.length > 0 &&
+                                hostname.length < 64) {
+                                const shortHostname = hostname.split('.')[0];
+                                logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using avahi-browse`);
+                                return shortHostname;
+                            }
+                        }
+                    }
+                } catch (error: any) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-browse failed for ${ip}: ${error.message || error}`);
+                }
+            } catch (error: any) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ mDNS lookup failed for ${ip}: ${error.message || error}`);
+            }
+            
+            // Method 7: Try LLMNR (Link-Local Multicast Name Resolution) - Windows and some Linux
+            try {
+                logger.info('NetworkScanService', `[HOSTNAME] Method 7: Trying LLMNR for ${ip}...`);
+                // Use systemd-resolve or resolvectl if available (systemd systems)
+                try {
+                    const { stdout } = await execAsync(`resolvectl query ${ip} 2>/dev/null | grep -i "name:" | head -1`, { timeout: 2000 });
+                    const match = stdout.match(/name:\s+([a-zA-Z0-9.-]+)/i);
+                    if (match && match[1]) {
+                        const hostname = match[1].trim();
+                        if (hostname && 
+                            hostname !== ip &&
+                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
+                            /^[a-zA-Z0-9.-]+$/.test(hostname) &&
+                            hostname.length > 0 &&
+                            hostname.length < 64) {
+                            const shortHostname = hostname.split('.')[0];
+                            logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using LLMNR`);
+                            return shortHostname;
+                        }
+                    }
+                } catch (error: any) {
+                    // resolvectl not available, skip
+                }
+            } catch (error: any) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ LLMNR lookup failed for ${ip}: ${error.message || error}`);
             }
         }
         
+        logger.info('NetworkScanService', `[HOSTNAME] ✗ All hostname detection methods failed for ${ip}`);
         return null;
+    }
+
+    /**
+     * Get current scan progress (if a scan is in progress)
+     */
+    getScanProgress(): { scanned: number; total: number; found: number; updated: number; isActive: boolean } | null {
+        return this.currentScanProgress;
     }
 
     /**
@@ -990,19 +2004,49 @@ export class NetworkScanService {
 
     /**
      * Parse latency from ping output
+     * Handles various ping output formats from different systems
      */
     private parsePingLatency(output: string): number | null {
-        // Windows: "Reply from 192.168.1.1: bytes=32 time<1ms TTL=64"
-        // Linux: "64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=0.123 ms"
-        
-        const windowsMatch = output.match(/time[<=](\d+)ms/i);
-        if (windowsMatch) {
-            return parseInt(windowsMatch[1], 10);
+        if (!output || output.trim().length === 0) {
+            return null;
         }
         
-        const linuxMatch = output.match(/time=([\d.]+)\s*ms/i);
+        // Windows formats:
+        // "Reply from 192.168.1.1: bytes=32 time<1ms TTL=64"
+        // "Reply from 192.168.1.1: bytes=32 time=1ms TTL=64"
+        const windowsMatch = output.match(/time[<=](\d+)ms/i);
+        if (windowsMatch) {
+            const latency = parseInt(windowsMatch[1], 10);
+            return latency >= 0 ? latency : null;
+        }
+        
+        // Linux formats:
+        // "64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=0.123 ms"
+        // "64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=1.23ms"
+        // "64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=123 ms"
+        const linuxMatch = output.match(/time[=:]\s*([\d.]+)\s*ms/i);
         if (linuxMatch) {
-            return Math.round(parseFloat(linuxMatch[1]));
+            const latency = Math.round(parseFloat(linuxMatch[1]));
+            return latency >= 0 ? latency : null;
+        }
+        
+        // Alternative Linux format (some systems):
+        // "1 packets transmitted, 1 received, 0% packet loss, time 0ms"
+        // "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.123 ms"
+        const rttMatch = output.match(/rtt\s+min\/avg\/max\/mdev\s*=\s*[\d.]+\/([\d.]+)\/[\d.]+\/[\d.]+/i);
+        if (rttMatch) {
+            const latency = Math.round(parseFloat(rttMatch[1]));
+            return latency >= 0 ? latency : null;
+        }
+        
+        // Check for "time" keyword with number (fallback)
+        const genericMatch = output.match(/time[=:]\s*([\d.]+)/i);
+        if (genericMatch) {
+            const latency = Math.round(parseFloat(genericMatch[1]));
+            // Assume milliseconds if value is reasonable (< 10000ms)
+            if (latency >= 0 && latency < 10000) {
+                return latency;
+            }
         }
         
         return null;

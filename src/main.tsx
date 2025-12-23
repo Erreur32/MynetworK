@@ -6,6 +6,29 @@ import './index.css';
 import './styles/themes.css';
 import { initTheme } from './utils/themeManager';
 
+// Application version and name
+const APP_NAME = 'MyNetwork';
+const APP_VERSION = '0.1.15';
+
+// Console log with colored background
+const logAppInfo = () => {
+    const styles = [
+        'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        'color: white',
+        'padding: 12px 20px',
+        'border-radius: 8px',
+        'font-size: 14px',
+        'font-weight: bold',
+        'font-family: monospace'
+    ].join(';');
+    
+    console.log(`%c${APP_NAME} v${APP_VERSION}`, styles);
+    console.log(`%cScript: main.tsx`, 'background: #1a1a1a; color: #10b981; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace');
+};
+
+// Log app info on startup
+logAppInfo();
+
 // In production, suppress WebSocket "Invalid frame header" errors
 // These errors occur when Nginx is not properly configured for WebSocket
 // The HTTP polling fallback handles data updates correctly

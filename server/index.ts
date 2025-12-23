@@ -97,11 +97,14 @@ initializeDatabase();
 import { initializeDatabaseConfig } from './database/dbConfig.js';
 initializeDatabaseConfig();
 
+// Initialize Wireshark vendor database (async, don't block startup)
+import { WiresharkVendorService } from './services/wiresharkVendorService.js';
+WiresharkVendorService.initialize().catch((error) => {
+    logger.error('Server', 'Failed to initialize Wireshark vendor service:', error);
+});
+
 // Reload logger config after database is initialized
 logger.reloadConfig();
-
-// Initialize database purge service (after database is initialized)
-initializePurgeService();
 
 // Create default admin user if no users exist
 async function createDefaultAdmin() {
@@ -241,6 +244,9 @@ import databaseRoutes from './routes/database.js';
 import './services/networkScanScheduler.js';
 // Initialize database purge service (loads configs from database)
 import { initializePurgeService } from './services/databasePurgeService.js';
+
+// Initialize database purge service (after database is initialized and routes are imported)
+initializePurgeService();
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);

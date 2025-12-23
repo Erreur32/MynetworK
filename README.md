@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.1.16-blue?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.2.0-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
@@ -29,7 +29,7 @@
 
 - **Freebox** - Gestion complète de votre Freebox (Ultra, Delta, Pop)
 - **UniFi Controller** - Surveillance et gestion de votre infrastructure UniFi
-- **Scan Réseau** - Détection et analyse des appareils réseau (à venir)
+- **Scan Réseau** - Détection et analyse des appareils réseau avec détection automatique des vendors
 
 ### ✨ Caractéristiques principales
 
@@ -396,6 +396,15 @@ PUBLIC_URL=https://mynetwork.example.com
 - **Données en temps réel** - Mise à jour automatique des statistiques
 - **Support dual API** - Controller Local (node-unifi) et Site Manager API (cloud)
 - **Badges de stats** - Affichage des stats système dans le header (débit, uptime, devices)
+
+### Scan Réseau (Plugin)
+- **Détection automatique** - Scan complet du réseau local avec découverte des IPs, MAC et hostnames
+- **Détection des vendors** - Identification automatique des fabricants via base Wireshark, plugins Freebox/UniFi, ou API externe
+- **Scan automatique** - Configuration de scans périodiques (full scan et refresh)
+- **Historique complet** - Suivi de l'évolution des appareils dans le temps avec graphiques
+- **Base vendors Wireshark** - Intégration complète de la base de données Wireshark `manuf` avec mise à jour automatique
+- **Système de priorité** - Configuration de l'ordre de priorité pour la détection hostname/vendor (Freebox, UniFi, Scanner)
+- **Interface moderne** - Tableau interactif avec tri, filtres, recherche et édition inline des hostnames
 
 ### Gestion des Utilisateurs (Admin)
 - **CRUD complet** - Création, modification, suppression d'utilisateurs

@@ -38,6 +38,9 @@ export interface DatabasePerformanceConfig {
     
     // Optimize for Docker: more frequent checkpoints, larger cache
     optimizeForDocker: boolean; // Default: true
+    
+    // Wireshark vendor database auto-update
+    wiresharkAutoUpdate?: boolean; // Default: true
 }
 
 const DEFAULT_CONFIG: DatabasePerformanceConfig = {
@@ -50,7 +53,8 @@ const DEFAULT_CONFIG: DatabasePerformanceConfig = {
     journalSizeLimit: -1, // Unlimited
     busyTimeout: 5000, // 5 seconds
     tempStore: 0, // Default
-    optimizeForDocker: true
+    optimizeForDocker: true,
+    wiresharkAutoUpdate: false // Default: disabled
 };
 
 /**
@@ -59,10 +63,18 @@ const DEFAULT_CONFIG: DatabasePerformanceConfig = {
 export function getDatabaseConfig(): DatabasePerformanceConfig {
     try {
         const configJson = AppConfigRepository.get('database_performance_config');
+        let config: Partial<DatabasePerformanceConfig> = {};
         if (configJson) {
-            const config = JSON.parse(configJson) as Partial<DatabasePerformanceConfig>;
-            return { ...DEFAULT_CONFIG, ...config };
+            config = JSON.parse(configJson) as Partial<DatabasePerformanceConfig>;
         }
+        
+        // Load wiresharkAutoUpdate from WiresharkVendorService if not in config
+        if (config.wiresharkAutoUpdate === undefined) {
+            const { WiresharkVendorService } = require('../services/wiresharkVendorService.js');
+            config.wiresharkAutoUpdate = WiresharkVendorService.isAutoUpdateEnabled();
+        }
+        
+        return { ...DEFAULT_CONFIG, ...config };
     } catch (error) {
         logger.error('DatabaseConfig', 'Failed to load database config:', error);
     }
@@ -124,14 +136,25 @@ export function applyDatabaseConfig(config?: Partial<DatabasePerformanceConfig>)
 /**
  * Save database performance configuration
  */
-export function saveDatabaseConfig(config: Partial<DatabasePerformanceConfig>): boolean {
+export async function saveDatabaseConfig(config: Partial<DatabasePerformanceConfig>): Promise<boolean> {
     try {
         const currentConfig = getDatabaseConfig();
         const newConfig: DatabasePerformanceConfig = { ...currentConfig, ...config };
         
+        // Handle wiresharkAutoUpdate separately (it's stored in WiresharkVendorService)
+        if (config.wiresharkAutoUpdate !== undefined) {
+            const { WiresharkVendorService } = await import('../services/wiresharkVendorService.js');
+            WiresharkVendorService.setAutoUpdateEnabled(config.wiresharkAutoUpdate);
+        }
+        
+        // Save to AppConfigRepository (excluding wiresharkAutoUpdate as it's stored separately)
+        const { wiresharkAutoUpdate, ...configToSave } = newConfig;
+        AppConfigRepository.set('database_performance_config', JSON.stringify(configToSave));
+        
         // Apply immediately
         applyDatabaseConfig(newConfig);
         
+        logger.info('DatabaseConfig', 'Database configuration saved and applied');
         return true;
     } catch (error) {
         logger.error('DatabaseConfig', 'Failed to save database config:', error);

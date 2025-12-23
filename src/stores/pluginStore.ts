@@ -8,6 +8,9 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import type { ApiResponse } from '../types/api';
 
+// Flag to ensure plugins are logged only once at startup
+let pluginsLogged = false;
+
 export interface Plugin {
     id: string;
     name: string;
@@ -78,6 +81,50 @@ export const usePluginStore = create<PluginState>((set, get) => ({
                     plugins: response.result,
                     isLoading: false
                 });
+                
+                // Log each loaded plugin with colored background (only once at startup)
+                if (!pluginsLogged) {
+                    pluginsLogged = true;
+                    response.result.forEach((plugin) => {
+                        const statusColor = plugin.enabled && plugin.connectionStatus 
+                            ? '#10b981' // green
+                            : plugin.enabled 
+                            ? '#f97316' // orange (enabled but not connected)
+                            : '#6b7280'; // gray (disabled)
+                        
+                        const statusText = plugin.enabled && plugin.connectionStatus 
+                            ? '✓ Actif'
+                            : plugin.enabled 
+                            ? '⚠ Non connecté'
+                            : '✗ Désactivé';
+                        
+                        const pluginStyles = [
+                            `background: ${statusColor}`,
+                            'color: white',
+                            'padding: 6px 12px',
+                            'border-radius: 4px',
+                            'font-size: 12px',
+                            'font-weight: bold',
+                            'font-family: monospace',
+                            'margin-right: 8px'
+                        ].join(';');
+                        
+                        const infoStyles = [
+                            'background: #1a1a1a',
+                            'color: #e5e7eb',
+                            'padding: 4px 8px',
+                            'border-radius: 4px',
+                            'font-size: 11px',
+                            'font-family: monospace'
+                        ].join(';');
+                        
+                        console.log(
+                            `%c${plugin.name}%c v${plugin.version} - ${statusText}`,
+                            pluginStyles,
+                            infoStyles
+                        );
+                    });
+                }
             } else {
                 set({
                     isLoading: false,

@@ -40,6 +40,7 @@ interface UnifiedAutoScanConfig {
 class NetworkScanSchedulerService {
     private scanTask: ReturnType<typeof cron.schedule> | null = null;
     private refreshTask: ReturnType<typeof cron.schedule> | null = null;
+    private manualScanInProgress: boolean = false; // Flag to prevent auto scans during manual scan
 
     /**
      * Check if the scan-reseau plugin is enabled
@@ -209,6 +210,12 @@ class NetworkScanSchedulerService {
                 return;
             }
 
+            // Skip if a manual scan is in progress
+            if (this.manualScanInProgress) {
+                logger.info('NetworkScanScheduler', 'Skipping scheduled scan: manual scan in progress');
+                return;
+            }
+
             logger.info('NetworkScanScheduler', `Executing scheduled scan (type: ${config.scanType})...`);
             try {
                 // Auto-detect network range
@@ -291,6 +298,12 @@ class NetworkScanSchedulerService {
             // Check if plugin is enabled before executing refresh
             if (!this.isPluginEnabled()) {
                 logger.info('NetworkScanScheduler', 'Skipping scheduled refresh: scan-reseau plugin is disabled');
+                return;
+            }
+
+            // Skip if a manual scan is in progress
+            if (this.manualScanInProgress) {
+                logger.info('NetworkScanScheduler', 'Skipping scheduled refresh: manual scan in progress');
                 return;
             }
 
@@ -493,6 +506,34 @@ class NetworkScanSchedulerService {
         logger.info('NetworkScanScheduler', 'Plugin is enabled - reloading config and starting schedulers');
         this.loadAndStartScanScheduler();
         this.loadAndStartRefreshScheduler();
+    }
+
+    /**
+     * Temporarily disable auto scans during manual scan
+     * This prevents multiple scans from running simultaneously
+     */
+    pauseAutoScans(): void {
+        if (!this.manualScanInProgress) {
+            this.manualScanInProgress = true;
+            logger.info('NetworkScanScheduler', 'Auto scans paused (manual scan in progress)');
+        }
+    }
+
+    /**
+     * Resume auto scans after manual scan completes
+     */
+    resumeAutoScans(): void {
+        if (this.manualScanInProgress) {
+            this.manualScanInProgress = false;
+            logger.info('NetworkScanScheduler', 'Auto scans resumed (manual scan completed)');
+        }
+    }
+
+    /**
+     * Check if manual scan is in progress
+     */
+    isManualScanInProgress(): boolean {
+        return this.manualScanInProgress;
     }
 }
 

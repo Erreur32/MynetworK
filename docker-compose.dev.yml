@@ -93,6 +93,10 @@ services:
       # Mount Docker socket to enable Docker version detection and stats
       - /var/run/docker.sock:/var/run/docker.sock:ro
       
+    # Network capabilities for ping and ARP scanning
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
     restart: unless-stopped
 
 # Note: Using local ./data directory mount instead of Docker volume

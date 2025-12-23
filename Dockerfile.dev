@@ -8,6 +8,15 @@ FROM node:22-alpine
 
 WORKDIR /app
 
+# 🔴 Outils de build OBLIGATOIRES pour compiler better-sqlite3 et autres modules natifs
+# Ces outils sont nécessaires pour npm ci qui compile better-sqlite3
+# curl: utile pour le debugging en dev (test des routes API)
+# iputils-ping: nécessaire pour le scan réseau (commande ping)
+# iproute2: nécessaire pour le scan réseau (commande ip neigh pour détection MAC)
+# samba-common: contient nmblookup pour NetBIOS/SMB hostname resolution
+# Note: getent n'est pas disponible dans Alpine (musl libc), on utilise la lecture directe de /etc/hosts
+RUN apk add --no-cache python3 make g++ curl iputils-ping iproute2 samba-common
+
 # Réduction du bruit npm en dev
 ENV NODE_ENV=development
 RUN npm config set fund false \

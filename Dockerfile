@@ -11,7 +11,8 @@ WORKDIR /app
 # Ces outils seront supprimés dans l'image finale
 RUN apk add --no-cache python3 make g++
 
-# Installer toutes les dépendances (dev + prod) pour compiler les modules natifs
+# Installer toutes les dépendances (y compris devDependencies) uniquement pour compiler les modules natifs
+# Les devDependencies seront supprimées dans l'image finale (voir npm prune --production ci-dessous)
 COPY package*.json ./
 RUN npm ci
 
@@ -34,9 +35,11 @@ WORKDIR /app
 # su-exec: nécessaire pour l'entrypoint script (switch root → node)
 # iputils-ping: nécessaire pour le scan réseau (commande ping)
 # iproute2: nécessaire pour le scan réseau (commande ip neigh pour détection MAC)
+# samba-common: contient nmblookup pour NetBIOS/SMB hostname resolution
+# Note: getent n'est pas disponible dans Alpine (musl libc), on utilise la lecture directe de /etc/hosts
 # Note: libpcap/libpcap-dev retirés car arp-scan est optionnel (fallback après ip neigh)
 #       Si arp-scan est vraiment nécessaire, il faudra le compiler dans le stage build
-RUN apk add --no-cache su-exec iputils-ping iproute2
+RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common
 
 # Créer le répertoire data avec les bonnes permissions
 RUN mkdir -p /app/data && chown -R node:node /app

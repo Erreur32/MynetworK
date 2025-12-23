@@ -3,7 +3,87 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
-## [0.1.16] - 2025-12-23
+## [0.2.0] - 2025-12-23
+
+### ✨ Ajouté
+
+**Plugin Scan Réseau - Base Vendors Wireshark Complète**
+- 📦 Intégration complète de la base de données Wireshark `manuf` pour la détection des vendors
+- 🔄 Téléchargement automatique depuis GitHub/GitLab avec fallback vers GitLab si GitHub échoue
+- 💾 Sauvegarde locale du fichier `manuf.txt` dans `data/manuf.txt` pour utilisation hors ligne
+- 🔌 Fallback vers les plugins actifs (Freebox/UniFi) si le téléchargement échoue
+- 📋 Base de vendors par défaut avec ~80 fabricants courants si toutes les autres sources échouent
+- ✅ Validation robuste du fichier téléchargé (taille, contenu, détection des pages HTML d'erreur)
+- 📊 Messages améliorés indiquant la source : "téléchargé depuis GitHub/GitLab" vs "chargé depuis le fichier local" vs "chargé depuis les plugins"
+- ⚙️ Option de mise à jour automatique désactivée par défaut (configurable dans le modal de configuration)
+- 🔘 Bouton "Mettre à jour maintenant" pour forcer une mise à jour manuelle de la base vendors
+
+**Plugin Scan Réseau - Système de Priorité pour Vendors**
+- 🎯 Configuration de la priorité des sources de vendors (Freebox, UniFi, Scanner système)
+- 📋 Interface similaire à la priorité hostname avec drag & drop pour réorganiser l'ordre
+- 🔄 Détection toujours tentée si une adresse MAC est disponible (même si déjà présente)
+- ✏️ Écrasement automatique des vendors vides (null, "", "--", "unknown") indépendamment du paramètre "écraser existants"
+- 📝 Logs détaillés pour chaque étape de détection (plugin utilisé, résultat, source finale)
+
+**Plugin Scan Réseau - Améliorations UI/UX**
+- 🎨 Modal de configuration refactorisé : layout simplifié (une colonne dans "Scan automatique")
+- 💾 Bouton unique "Enregistrer toutes les modifications" en bas du modal (remplace les multiples boutons individuels)
+- ⚠️ Système d'avertissement des modifications non sauvegardées avec message orange en haut du modal
+- 🔘 Bouton de sauvegarde désactivé si aucune modification n'a été effectuée
+- 🏷️ Suppression du badge "Scanner" : par défaut, si aucun badge n'est affiché, c'est que la source est le scanner système
+- 🚫 Suppression de la double confirmation (popup) pour la mise à jour de la base vendors Wireshark
+
+**Console Browser - Logs Améliorés**
+- 🎨 Affichage stylisé du nom de l'application, version et fichier principal au démarrage (fond dégradé violet)
+- 🔌 Affichage unique des plugins chargés au démarrage avec badges colorés (vert = actif/connecté, orange = actif/non connecté, gris = désactivé)
+- 🚫 Prévention des logs répétés lors de la navigation entre pages
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau - Détection Vendors**
+- 🔍 Amélioration de la logique de détection : utilisation de la MAC existante si `getMacAddress()` retourne `null`
+- 📊 Détection toujours tentée pour toutes les IPs avec MAC disponible (nouvelle ou existante)
+- 🔄 Unification de la logique entre `scanNetwork()` et `refreshExistingIps()` pour la détection des vendors
+- 📝 Logs améliorés : logs `[VENDOR]` passés en DEBUG, logs principaux `[${ip}]` restent en INFO
+- ⚠️ Avertissements visibles si la base Wireshark est vide ou contient trop peu de vendors (<1000)
+
+**Plugin Scan Réseau - Performance Frontend**
+- ⚡ Optimisations React : `useMemo` pour les calculs coûteux (filtrage, graphiques)
+- ⚡ Optimisations React : `useCallback` pour toutes les fonctions `fetch` pour éviter les re-créations
+- 🔍 Debounce de 300ms sur la barre de recherche pour réduire les appels API
+- 📊 Polling optimisé : intervalles réduits pendant les scans actifs (1-2s), polling général décalé avec `setTimeout`
+- 🎯 Réduction des violations de performance (`[Violation] 'message' handler took XXXms`)
+
+**Base Vendors Wireshark - Service**
+- 🔧 `updateDatabase()` retourne maintenant la source (`downloaded` | `local` | `plugins`) et le nombre de vendors
+- ✅ Validation améliorée : vérification de la taille (>1000 bytes), détection HTML, présence d'entrées OUI attendues
+- 🔄 Parsing amélioré : support des délimiteurs multiples (tabs, espaces multiples, regex fallback)
+- 📦 `loadDefaultVendors()` : méthode statique pour charger ~80 vendors courants en dernier recours
+- 🔌 `getVendorsFromPlugins()` : méthode statique pour collecter les vendors depuis Freebox/UniFi
+- ✅ `initialize()` : logique renforcée pour garantir que la base n'est jamais vide
+
+**API Routes**
+- 🔄 Route `/api/network-scan/update-wireshark-vendors` retourne maintenant `updateSource` et `vendorCount`
+- 🔄 Route `/api/network-scan/wireshark-vendor-stats` initialise automatiquement la base si vide
+
+### 🐛 Corrigé
+
+**Plugin Scan Réseau - Détection Vendors**
+- ✅ Correction de la logique qui empêchait la détection des vendors si une MAC existait déjà sans vendor associé
+- ✅ Correction de l'écrasement des vendors vides : maintenant toujours écrasés même si "écraser existants" est désactivé
+- ✅ Correction du compteur `vendorsFound` dans `refreshExistingIps()` pour comptabiliser correctement les vendors trouvés
+- ✅ Correction de l'initialisation : vérification de la base Wireshark au début de chaque scan avec logs
+
+**Interface Utilisateur**
+- ✅ Correction de l'erreur JSX : balise `</div>` manquante dans `NetworkScanConfigModal.tsx`
+- ✅ Correction de l'ordre des routes API : `/wireshark-vendor-stats` avant `/:id` pour éviter les 404
+- ✅ Correction de l'erreur `ReferenceError: require is not defined` dans `dbConfig.ts` (remplacement par `import()` dynamique)
+- ✅ Correction de l'erreur `Cannot access 'fetchHistory' before initialization` : réorganisation des déclarations de fonctions
+
+**Performance**
+- ✅ Réduction des violations de performance dans la console browser (`[Violation] 'message' handler took XXXms`)
+- ✅ Optimisation du polling pour éviter les appels simultanés bloquants
+- ✅ Réduction des re-renders inutiles avec `useMemo` et `useCallback`
 
 ---
 
