@@ -21,6 +21,7 @@ interface AutoScanConfig {
 interface AutoRefreshConfig {
     enabled: boolean;
     interval: number; // minutes: 5, 10, 15, 30, 60
+    scanType: 'full' | 'quick';
 }
 
 // New unified configuration structure
@@ -34,6 +35,7 @@ interface UnifiedAutoScanConfig {
     refresh?: {
         enabled: boolean;
         interval: number; // minutes: 5, 10, 15, 30, 60
+        scanType: 'full' | 'quick';
     };
 }
 
@@ -100,8 +102,10 @@ class NetworkScanSchedulerService {
                 logger.info('NetworkScanScheduler', `Unified config details: ${JSON.stringify(unifiedConfig)}`);
                 this.updateUnifiedConfig(unifiedConfig);
                 
-                // Launch initial scan on startup if enabled and configured
-                // This ensures we have data immediately after container restart
+                // Note: Initial scan on startup is disabled by default to avoid unexpected scans after Docker restart
+                // Users can manually trigger a scan or wait for the scheduled scan according to their configuration
+                // If you want to enable automatic scan on startup, uncomment the code below:
+                /*
                 if (unifiedConfig.enabled && unifiedConfig.fullScan?.enabled && this.isPluginEnabled()) {
                     logger.info('NetworkScanScheduler', 'Launching initial scan on startup...');
                     
@@ -129,6 +133,7 @@ class NetworkScanSchedulerService {
                         logger.error('NetworkScanScheduler', 'Initial scan on startup failed:', error);
                     });
                 }
+                */
                 return;
             }
             
@@ -292,7 +297,7 @@ class NetworkScanSchedulerService {
             return;
         }
 
-        logger.info('NetworkScanScheduler', `Scheduling auto refresh: every ${config.interval} minutes (${cronExpression})`);
+        logger.info('NetworkScanScheduler', `Scheduling auto refresh: every ${config.interval} minutes (${cronExpression}), type: ${config.scanType || 'quick'}`);
 
         this.refreshTask = cron.schedule(cronExpression, async () => {
             // Check if plugin is enabled before executing refresh
@@ -307,15 +312,16 @@ class NetworkScanSchedulerService {
                 return;
             }
 
-            logger.info('NetworkScanScheduler', 'Executing scheduled refresh...');
+            const scanType = config.scanType || 'quick';
+            logger.info('NetworkScanScheduler', `Executing scheduled refresh (type: ${scanType})...`);
             try {
-                await networkScanService.refreshExistingIps('quick');
+                await networkScanService.refreshExistingIps(scanType);
                 
                 // Track last auto refresh
                 const { AppConfigRepository } = await import('../database/models/AppConfig.js');
                 AppConfigRepository.set('network_scan_last_auto', JSON.stringify({
                     type: 'refresh',
-                    scanType: 'quick',
+                    scanType: scanType,
                     timestamp: new Date().toISOString()
                 }));
                 
@@ -369,11 +375,13 @@ class NetworkScanSchedulerService {
      */
     getScanStatus(): { enabled: boolean; running: boolean } {
         const status = this.scanTask?.getStatus();
-        // 'scheduled' means actively scheduled, 'idle' can be normal immediately after creation
-        // Both indicate the task is set up and will run
+        // Check if a scan is actually running by checking scan progress
+        const scanProgress = networkScanService.getScanProgress();
+        const isScanRunning = scanProgress !== null && scanProgress.isActive === true;
+        
         return {
             enabled: this.scanTask !== null,
-            running: this.scanTask !== null && (status === 'scheduled' || status === 'idle')
+            running: isScanRunning // Only true if a scan is actually in progress
         };
     }
 
@@ -382,11 +390,14 @@ class NetworkScanSchedulerService {
      */
     getRefreshStatus(): { enabled: boolean; running: boolean } {
         const status = this.refreshTask?.getStatus();
-        // 'scheduled' means actively scheduled, 'idle' can be normal immediately after creation
-        // Both indicate the task is set up and will run
+        // Check if a refresh is actually running by checking scan progress
+        // Note: refresh uses the same progress tracking as scan
+        const scanProgress = networkScanService.getScanProgress();
+        const isRefreshRunning = scanProgress !== null && scanProgress.isActive === true;
+        
         return {
             enabled: this.refreshTask !== null,
-            running: this.refreshTask !== null && (status === 'scheduled' || status === 'idle')
+            running: isRefreshRunning // Only true if a refresh is actually in progress
         };
     }
 
@@ -457,10 +468,11 @@ class NetworkScanSchedulerService {
 
         // Update refresh scheduler if configured and enabled
         if (config.refresh && config.refresh.enabled) {
-            logger.info('NetworkScanScheduler', `Starting refresh scheduler: interval=${config.refresh.interval}min`);
+            logger.info('NetworkScanScheduler', `Starting refresh scheduler: interval=${config.refresh.interval}min, type=${config.refresh.scanType || 'quick'}`);
             this.updateRefreshScheduler({
                 enabled: true,
-                interval: config.refresh.interval
+                interval: config.refresh.interval,
+                scanType: config.refresh.scanType || 'quick'
             });
             
             // Update metrics: scheduler enabled

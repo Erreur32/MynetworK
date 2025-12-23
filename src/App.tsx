@@ -154,6 +154,21 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
+  // Load custom theme colors when user becomes authenticated
+  useEffect(() => {
+    if (isUserAuthenticated) {
+      // Import and call initTheme to load custom colors from server
+      import('./utils/themeManager').then(({ initTheme }) => {
+        initTheme().catch(err => {
+          // Silently fail - default theme colors will be used
+          if (import.meta.env.DEV) {
+            console.debug('[Theme] Failed to load custom colors after auth:', err);
+          }
+        });
+      });
+    }
+  }, [isUserAuthenticated]);
+
   // Check Freebox auth only if Freebox plugin is enabled
   useEffect(() => {
     if (isUserAuthenticated) {

@@ -70,27 +70,44 @@ export const initTheme = async (): Promise<void> => {
   const theme = getCurrentTheme();
   applyTheme(theme);
   
+  // Check if user is authenticated before making API call
+  // This prevents 401 errors in console when user is not logged in yet
+  let token: string | null = null;
+  try {
+    if (typeof window !== 'undefined') {
+      token = localStorage.getItem('dashboard_user_token');
+    }
+  } catch (error) {
+    // localStorage might not be available (e.g., in private mode)
+    return;
+  }
+  
+  // Only try to load custom colors if user is authenticated
+  // This prevents unnecessary 401 errors in console
+  if (!token) {
+    return;
+  }
+  
   // Try to load custom colors from server
   try {
-    const response = await fetch('/api/settings/theme');
-    // 401 is expected if user is not authenticated yet - don't log as error
+    const response = await fetch('/api/settings/theme', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.result?.customColors) {
         applyCustomColors(data.result.customColors);
       }
-    } else if (response.status === 401) {
-      // User not authenticated yet - this is normal, don't log
-      // Note: Browser will still show 401 in console, but this is expected behavior
-      return;
     }
+    // Silently ignore 401/403 errors - user might have logged out or token expired
+    // The theme will still work with default colors
   } catch (error) {
     // Silently fail - use default theme colors
-    // Only log if it's not a network error (which is expected if server is not ready)
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      // Network error - server might not be ready yet, don't log
-      return;
-    }
+    // Network errors are expected if server is not ready yet
   }
 };
 

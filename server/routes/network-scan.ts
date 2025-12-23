@@ -605,7 +605,8 @@ router.post('/refresh-config', requireAuth, autoLog('network-scan', 'refresh-con
     try {
         const config = {
             enabled,
-            interval
+            interval,
+            scanType: req.body.scanType || 'quick'
         };
 
         AppConfigRepository.set('network_scan_refresh_auto', JSON.stringify(config));
@@ -774,7 +775,8 @@ router.get('/unified-config', requireAuth, asyncHandler(async (req: Authenticate
             } : undefined,
             refresh: refreshConfig?.enabled ? {
                 enabled: true,
-                interval: refreshConfig.interval
+                interval: refreshConfig.interval,
+                scanType: refreshConfig.scanType || 'quick'
             } : undefined
         };
 
@@ -833,7 +835,8 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
                 } : undefined,
                 refresh: refreshConfig.enabled ? {
                     enabled: true,
-                    interval: refreshConfig.interval
+                    interval: refreshConfig.interval,
+                    scanType: refreshConfig.scanType || 'quick'
                 } : undefined
             };
         }
@@ -1142,7 +1145,8 @@ router.post('/plugin-priority-config', requireAuth, requireAdmin, autoLog('netwo
 
 /**
  * GET /api/network-scan/wireshark-vendor-stats
- * Get Wireshark vendor database statistics
+ * Get IEEE OUI vendor database statistics
+ * Note: Route name kept for backward compatibility, but uses IEEE OUI database
  */
 router.get('/wireshark-vendor-stats', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
@@ -1165,11 +1169,11 @@ router.get('/wireshark-vendor-stats', requireAuth, requireAdmin, asyncHandler(as
             result: stats
         });
     } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to get Wireshark vendor stats:', error);
+        logger.error('NetworkScan', 'Failed to get IEEE OUI vendor stats:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Failed to get Wireshark vendor stats',
+                message: error.message || 'Failed to get IEEE OUI vendor stats',
                 code: 'WIRESHARK_STATS_ERROR'
             }
         });
@@ -1178,7 +1182,8 @@ router.get('/wireshark-vendor-stats', requireAuth, requireAdmin, asyncHandler(as
 
 /**
  * POST /api/network-scan/update-wireshark-vendors
- * Manually update Wireshark vendor database
+ * Manually update IEEE OUI vendor database
+ * Note: Route name kept for backward compatibility, but uses IEEE OUI database
  */
 router.post('/update-wireshark-vendors', requireAuth, requireAdmin, autoLog('network-scan', 'update-wireshark-vendors'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
@@ -1194,11 +1199,11 @@ router.post('/update-wireshark-vendors', requireAuth, requireAdmin, autoLog('net
             }
         });
     } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to update Wireshark vendor database:', error);
+        logger.error('NetworkScan', 'Failed to update IEEE OUI vendor database:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Failed to update vendor database',
+                message: error.message || 'Failed to update IEEE OUI vendor database',
                 code: 'WIRESHARK_UPDATE_ERROR'
             }
         });
@@ -1468,6 +1473,15 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
                     }
                 });
             }
+            if (refresh.scanType !== 'full' && refresh.scanType !== 'quick') {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: 'refresh.scanType must be "full" or "quick"',
+                        code: 'INVALID_REFRESH_TYPE'
+                    }
+                });
+            }
         }
     }
 
@@ -1483,7 +1497,8 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
             } : undefined,
             refresh: refresh ? {
                 enabled: refresh.enabled || false,
-                interval: refresh.interval || 10
+                interval: refresh.interval || 10,
+                scanType: refresh.scanType || 'quick'
             } : undefined
         };
 

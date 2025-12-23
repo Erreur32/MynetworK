@@ -56,7 +56,7 @@ interface AutoStatus {
         } | null;
     };
     refresh: {
-        config: { enabled: boolean; interval: number };
+        config: { enabled: boolean; interval: number; scanType: 'full' | 'quick' };
         scheduler: { enabled: boolean; running: boolean };
         lastExecution: {
             timestamp: string;
@@ -92,13 +92,70 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
     const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
     
-    // Filters
-    const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+    // Filters - Load from localStorage or use defaults
+    const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>(() => {
+        try {
+            const saved = localStorage.getItem('networkScan_statusFilter');
+            if (saved && ['all', 'online', 'offline'].includes(saved)) {
+                return saved as 'all' | 'online' | 'offline';
+            }
+        } catch (error) {
+            console.warn('Failed to load status filter from localStorage:', error);
+        }
+        return 'online'; // Default: show only online IPs
+    });
     const [searchFilter, setSearchFilter] = useState<string>('');
     const [debouncedSearchFilter, setDebouncedSearchFilter] = useState<string>('');
-    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor'>('ip');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor'>(() => {
+        try {
+            const saved = localStorage.getItem('networkScan_sortBy');
+            if (saved && ['ip', 'last_seen', 'first_seen', 'status', 'ping_latency', 'hostname', 'mac', 'vendor'].includes(saved)) {
+                return saved as 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor';
+            }
+        } catch (error) {
+            console.warn('Failed to load sortBy from localStorage:', error);
+        }
+        return 'ip'; // Default: sort by IP
+    });
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+        try {
+            const saved = localStorage.getItem('networkScan_sortOrder');
+            if (saved && ['asc', 'desc'].includes(saved)) {
+                return saved as 'asc' | 'desc';
+            }
+        } catch (error) {
+            console.warn('Failed to load sortOrder from localStorage:', error);
+        }
+        return 'asc'; // Default: ascending order
+    });
     
+    // Save statusFilter to localStorage when it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('networkScan_statusFilter', statusFilter);
+        } catch (error) {
+            console.warn('Failed to save statusFilter to localStorage:', error);
+        }
+    }, [statusFilter]);
+
+    // Save sortBy to localStorage when it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('networkScan_sortBy', sortBy);
+        } catch (error) {
+            console.warn('Failed to save sortBy to localStorage:', error);
+        }
+    }, [sortBy]);
+
+    // Save sortOrder to localStorage when it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('networkScan_sortOrder', sortOrder);
+        } catch (error) {
+            console.warn('Failed to save sortOrder to localStorage:', error);
+        }
+    }, [sortOrder]);
+
     // Debounce search filter to avoid too many API calls
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -108,13 +165,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         return () => clearTimeout(timer);
     }, [searchFilter]);
     
-    // Results per page - Load from localStorage or default to 20
-    const [resultsPerPage, setResultsPerPage] = useState<number>(() => {
+    // Results per page - Load from localStorage or default to 'full' (all results)
+    const [resultsPerPage, setResultsPerPage] = useState<number | 'full'>(() => {
         const saved = localStorage.getItem('networkScan_resultsPerPage');
-        return saved ? parseInt(saved, 10) : 20;
+        if (saved === 'full') return 'full';
+        if (saved) {
+            const num = parseInt(saved, 10);
+            if ([20, 50].includes(num)) return num;
+        }
+        return 'full'; // Default: show all results
     });
-    const [customResultsPerPage, setCustomResultsPerPage] = useState<string>('');
-    const [showCustomInput, setShowCustomInput] = useState(false);
     
     // Editing hostname state
     const [editingHostname, setEditingHostname] = useState<string | null>(null);
@@ -124,7 +184,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     
-    // Wireshark vendor database stats
+    // IEEE OUI vendor database stats
     const [wiresharkVendorStats, setWiresharkVendorStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
 
     const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
@@ -168,17 +228,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 setWiresharkVendorStats(response.result);
             }
         } catch (error) {
-            console.error('Failed to fetch Wireshark vendor stats:', error);
+            console.error('Failed to fetch IEEE OUI vendor stats:', error);
         }
     }, []);
 
     const fetchHistory = useCallback(async () => {
         try {
             const params: any = {
-                limit: resultsPerPage.toString(),
                 sortBy: sortBy,
                 sortOrder: sortOrder
             };
+            // Only add limit if not 'full'
+            if (resultsPerPage !== 'full') {
+                params.limit = resultsPerPage.toString();
+            }
             if (statusFilter !== 'all') params.status = statusFilter;
             if (debouncedSearchFilter) params.search = debouncedSearchFilter;
 
@@ -278,6 +341,41 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         };
     }, [scanPollingInterval]);
 
+    // Poll scan progress during auto scans
+    useEffect(() => {
+        const isAutoScanRunning = autoStatus && (
+            autoStatus.fullScan.scheduler.running || 
+            autoStatus.refresh.scheduler.running
+        );
+
+        if (!isAutoScanRunning) {
+            // Clear progress when auto scan stops
+            if (scanProgress && !isScanning && !isRefreshing) {
+                setScanProgress(null);
+            }
+            return;
+        }
+
+        // Poll progress every 2 seconds during auto scans
+        const progressInterval = setInterval(async () => {
+            try {
+                const progressResponse = await api.get('/api/network-scan/progress');
+                if (progressResponse.success && progressResponse.result) {
+                    setScanProgress(progressResponse.result);
+                } else if (progressResponse.success && !progressResponse.result) {
+                    // Scan completed, clear progress
+                    setScanProgress(null);
+                }
+            } catch (error) {
+                // Ignore errors, progress is optional
+            }
+        }, 2000);
+
+        return () => {
+            clearInterval(progressInterval);
+        };
+    }, [autoStatus, scanProgress, isScanning, isRefreshing]);
+
     // Poll stats every 30 seconds if active
     // Optimized: Only fetch essential data, stagger requests to avoid blocking
     usePolling(() => {
@@ -300,23 +398,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     });
     
     const handleResultsPerPageChange = (value: string) => {
-        if (value === 'custom') {
-            setShowCustomInput(true);
+        if (value === 'full') {
+            setResultsPerPage('full');
+            localStorage.setItem('networkScan_resultsPerPage', 'full');
         } else {
             const numValue = parseInt(value, 10);
             setResultsPerPage(numValue);
             localStorage.setItem('networkScan_resultsPerPage', numValue.toString());
-            setShowCustomInput(false);
-        }
-    };
-    
-    const handleCustomResultsPerPageSubmit = () => {
-        const numValue = parseInt(customResultsPerPage, 10);
-        if (numValue > 0 && numValue <= 10000) {
-            setResultsPerPage(numValue);
-            localStorage.setItem('networkScan_resultsPerPage', numValue.toString());
-            setShowCustomInput(false);
-            setCustomResultsPerPage('');
         }
     };
 
@@ -870,9 +958,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             )}
                                             <span className="text-gray-400">
                                                 {autoStatus.lastScan.type === 'full' ? (
-                                                    <>Full Scan ({autoStatus.lastScan.scanType})</>
+                                                    <>Full Scan <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                                 ) : (
-                                                    <>Refresh ({autoStatus.lastScan.scanType})</>
+                                                    <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                                 )}
                                             </span>
                                             <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
@@ -913,6 +1001,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                         autoStatus.fullScan.config.interval
                                                     )}
                                                 </span>
+                                                <span className="text-gray-500">
+                                                    ({autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'})
+                                                </span>
                                             </div>
                                         )}
                                         {autoStatus.refresh.config.enabled && (
@@ -923,6 +1014,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                         autoStatus.refresh.lastExecution?.timestamp || null,
                                                         autoStatus.refresh.config.interval
                                                     )}
+                                                </span>
+                                                <span className="text-gray-500">
+                                                    ({autoStatus.refresh.config.scanType === 'full' ? 'Complet' : 'Rapide'})
                                                 </span>
                                             </div>
                                         )}
@@ -1046,9 +1140,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                          (autoStatus?.refresh.scheduler.running) ? 'Auto Refresh' : 'Scan'}
                                     </span>
                                 </div>
-                                {currentScanRange && (
+                                {(currentScanRange || (autoStatus && autoStatus.lastScan?.range)) && (
                                     <div className="text-xs text-gray-400 px-2 py-0.5 bg-gray-800/50 rounded">
-                                        Range: <span className="text-gray-300 font-medium">{currentScanRange}</span>
+                                        Range: <span className="text-gray-300 font-medium">{currentScanRange || autoStatus?.lastScan?.range || ''}</span>
                                     </div>
                                 )}
                                 {scanProgress && scanProgress.total > 0 && (
@@ -1118,11 +1212,31 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         </div>
                     }
                     actions={
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {/* Barre de recherche agrandie et stylée */}
+                            <div className="relative flex-1 min-w-[420px] max-w-[500px]">
+                                <Search size={18} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 transition-colors" />
+                                <input
+                                    type="text"
+                                    value={searchFilter}
+                                    onChange={(e) => setSearchFilter(e.target.value)}
+                                    placeholder="Rechercher par IP, MAC, hostname ou vendor..."
+                                    className="w-full pl-12 pr-4 py-2.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-base text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 hover:border-gray-600"
+                                />
+                                {searchFilter && (
+                                    <button
+                                        onClick={() => setSearchFilter('')}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-700 rounded-full transition-colors"
+                                        title="Effacer"
+                                    >
+                                        <X size={16} className="text-gray-400 hover:text-gray-200" />
+                                    </button>
+                                )}
+                            </div>
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                                className="px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                                className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                             >
                                 <option value="all">Tous</option>
                                 <option value="online">Online</option>
@@ -1130,83 +1244,23 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             </select>
                         <div className="flex items-center gap-2">
                                 <label className="text-sm text-gray-400 whitespace-nowrap">Résultats:</label>
-                                {showCustomInput ? (
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max="10000"
-                                            value={customResultsPerPage}
-                                            onChange={(e) => setCustomResultsPerPage(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    handleCustomResultsPerPageSubmit();
-                                                } else if (e.key === 'Escape') {
-                                                    setShowCustomInput(false);
-                                                    setCustomResultsPerPage('');
-                                                }
-                                            }}
-                                            placeholder="Nombre"
-                                            className="w-20 px-2 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                                            autoFocus
-                                        />
-                            <button
-                                            onClick={handleCustomResultsPerPageSubmit}
-                                            className="px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 text-sm"
-                            >
-                                            OK
-                            </button>
-                            <button
-                                            onClick={() => {
-                                                setShowCustomInput(false);
-                                                setCustomResultsPerPage('');
-                                            }}
-                                            className="px-3 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 rounded-lg border border-gray-500/30 text-sm"
-                            >
-                                            Annuler
-                            </button>
-                                    </div>
-                                ) : (
-                                    <select
-                                        value={resultsPerPage.toString()}
-                                        onChange={(e) => handleResultsPerPageChange(e.target.value)}
-                                        className="px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                                    >
-                                        <option value="20">20</option>
-                                        <option value="30">30</option>
-                                        <option value="50">50</option>
-                                        <option value="100">100</option>
-                                        <option value="custom">Manuel</option>
-                                    </select>
-                                )}
+                                <select
+                                    value={resultsPerPage === 'full' ? 'full' : resultsPerPage.toString()}
+                                    onChange={(e) => handleResultsPerPageChange(e.target.value)}
+                                    className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                >
+                                    <option value="20">20</option>
+                                    <option value="50">50</option>
+                                    <option value="full">Full</option>
+                                </select>
                             </div>
                         </div>
                     }
             >
-                {/* Barre de recherche centrée */}
-                <div className="flex justify-center mb-4">
-                    <div className="relative w-full max-w-md">
-                            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                value={searchFilter}
-                                onChange={(e) => setSearchFilter(e.target.value)}
-                                placeholder="Rechercher..."
-                            className="w-full pl-10 pr-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                            />
-                        </div>
-                    </div>
                 <div className="overflow-x-auto">
                     <table className="w-full table-auto">
                         <colgroup>
-                            <col className="min-w-[144px]" /> {/* IP */}
-                            <col className="min-w-[200px]" /> {/* Hostname */}
-                            <col className="min-w-[200px]" /> {/* Vendor */}
-                            <col className="min-w-[140px]" /> {/* MAC */}
-                            <col className="min-w-[100px]" /> {/* Statut */}
-                            <col className="min-w-[80px]" /> {/* Latence */}
-                            <col className="min-w-[100px]" /> {/* Dernière vue */}
-                            <col className="min-w-[60px]" /> {/* Actions */}
+                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-gray-800">
@@ -1426,6 +1480,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         setConfigModalOpen(false);
                         // Reload default config after closing modal in case it was changed
                         fetchDefaultConfig();
+                    }}
+                    onVendorUpdate={() => {
+                        // Refresh vendor stats after vendor database update
+                        fetchWiresharkVendorStats();
                     }}
                     onDataChanged={async () => {
                         console.log('[NetworkScanPage] onDataChanged called - clearing all scan data');

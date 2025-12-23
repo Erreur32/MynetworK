@@ -218,7 +218,7 @@ const DatabaseManagementSection: React.FC = () => {
   const loadDatabaseStats = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/network-scan/database-stats');
+      const response = await api.get<DatabaseStatsResponse>('/api/network-scan/database-stats');
       if (response.success && response.result) {
         setDatabaseStats({
           scansCount: response.result.scansCount || 0,
@@ -266,7 +266,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsPurging(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/purge');
+      const response = await api.post<PurgeAllResponse>('/api/network-scan/purge');
       if (response.success && response.result) {
         const totalDeleted = response.result.totalDeleted || 
           (response.result.historyDeleted || 0) + 
@@ -295,7 +295,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsPurgingHistory(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/purge/history', { retentionDays: retentionConfig.historyRetentionDays });
+      const response = await api.post<PurgeResponse>('/api/network-scan/purge/history', { retentionDays: retentionConfig.historyRetentionDays });
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
@@ -320,7 +320,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsPurgingScans(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/purge/scans', { retentionDays: retentionConfig.scanRetentionDays });
+      const response = await api.post<PurgeResponse>('/api/network-scan/purge/scans', { retentionDays: retentionConfig.scanRetentionDays });
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
@@ -345,7 +345,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsPurgingOffline(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/purge/offline', { retentionDays: retentionConfig.offlineRetentionDays });
+      const response = await api.post<PurgeResponse>('/api/network-scan/purge/offline', { retentionDays: retentionConfig.offlineRetentionDays });
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
@@ -371,9 +371,9 @@ const DatabaseManagementSection: React.FC = () => {
     setMessage(null);
     try {
       // Purge avec 0 jours = tout supprimer
-      const historyResponse = await api.post('/api/network-scan/purge/history', { retentionDays: 0 });
-      const scansResponse = await api.post('/api/network-scan/purge/scans', { retentionDays: 0 });
-      const offlineResponse = await api.post('/api/network-scan/purge/offline', { retentionDays: 0 });
+      const historyResponse = await api.post<PurgeResponse>('/api/network-scan/purge/history', { retentionDays: 0 });
+      const scansResponse = await api.post<PurgeResponse>('/api/network-scan/purge/scans', { retentionDays: 0 });
+      const offlineResponse = await api.post<PurgeResponse>('/api/network-scan/purge/offline', { retentionDays: 0 });
       
       if (historyResponse.success && scansResponse.success && offlineResponse.success) {
         const totalDeleted = (historyResponse.result?.deleted || 0) + (scansResponse.result?.deleted || 0) + (offlineResponse.result?.deleted || 0);
@@ -403,7 +403,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsClearingAll(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/purge/clear-all');
+      const response = await api.post<ClearAllResponse>('/api/network-scan/purge/clear-all');
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
@@ -729,14 +729,53 @@ const DatabaseManagementSection: React.FC = () => {
         <PluginPrioritySection />
       </Section>
 
-      <Section title="Base de vendors Wireshark" icon={HardDrive} iconColor="cyan">
+      <Section title="Base de vendors IEEE OUI" icon={HardDrive} iconColor="cyan">
         <WiresharkVendorSection />
       </Section>
     </div>
   );
 };
 
-// Wireshark Vendor Database Section Component
+// Types for API responses
+interface DatabaseConfig {
+  wiresharkAutoUpdate?: boolean;
+}
+
+interface PurgeResponse {
+  deleted: number;
+  retentionDays?: number;
+}
+
+interface PurgeAllResponse {
+  totalDeleted?: number;
+  historyDeleted?: number;
+  scansDeleted?: number;
+  offlineDeleted?: number;
+}
+
+interface DatabaseStatsResponse {
+  scansCount?: number;
+  historyCount?: number;
+  oldestScan?: string;
+  oldestHistory?: string;
+  totalSize?: number;
+}
+
+interface ClearAllResponse {
+  scansDeleted?: number;
+  historyDeleted?: number;
+  totalDeleted?: number;
+}
+
+interface VendorUpdateResponse {
+  updateSource?: 'downloaded' | 'local' | 'plugins';
+  vendorCount?: number;
+  stats?: {
+    totalVendors: number;
+  };
+}
+
+// IEEE OUI Vendor Database Section Component
 const WiresharkVendorSection: React.FC = () => {
   const [stats, setStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -760,7 +799,7 @@ const WiresharkVendorSection: React.FC = () => {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement des statistiques' });
       }
     } catch (error: any) {
-      console.error('Failed to load Wireshark vendor stats:', error);
+      console.error('Failed to load IEEE OUI vendor stats:', error);
       setMessage({ type: 'error', text: 'Erreur lors du chargement des statistiques' });
     } finally {
       setIsLoading(false);
@@ -769,7 +808,7 @@ const WiresharkVendorSection: React.FC = () => {
 
   const loadAutoUpdateConfig = async () => {
     try {
-      const response = await api.get('/api/database/config');
+      const response = await api.get<DatabaseConfig>('/api/database/config');
       if (response.success && response.result?.wiresharkAutoUpdate !== undefined) {
         setAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
       }
@@ -782,14 +821,14 @@ const WiresharkVendorSection: React.FC = () => {
     setIsUpdating(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/update-wireshark-vendors');
-      if (response.success) {
-        const source = response.result?.updateSource || 'unknown';
-        const vendorCount = response.result?.vendorCount || response.result?.stats?.totalVendors || 0;
+      const response = await api.post<VendorUpdateResponse>('/api/network-scan/update-wireshark-vendors');
+      if (response.success && response.result) {
+        const source = response.result.updateSource || 'unknown';
+        const vendorCount = response.result.vendorCount || response.result.stats?.totalVendors || 0;
         
         let message = '';
         if (source === 'downloaded') {
-          message = `Base téléchargée depuis GitHub/GitLab : ${vendorCount} vendors chargés`;
+          message = `Base téléchargée depuis IEEE OUI : ${vendorCount} vendors chargés`;
         } else if (source === 'local') {
           message = `Base chargée depuis le fichier local : ${vendorCount} vendors chargés`;
         } else if (source === 'plugins') {
@@ -805,7 +844,7 @@ const WiresharkVendorSection: React.FC = () => {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la mise à jour' });
       }
     } catch (error: any) {
-      console.error('Failed to update Wireshark vendors:', error);
+      console.error('Failed to update IEEE OUI vendors:', error);
       setMessage({ type: 'error', text: 'Erreur lors de la mise à jour' });
     } finally {
       setIsUpdating(false);

@@ -309,6 +309,8 @@ export class NetworkScanService {
                                 logger.debug('NetworkScanService', `[${ip}] ✗ No hostname detected after trying all methods`);
                             }
                             // Only preserve existing hostname if new detection failed AND it's valid
+                            // Note: Manual hostnames are already protected in getHostnameWithSource()
+                            // If hostname was manually deleted (empty), it won't be preserved here
                             if (!scanData.hostname && existing?.hostname) {
                                 const existingHostname = existing.hostname.trim();
                                 // Check if existing hostname is not an IP address
@@ -436,6 +438,9 @@ export class NetworkScanService {
         // Record metrics AFTER scan completes (not during, to avoid performance impact)
         metricsCollector.recordScanComplete(duration, scanned, found, updated, latencies);
 
+        // Clear progress tracking after scan completes
+        this.currentScanProgress = null;
+
         return {
             scanned,
             found,
@@ -489,6 +494,15 @@ export class NetworkScanService {
             }
         }
 
+        // Initialize progress tracking for refresh
+        this.currentScanProgress = {
+            scanned: 0,
+            total: ipsToRefresh.length,
+            found: 0,
+            updated: 0,
+            isActive: true
+        };
+
         let online = 0;
         let offline = 0;
         let scanned = 0;
@@ -507,6 +521,12 @@ export class NetworkScanService {
                 const ip = batch[j];
                 const result = pingResults[j];
                 scanned++;
+                
+                // Update progress tracking
+                if (this.currentScanProgress) {
+                    this.currentScanProgress.scanned = scanned;
+                    this.currentScanProgress.updated = online + offline;
+                }
                 
                 if (result.status === 'fulfilled' && result.value.success) {
                     const latency = result.value.latency;
@@ -670,6 +690,12 @@ export class NetworkScanService {
                         NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
                     }
                     online++;
+                    
+                    // Update progress tracking
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.updated = online + offline;
+                    }
                 } else {
                     // IP is offline
                     const updatedScan = NetworkScanRepository.update(ip, {
@@ -681,6 +707,12 @@ export class NetworkScanService {
                         NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
                     }
                     offline++;
+                    
+                    // Update progress tracking
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.updated = online + offline;
+                    }
                 }
             }
             
@@ -695,6 +727,9 @@ export class NetworkScanService {
         if (scanType === 'full') {
             logger.info('NetworkScanService', `Vendors found during this refresh: ${vendorsFound} (out of ${scanned} scanned IPs)`);
         }
+
+        // Clear progress tracking after refresh completes
+        this.currentScanProgress = null;
 
         return {
             scanned,
@@ -1239,12 +1274,22 @@ export class NetworkScanService {
         const priority = config.hostnamePriority;
         const overwrite = config.overwriteExisting.hostname;
         
+        // NEVER overwrite manual hostnames, regardless of overwrite setting
+        const isManualHostname = existingScan?.hostnameSource === 'manual' && 
+                                 existingScan?.hostname && 
+                                 existingScan.hostname.trim().length > 0;
+        
+        if (isManualHostname) {
+            logger.debug('NetworkScanService', `[${ip}] Preserving manual hostname: ${existingScan.hostname} (never overwritten)`);
+            return null; // Return null to indicate we should keep the existing manual hostname
+        }
+        
         // Try each plugin in priority order
         for (const pluginName of priority) {
             if (pluginName === 'freebox') {
                 const result = await this.getHostnameFromFreebox(ip);
                 if (result) {
-                    // Check if we should overwrite existing data
+                    // Check if we should overwrite existing data (but manual hostnames are already handled above)
                     if (existingScan?.hostname && !overwrite && existingScan.hostname.trim().length > 0) {
                         logger.debug('NetworkScanService', `[${ip}] Keeping existing hostname (overwrite disabled): ${existingScan.hostname}`);
                         continue; // Skip to next plugin

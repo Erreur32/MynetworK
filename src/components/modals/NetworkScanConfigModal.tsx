@@ -31,6 +31,7 @@ interface UnifiedAutoScanConfig {
     refresh?: {
         enabled: boolean;
         interval: number; // minutes: 5, 10, 15, 30, 60
+        scanType: 'full' | 'quick';
     };
 }
 
@@ -44,15 +45,33 @@ interface NetworkScanConfigModalProps {
     isOpen: boolean;
     onClose: () => void;
     onDataChanged?: () => void; // Callback when data is changed (e.g., scans cleared)
+    onVendorUpdate?: () => void; // Callback when vendor database is updated
 }
 
-export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose, onDataChanged }) => {
+interface DatabaseConfig {
+    wiresharkAutoUpdate?: boolean;
+}
+
+interface VendorUpdateResponse {
+    updateSource?: 'downloaded' | 'local' | 'plugins';
+    vendorCount?: number;
+    stats?: {
+        totalVendors: number;
+    };
+}
+
+interface ClearScansResponse {
+    deletedScans?: number;
+    deletedHistory?: number;
+}
+
+export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose, onDataChanged, onVendorUpdate }) => {
     const { plugins } = usePluginStore();
     // New unified config
     const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
         enabled: false,
         fullScan: { enabled: false, interval: 1440, scanType: 'full' },
-        refresh: { enabled: false, interval: 10 }
+        refresh: { enabled: false, interval: 10, scanType: 'quick' }
     });
     
     // Plugin priority config
@@ -119,7 +138,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     
     const loadAutoUpdateConfig = async () => {
         try {
-            const response = await api.get('/api/database/config');
+            const response = await api.get<DatabaseConfig>('/api/database/config');
             if (response.success && response.result?.wiresharkAutoUpdate !== undefined) {
                 setAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
                 setInitialAutoUpdateEnabled(response.result.wiresharkAutoUpdate);
@@ -150,14 +169,14 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
         setIsUpdatingVendors(true);
         setSaveMessage(null);
         try {
-            const response = await api.post('/api/network-scan/update-wireshark-vendors');
-            if (response.success) {
-                const source = response.result?.updateSource || 'unknown';
-                const vendorCount = response.result?.vendorCount || response.result?.stats?.totalVendors || 0;
+            const response = await api.post<VendorUpdateResponse>('/api/network-scan/update-wireshark-vendors');
+            if (response.success && response.result) {
+                const source = response.result.updateSource || 'unknown';
+                const vendorCount = response.result.vendorCount || response.result.stats?.totalVendors || 0;
                 
                 let message = '';
                 if (source === 'downloaded') {
-                    message = `Base téléchargée depuis GitHub/GitLab : ${vendorCount} vendors chargés`;
+                    message = `Base téléchargée depuis IEEE OUI : ${vendorCount} vendors chargés`;
                 } else if (source === 'local') {
                     message = `Base chargée depuis le fichier local : ${vendorCount} vendors chargés`;
                 } else if (source === 'plugins') {
@@ -171,6 +190,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     text: message
                 });
                 await fetchWiresharkVendorStats();
+                // Notify parent component to refresh vendor stats
+                if (onVendorUpdate) {
+                    onVendorUpdate();
+                }
                 setTimeout(() => setSaveMessage(null), 5000);
             } else {
                 setSaveMessage({ 
@@ -342,10 +365,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 },
                 refresh: unifiedConfig.refresh ? {
                     enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
-                    interval: unifiedConfig.refresh.interval || 10
+                    interval: unifiedConfig.refresh.interval || 10,
+                    scanType: unifiedConfig.refresh.scanType || 'quick'
                 } : {
                     enabled: false,
-                    interval: 10
+                    interval: 10,
+                    scanType: 'quick'
                 }
             };
             
@@ -415,10 +440,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     },
                     refresh: unifiedConfig.refresh ? {
                         enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
-                        interval: unifiedConfig.refresh.interval || 10
+                        interval: unifiedConfig.refresh.interval || 10,
+                        scanType: unifiedConfig.refresh.scanType || 'quick'
                     } : {
                         enabled: false,
-                        interval: 10
+                        interval: 10,
+                        scanType: 'quick'
                     }
                 };
                 const unifiedResponse = await api.post<UnifiedAutoScanConfig>('/api/network-scan/unified-config', configToSave);
@@ -610,7 +637,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 </label>
                                             </div>
                                             <p className="text-xs text-gray-500 mb-3">
-                                                Découvre de nouvelles IPs sur le réseau (scan complet de la plage choisie)
+                                                <strong className="text-gray-400">Découvre de nouvelles IPs</strong> en scannant toute la plage réseau configurée (ex: 192.168.1.0/24). 
+                                                Peut trouver des équipements jamais vus auparavant.
                                             </p>
                                             
                                             {unifiedConfig.fullScan?.enabled && (
@@ -683,29 +711,49 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 </label>
                                             </div>
                                             <p className="text-xs text-gray-500 mb-3">
-                                                Met à jour uniquement les IPs déjà connues (plus rapide, ne découvre pas de nouvelles IPs)
+                                                <strong className="text-gray-400">Met à jour uniquement les IPs déjà connues</strong> dans la base de données. 
+                                                Plus rapide car ne scanne que les équipements déjà découverts. <strong className="text-orange-400">Ne découvre pas de nouvelles IPs.</strong>
                                             </p>
                                             
                                             {unifiedConfig.refresh?.enabled && (
-                                                <div>
-                                                    <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
-                                                    <select
-                                                        value={unifiedConfig.refresh.interval}
-                                                        onChange={(e) => setUnifiedConfig({
-                                                            ...unifiedConfig,
-                                                            refresh: {
-                                                                ...unifiedConfig.refresh!,
-                                                                interval: parseInt(e.target.value)
-                                                            }
-                                                        })}
-                                                        className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                                    >
-                                                        <option value="5">5 minutes</option>
-                                                        <option value="10">10 minutes</option>
-                                                        <option value="15">15 minutes</option>
-                                                        <option value="30">30 minutes</option>
-                                                        <option value="60">1 heure</option>
-                                                    </select>
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
+                                                        <select
+                                                            value={unifiedConfig.refresh.interval}
+                                                            onChange={(e) => setUnifiedConfig({
+                                                                ...unifiedConfig,
+                                                                refresh: {
+                                                                    ...unifiedConfig.refresh!,
+                                                                    interval: parseInt(e.target.value)
+                                                                }
+                                                            })}
+                                                            className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
+                                                        >
+                                                            <option value="5">5 minutes</option>
+                                                            <option value="10">10 minutes</option>
+                                                            <option value="15">15 minutes</option>
+                                                            <option value="30">30 minutes</option>
+                                                            <option value="60">1 heure</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-400 mb-1.5">Type de rafraîchissement</label>
+                                                        <select
+                                                            value={unifiedConfig.refresh.scanType || 'quick'}
+                                                            onChange={(e) => setUnifiedConfig({
+                                                                ...unifiedConfig,
+                                                                refresh: {
+                                                                    ...unifiedConfig.refresh!,
+                                                                    scanType: e.target.value as 'full' | 'quick'
+                                                                }
+                                                            })}
+                                                            className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
+                                                        >
+                                                            <option value="quick">Rapide (ping uniquement)</option>
+                                                            <option value="full">Complet (ping + MAC + hostname)</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -907,14 +955,14 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                             )}
                             </div>
                             
-                            {/* Base vendors Wireshark */}
+                            {/* Base vendors IEEE OUI */}
                             <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-4">
                                 <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-3">
                                     <HardDrive size={14} className="text-cyan-400" />
-                                    <span>Base vendors Wireshark</span>
+                                    <span>Base vendors IEEE OUI</span>
                                 </h3>
                                 <p className="text-xs text-gray-500 mb-3">
-                                    Base de données complète des vendors depuis Wireshark. Mise à jour automatique tous les 7 jours si activée.
+                                    Base de données complète des vendors IEEE OUI. Mise à jour automatique tous les 7 jours si activée.
                                 </p>
                                 
                                 {/* Option auto-update */}
@@ -928,7 +976,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                         />
                                         <div>
                                             <span className="text-sm text-gray-300">Mise à jour automatique</span>
-                                            <p className="text-xs text-gray-500">Mise à jour automatique tous les 7 jours depuis GitHub</p>
+                                            <p className="text-xs text-gray-500">Mise à jour automatique tous les 7 jours depuis IEEE OUI</p>
                                         </div>
                                     </label>
                                 </div>
@@ -1000,7 +1048,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                     <span>Réinitialisation des scans</span>
                                 </h3>
                                 <p className="text-xs text-gray-500 mb-3">
-                                    Supprime tous les scans réseau et leur historique. Les configurations et la base vendors Wireshark ne sont pas affectées.
+                                    Supprime tous les scans réseau et leur historique. Les configurations et la base vendors IEEE OUI ne sont pas affectées.
                                 </p>
                                 
                                 <button
@@ -1010,12 +1058,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                         }
                                         try {
                                             console.log('[NetworkScanConfigModal] Starting clear operation...');
-                                            const response = await api.delete('/api/network-scan/clear');
+                                            const response = await api.delete<ClearScansResponse>('/api/network-scan/clear');
                                             console.log('[NetworkScanConfigModal] Clear response:', response);
                                             
-                                            if (response.success) {
-                                                const deletedScans = response.result?.deletedScans || 0;
-                                                const deletedHistory = response.result?.deletedHistory || 0;
+                                            if (response.success && response.result) {
+                                                const deletedScans = response.result.deletedScans || 0;
+                                                const deletedHistory = response.result.deletedHistory || 0;
                                                 
                                                 console.log(`[NetworkScanConfigModal] Successfully deleted ${deletedScans} scans and ${deletedHistory} history entries`);
                                                 

@@ -4,14 +4,19 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.2.1-blue?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
-![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
-[![Build and Publish Docker Image](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
-![React](https://img.shields.io/badge/React-19-blue?style=for-the-badge&logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=for-the-badge&logo=typescript)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.2.2-111827?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-DEVELOPMENT-374151?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
+[![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
+[![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
+![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa)
+![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&labelColor=111827&logoColor=white)
+
+[![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
+
+ 
+
 
 **Un dashboard multi-sources moderne pour gérer Freebox, UniFi et vos réseaux**
 
