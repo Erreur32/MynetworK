@@ -6,11 +6,12 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import os from 'os';
-import dns from 'dns';
+import * as os from 'os';
+import * as dns from 'dns';
 import { NetworkScanRepository, type NetworkScan, type CreateNetworkScanInput } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
 import { vendorDetectionService } from './vendorDetection.js';
+import { metricsCollector } from './metricsCollector.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -24,9 +25,11 @@ const execAsync = (command: string, options?: { timeout?: number }): Promise<{ s
             // Only reject on real errors (timeout, spawn errors, etc.)
             if (error) {
                 // Check if it's a real error (timeout, spawn error) or just exit code
+                // error.code can be a number (exit code) or string (system error code like 'ENOENT')
+                const errorCode = error.code;
                 if (error.signal === 'SIGTERM' || 
                     error.message?.includes('timeout') ||
-                    error.code === 'ENOENT' ||
+                    (typeof errorCode === 'string' && errorCode === 'ENOENT') ||
                     error.message?.includes('spawn')) {
                     reject(error);
                 } else {
@@ -46,6 +49,56 @@ const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
 const PING_TIMEOUT = isWindows ? 2000 : 2000; // 2 seconds timeout
 const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operations
+
+/**
+ * Detect if running in Docker container
+ * @returns true if running in Docker, false otherwise
+ */
+function isDockerEnv(): boolean {
+    try {
+        const fsSync = require('fs').readFileSync;
+        const cgroup = fsSync('/proc/self/cgroup', 'utf8');
+        if (cgroup.includes('docker') || cgroup.includes('containerd')) {
+            return true;
+        }
+    } catch {
+        // Not Linux or file doesn't exist
+    }
+    
+    if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
+        return true;
+    }
+    
+    try {
+        const fsSync = require('fs').accessSync;
+        fsSync('/.dockerenv');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Get host filesystem path prefix for Docker
+ * In Docker, host filesystem is mounted at /host
+ * @returns Path prefix (e.g., '/host' in Docker, '' otherwise)
+ */
+function getHostPathPrefix(): string {
+    if (isDockerEnv()) {
+        const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
+        // Check if /host/proc exists (mounted from host)
+        try {
+            const fsSync = require('fs').accessSync;
+            fsSync(`${HOST_ROOT_PATH}/proc`);
+            return HOST_ROOT_PATH;
+        } catch {
+            // Host filesystem not mounted, return empty (use container paths)
+            logger.debug('NetworkScanService', 'Docker detected but host filesystem not mounted at /host');
+            return '';
+        }
+    }
+    return '';
+}
 
 /**
  * Network Scan Service
@@ -79,6 +132,7 @@ export class NetworkScanService {
         let found = 0;
         let updated = 0;
         let scanned = 0;
+        const latencies: number[] = []; // Collect latencies for metrics
 
         // Process IPs in batches to limit concurrent operations
         for (let i = 0; i < ipsToScan.length; i += MAX_CONCURRENT_PINGS) {
@@ -96,6 +150,9 @@ export class NetworkScanService {
                 
                 if (result.status === 'fulfilled' && result.value.success) {
                     const latency = result.value.latency;
+                    if (latency !== undefined && latency > 0) {
+                        latencies.push(latency);
+                    }
                     const existing = NetworkScanRepository.findByIp(ip);
                     const wasNew = !existing;
                     
@@ -200,6 +257,9 @@ export class NetworkScanService {
 
         const duration = Date.now() - startTime;
         logger.info('NetworkScanService', `Scan completed: ${scanned} scanned, ${found} found, ${updated} updated in ${duration}ms`);
+
+        // Record metrics AFTER scan completes (not during, to avoid performance impact)
+        metricsCollector.recordScanComplete(duration, scanned, found, updated, latencies);
 
         return {
             scanned,
@@ -553,30 +613,8 @@ export class NetworkScanService {
             return { success: false };
         }
         
-        // Detect if running in Docker
-        const isDockerEnv = ((): boolean => {
-            try {
-                const fsSync = require('fs').readFileSync;
-                const cgroup = fsSync('/proc/self/cgroup', 'utf8');
-                if (cgroup.includes('docker') || cgroup.includes('containerd')) {
-                    return true;
-                }
-            } catch {
-                // Not Linux or file doesn't exist
-            }
-            
-            if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
-                return true;
-            }
-            
-            try {
-                const fsSync = require('fs').accessSync;
-                fsSync('/.dockerenv');
-                return true;
-            } catch {
-                return false;
-            }
-        })();
+        // Detect if running in Docker (use the helper function)
+        const runningInDocker = isDockerEnv();
         
         // Determine ping command based on environment
         let pingCommand = 'ping';
@@ -653,7 +691,7 @@ export class NetworkScanService {
                      errorMessage.includes('ENOENT') ||
                      errorMessage.includes('spawn') ||
                      errorStderr.includes('command not found')) {
-                const envType = isDockerEnv ? 'Docker' : 'npm';
+                const envType = runningInDocker ? 'Docker' : 'npm';
                 logger.error('NetworkScanService', `Ping command not found. Tried: ${pingCommand}. In ${envType} mode, ensure ping is available.`);
                 logger.error('NetworkScanService', `Error details: ${errorMessage}, stderr: ${errorStderr}`);
             }
@@ -703,19 +741,28 @@ export class NetworkScanService {
                     logger.debug('NetworkScanService', `ip neigh failed for ${ip}:`, error);
                 }
                 
-                // Method 2: Try reading /proc/net/arp (Linux only, works in Docker with host network)
-                try {
-                    const { stdout } = await execAsync(`cat /proc/net/arp 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
-                    const parts = stdout.trim().split(/\s+/);
-                    if (parts.length >= 4 && parts[3] !== '00:00:00:00:00:00') {
-                        const mac = parts[3].toLowerCase().replace(/-/g, ':');
-                        if (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
-                            logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using /proc/net/arp`);
-                            return mac;
+                // Method 2: Try reading /proc/net/arp (Linux only)
+                // In Docker, try /host/proc/net/arp first (mounted from host), then container /proc/net/arp
+                const hostPathPrefix = getHostPathPrefix();
+                const arpPaths = hostPathPrefix 
+                    ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']  // Try host first, then container
+                    : ['/proc/net/arp'];  // Only container path
+                
+                for (const arpPath of arpPaths) {
+                    try {
+                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
+                        const parts = stdout.trim().split(/\s+/);
+                        if (parts.length >= 4 && parts[3] !== '00:00:00:00:00:00') {
+                            const mac = parts[3].toLowerCase().replace(/-/g, ':');
+                            if (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
+                                logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using ${arpPath}`);
+                                return mac;
+                            }
                         }
+                    } catch (error) {
+                        logger.debug('NetworkScanService', `${arpPath} failed for ${ip}:`, error);
+                        // Continue to next path
                     }
-                } catch (error) {
-                    logger.debug('NetworkScanService', `/proc/net/arp failed for ${ip}:`, error);
                 }
                 
                 // Method 3: Try arp-scan if available (like WatchYourLAN)
@@ -854,18 +901,27 @@ export class NetworkScanService {
             }
             
             // Method 3: Try reading /etc/hosts directly
-            try {
-                const { stdout } = await execAsync(`grep "^${ip.replace(/\./g, '\\.')}\\s" /etc/hosts 2>/dev/null | head -1`, { timeout: 1000 });
-                const parts = stdout.trim().split(/\s+/);
-                if (parts.length >= 2) {
-                    const hostname = parts[1].trim();
-                    if (hostname && hostname.length > 0 && !hostname.startsWith('#')) {
-                        logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using /etc/hosts`);
-                        return hostname;
+            // In Docker, try /host/etc/hosts first (mounted from host), then container /etc/hosts
+            const hostPathPrefix = getHostPathPrefix();
+            const hostsPaths = hostPathPrefix 
+                ? [`${hostPathPrefix}/etc/hosts`, '/etc/hosts']  // Try host first, then container
+                : ['/etc/hosts'];  // Only container path
+            
+            for (const hostsPath of hostsPaths) {
+                try {
+                    const { stdout } = await execAsync(`grep "^${ip.replace(/\./g, '\\.')}\\s" ${hostsPath} 2>/dev/null | head -1`, { timeout: 1000 });
+                    const parts = stdout.trim().split(/\s+/);
+                    if (parts.length >= 2) {
+                        const hostname = parts[1].trim();
+                        if (hostname && hostname.length > 0 && !hostname.startsWith('#')) {
+                            logger.debug('NetworkScanService', `Found hostname ${hostname} for ${ip} using ${hostsPath}`);
+                            return hostname;
+                        }
                     }
+                } catch (error) {
+                    logger.debug('NetworkScanService', `${hostsPath} lookup failed for ${ip}:`, error);
+                    // Continue to next path
                 }
-            } catch (error) {
-                logger.debug('NetworkScanService', `/etc/hosts lookup failed for ${ip}:`, error);
             }
             
             // Method 4: Try SMB/NetBIOS (smbclient or nmblookup)

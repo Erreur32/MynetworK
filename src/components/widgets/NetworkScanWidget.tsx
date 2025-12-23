@@ -406,7 +406,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             {loading && offlineIpsList.length === 0 ? (
                                 <div className="text-[11px] text-gray-500 py-2">Chargement...</div>
                             ) : offlineIpsList.length > 0 ? (
-                                <div className="space-y-1 max-h-32 overflow-y-auto">
+                                <div className="space-y-1 max-h-80 overflow-y-auto">
                                     {offlineIpsList.map((item) => (
                                         <div 
                                             key={item.id} 

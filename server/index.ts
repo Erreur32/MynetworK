@@ -92,8 +92,16 @@ import { logBuffer } from './utils/logBuffer.js';
 // Initialize database
 logger.info('Server', 'Initializing database...');
 initializeDatabase();
+
+// Initialize database performance configuration (after schema is ready)
+import { initializeDatabaseConfig } from './database/dbConfig.js';
+initializeDatabaseConfig();
+
 // Reload logger config after database is initialized
 logger.reloadConfig();
+
+// Initialize database purge service (after database is initialized)
+initializePurgeService();
 
 // Create default admin user if no users exist
 async function createDefaultAdmin() {
@@ -152,7 +160,7 @@ function getCorsConfig() {
       // Process allowedOrigins - convert regex strings to RegExp objects
       let origin: boolean | string[] | RegExp[] = corsConfig.allowedOrigins || true;
       if (Array.isArray(origin)) {
-        origin = origin.map((o: string) => {
+        const processedOrigin: (string | RegExp)[] = (origin as string[]).map((o: string): string | RegExp => {
           // Check if it's a regex pattern (starts and ends with /)
           if (typeof o === 'string' && o.startsWith('/') && o.endsWith('/')) {
             try {
@@ -164,10 +172,21 @@ function getCorsConfig() {
           }
           return o;
         });
+        // Check if all are strings or all are RegExp
+        const allStrings = processedOrigin.every(item => typeof item === 'string');
+        const allRegExp = processedOrigin.every(item => item instanceof RegExp);
+        if (allStrings) {
+          origin = processedOrigin as string[];
+        } else if (allRegExp) {
+          origin = processedOrigin as RegExp[];
+        } else {
+          // Mixed types - keep as is (will be treated as string[] | RegExp[])
+          origin = processedOrigin as string[] | RegExp[];
+        }
       }
       
       return {
-        origin: origin === '*' ? true : origin,
+        origin: (typeof origin === 'string' && origin === '*') ? true : origin,
         credentials: corsConfig.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
         methods: corsConfig.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
         allowedHeaders: corsConfig.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -199,6 +218,10 @@ function getCorsConfig() {
 app.use(cors(getCorsConfig()));
 app.use(express.json({ limit: '10mb' }));
 
+// Metrics middleware (track all API requests)
+import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+app.use(metricsMiddleware);
+
 // Request logging (only in debug mode)
 app.use((req, _res, next) => {
   logger.debug('HTTP', `${req.method} ${req.path}`);
@@ -212,9 +235,12 @@ import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
 import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
+import databaseRoutes from './routes/database.js';
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
 import './services/networkScanScheduler.js';
+// Initialize database purge service (loads configs from database)
+import { initializePurgeService } from './services/databasePurgeService.js';
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
@@ -224,6 +250,7 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/docs', apiDocsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/network-scan', networkScanRoutes);
+app.use('/api/database', databaseRoutes);
 
 // Existing Freebox routes (kept for backward compatibility)
 app.use('/api/auth', authRoutes);

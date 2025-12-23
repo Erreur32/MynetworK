@@ -7,6 +7,7 @@
 
 import { logger } from '../utils/logger.js';
 import { loggingService } from './loggingService.js';
+import { metricsCollector } from './metricsCollector.js';
 
 export type SecurityEventType =
     | 'login_failed'
@@ -69,6 +70,18 @@ class SecurityNotificationService {
                 logger.info('Security', logMessage);
         }
 
+        // Record metrics (aggregated by level only, no username/IP)
+        const level = fullNotification.severity === 'critical' || fullNotification.severity === 'error' ? 'error' : fullNotification.severity === 'warning' ? 'warning' : 'info';
+        metricsCollector.recordSecurityEvent(level);
+        
+        // Record specific security events
+        if (fullNotification.type === 'security_settings_changed') {
+            metricsCollector.recordSecuritySettingsChanged();
+        }
+        if (fullNotification.type === 'ip_blocked') {
+            metricsCollector.recordIpBlocked();
+        }
+
         // Log to database via loggingService
         if (fullNotification.userId) {
             await loggingService.log({
@@ -77,8 +90,8 @@ class SecurityNotificationService {
                 resourceId: fullNotification.userId.toString(),
                 username: fullNotification.username,
                 ipAddress: fullNotification.ipAddress,
-                level: fullNotification.severity === 'critical' || fullNotification.severity === 'error' ? 'error' : fullNotification.severity === 'warning' ? 'warning' : 'info',
-                metadata: fullNotification.metadata
+                level: level,
+                details: fullNotification.metadata
             }).catch(err => {
                 console.error('[SecurityNotification] Failed to log to database:', err);
             });

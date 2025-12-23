@@ -526,14 +526,14 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                     <Tooltip
                       contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                       labelStyle={{ color: '#9ca3af' }}
-                      formatter={(value: number, _name: string, props: { dataKey: string }) => {
+                      formatter={((value: number, _name: string, props: { dataKey: string }) => {
                         const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
                         const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
                         return [
-                          <span style={{ color }}>{formatKBSpeed(value)}</span>,
-                          label
+                            <span key="value" style={{ color }}>{formatKBSpeed(value)}</span>,
+                            label
                         ];
-                      }}
+                      }) as any}
                     />
                     <Legend />
                     <Area

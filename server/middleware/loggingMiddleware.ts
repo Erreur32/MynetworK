@@ -8,6 +8,7 @@ import { Request, Response, NextFunction } from 'express';
 import { loggingService } from '../services/loggingService.js';
 import type { AuthenticatedRequest } from './authMiddleware.js';
 import { getClientIp } from '../utils/getClientIp.js';
+import { metricsCollector } from '../services/metricsCollector.js';
 
 /**
  * Create middleware to automatically log an action
@@ -18,11 +19,18 @@ export const autoLog = (
     getResourceId?: (req: Request) => string | undefined
 ) => {
     return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+        const startTime = Date.now();
+        
         // Store original json method
         const originalJson = res.json.bind(res);
 
         // Override json method to log after response
         res.json = function (body: any) {
+            const duration = Date.now() - startTime;
+            
+            // Record API metrics (aggregated, no route/method details)
+            metricsCollector.recordApiRequest(res.statusCode, duration);
+            
             // Only log successful requests (status < 400)
             if (res.statusCode < 400 && req.user) {
                 const resourceId = getResourceId ? getResourceId(req) : undefined;

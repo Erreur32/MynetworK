@@ -178,7 +178,11 @@ export const useWifiStore = create<WifiState>((set, get) => ({
 
               // Estimate load based on device count if no channel_usage provided
               // ~8% per device, max 80%
-              const estimatedLoad = channelUsage > 0 ? channelUsage : Math.min(bandDeviceCount * 8, 80);
+              // Only calculate load if WiFi is active, otherwise set to 0
+              const isActive = b.status?.state === 'active';
+              const estimatedLoad = isActive 
+                ? (channelUsage > 0 ? channelUsage : Math.min(bandDeviceCount * 8, 80))
+                : 0;
 
               networks.push({
                 id: b.id,
@@ -186,8 +190,9 @@ export const useWifiStore = create<WifiState>((set, get) => ({
                 band,
                 channelWidth,
                 channel: apStatus?.primary_channel || apConfig?.primary_channel || 0,
-                active: b.status?.state === 'active',
-                connectedDevices: bandDeviceCount,
+                active: isActive,
+                // Only count devices if WiFi is active, otherwise set to 0
+                connectedDevices: isActive ? bandDeviceCount : 0,
                 load: estimatedLoad
               });
             }

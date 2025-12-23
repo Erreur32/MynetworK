@@ -11,6 +11,9 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+    public state: State;
+    public props: PropsWithChildren<Props>;
+
     constructor(props: Props) {
         super(props);
         this.state = {
@@ -18,6 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
             error: null,
             errorInfo: null
         };
+        this.props = props;
     }
 
     static getDerivedStateFromError(error: Error): State {
@@ -30,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         console.error('[ErrorBoundary] Caught error:', error, errorInfo);
-        this.setState({
+        (this as Component<Props, State>).setState({
             error,
             errorInfo
         });
@@ -58,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
                         </div>
                         <button
                             onClick={() => {
-                                this.setState({ hasError: false, error: null, errorInfo: null });
+                                (this as Component<Props, State>).setState({ hasError: false, error: null, errorInfo: null });
                                 window.location.reload();
                             }}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors"

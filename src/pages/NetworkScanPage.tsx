@@ -479,7 +479,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             // Si pas de dernière exécution, le prochain scan est dans l'intervalle configuré
             nextDate = new Date(now.getTime() + intervalMinutes * 60000);
         } else {
-            const lastDate = new Date(lastExecution);
+        const lastDate = new Date(lastExecution);
             nextDate = new Date(lastDate.getTime() + intervalMinutes * 60000);
         }
         
@@ -591,10 +591,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Colonne 1 : Informations des scans */}
-                            <div className="space-y-2 text-xs">
+                        <div className="space-y-2 text-xs">
                                 <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
-                                {/* Afficher le dernier scan avec son type et sa date exacte */}
-                                {autoStatus?.lastScan ? (
+                            {/* Afficher le dernier scan avec son type et sa date exacte */}
+                            {autoStatus?.lastScan ? (
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2 mb-1">
                                         {autoStatus.lastScan.isManual ? (
@@ -659,7 +659,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                     {formatNextExecution(null, autoStatus.fullScan.config.interval)}
                                                 </span>
                                             )}
-                                        </div>
+                                                </div>
                                     )}
                                     {autoStatus.refresh.config.enabled && (
                                         <div className="flex items-center gap-2 text-xs whitespace-nowrap overflow-x-auto">
@@ -682,7 +682,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                     {formatNextExecution(null, autoStatus.refresh.config.interval)}
                                                 </span>
                                             )}
-                                        </div>
+                                                </div>
                                     )}
                                 </div>
                             ) : autoStatusLoading ? (
@@ -893,7 +893,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 <option value="online">Online</option>
                                 <option value="offline">Offline</option>
                             </select>
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                                 <label className="text-sm text-gray-400 whitespace-nowrap">Résultats:</label>
                                 {showCustomInput ? (
                                     <div className="flex items-center gap-2">
@@ -915,21 +915,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             className="w-20 px-2 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                                             autoFocus
                                         />
-                                        <button
+                            <button
                                             onClick={handleCustomResultsPerPageSubmit}
                                             className="px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 text-sm"
-                                        >
+                            >
                                             OK
-                                        </button>
-                                        <button
+                            </button>
+                            <button
                                             onClick={() => {
                                                 setShowCustomInput(false);
                                                 setCustomResultsPerPage('');
                                             }}
                                             className="px-3 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 rounded-lg border border-gray-500/30 text-sm"
-                                        >
+                            >
                                             Annuler
-                                        </button>
+                            </button>
                                     </div>
                                 ) : (
                                     <select
@@ -951,16 +951,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 {/* Barre de recherche centrée */}
                 <div className="flex justify-center mb-4">
                     <div className="relative w-full max-w-md">
-                        <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            value={searchFilter}
-                            onChange={(e) => setSearchFilter(e.target.value)}
-                            placeholder="Rechercher..."
+                            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                value={searchFilter}
+                                onChange={(e) => setSearchFilter(e.target.value)}
+                                placeholder="Rechercher..."
                             className="w-full pl-10 pr-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                        />
+                            />
+                        </div>
                     </div>
-                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full table-fixed">
                         <colgroup>

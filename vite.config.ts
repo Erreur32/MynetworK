@@ -138,7 +138,7 @@ export default defineConfig({
           });
           
           // Handle WebSocket upgrade response errors
-          proxy.on('proxyResWs', (_proxyRes, _req, socket) => {
+          (proxy as any).on('proxyResWs', (_proxyRes: any, _req: any, socket: any) => {
             socket.on('error', (err) => {
               // Silently suppress all errors after upgrade
               if (!shouldSuppressError(err)) {

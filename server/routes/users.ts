@@ -14,6 +14,7 @@ import { autoLog } from '../middleware/loggingMiddleware.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
 import { getClientIp } from '../utils/getClientIp.js';
+import { metricsCollector } from '../services/metricsCollector.js';
 
 const router = Router();
 
@@ -73,6 +74,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
     // Check brute force protection for username
     if (bruteForceProtection.isBlocked(username)) {
+        metricsCollector.recordAuthLogin('blocked');
         const remainingTime = bruteForceProtection.getRemainingLockoutTime(username);
         await securityNotificationService.notifyBlockedLogin(
             username,
@@ -88,6 +90,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
     // Check brute force protection for IP address
     if (clientIp && bruteForceProtection.isBlocked(clientIp)) {
+        metricsCollector.recordIpBlocked();
         const remainingTime = bruteForceProtection.getRemainingLockoutTime(clientIp);
         await securityNotificationService.notifyIpBlocked(
             clientIp,
@@ -114,6 +117,9 @@ router.post('/login', asyncHandler(async (req, res) => {
         // Check if this is a new IP address for this user
         const user = UserRepository.findByUsername(username);
         const isNewIp = user && user.lastLoginIp && user.lastLoginIp !== clientIp;
+
+        // Record metrics (aggregated, no username)
+        metricsCollector.recordAuthLogin('success');
 
         // Notify successful login
         await securityNotificationService.notifySuccessfulLogin(

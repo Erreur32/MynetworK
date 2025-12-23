@@ -6,10 +6,11 @@
  */
 
 import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+import { initializeDatabaseConfig } from './dbConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,8 +38,16 @@ export function getDatabase(): Database.Database {
         // Enable foreign keys
         db.pragma('foreign_keys = ON');
         
-        // Enable WAL mode for better concurrency
+        // Apply basic WAL mode first (required before other configs)
         db.pragma('journal_mode = WAL');
+        
+        // Apply performance configuration (will set other optimizations)
+        // Note: initializeDatabaseConfig will be called after schema initialization
+        try {
+            initializeDatabaseConfig();
+        } catch (error) {
+            logger.warn('Database', 'Failed to initialize database config (will retry after schema init):', error);
+        }
         
         logger.success('Database', `Connected to SQLite database: ${dbPath}`);
     }

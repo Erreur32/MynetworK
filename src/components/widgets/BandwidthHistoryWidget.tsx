@@ -184,14 +184,14 @@ export const BandwidthHistoryWidget: React.FC = () => {
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                                 labelStyle={{ color: '#9ca3af' }}
-                                formatter={(value: number, _name: string, props: { dataKey: string }) => {
+                                formatter={((value: number, _name: string, props: { dataKey: string }) => {
                                     const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
                                     const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
                                     return [
-                                        <span style={{ color }}>{formatSpeed(value * 1024)}</span>,
+                                        <span key="value" style={{ color }}>{formatSpeed(value * 1024)}</span>,
                                         label
                                     ];
-                                }}
+                                }) as any}
                             />
                             <Legend />
                             <Area

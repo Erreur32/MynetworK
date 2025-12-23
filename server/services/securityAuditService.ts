@@ -80,17 +80,17 @@ class SecurityAuditService {
                 action: action ? `security.${action}` : undefined,
                 userId,
                 level,
-                startDate,
-                endDate
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined
             });
 
             // Filter and format for security audit
-            const securityLogs = allLogs
+            const securityLogs: SecurityAuditEntry[] = allLogs
                 .filter(log => log.resource === 'security' || log.action?.startsWith('security.'))
                 .slice(offset, offset + limit)
                 .map(log => ({
                     id: log.id,
-                    timestamp: log.timestamp,
+                    timestamp: log.timestamp.getTime(),
                     action: log.action?.replace('security.', '') || log.action || 'unknown',
                     resource: log.resource,
                     resourceId: log.resourceId,
@@ -99,7 +99,7 @@ class SecurityAuditService {
                     ipAddress: log.ipAddress,
                     userAgent: log.userAgent,
                     level: log.level || 'info',
-                    metadata: log.metadata
+                    metadata: log.details
                 }));
 
             return securityLogs;
@@ -114,8 +114,8 @@ class SecurityAuditService {
      */
     async getAuditStats(): Promise<SecurityAuditStats> {
         try {
-            const now = Date.now();
-            const last24Hours = now - (24 * 60 * 60 * 1000);
+            const now = new Date();
+            const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
 
             // Get all security logs from last 24 hours
             const recentLogs = await loggingService.getLogs({

@@ -17,7 +17,7 @@ const DEFAULT_SCHEDULE: RebootSchedule = {
 
 class RebootSchedulerService {
   private schedule: RebootSchedule;
-  private tasks: cron.ScheduledTask[] = [];
+  private tasks: ReturnType<typeof cron.schedule>[] = [];
   private configPath: string;
 
   constructor() {

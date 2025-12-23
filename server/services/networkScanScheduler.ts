@@ -10,6 +10,7 @@ import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { networkScanService } from './networkScanService.js';
 import { logger } from '../utils/logger.js';
 import { pluginManager } from './pluginManager.js';
+import { metricsCollector } from './metricsCollector.js';
 
 interface AutoScanConfig {
     enabled: boolean;
@@ -37,8 +38,8 @@ interface UnifiedAutoScanConfig {
 }
 
 class NetworkScanSchedulerService {
-    private scanTask: cron.ScheduledTask | null = null;
-    private refreshTask: cron.ScheduledTask | null = null;
+    private scanTask: ReturnType<typeof cron.schedule> | null = null;
+    private refreshTask: ReturnType<typeof cron.schedule> | null = null;
 
     /**
      * Check if the scan-reseau plugin is enabled
@@ -219,6 +220,9 @@ class NetworkScanSchedulerService {
 
                 await networkScanService.scanNetwork(range, config.scanType);
                 
+                // Update scheduler metrics: record last run
+                metricsCollector.updateSchedulerMetrics(true, Date.now());
+                
                 // Track last auto scan
                 const { AppConfigRepository } = await import('../database/models/AppConfig.js');
                 AppConfigRepository.set('network_scan_last_auto', JSON.stringify({
@@ -236,7 +240,7 @@ class NetworkScanSchedulerService {
         }, {
             scheduled: true,
             timezone: 'Europe/Paris' // Explicit timezone to avoid Docker timezone issues
-        });
+        } as any);
         
         // Ensure task is started (even though scheduled: true should do it)
         if (this.scanTask && this.scanTask.getStatus() !== 'scheduled') {
@@ -310,7 +314,7 @@ class NetworkScanSchedulerService {
         }, {
             scheduled: true,
             timezone: 'Europe/Paris' // Explicit timezone to avoid Docker timezone issues
-        });
+        } as any);
         
         // Ensure task is started (even though scheduled: true should do it)
         if (this.refreshTask && this.refreshTask.getStatus() !== 'scheduled') {
@@ -421,12 +425,20 @@ class NetworkScanSchedulerService {
                 interval: config.fullScan.interval,
                 scanType: config.fullScan.scanType
             });
+            
+            // Update metrics: scheduler enabled
+            metricsCollector.updateSchedulerMetrics(true);
         } else {
             // Stop full scan if disabled
             logger.info('NetworkScanScheduler', 'Stopping full scan scheduler (disabled in config)');
             if (this.scanTask) {
                 this.scanTask.stop();
                 this.scanTask = null;
+            }
+            
+            // Update metrics: scheduler disabled if no refresh either
+            if (!config.refresh || !config.refresh.enabled) {
+                metricsCollector.updateSchedulerMetrics(false);
             }
         }
 
@@ -437,12 +449,20 @@ class NetworkScanSchedulerService {
                 enabled: true,
                 interval: config.refresh.interval
             });
+            
+            // Update metrics: scheduler enabled
+            metricsCollector.updateSchedulerMetrics(true);
         } else {
             // Stop refresh if disabled
             logger.info('NetworkScanScheduler', 'Stopping refresh scheduler (disabled in config)');
             if (this.refreshTask) {
                 this.refreshTask.stop();
                 this.refreshTask = null;
+            }
+            
+            // Update metrics: scheduler disabled if no full scan either
+            if (!config.fullScan || !config.fullScan.enabled) {
+                metricsCollector.updateSchedulerMetrics(false);
             }
         }
         

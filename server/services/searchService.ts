@@ -107,26 +107,27 @@ export class SearchService {
                 if (!typeFilter || typeFilter.includes('device')) {
                     if (stats.devices && Array.isArray(stats.devices)) {
                         for (const device of stats.devices) {
+                            const dev = device as { name?: string; mac?: string; ip?: string; hostname?: string; id?: string; active?: boolean; lastSeen?: Date; type?: string };
                             if (
-                                matches(device.name) ||
-                                matches(device.mac) ||
-                                matches(device.ip) ||
-                                matches(device.hostname)
+                                matches(dev.name) ||
+                                matches(dev.mac) ||
+                                matches(dev.ip) ||
+                                matches(dev.hostname)
                             ) {
                                 results.push({
                                     pluginId,
                                     pluginName,
                                     type: 'device',
-                                    id: device.id || device.mac || '',
-                                    name: device.name || 'Unknown Device',
-                                    ip: device.ip,
-                                    mac: device.mac,
-                                    hostname: device.hostname,
-                                    active: device.active,
-                                    lastSeen: device.lastSeen,
+                                    id: dev.id || dev.mac || '',
+                                    name: dev.name || 'Unknown Device',
+                                    ip: dev.ip,
+                                    mac: dev.mac,
+                                    hostname: dev.hostname,
+                                    active: dev.active,
+                                    lastSeen: dev.lastSeen,
                                     additionalData: {
-                                        vendor: device.type,
-                                        ...device
+                                        vendor: dev.type,
+                                        ...dev
                                     }
                                 });
                             }
@@ -219,6 +220,7 @@ export class SearchService {
                             const isSwitch = deviceType.includes('usw') || deviceType.includes('switch');
                             const isGateway = deviceType.includes('ugw') || deviceType.includes('gateway');
 
+                            const dev = device as { name?: string; mac?: string; ip?: string; model?: string; id?: string; active?: boolean; lastSeen?: Date; type?: string };
                             if (
                                 (!typeFilter || 
                                  (isAP && typeFilter.includes('ap')) ||
@@ -226,26 +228,26 @@ export class SearchService {
                                  (isGateway && typeFilter.includes('switch'))
                                 ) &&
                                 (
-                                    matches(device.name) ||
-                                    matches(device.mac) ||
-                                    matches(device.ip) ||
-                                    matches(device.model)
+                                    matches(dev.name) ||
+                                    matches(dev.mac) ||
+                                    matches(dev.ip) ||
+                                    matches(dev.model)
                                 )
                             ) {
                                 results.push({
                                     pluginId,
                                     pluginName,
                                     type: isAP ? 'ap' : 'switch',
-                                    id: device.id || device.mac || '',
-                                    name: device.name || device.model || 'Unknown Device',
-                                    ip: device.ip,
-                                    mac: device.mac,
-                                    active: device.active,
-                                    lastSeen: device.lastSeen,
+                                    id: dev.id || dev.mac || '',
+                                    name: dev.name || dev.model || 'Unknown Device',
+                                    ip: dev.ip,
+                                    mac: dev.mac,
+                                    active: dev.active,
+                                    lastSeen: dev.lastSeen,
                                     additionalData: {
-                                        model: device.model,
-                                        type: device.type,
-                                        ...device
+                                        model: dev.model,
+                                        type: dev.type,
+                                        ...dev
                                     }
                                 });
                             }
@@ -290,32 +292,33 @@ export class SearchService {
                     // Also check devices array for clients
                     if (stats.devices && Array.isArray(stats.devices)) {
                         for (const device of stats.devices) {
-                            if (device.type === 'client' || !device.type) {
+                            const dev = device as { name?: string; mac?: string; ip?: string; hostname?: string; id?: string; active?: boolean; lastSeen?: Date; type?: string };
+                            if (dev.type === 'client' || !dev.type) {
                                 if (
-                                    matches(device.name) ||
-                                    matches(device.mac) ||
-                                    matches(device.ip) ||
-                                    matches(device.hostname)
+                                    matches(dev.name) ||
+                                    matches(dev.mac) ||
+                                    matches(dev.ip) ||
+                                    matches(dev.hostname)
                                 ) {
                                     // Avoid duplicates
                                     const exists = results.some(r => 
                                         r.type === 'client' && 
-                                        (r.mac === device.mac || r.id === device.id)
+                                        (r.mac === dev.mac || r.id === dev.id)
                                     );
                                     if (!exists) {
                                         results.push({
                                             pluginId,
                                             pluginName,
                                             type: 'client',
-                                            id: device.id || device.mac || '',
-                                            name: device.name || device.hostname || 'Unknown Client',
-                                            ip: device.ip,
-                                            mac: device.mac,
-                                            hostname: device.hostname,
-                                            active: device.active,
-                                            lastSeen: device.lastSeen,
+                                            id: dev.id || dev.mac || '',
+                                            name: dev.name || dev.hostname || 'Unknown Client',
+                                            ip: dev.ip,
+                                            mac: dev.mac,
+                                            hostname: dev.hostname,
+                                            active: dev.active,
+                                            lastSeen: dev.lastSeen,
                                             additionalData: {
-                                                ...device
+                                                ...dev
                                             }
                                         });
                                     }

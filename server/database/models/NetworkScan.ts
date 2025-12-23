@@ -518,6 +518,140 @@ export class NetworkScanRepository {
     }
 
     /**
+     * Purge old history entries based on retention period
+     * @param retentionDays Number of days to keep (default: 30)
+     * @returns Number of deleted entries
+     */
+    static purgeHistory(retentionDays: number = 30): number {
+        const db = getDatabase();
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+        
+        try {
+            const stmt = db.prepare(`
+                DELETE FROM network_scan_history
+                WHERE seen_at < ?
+            `);
+            const result = stmt.run(cutoffDate.toISOString());
+            logger.info('NetworkScanRepository', `Purged ${result.changes} history entries older than ${retentionDays} days`);
+            return result.changes;
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to purge history:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Purge old scan entries that haven't been seen recently
+     * @param retentionDays Number of days to keep entries that haven't been seen (default: 90)
+     * @returns Number of deleted entries
+     */
+    static purgeOldScans(retentionDays: number = 90): number {
+        const db = getDatabase();
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+        
+        try {
+            const stmt = db.prepare(`
+                DELETE FROM network_scans
+                WHERE last_seen < ?
+            `);
+            const result = stmt.run(cutoffDate.toISOString());
+            logger.info('NetworkScanRepository', `Purged ${result.changes} scan entries older than ${retentionDays} days`);
+            return result.changes;
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to purge old scans:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Purge offline entries that haven't been seen recently
+     * @param retentionDays Number of days to keep offline entries (default: 7)
+     * @returns Number of deleted entries
+     */
+    static purgeOfflineScans(retentionDays: number = 7): number {
+        const db = getDatabase();
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+        
+        try {
+            const stmt = db.prepare(`
+                DELETE FROM network_scans
+                WHERE status = 'offline' AND last_seen < ?
+            `);
+            const result = stmt.run(cutoffDate.toISOString());
+            logger.info('NetworkScanRepository', `Purged ${result.changes} offline scan entries older than ${retentionDays} days`);
+            return result.changes;
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to purge offline scans:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get database statistics for scan tables
+     * @returns Statistics about table sizes and oldest entries
+     */
+    static getDatabaseStats(): {
+        scansCount: number;
+        historyCount: number;
+        oldestScan: Date | null;
+        oldestHistory: Date | null;
+        totalSize: number; // Approximate size in bytes
+    } {
+        const db = getDatabase();
+        
+        try {
+            // Count entries
+            const scansCountStmt = db.prepare('SELECT COUNT(*) as count FROM network_scans');
+            const scansCount = (scansCountStmt.get() as { count: number }).count;
+            
+            const historyCountStmt = db.prepare('SELECT COUNT(*) as count FROM network_scan_history');
+            const historyCount = (historyCountStmt.get() as { count: number }).count;
+            
+            // Get oldest entries
+            const oldestScanStmt = db.prepare('SELECT MIN(first_seen) as oldest FROM network_scans');
+            const oldestScanResult = oldestScanStmt.get() as { oldest: string | null };
+            const oldestScan = oldestScanResult.oldest ? new Date(oldestScanResult.oldest) : null;
+            
+            const oldestHistoryStmt = db.prepare('SELECT MIN(seen_at) as oldest FROM network_scan_history');
+            const oldestHistoryResult = oldestHistoryStmt.get() as { oldest: string | null };
+            const oldestHistory = oldestHistoryResult.oldest ? new Date(oldestHistoryResult.oldest) : null;
+            
+            // Approximate size (rough estimate: each row ~200 bytes)
+            const totalSize = (scansCount * 200) + (historyCount * 100);
+            
+            return {
+                scansCount,
+                historyCount,
+                oldestScan,
+                oldestHistory,
+                totalSize
+            };
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to get database stats:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Optimize database by running VACUUM
+     * This reclaims space and optimizes the database structure
+     */
+    static optimizeDatabase(): void {
+        const db = getDatabase();
+        try {
+            logger.info('NetworkScanRepository', 'Starting database optimization (VACUUM)...');
+            db.exec('VACUUM');
+            logger.info('NetworkScanRepository', 'Database optimization completed');
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to optimize database:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Map database row to NetworkScan interface
      */
     private static mapRowToNetworkScan(row: any): NetworkScan {

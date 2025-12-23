@@ -166,7 +166,7 @@ export class AuthService {
 
         const token = jwt.sign(payload, this.jwtSecret, {
             expiresIn: this.jwtExpiresIn
-        });
+        } as jwt.SignOptions);
 
         // Return token and user (without password hash)
         const { passwordHash: _, ...userWithoutPassword } = user;

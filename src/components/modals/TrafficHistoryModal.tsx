@@ -270,7 +270,7 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
                           color: '#fff',
                           borderRadius: '0.5rem'
                         }}
-                        formatter={(value: number, _name: string, props: { dataKey: string }) => {
+                        formatter={((value: number, _name: string, props: { dataKey: string }) => {
                           const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
                           const color = props.dataKey === 'download' ? '#3b82f6' : '#10b981';
                           // Convert KB/s to kb/s
@@ -280,10 +280,10 @@ export const TrafficHistoryModal: React.FC<TrafficHistoryModalProps> = ({
                           else if (kbits >= 1000) formatted = `${(kbits / 1000).toFixed(2)} Mb/s`;
                           else formatted = `${Math.round(kbits)} kb/s`;
                           return [
-                            <span style={{ color }}>{formatted}</span>,
+                            <span key="value" style={{ color }}>{formatted}</span>,
                             label
                           ];
-                        }}
+                        }) as any}
                       />
                       <Legend wrapperStyle={{ paddingTop: '20px' }} />
                       <Area

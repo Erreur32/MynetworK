@@ -7,6 +7,10 @@
 
 import { pluginManager } from './pluginManager.js';
 import type { PluginStats } from '../plugins/base/PluginInterface.js';
+import { metricsCollector } from './metricsCollector.js';
+import { NetworkScanRepository } from '../database/models/NetworkScan.js';
+import { getDatabase } from '../database/connection.js';
+import { bruteForceProtection } from './bruteForceProtection.js';
 
 export interface MetricsConfig {
     prometheus: {
@@ -207,6 +211,31 @@ export async function generatePrometheusMetrics(): Promise<string> {
                 lines.push(`mynetwork_plugin_ips_detected${pluginLabels} ${uniqueIps.size}`);
             }
             
+            // Network scan plugin specific metrics
+            if (pluginId === 'scan-reseau' && stats.system) {
+                const sys = stats.system as any;
+                if (sys.totalIps !== undefined) {
+                    lines.push(`# HELP mynetwork_scan_total_ips Total number of scanned IP addresses`);
+                    lines.push(`# TYPE mynetwork_scan_total_ips gauge`);
+                    lines.push(`mynetwork_scan_total_ips${pluginLabels} ${sys.totalIps}`);
+                }
+                if (sys.onlineIps !== undefined) {
+                    lines.push(`# HELP mynetwork_scan_online_ips Number of online IP addresses`);
+                    lines.push(`# TYPE mynetwork_scan_online_ips gauge`);
+                    lines.push(`mynetwork_scan_online_ips${pluginLabels} ${sys.onlineIps}`);
+                }
+                if (sys.offlineIps !== undefined) {
+                    lines.push(`# HELP mynetwork_scan_offline_ips Number of offline IP addresses`);
+                    lines.push(`# TYPE mynetwork_scan_offline_ips gauge`);
+                    lines.push(`mynetwork_scan_offline_ips${pluginLabels} ${sys.offlineIps}`);
+                }
+                if (sys.unknownIps !== undefined) {
+                    lines.push(`# HELP mynetwork_scan_unknown_ips Number of unknown status IP addresses`);
+                    lines.push(`# TYPE mynetwork_scan_unknown_ips gauge`);
+                    lines.push(`mynetwork_scan_unknown_ips${pluginLabels} ${sys.unknownIps}`);
+                }
+            }
+            
             // WiFi networks with source (Freebox or UniFi)
             if (pluginId === 'freebox' && stats.system && (stats.system as any).wifiNetworks) {
                 const wifiNetworks = (stats.system as any).wifiNetworks as Array<{ ssid: string; band: string; enabled: boolean }>;
@@ -251,6 +280,177 @@ export async function generatePrometheusMetrics(): Promise<string> {
         }
     } catch (error) {
         console.error('[MetricsService] Failed to fetch plugin stats:', error);
+    }
+    
+    // Application metrics (aggregated, no high cardinality)
+    try {
+        const appMetrics = metricsCollector.getAllMetrics();
+        
+        // Scan metrics (performance metrics, calculated AFTER scan)
+        if (appMetrics.scan.scanCount > 0) {
+            lines.push(`# HELP mynetwork_scan_duration_seconds Duration of last scan in seconds`);
+            lines.push(`# TYPE mynetwork_scan_duration_seconds gauge`);
+            lines.push(`mynetwork_scan_duration_seconds ${(appMetrics.scan.lastScanDuration / 1000).toFixed(3)}`);
+            
+            lines.push(`# HELP mynetwork_scan_last_timestamp Timestamp of last scan (Unix timestamp)`);
+            lines.push(`# TYPE mynetwork_scan_last_timestamp gauge`);
+            lines.push(`mynetwork_scan_last_timestamp ${appMetrics.scan.lastScanTimestamp}`);
+            
+            lines.push(`# HELP mynetwork_scan_ips_scanned Number of IPs scanned in last scan`);
+            lines.push(`# TYPE mynetwork_scan_ips_scanned gauge`);
+            lines.push(`mynetwork_scan_ips_scanned ${appMetrics.scan.lastScanScanned}`);
+            
+            lines.push(`# HELP mynetwork_scan_ips_found Number of IPs found in last scan`);
+            lines.push(`# TYPE mynetwork_scan_ips_found gauge`);
+            lines.push(`mynetwork_scan_ips_found ${appMetrics.scan.lastScanFound}`);
+            
+            lines.push(`# HELP mynetwork_scan_runs_total Total number of scans executed`);
+            lines.push(`# TYPE mynetwork_scan_runs_total counter`);
+            lines.push(`mynetwork_scan_runs_total ${appMetrics.scan.scanCount}`);
+            
+            // Latency metrics (aggregated, not per IP)
+            if (appMetrics.scan.latencyCount > 0) {
+                const avgLatency = appMetrics.scan.latencySum / appMetrics.scan.latencyCount;
+                lines.push(`# HELP mynetwork_scan_latency_avg_ms Average ping latency in milliseconds`);
+                lines.push(`# TYPE mynetwork_scan_latency_avg_ms gauge`);
+                lines.push(`mynetwork_scan_latency_avg_ms ${avgLatency.toFixed(2)}`);
+                
+                if (appMetrics.scan.latencyMin !== Infinity) {
+                    lines.push(`# HELP mynetwork_scan_latency_min_ms Minimum ping latency in milliseconds`);
+                    lines.push(`# TYPE mynetwork_scan_latency_min_ms gauge`);
+                    lines.push(`mynetwork_scan_latency_min_ms ${appMetrics.scan.latencyMin}`);
+                }
+                
+                if (appMetrics.scan.latencyMax > 0) {
+                    lines.push(`# HELP mynetwork_scan_latency_max_ms Maximum ping latency in milliseconds`);
+                    lines.push(`# TYPE mynetwork_scan_latency_max_ms gauge`);
+                    lines.push(`mynetwork_scan_latency_max_ms ${appMetrics.scan.latencyMax}`);
+                }
+            }
+        }
+        
+        // Database metrics
+        const dbStats = NetworkScanRepository.getDatabaseStats();
+        lines.push(`# HELP mynetwork_scan_db_entries_scans Number of entries in network_scans table`);
+        lines.push(`# TYPE mynetwork_scan_db_entries_scans gauge`);
+        lines.push(`mynetwork_scan_db_entries_scans ${dbStats.scansCount}`);
+        
+        lines.push(`# HELP mynetwork_scan_db_entries_history Number of entries in network_scan_history table`);
+        lines.push(`# TYPE mynetwork_scan_db_entries_history gauge`);
+        lines.push(`mynetwork_scan_db_entries_history ${dbStats.historyCount}`);
+        
+        lines.push(`# HELP mynetwork_scan_db_size_bytes Estimated database size in bytes`);
+        lines.push(`# TYPE mynetwork_scan_db_size_bytes gauge`);
+        lines.push(`mynetwork_scan_db_size_bytes ${dbStats.totalSize}`);
+        
+        if (dbStats.oldestScan) {
+            lines.push(`# HELP mynetwork_scan_db_oldest_entry Timestamp of oldest entry (Unix timestamp)`);
+            lines.push(`# TYPE mynetwork_scan_db_oldest_entry gauge`);
+            lines.push(`mynetwork_scan_db_oldest_entry ${Math.floor(dbStats.oldestScan.getTime() / 1000)}`);
+        }
+        
+        // Auth metrics (aggregated, no username)
+        lines.push(`# HELP mynetwork_auth_login_success_total Total successful login attempts`);
+        lines.push(`# TYPE mynetwork_auth_login_success_total counter`);
+        lines.push(`mynetwork_auth_login_success_total ${appMetrics.auth.loginSuccessTotal}`);
+        
+        lines.push(`# HELP mynetwork_auth_login_failed_total Total failed login attempts`);
+        lines.push(`# TYPE mynetwork_auth_login_failed_total counter`);
+        lines.push(`mynetwork_auth_login_failed_total ${appMetrics.auth.loginFailedTotal}`);
+        
+        lines.push(`# HELP mynetwork_auth_login_blocked_total Total blocked login attempts`);
+        lines.push(`# TYPE mynetwork_auth_login_blocked_total counter`);
+        lines.push(`mynetwork_auth_login_blocked_total ${appMetrics.auth.loginBlockedTotal}`);
+        
+        lines.push(`# HELP mynetwork_auth_ip_blocked_total Total IP blocking events`);
+        lines.push(`# TYPE mynetwork_auth_ip_blocked_total counter`);
+        lines.push(`mynetwork_auth_ip_blocked_total ${appMetrics.auth.ipBlockedTotal}`);
+        
+        lines.push(`# HELP mynetwork_auth_sessions_active Number of active sessions`);
+        lines.push(`# TYPE mynetwork_auth_sessions_active gauge`);
+        lines.push(`mynetwork_auth_sessions_active ${appMetrics.auth.sessionsActive}`);
+        
+        // API metrics (aggregated by status only, no route/method)
+        lines.push(`# HELP mynetwork_api_requests_total Total API requests`);
+        lines.push(`# TYPE mynetwork_api_requests_total counter`);
+        lines.push(`mynetwork_api_requests_total ${appMetrics.api.requestsTotal}`);
+        
+        lines.push(`# HELP mynetwork_api_errors_total Total API errors (status >= 400)`);
+        lines.push(`# TYPE mynetwork_api_errors_total counter`);
+        lines.push(`mynetwork_api_errors_total ${appMetrics.api.errorsTotal}`);
+        
+        // API requests by status (limited to common status codes to avoid high cardinality)
+        const commonStatuses = ['200', '400', '401', '403', '404', '500'];
+        for (const status of commonStatuses) {
+            const count = appMetrics.api.requestsByStatus[status] || 0;
+            if (count > 0 || appMetrics.api.requestsTotal > 0) {
+                lines.push(`# HELP mynetwork_api_requests_by_status_total API requests by status code`);
+                lines.push(`# TYPE mynetwork_api_requests_by_status_total counter`);
+                lines.push(`mynetwork_api_requests_by_status_total{status="${status}"} ${count}`);
+            }
+        }
+        
+        // API duration metrics (aggregated)
+        if (appMetrics.api.requestsDurationCount > 0) {
+            const avgDuration = appMetrics.api.requestsDurationSum / appMetrics.api.requestsDurationCount;
+            lines.push(`# HELP mynetwork_api_request_duration_avg_ms Average API request duration in milliseconds`);
+            lines.push(`# TYPE mynetwork_api_request_duration_avg_ms gauge`);
+            lines.push(`mynetwork_api_request_duration_avg_ms ${avgDuration.toFixed(2)}`);
+            
+            if (appMetrics.api.requestsDurationMin !== Infinity) {
+                lines.push(`# HELP mynetwork_api_request_duration_min_ms Minimum API request duration in milliseconds`);
+                lines.push(`# TYPE mynetwork_api_request_duration_min_ms gauge`);
+                lines.push(`mynetwork_api_request_duration_min_ms ${appMetrics.api.requestsDurationMin}`);
+            }
+            
+            if (appMetrics.api.requestsDurationMax > 0) {
+                lines.push(`# HELP mynetwork_api_request_duration_max_ms Maximum API request duration in milliseconds`);
+                lines.push(`# TYPE mynetwork_api_request_duration_max_ms gauge`);
+                lines.push(`mynetwork_api_request_duration_max_ms ${appMetrics.api.requestsDurationMax}`);
+            }
+        }
+        
+        // Security metrics (aggregated by level only)
+        lines.push(`# HELP mynetwork_security_events_total Security events by level`);
+        lines.push(`# TYPE mynetwork_security_events_total counter`);
+        for (const [level, count] of Object.entries(appMetrics.security.eventsByLevel)) {
+            lines.push(`mynetwork_security_events_total{level="${level}"} ${count}`);
+        }
+        
+        lines.push(`# HELP mynetwork_security_settings_changed_total Total security settings changes`);
+        lines.push(`# TYPE mynetwork_security_settings_changed_total counter`);
+        lines.push(`mynetwork_security_settings_changed_total ${appMetrics.security.settingsChangedTotal}`);
+        
+        // Update blocked IPs count from bruteForceProtection
+        const blockedIPs = bruteForceProtection.getBlockedIdentifiers();
+        metricsCollector.updateBlockedIpsCount(blockedIPs.length);
+        
+        lines.push(`# HELP mynetwork_security_blocked_ips_count Number of currently blocked IPs`);
+        lines.push(`# TYPE mynetwork_security_blocked_ips_count gauge`);
+        lines.push(`mynetwork_security_blocked_ips_count ${blockedIPs.length}`);
+        
+        // Scheduler metrics
+        lines.push(`# HELP mynetwork_scan_scheduler_enabled Scheduler enabled status (1=enabled, 0=disabled)`);
+        lines.push(`# TYPE mynetwork_scan_scheduler_enabled gauge`);
+        lines.push(`mynetwork_scan_scheduler_enabled ${appMetrics.scheduler.enabled}`);
+        
+        if (appMetrics.scheduler.lastRunTimestamp > 0) {
+            lines.push(`# HELP mynetwork_scan_scheduler_last_run Timestamp of last scheduled scan (Unix timestamp)`);
+            lines.push(`# TYPE mynetwork_scan_scheduler_last_run gauge`);
+            lines.push(`mynetwork_scan_scheduler_last_run ${appMetrics.scheduler.lastRunTimestamp}`);
+        }
+        
+        if (appMetrics.scheduler.nextRunTimestamp > 0) {
+            lines.push(`# HELP mynetwork_scan_scheduler_next_run Timestamp of next scheduled scan (Unix timestamp)`);
+            lines.push(`# TYPE mynetwork_scan_scheduler_next_run gauge`);
+            lines.push(`mynetwork_scan_scheduler_next_run ${appMetrics.scheduler.nextRunTimestamp}`);
+        }
+        
+        lines.push(`# HELP mynetwork_scan_scheduler_runs_total Total number of scheduled scans executed`);
+        lines.push(`# TYPE mynetwork_scan_scheduler_runs_total counter`);
+        lines.push(`mynetwork_scan_scheduler_runs_total ${appMetrics.scheduler.runsTotal}`);
+    } catch (error) {
+        console.error('[MetricsService] Failed to fetch application metrics:', error);
     }
     
     return lines.join('\n') + '\n';
@@ -384,6 +584,19 @@ export async function generateInfluxDBMetrics(): Promise<string> {
                 lines.push(`mynetwork,type=plugin_devices,plugin=${pluginTag} total=${stats.devices.length}i,active=${activeDevices}i,clients_active=${activeClients}i,ips_detected=${uniqueIps.size}i ${timestamp}`);
             }
             
+            // Network scan plugin specific metrics
+            if (pluginId === 'scan-reseau' && stats.system) {
+                const sys = stats.system as any;
+                const scanFields: string[] = [];
+                if (sys.totalIps !== undefined) scanFields.push(`total_ips=${sys.totalIps}i`);
+                if (sys.onlineIps !== undefined) scanFields.push(`online_ips=${sys.onlineIps}i`);
+                if (sys.offlineIps !== undefined) scanFields.push(`offline_ips=${sys.offlineIps}i`);
+                if (sys.unknownIps !== undefined) scanFields.push(`unknown_ips=${sys.unknownIps}i`);
+                if (scanFields.length > 0) {
+                    lines.push(`mynetwork,type=scan_reseau,plugin=${pluginTag} ${scanFields.join(',')} ${timestamp}`);
+                }
+            }
+            
             // WiFi networks with source (Freebox or UniFi)
             if (pluginId === 'freebox' && stats.system && (stats.system as any).wifiNetworks) {
                 const wifiNetworks = (stats.system as any).wifiNetworks as Array<{ ssid: string; band: string; enabled: boolean }>;
@@ -414,6 +627,91 @@ export async function generateInfluxDBMetrics(): Promise<string> {
         }
     } catch (error) {
         console.error('[MetricsService] Failed to fetch plugin stats:', error);
+    }
+    
+    // Application metrics (aggregated, no high cardinality)
+    try {
+        const appMetrics = metricsCollector.getAllMetrics();
+        const timestamp = Date.now() * 1000000; // Nanoseconds
+        
+        // Scan metrics
+        if (appMetrics.scan.scanCount > 0) {
+            lines.push(`mynetwork,type=scan_metrics duration_seconds=${(appMetrics.scan.lastScanDuration / 1000).toFixed(3)},last_timestamp=${appMetrics.scan.lastScanTimestamp}i,ips_scanned=${appMetrics.scan.lastScanScanned}i,ips_found=${appMetrics.scan.lastScanFound}i,runs_total=${appMetrics.scan.scanCount}i ${timestamp}`);
+            
+            if (appMetrics.scan.latencyCount > 0) {
+                const avgLatency = appMetrics.scan.latencySum / appMetrics.scan.latencyCount;
+                const latencyFields: string[] = [`latency_avg_ms=${avgLatency.toFixed(2)}`];
+                if (appMetrics.scan.latencyMin !== Infinity) {
+                    latencyFields.push(`latency_min_ms=${appMetrics.scan.latencyMin}`);
+                }
+                if (appMetrics.scan.latencyMax > 0) {
+                    latencyFields.push(`latency_max_ms=${appMetrics.scan.latencyMax}`);
+                }
+                lines.push(`mynetwork,type=scan_latency ${latencyFields.join(',')} ${timestamp}`);
+            }
+        }
+        
+        // Database metrics
+        const dbStats = NetworkScanRepository.getDatabaseStats();
+        const dbFields: string[] = [
+            `entries_scans=${dbStats.scansCount}i`,
+            `entries_history=${dbStats.historyCount}i`,
+            `size_bytes=${dbStats.totalSize}i`
+        ];
+        if (dbStats.oldestScan) {
+            dbFields.push(`oldest_entry=${Math.floor(dbStats.oldestScan.getTime() / 1000)}i`);
+        }
+        lines.push(`mynetwork,type=scan_database ${dbFields.join(',')} ${timestamp}`);
+        
+        // Auth metrics
+        lines.push(`mynetwork,type=auth login_success_total=${appMetrics.auth.loginSuccessTotal}i,login_failed_total=${appMetrics.auth.loginFailedTotal}i,login_blocked_total=${appMetrics.auth.loginBlockedTotal}i,ip_blocked_total=${appMetrics.auth.ipBlockedTotal}i,sessions_active=${appMetrics.auth.sessionsActive}i ${timestamp}`);
+        
+        // API metrics
+        const apiFields: string[] = [
+            `requests_total=${appMetrics.api.requestsTotal}i`,
+            `errors_total=${appMetrics.api.errorsTotal}i`
+        ];
+        if (appMetrics.api.requestsDurationCount > 0) {
+            const avgDuration = appMetrics.api.requestsDurationSum / appMetrics.api.requestsDurationCount;
+            apiFields.push(`request_duration_avg_ms=${avgDuration.toFixed(2)}`);
+            if (appMetrics.api.requestsDurationMin !== Infinity) {
+                apiFields.push(`request_duration_min_ms=${appMetrics.api.requestsDurationMin}`);
+            }
+            if (appMetrics.api.requestsDurationMax > 0) {
+                apiFields.push(`request_duration_max_ms=${appMetrics.api.requestsDurationMax}`);
+            }
+        }
+        lines.push(`mynetwork,type=api ${apiFields.join(',')} ${timestamp}`);
+        
+        // API requests by status (limited to common status codes)
+        const commonStatuses = ['200', '400', '401', '403', '404', '500'];
+        for (const status of commonStatuses) {
+            const count = appMetrics.api.requestsByStatus[status] || 0;
+            if (count > 0 || appMetrics.api.requestsTotal > 0) {
+                lines.push(`mynetwork,type=api_requests_by_status,status=${status} count=${count}i ${timestamp}`);
+            }
+        }
+        
+        // Security metrics
+        const blockedIPs = bruteForceProtection.getBlockedIdentifiers();
+        metricsCollector.updateBlockedIpsCount(blockedIPs.length);
+        
+        for (const [level, count] of Object.entries(appMetrics.security.eventsByLevel)) {
+            lines.push(`mynetwork,type=security_events,level=${level} count=${count}i ${timestamp}`);
+        }
+        lines.push(`mynetwork,type=security settings_changed_total=${appMetrics.security.settingsChangedTotal}i,blocked_ips_count=${blockedIPs.length}i ${timestamp}`);
+        
+        // Scheduler metrics
+        const schedulerFields: string[] = [`enabled=${appMetrics.scheduler.enabled}i`, `runs_total=${appMetrics.scheduler.runsTotal}i`];
+        if (appMetrics.scheduler.lastRunTimestamp > 0) {
+            schedulerFields.push(`last_run=${appMetrics.scheduler.lastRunTimestamp}i`);
+        }
+        if (appMetrics.scheduler.nextRunTimestamp > 0) {
+            schedulerFields.push(`next_run=${appMetrics.scheduler.nextRunTimestamp}i`);
+        }
+        lines.push(`mynetwork,type=scan_scheduler ${schedulerFields.join(',')} ${timestamp}`);
+    } catch (error) {
+        console.error('[MetricsService] Failed to fetch application metrics:', error);
     }
     
     return lines.join('\n') + '\n';

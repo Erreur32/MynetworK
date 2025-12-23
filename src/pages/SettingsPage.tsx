@@ -7,6 +7,7 @@ import {
   Shield,
   Server,
   Monitor,
+  Database,
   ChevronLeft,
   Loader2,
   AlertCircle,
@@ -71,7 +72,7 @@ interface SettingsPageProps {
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system';
-type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup';
+type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
 
 // Toggle component
 const Toggle: React.FC<{
@@ -161,6 +162,555 @@ export const Section: React.FC<{
       </div>
     )}
     <div className={`px-4 py-4 ${permissionError ? 'pointer-events-none' : ''}`}>{children}</div>
+  </div>
+  );
+};
+
+// Database Management Section Component
+const DatabaseManagementSection: React.FC = () => {
+  const [retentionConfig, setRetentionConfig] = useState({
+    historyRetentionDays: 30,
+    scanRetentionDays: 90,
+    offlineRetentionDays: 7,
+    autoPurgeEnabled: true,
+    purgeSchedule: '0 2 * * *' // Daily at 2 AM
+  });
+  const [databaseStats, setDatabaseStats] = useState<{
+    scansCount: number;
+    historyCount: number;
+    oldestScan: string | null;
+    oldestHistory: string | null;
+    totalSize: number;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadRetentionConfig();
+    loadDatabaseStats();
+  }, []);
+
+  const loadRetentionConfig = async () => {
+    try {
+      const response = await api.get('/api/network-scan/retention-config');
+      if (response.data.success) {
+        setRetentionConfig(response.data.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load retention config:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
+    }
+  };
+
+  const loadDatabaseStats = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/api/network-scan/database-stats');
+      if (response.data.success) {
+        setDatabaseStats(response.data.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load database stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/retention-config', retentionConfig);
+      if (response.data.success) {
+        setRetentionConfig(response.data.result);
+        setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la sauvegarde' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir purger les données anciennes ? Cette action est irréversible.')) {
+      return;
+    }
+    setIsPurging(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/purge');
+      if (response.data.success) {
+        setMessage({ 
+          type: 'success', 
+          text: `Purge terminée : ${response.data.result.totalDeleted} entrées supprimées` 
+        });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 5000);
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la purge' });
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
+  const handleOptimize = async () => {
+    if (!confirm('Optimiser la base de données peut prendre quelques instants. Continuer ?')) {
+      return;
+    }
+    setIsOptimizing(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/network-scan/optimize-database');
+      if (response.data.success) {
+        setMessage({ type: 'success', text: 'Optimisation de la base de données terminée' });
+        loadDatabaseStats();
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de l\'optimisation' });
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateStr: string | null): string => {
+    if (!dateStr) return 'N/A';
+    return new Date(dateStr).toLocaleDateString('fr-FR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Section title="Rétention des données de scan" icon={Database} iconColor="purple">
+        <div className="space-y-6">
+          {message && (
+            <div className={`p-3 rounded-lg ${
+              message.type === 'success' 
+                ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400' 
+                : 'bg-red-900/20 border border-red-700/50 text-red-400'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          <SettingRow
+            label="Rétention de l'historique"
+            description="Nombre de jours à conserver dans l'historique des scans (network_scan_history)"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={retentionConfig.historyRetentionDays}
+                onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
+                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-sm text-gray-400">jours</span>
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Rétention des scans"
+            description="Nombre de jours à conserver les entrées de scan (network_scans)"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={retentionConfig.scanRetentionDays}
+                onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
+                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-sm text-gray-400">jours</span>
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Rétention des IPs offline"
+            description="Nombre de jours à conserver les IPs offline (suppression plus rapide)"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={retentionConfig.offlineRetentionDays}
+                onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
+                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-sm text-gray-400">jours</span>
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Purge automatique"
+            description="Activer la purge automatique selon la planification"
+          >
+            <Toggle
+              enabled={retentionConfig.autoPurgeEnabled}
+              onChange={(enabled) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: enabled })}
+            />
+          </SettingRow>
+
+          {retentionConfig.autoPurgeEnabled && (
+            <SettingRow
+              label="Planification de la purge"
+              description="Expression cron pour la planification (ex: '0 2 * * *' = tous les jours à 2h)"
+            >
+              <input
+                type="text"
+                value={retentionConfig.purgeSchedule}
+                onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
+                placeholder="0 2 * * *"
+                className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+            </SettingRow>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+            >
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Sauvegarder
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Statistiques de la base de données" icon={Database} iconColor="purple">
+        <div className="space-y-4">
+          {databaseStats ? (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                  <div className="text-xs text-gray-400 mb-1">Entrées de scan</div>
+                  <div className="text-lg font-semibold text-gray-200">{databaseStats.scansCount.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                  <div className="text-xs text-gray-400 mb-1">Entrées d'historique</div>
+                  <div className="text-lg font-semibold text-gray-200">{databaseStats.historyCount.toLocaleString()}</div>
+                </div>
+                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                  <div className="text-xs text-gray-400 mb-1">Plus ancien scan</div>
+                  <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
+                </div>
+                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                  <div className="text-xs text-gray-400 mb-1">Plus ancien historique</div>
+                  <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
+                </div>
+              </div>
+              <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                <div className="text-xs text-gray-400 mb-1">Taille estimée</div>
+                <div className="text-lg font-semibold text-gray-200">{formatBytes(databaseStats.totalSize)}</div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-8 text-gray-400">
+              <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+              <div>Chargement des statistiques...</div>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Actions de maintenance" icon={Trash2} iconColor="red">
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+            <p className="text-sm text-amber-400 mb-2">
+              <strong>Attention :</strong> Ces actions sont irréversibles. Assurez-vous d'avoir sauvegardé vos données si nécessaire.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handlePurge}
+              disabled={isPurging}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+            >
+              {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              Purger les données anciennes
+            </button>
+
+            <button
+              onClick={handleOptimize}
+              disabled={isOptimizing}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+            >
+              {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              Optimiser la base de données
+            </button>
+
+            <button
+              onClick={loadDatabaseStats}
+              disabled={isLoading}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+            >
+              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              Actualiser les statistiques
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Performance de la base de données (Docker)" icon={Sparkles} iconColor="blue">
+        <DatabasePerformanceSection />
+      </Section>
+    </div>
+  );
+};
+
+// Database Performance Section Component
+const DatabasePerformanceSection: React.FC = () => {
+  const [dbConfig, setDbConfig] = useState({
+    walMode: 'WAL' as 'WAL' | 'DELETE' | 'TRUNCATE' | 'PERSIST' | 'MEMORY' | 'OFF',
+    walCheckpointInterval: 1000,
+    walAutoCheckpoint: true,
+    synchronous: 1 as 0 | 1 | 2,
+    cacheSize: -64000,
+    busyTimeout: 5000,
+    tempStore: 0 as 0 | 1 | 2,
+    optimizeForDocker: true
+  });
+  const [dbStats, setDbStats] = useState<{
+    pageSize: number;
+    pageCount: number;
+    cacheSize: number;
+    synchronous: number;
+    journalMode: string;
+    walSize: number;
+    dbSize: number;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    loadDbConfig();
+    loadDbStats();
+  }, []);
+
+  const loadDbConfig = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/api/database/config');
+      if (response.data.success) {
+        setDbConfig(response.data.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load DB config:', error);
+      setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadDbStats = async () => {
+    try {
+      const response = await api.get('/api/database/stats');
+      if (response.data.success) {
+        setDbStats(response.data.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load DB stats:', error);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/database/config', dbConfig);
+      if (response.data.success) {
+        setDbConfig(response.data.result);
+        setMessage({ type: 'success', text: 'Configuration de performance sauvegardée' });
+        loadDbStats();
+        setTimeout(() => setMessage(null), 3000);
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error?.message || 'Erreur lors de la sauvegarde' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  if (isLoading) {
+    return (
+      <div className="py-4 text-center text-gray-500">
+        <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+        Chargement de la configuration...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {message && (
+        <div className={`p-3 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400' 
+            : 'bg-red-900/20 border border-red-700/50 text-red-400'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      {dbStats && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+            <div className="text-xs text-gray-400 mb-1">Taille de la DB</div>
+            <div className="text-lg font-semibold text-gray-200">{formatBytes(dbStats.dbSize)}</div>
+          </div>
+          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+            <div className="text-xs text-gray-400 mb-1">Mode journal</div>
+            <div className="text-lg font-semibold text-gray-200">{dbStats.journalMode}</div>
+          </div>
+          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+            <div className="text-xs text-gray-400 mb-1">Taille du cache</div>
+            <div className="text-lg font-semibold text-gray-200">{formatBytes(Math.abs(dbStats.cacheSize) * 1024)}</div>
+          </div>
+          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+            <div className="text-xs text-gray-400 mb-1">Mode synchrone</div>
+            <div className="text-lg font-semibold text-gray-200">
+              {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SettingRow
+        label="Optimisations Docker"
+        description="Active les optimisations spécifiques pour Docker (checkpoint WAL automatique toutes les 5 min)"
+      >
+        <Toggle
+          enabled={dbConfig.optimizeForDocker}
+          onChange={(enabled) => setDbConfig({ ...dbConfig, optimizeForDocker: enabled })}
+        />
+      </SettingRow>
+
+      <SettingRow
+        label="Mode WAL"
+        description="Mode de journalisation (WAL recommandé pour Docker)"
+      >
+        <select
+          value={dbConfig.walMode}
+          onChange={(e) => setDbConfig({ ...dbConfig, walMode: e.target.value as any })}
+          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+        >
+          <option value="WAL">WAL (Recommandé)</option>
+          <option value="DELETE">DELETE</option>
+          <option value="TRUNCATE">TRUNCATE</option>
+          <option value="PERSIST">PERSIST</option>
+          <option value="MEMORY">MEMORY</option>
+          <option value="OFF">OFF</option>
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        label="Mode synchrone"
+        description="0=OFF (rapide, risqué), 1=NORMAL (équilibré), 2=FULL (sûr, lent)"
+      >
+        <select
+          value={dbConfig.synchronous}
+          onChange={(e) => setDbConfig({ ...dbConfig, synchronous: parseInt(e.target.value) as 0 | 1 | 2 })}
+          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+        >
+          <option value="0">OFF (Rapide)</option>
+          <option value="1">NORMAL (Recommandé)</option>
+          <option value="2">FULL (Sûr)</option>
+        </select>
+      </SettingRow>
+
+      <SettingRow
+        label="Taille du cache (KB)"
+        description="Cache SQLite en KB (négatif = KB, positif = pages). Défaut: -64000 (64 MB)"
+      >
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            value={dbConfig.cacheSize}
+            onChange={(e) => setDbConfig({ ...dbConfig, cacheSize: parseInt(e.target.value) || -64000 })}
+            className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+          />
+          <span className="text-sm text-gray-400">
+            ({formatBytes(Math.abs(dbConfig.cacheSize) * 1024)})
+          </span>
+        </div>
+      </SettingRow>
+
+      <SettingRow
+        label="Timeout de verrouillage (ms)"
+        description="Temps d'attente pour les verrous de base de données (défaut: 5000ms)"
+      >
+        <input
+          type="number"
+          min="1000"
+          max="60000"
+          step="1000"
+          value={dbConfig.busyTimeout}
+          onChange={(e) => setDbConfig({ ...dbConfig, busyTimeout: parseInt(e.target.value) || 5000 })}
+          className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+        />
+      </SettingRow>
+
+      <SettingRow
+        label="Checkpoint WAL automatique"
+        description="Active le checkpoint WAL automatique (recommandé pour Docker)"
+      >
+        <Toggle
+          enabled={dbConfig.walAutoCheckpoint}
+          onChange={(enabled) => setDbConfig({ ...dbConfig, walAutoCheckpoint: enabled })}
+        />
+      </SettingRow>
+
+      <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+        <button
+          onClick={loadDbStats}
+          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm font-medium text-white flex items-center gap-2"
+        >
+          <RefreshCw size={16} />
+          Actualiser stats
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+        >
+          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          Sauvegarder
+        </button>
+      </div>
   </div>
   );
 };
@@ -2085,6 +2635,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'logs', label: 'Logs', icon: FileText, color: 'cyan' },
     { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
     { id: 'exporter', label: 'Exporter', icon: Share2, color: 'amber' },
+    { id: 'database', label: 'Base de données', icon: Database, color: 'purple' },
     { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
     { id: 'backup', label: 'Backup', icon: Download, color: 'orange' },
     { id: 'debug', label: 'Debug', icon: Monitor, color: 'violet' },
@@ -2422,6 +2973,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {activeAdminTab === 'exporter' && (
               <ExporterSection />
+            )}
+
+            {activeAdminTab === 'database' && (
+              <DatabaseManagementSection />
             )}
 
             {activeAdminTab === 'backup' && (

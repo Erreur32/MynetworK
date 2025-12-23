@@ -39,7 +39,8 @@ router.get('/history', asyncHandler(async (req, res) => {
     console.log('[RRD] Net history - sample keys:', Object.keys(sample));
     console.log('[RRD] Net history - sample values:', JSON.stringify(sample));
   } else {
-    console.log('[RRD] Net history failed or empty:', result.success, result.msg || (result as Record<string, unknown>).error_code);
+    const errorResult = result.result as { error_code?: string } | undefined;
+    console.log('[RRD] Net history failed or empty:', result.success, result.msg || errorResult?.error_code);
   }
 
   res.json(result);
@@ -61,7 +62,8 @@ router.get('/temp-history', asyncHandler(async (req, res) => {
     console.log('[RRD] Temp history - sample keys:', Object.keys(sample));
     console.log('[RRD] Temp history - sample values:', JSON.stringify(sample));
   } else {
-    console.log('[RRD] Temp history failed or empty:', result.success, result.msg || (result as Record<string, unknown>).error_code);
+    const errorResult = result.result as { error_code?: string } | undefined;
+    console.log('[RRD] Temp history failed or empty:', result.success, result.msg || errorResult?.error_code);
   }
 
   res.json(result);

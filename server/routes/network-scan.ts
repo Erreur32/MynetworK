@@ -5,6 +5,7 @@
  */
 
 import { Router } from 'express';
+import cron from 'node-cron';
 import { networkScanService } from '../services/networkScanService.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
@@ -13,6 +14,12 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { networkScanScheduler, type UnifiedAutoScanConfig } from '../services/networkScanScheduler.js';
+import { 
+    getRetentionConfig, 
+    saveRetentionConfig, 
+    executePurge,
+    initializePurgeService 
+} from '../services/databasePurgeService.js';
 
 const router = Router();
 
@@ -75,17 +82,17 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
             } catch (e) {
                 logger.warn('NetworkScan', 'Failed to parse default config, falling back to auto-detect');
                 // Fallback to auto-detect
-                const detectedRange = networkScanService.getNetworkRange();
-                if (!detectedRange) {
-                    return res.status(400).json({
-                        success: false,
-                        error: {
-                            message: 'Could not auto-detect network range. Please specify a range manually.',
-                            code: 'AUTO_DETECT_FAILED'
-                        }
-                    });
+        const detectedRange = networkScanService.getNetworkRange();
+        if (!detectedRange) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Could not auto-detect network range. Please specify a range manually.',
+                    code: 'AUTO_DETECT_FAILED'
                 }
-                scanRange = detectedRange;
+            });
+        }
+        scanRange = detectedRange;
             }
         } else {
             // No default config, use auto-detect
@@ -694,12 +701,12 @@ router.get('/unified-config', requireAuth, asyncHandler(async (req: Authenticate
     try {
         // Try to get unified config first
         const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
-        
+
         if (unifiedConfigStr) {
             // New unified config exists
             const config: UnifiedAutoScanConfig = JSON.parse(unifiedConfigStr);
-            res.json({
-                success: true,
+        res.json({
+            success: true,
                 result: config
             });
             return;
@@ -711,7 +718,7 @@ router.get('/unified-config', requireAuth, asyncHandler(async (req: Authenticate
         
         const scanConfig = scanConfigStr ? JSON.parse(scanConfigStr) : null;
         const refreshConfig = refreshConfigStr ? JSON.parse(refreshConfigStr) : null;
-        
+
         // Build unified config from old configs
         const unifiedConfig: UnifiedAutoScanConfig = {
             enabled: (scanConfig?.enabled || refreshConfig?.enabled) ?? false,
@@ -757,7 +764,7 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         
         if (unifiedConfigStr) {
             try {
-                unifiedConfig = JSON.parse(unifiedConfigStr);
+            unifiedConfig = JSON.parse(unifiedConfigStr);
                 logger.info('NetworkScan', `Parsed unified config: ${JSON.stringify(unifiedConfig)}`);
             } catch (e) {
                 logger.error('NetworkScan', `Failed to parse unified config: ${e}`);
@@ -831,39 +838,39 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         
         const result = {
             enabled: isEnabled,
-            fullScan: {
+                fullScan: {
                 config: fullScanConfig,
-                scheduler: scanStatus,
-                lastExecution: lastFullScan ? {
-                    timestamp: lastFullScan.timestamp,
-                    type: lastManual?.type === 'full' ? 'manual' : 'auto',
-                    scanType: lastFullScan.scanType,
-                    range: lastFullScan.range
-                } : null
-            },
-            refresh: {
+                    scheduler: scanStatus,
+                    lastExecution: lastFullScan ? {
+                        timestamp: lastFullScan.timestamp,
+                        type: lastManual?.type === 'full' ? 'manual' : 'auto',
+                        scanType: lastFullScan.scanType,
+                        range: lastFullScan.range
+                    } : null
+                },
+                refresh: {
                 config: refreshConfig,
-                scheduler: refreshStatus,
-                lastExecution: lastRefresh ? {
-                    timestamp: lastRefresh.timestamp,
-                    type: lastManual?.type === 'refresh' ? 'manual' : 'auto',
-                    scanType: lastRefresh.scanType
-                } : null
-            },
-            lastScan: (() => {
-                // Get the most recent scan (manual or auto, full or refresh)
-                const scans = [lastManual, lastAuto].filter(Boolean) as Array<{ timestamp: string; type: string; scanType: string; range?: string }>;
-                if (scans.length === 0) return null;
-                scans.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-                const mostRecent = scans[0];
-                return {
-                    timestamp: mostRecent.timestamp,
-                    type: mostRecent.type,
-                    scanType: mostRecent.scanType,
-                    isManual: lastManual?.timestamp === mostRecent.timestamp,
-                    range: mostRecent.range
-                };
-            })()
+                    scheduler: refreshStatus,
+                    lastExecution: lastRefresh ? {
+                        timestamp: lastRefresh.timestamp,
+                        type: lastManual?.type === 'refresh' ? 'manual' : 'auto',
+                        scanType: lastRefresh.scanType
+                    } : null
+                },
+                lastScan: (() => {
+                    // Get the most recent scan (manual or auto, full or refresh)
+                    const scans = [lastManual, lastAuto].filter(Boolean) as Array<{ timestamp: string; type: string; scanType: string; range?: string }>;
+                    if (scans.length === 0) return null;
+                    scans.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    const mostRecent = scans[0];
+                    return {
+                        timestamp: mostRecent.timestamp,
+                        type: mostRecent.type,
+                        scanType: mostRecent.scanType,
+                        isManual: lastManual?.timestamp === mostRecent.timestamp,
+                        range: mostRecent.range
+                    };
+                })()
         };
         
         // Log the complete result being sent
@@ -896,7 +903,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
 
     try {
         const scan = NetworkScanRepository.findByIp(ip);
-
+        
         if (!scan) {
             return res.status(404).json({
                 success: false,
@@ -907,8 +914,8 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
             });
         }
 
-        res.json({
-            success: true,
+            res.json({
+                success: true,
             result: scan
         });
     } catch (error: any) {
@@ -922,7 +929,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
         });
     }
 }));
-
+        
 /**
  * DELETE /api/network-scan/:id
  * Delete a specific IP from history
@@ -1229,6 +1236,205 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
             error: {
                 message: error.message || 'Failed to save unified config',
                 code: 'CONFIG_SAVE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/retention-config
+ * Get current retention configuration
+ */
+router.get('/retention-config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const config = getRetentionConfig();
+        res.json({
+            success: true,
+            result: config
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get retention config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get retention config',
+                code: 'RETENTION_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/retention-config
+ * Update retention configuration
+ */
+router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-scan', 'retention-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const {
+            historyRetentionDays,
+            scanRetentionDays,
+            offlineRetentionDays,
+            autoPurgeEnabled,
+            purgeSchedule
+        } = req.body;
+
+        // Validate retention days
+        if (historyRetentionDays !== undefined && (historyRetentionDays < 1 || historyRetentionDays > 365)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'historyRetentionDays must be between 1 and 365',
+                    code: 'INVALID_RETENTION_DAYS'
+                }
+            });
+        }
+
+        if (scanRetentionDays !== undefined && (scanRetentionDays < 1 || scanRetentionDays > 365)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'scanRetentionDays must be between 1 and 365',
+                    code: 'INVALID_RETENTION_DAYS'
+                }
+            });
+        }
+
+        if (offlineRetentionDays !== undefined && (offlineRetentionDays < 1 || offlineRetentionDays > 365)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'offlineRetentionDays must be between 1 and 365',
+                    code: 'INVALID_RETENTION_DAYS'
+                }
+            });
+        }
+
+        // Validate cron schedule if provided
+        if (purgeSchedule !== undefined) {
+            try {
+                cron.validate(purgeSchedule);
+            } catch (e) {
+                return res.status(400).json({
+                    success: false,
+                    error: {
+                        message: 'Invalid cron schedule format',
+                        code: 'INVALID_CRON_SCHEDULE'
+                    }
+                });
+            }
+        }
+
+        const configUpdate: any = {};
+        if (historyRetentionDays !== undefined) configUpdate.historyRetentionDays = historyRetentionDays;
+        if (scanRetentionDays !== undefined) configUpdate.scanRetentionDays = scanRetentionDays;
+        if (offlineRetentionDays !== undefined) configUpdate.offlineRetentionDays = offlineRetentionDays;
+        if (autoPurgeEnabled !== undefined) configUpdate.autoPurgeEnabled = Boolean(autoPurgeEnabled);
+        if (purgeSchedule !== undefined) configUpdate.purgeSchedule = purgeSchedule;
+
+        const success = saveRetentionConfig(configUpdate);
+        if (!success) {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Failed to save retention configuration',
+                    code: 'CONFIG_SAVE_ERROR'
+                }
+            });
+        }
+
+        const updatedConfig = getRetentionConfig();
+        res.json({
+            success: true,
+            result: updatedConfig
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to save retention config:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to save retention config',
+                code: 'RETENTION_CONFIG_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/purge
+ * Execute manual purge based on current retention configuration
+ */
+router.post('/purge', requireAuth, requireAdmin, autoLog('network-scan', 'purge'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const result = executePurge();
+        
+        res.json({
+            success: true,
+            result: {
+                ...result,
+                message: `Purge completed: ${result.totalDeleted} entries deleted`
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to execute purge:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to execute purge',
+                code: 'PURGE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/database-stats
+ * Get database statistics for scan tables
+ */
+router.get('/database-stats', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const stats = NetworkScanRepository.getDatabaseStats();
+        const retentionConfig = getRetentionConfig();
+        
+        res.json({
+            success: true,
+            result: {
+                ...stats,
+                retentionConfig
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get database stats:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get database stats',
+                code: 'DATABASE_STATS_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/optimize-database
+ * Optimize database by running VACUUM
+ */
+router.post('/optimize-database', requireAuth, requireAdmin, autoLog('network-scan', 'optimize-database'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        NetworkScanRepository.optimizeDatabase();
+        
+        res.json({
+            success: true,
+            result: {
+                message: 'Database optimization completed'
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to optimize database:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to optimize database',
+                code: 'OPTIMIZE_ERROR'
             }
         });
     }

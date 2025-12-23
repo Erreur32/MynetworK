@@ -34,7 +34,8 @@ router.get('/dhcp/static', asyncHandler(async (_req, res) => {
 
 // POST /api/settings/dhcp/static - Create static lease
 router.post('/dhcp/static', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.createDhcpStaticLease(req.body);
+  const { mac, ip, comment } = req.body;
+  const result = await freeboxApi.addDhcpStaticLease(mac, ip, comment);
   res.json(result);
 }));
 

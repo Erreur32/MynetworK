@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.1.15-blue?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.1.16-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-DEVELOPMENT-orange?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io%2Ferreur32%2Fmynetwork-blue?logo=docker)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
