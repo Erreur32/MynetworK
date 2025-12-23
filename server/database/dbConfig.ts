@@ -68,11 +68,9 @@ export function getDatabaseConfig(): DatabasePerformanceConfig {
             config = JSON.parse(configJson) as Partial<DatabasePerformanceConfig>;
         }
         
-        // Load wiresharkAutoUpdate from WiresharkVendorService if not in config
-        if (config.wiresharkAutoUpdate === undefined) {
-            const { WiresharkVendorService } = require('../services/wiresharkVendorService.js');
-            config.wiresharkAutoUpdate = WiresharkVendorService.isAutoUpdateEnabled();
-        }
+        // Note: wiresharkAutoUpdate is loaded from WiresharkVendorService in saveDatabaseConfig()
+        // For getDatabaseConfig(), we use the default value if not in config
+        // This avoids the require/import issue in synchronous context
         
         return { ...DEFAULT_CONFIG, ...config };
     } catch (error) {

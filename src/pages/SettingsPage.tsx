@@ -845,7 +845,7 @@ const WiresharkVendorSection: React.FC = () => {
 
       <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-800">
         <p className="text-sm text-gray-400 mb-4">
-          Base de données complète des vendors depuis Wireshark. Mise à jour automatique tous les 7 jours depuis GitHub.
+          Base de données complète des vendors depuis IEEE OUI. Mise à jour automatique tous les 7 jours depuis standards-oui.ieee.org.
         </p>
 
         {/* Stats */}

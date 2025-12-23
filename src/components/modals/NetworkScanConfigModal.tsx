@@ -43,9 +43,10 @@ interface DefaultScanConfig {
 interface NetworkScanConfigModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onDataChanged?: () => void; // Callback when data is changed (e.g., scans cleared)
 }
 
-export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose }) => {
+export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ isOpen, onClose, onDataChanged }) => {
     const { plugins } = usePluginStore();
     // New unified config
     const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
@@ -980,25 +981,85 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                     
                                     <div className="space-y-2 pt-2 border-t border-gray-800">
                                         <a
-                                            href="https://raw.githubusercontent.com/wireshark/wireshark/master/manuf"
+                                            href="https://standards-oui.ieee.org/oui/oui.txt"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
                                         >
                                             <ExternalLink size={12} />
-                                            <span className="truncate">Source: GitHub Wireshark</span>
-                                        </a>
-                                        <a
-                                            href="https://gitlab.com/wireshark/wireshark/-/raw/master/manuf"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
-                                        >
-                                            <ExternalLink size={12} />
-                                            <span className="truncate">Alternative: GitLab Wireshark</span>
+                                            <span className="truncate">Source: IEEE OUI Database</span>
                                         </a>
                                     </div>
                                 </div>
+                            </div>
+                            
+                            {/* Réinitialisation des scans */}
+                            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-3">
+                                    <XCircle size={14} className="text-red-400" />
+                                    <span>Réinitialisation des scans</span>
+                                </h3>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Supprime tous les scans réseau et leur historique. Les configurations et la base vendors Wireshark ne sont pas affectées.
+                                </p>
+                                
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm('⚠️ Êtes-vous sûr de vouloir supprimer tous les scans réseau et leur historique ?\n\nCette action est irréversible.')) {
+                                            return;
+                                        }
+                                        try {
+                                            console.log('[NetworkScanConfigModal] Starting clear operation...');
+                                            const response = await api.delete('/api/network-scan/clear');
+                                            console.log('[NetworkScanConfigModal] Clear response:', response);
+                                            
+                                            if (response.success) {
+                                                const deletedScans = response.result?.deletedScans || 0;
+                                                const deletedHistory = response.result?.deletedHistory || 0;
+                                                
+                                                console.log(`[NetworkScanConfigModal] Successfully deleted ${deletedScans} scans and ${deletedHistory} history entries`);
+                                                
+                                                setSaveMessage({ 
+                                                    type: 'success', 
+                                                    text: `Scans réseau réinitialisés : ${deletedScans} scans et ${deletedHistory} entrées d'historique supprimés` 
+                                                });
+                                                
+                                                // Notify parent component to refresh data IMMEDIATELY (before closing modal)
+                                                if (onDataChanged) {
+                                                    console.log('[NetworkScanConfigModal] Calling onDataChanged callback...');
+                                                    try {
+                                                        await onDataChanged();
+                                                        console.log('[NetworkScanConfigModal] onDataChanged callback completed');
+                                                    } catch (callbackError) {
+                                                        console.error('[NetworkScanConfigModal] Error in onDataChanged callback:', callbackError);
+                                                    }
+                                                } else {
+                                                    console.warn('[NetworkScanConfigModal] onDataChanged callback not provided - data will not refresh automatically');
+                                                }
+                                                
+                                                setTimeout(() => setSaveMessage(null), 5000);
+                                                
+                                                // Close modal after a short delay to show success message
+                                                setTimeout(() => {
+                                                    onClose();
+                                                }, 2000);
+                                            } else {
+                                                console.error('[NetworkScanConfigModal] Clear failed:', response.error);
+                                                setSaveMessage({ 
+                                                    type: 'error', 
+                                                    text: response.error?.message || 'Erreur lors de la réinitialisation' 
+                                                });
+                                            }
+                                        } catch (error: any) {
+                                            console.error('[NetworkScanConfigModal] Failed to clear scan data:', error);
+                                            setSaveMessage({ type: 'error', text: 'Erreur lors de la réinitialisation' });
+                                        }
+                                    }}
+                                    className="w-full px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 flex items-center justify-center gap-2 text-sm transition-colors"
+                                >
+                                    <XCircle size={14} />
+                                    <span>Supprimer tous les scans réseau</span>
+                                </button>
                             </div>
                             </div>
                         </div>

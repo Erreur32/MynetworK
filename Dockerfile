@@ -36,7 +36,7 @@ WORKDIR /app
 # iputils-ping: nécessaire pour le scan réseau (commande ping)
 # iproute2: nécessaire pour le scan réseau (commande ip neigh pour détection MAC)
 # samba-common: contient nmblookup pour NetBIOS/SMB hostname resolution
-# curl: nécessaire pour télécharger la base vendors Wireshark depuis GitHub/GitLab (avec fallback fetch si échec)
+# curl: nécessaire pour télécharger la base vendors IEEE OUI depuis standards-oui.ieee.org (avec fallback plugins si échec)
 # Note: getent n'est pas disponible dans Alpine (musl libc), on utilise la lecture directe de /etc/hosts
 # Note: libpcap/libpcap-dev retirés car arp-scan est optionnel (fallback après ip neigh)
 #       Si arp-scan est vraiment nécessaire, il faudra le compiler dans le stage build

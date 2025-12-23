@@ -176,43 +176,95 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
   const maxValue = Math.max(...data, 1);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
-  // Convert hex color to RGB for gradient effect
+  // Convert hex color to RGB for 3D effect
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? {
       r: parseInt(result[1], 16),
       g: parseInt(result[2], 16),
       b: parseInt(result[3], 16)
-    } : null;
+    } : { r: 156, g: 163, b: 175 }; // Default gray
   };
   
   const rgb = hexToRgb(color);
-  // Create darker version for bottom of gradient (reduce brightness by 50-60%)
-  // More subtle and elegant gradient
-  const darkerColor = rgb 
-    ? `rgba(${Math.max(0, Math.floor(rgb.r * 0.4))}, ${Math.max(0, Math.floor(rgb.g * 0.4))}, ${Math.max(0, Math.floor(rgb.b * 0.4))}, 0.95)`
-    : `#000000`;
+  
+  // 3D effect colors: less flashy, more subtle - darker overall
+  const topLight = `rgba(${Math.min(255, rgb.r + 15)}, ${Math.min(255, rgb.g + 15)}, ${Math.min(255, rgb.b + 15)}, 0.7)`;
+  const midColor = `rgba(${Math.max(0, rgb.r - 10)}, ${Math.max(0, rgb.g - 10)}, ${Math.max(0, rgb.b - 10)}, 0.7)`;
+  const bottomDark = `rgba(${Math.max(0, rgb.r - 100)}, ${Math.max(0, rgb.g - 100)}, ${Math.max(0, rgb.b - 100)}, 0.95)`;
+  const sideDark = `rgba(${Math.max(0, rgb.r - 120)}, ${Math.max(0, rgb.g - 120)}, ${Math.max(0, rgb.b - 120)}, 1)`;
+  const baseBlack = `rgba(0, 0, 0, 0.85)`; // Noir très foncé à la base
 
   return (
-    <div className="relative flex items-end gap-[1px]" style={{ height }}>
+    <div className="relative flex items-end gap-[2px]" style={{ height }}>
       {data.map((value, idx) => {
         const barHeight = (value / maxValue) * 100;
         const label = labels && labels[idx] ? labels[idx] : null;
         const showTooltip = hoveredIndex === idx && label;
+        const isHovered = hoveredIndex === idx;
         
         return (
           <div
             key={idx}
-            className="flex-1 rounded-t-sm relative group"
+            className="flex-1 relative group"
             style={{
               height: `${Math.max(barHeight, 5)}%`,
-              background: `linear-gradient(to bottom, ${color}FF, ${color}E6 20%, ${color}CC 50%, ${darkerColor} 100%)`,
-              boxShadow: `0 1px 3px rgba(0, 0, 0, 0.2), inset 0 -1px 2px rgba(0, 0, 0, 0.3)`,
               cursor: label ? 'pointer' : 'default'
             }}
             onMouseEnter={() => setHoveredIndex(idx)}
             onMouseLeave={() => setHoveredIndex(null)}
           >
+            {/* Barre principale avec effet 3D */}
+            <div
+              className="w-full h-full rounded-t-sm relative overflow-hidden"
+              style={{
+                background: `linear-gradient(to bottom, 
+                  ${topLight} 0%, 
+                  ${midColor} 25%, 
+                  ${bottomDark} 50%, 
+                  ${sideDark} 75%, 
+                  ${baseBlack} 100%)`,
+                boxShadow: `
+                  0 -2px 4px rgba(255, 255, 255, 0.1),
+                  0 2px 6px rgba(0, 0, 0, 0.4),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.15),
+                  inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+                  ${isHovered ? '0 0 8px rgba(59, 130, 246, 0.5),' : ''}
+                  0 0 2px rgba(0, 0, 0, 0.2)
+                `,
+                borderTop: `1px solid rgba(255, 255, 255, 0.2)`,
+                borderLeft: `1px solid rgba(255, 255, 255, 0.1)`,
+                borderRight: `1px solid rgba(0, 0, 0, 0.3)`,
+                borderBottom: `1px solid rgba(0, 0, 0, 0.4)`,
+                transform: isHovered ? 'scaleY(1.05) translateY(-1px)' : 'scaleY(1)',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+              }}
+            >
+              {/* Reflet lumineux sur le dessus */}
+              <div
+                className="absolute top-0 left-0 right-0 h-[30%] rounded-t-sm"
+                style={{
+                  background: `linear-gradient(to bottom, 
+                    rgba(255, 255, 255, 0.25) 0%, 
+                    rgba(255, 255, 255, 0.1) 50%, 
+                    transparent 100%)`,
+                  pointerEvents: 'none'
+                }}
+              />
+              
+              {/* Ombre intérieure en bas - plus sombre */}
+              <div
+                className="absolute bottom-0 left-0 right-0 h-[50%]"
+                style={{
+                  background: `linear-gradient(to top, 
+                    rgba(0, 0, 0, 0.6) 0%, 
+                    rgba(0, 0, 0, 0.3) 50%,
+                    transparent 100%)`,
+                  pointerEvents: 'none'
+                }}
+              />
+            </div>
+            
             {showTooltip && (
               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-50 pointer-events-none">
                 <div className="font-medium">{label}</div>

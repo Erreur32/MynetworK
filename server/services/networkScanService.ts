@@ -1139,9 +1139,20 @@ export class NetworkScanService {
                             logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
                             return mac;
                         }
-                        }
-                    } catch {
-                        // ARP not available
+                    }
+                } catch {
+                    // Continue to next method
+                }
+                
+                // Method 5: Try Freebox plugin as fallback (if hostname is detected from Freebox, MAC should be available)
+                try {
+                    const macFromFreebox = await this.getMacFromFreebox(ip);
+                    if (macFromFreebox) {
+                        logger.info('NetworkScanService', `[MAC] Found MAC ${macFromFreebox} for ${ip} from Freebox plugin`);
+                        return macFromFreebox;
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[MAC] Freebox fallback failed for ${ip}: ${error.message || error}`);
                 }
             }
         } catch (error) {
@@ -1149,6 +1160,41 @@ export class NetworkScanService {
             logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
         }
         
+        return null;
+    }
+    
+    /**
+     * Get MAC address from Freebox plugin
+     * @param ip IP address
+     * @returns MAC address or null if not found
+     */
+    private async getMacFromFreebox(ip: string): Promise<string | null> {
+        try {
+            const freeboxPlugin = pluginManager.getPlugin('freebox');
+            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+                return null;
+            }
+            
+            const stats = await freeboxPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) {
+                return null;
+            }
+            
+            // Find device by IP
+            const device = stats.devices.find((d: any) => d.ip === ip);
+            if (device && device.mac) {
+                const mac = device.mac.toLowerCase().trim();
+                // Validate MAC format
+                if (/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/.test(mac)) {
+                    logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} from Freebox`);
+                    return mac.replace(/-/g, ':');
+                } else {
+                    logger.debug('NetworkScanService', `[MAC] Invalid MAC format from Freebox for ${ip}: ${mac}`);
+                }
+            }
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `[MAC] Freebox lookup failed for ${ip}: ${error.message || error}`);
+        }
         return null;
     }
 
@@ -1342,9 +1388,24 @@ export class NetworkScanService {
      * @returns Object with vendor and source, or null if not found
      */
     async getVendorWithSource(mac: string, ip: string, existingScan?: NetworkScan): Promise<{ vendor: string; source: string } | null> {
-        if (!mac) {
-            logger.debug('NetworkScanService', `[${ip}] No MAC address provided for vendor detection`);
-            return null;
+        // Si MAC vide mais IP connue, essayer de récupérer MAC depuis Freebox
+        let macToUse = mac;
+        if (!macToUse || macToUse.trim().length === 0) {
+            logger.info('NetworkScanService', `[${ip}] No MAC provided, trying to get from Freebox...`);
+            const macFromFreebox = await this.getMacFromFreebox(ip);
+            if (macFromFreebox) {
+                macToUse = macFromFreebox;
+                logger.info('NetworkScanService', `[${ip}] Got MAC from Freebox: ${macFromFreebox}`);
+            }
+        }
+        
+        // Si toujours pas de MAC, essayer vendor directement depuis Freebox par IP
+        if (!macToUse || macToUse.trim().length === 0) {
+            logger.info('NetworkScanService', `[${ip}] No MAC available, trying vendor detection by IP from Freebox...`);
+            const vendorFromFreebox = await this.getVendorFromFreeboxByIp(ip);
+            if (vendorFromFreebox) {
+                return { vendor: vendorFromFreebox, source: 'freebox' };
+            }
         }
 
         const config = PluginPriorityConfigService.getConfig();
@@ -1361,7 +1422,7 @@ export class NetworkScanService {
         
         const hasValidExistingVendor = !isEmptyVendor;
         
-        logger.info('NetworkScanService', `[${ip}] Starting vendor detection for MAC ${mac}, priority: [${priority.join(', ')}], overwrite: ${overwrite}, existing: "${existingVendor || '(empty)'}"`);
+        logger.info('NetworkScanService', `[${ip}] Starting vendor detection for MAC ${macToUse || '(none)'}, priority: [${priority.join(', ')}], overwrite: ${overwrite}, existing: "${existingVendor || '(empty)'}"`);
         
         // If vendor exists and is valid AND overwrite is disabled, keep existing
         if (hasValidExistingVendor && !overwrite) {
@@ -1379,7 +1440,8 @@ export class NetworkScanService {
             logger.info('NetworkScanService', `[${ip}] Trying vendor detection with plugin: ${pluginName}`);
             
             if (pluginName === 'freebox') {
-                const result = await this.getVendorFromFreebox(mac, ip);
+                // Use macToUse (may be from Freebox if original MAC was empty)
+                const result = macToUse ? await this.getVendorFromFreebox(macToUse, ip) : await this.getVendorFromFreeboxByIp(ip);
                 if (result) {
                     logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from Freebox: ${result}`);
                     return { vendor: result, source: 'freebox' };
@@ -1387,7 +1449,7 @@ export class NetworkScanService {
                     logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from Freebox`);
                 }
             } else if (pluginName === 'unifi') {
-                const result = await this.getVendorFromUniFi(mac, ip);
+                const result = macToUse ? await this.getVendorFromUniFi(macToUse, ip) : null;
                 if (result) {
                     logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from UniFi: ${result}`);
                     return { vendor: result, source: 'unifi' };
@@ -1395,13 +1457,17 @@ export class NetworkScanService {
                     logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from UniFi`);
                 }
             } else if (pluginName === 'scanner') {
-                // Scanner methods (Wireshark DB, local DB, API)
-                const result = await this.getVendorFromScanner(mac);
-                if (result) {
-                    logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from Scanner (${result.source}): ${result.vendor}`);
-                    return { vendor: result.vendor, source: result.source };
+                // Scanner methods (Wireshark DB, local DB, API) - requires MAC
+                if (macToUse) {
+                    const result = await this.getVendorFromScanner(macToUse);
+                    if (result) {
+                        logger.info('NetworkScanService', `[${ip}] ✓ Found vendor from Scanner (${result.source}): ${result.vendor}`);
+                        return { vendor: result.vendor, source: result.source };
+                    } else {
+                        logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from Scanner`);
+                    }
                 } else {
-                    logger.debug('NetworkScanService', `[${ip}] ✗ No vendor found from Scanner`);
+                    logger.debug('NetworkScanService', `[${ip}] ✗ Scanner requires MAC, skipping`);
                 }
             }
         }
@@ -1410,6 +1476,35 @@ export class NetworkScanService {
         return null;
     }
 
+    /**
+     * Get vendor from Freebox by IP (when MAC not available)
+     */
+    private async getVendorFromFreeboxByIp(ip: string): Promise<string | null> {
+        try {
+            const freeboxPlugin = pluginManager.getPlugin('freebox');
+            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+                return null;
+            }
+            
+            const stats = await freeboxPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) {
+                return null;
+            }
+            
+            const device = stats.devices.find((d: any) => d.ip === ip);
+            if (device) {
+                const vendor = device.type || device.vendor_name;
+                if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
+                    logger.info('NetworkScanService', `[VENDOR] Freebox: ✓ Found vendor ${vendor} by IP ${ip}`);
+                    return vendor.trim();
+                }
+            }
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `[VENDOR] Freebox lookup by IP failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+    
     /**
      * Get vendor from Freebox plugin
      */

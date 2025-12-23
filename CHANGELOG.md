@@ -3,6 +3,106 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.1] - 2025-12-23
+
+### ✨ Ajouté
+
+**Plugin Scan Réseau - Migration vers IEEE OUI Database**
+- 🌐 Migration complète vers la base de données officielle IEEE OUI (`https://standards-oui.ieee.org/oui/oui.txt`)
+- 📦 Remplacement de `manuf.txt` par `oui.txt` pour une meilleure compatibilité
+- 🔄 Parser dédié pour le format IEEE OUI multi-lignes avec extraction des OUI et noms de fabricants
+- ✅ Validation améliorée spécifique au format IEEE OUI (détection des marqueurs `(hex)` et `(base 16)`)
+- 📊 Support du format multi-lignes IEEE avec extraction correcte des noms de fabricants
+
+**Plugin Scan Réseau - Détection MAC/Vendor depuis Freebox**
+- 🔍 Nouvelle méthode `getMacFromFreebox(ip)` pour récupérer les adresses MAC depuis les équipements Freebox
+- 🏷️ Nouvelle méthode `getVendorFromFreeboxByIp(ip)` pour détecter les vendors même sans MAC système détectée
+- 🔄 Intégration de Freebox comme fallback dans `getMacAddress()` (Méthode 5) si les méthodes système échouent
+- 📝 Amélioration de `getVendorWithSource()` pour essayer Freebox même si la MAC système n'est pas détectée
+- 🎯 Détection améliorée des vendors pour les équipements Freebox non détectés par les méthodes système
+
+**Plugin Scan Réseau - Bouton de Réinitialisation**
+- 🗑️ Nouveau bouton "Supprimer tous les scans réseau" dans le modal de configuration
+- 🔄 Section "Réinitialisation des scans" ajoutée dans les options scanner
+- ✅ Rafraîchissement automatique de l'interface après suppression des scans
+- 📊 Callback `onDataChanged` pour synchroniser l'UI après les opérations de suppression
+
+**Plugin Scan Réseau - Améliorations UI/UX**
+- 🎨 Effet 3D sur les mini barres graphiques avec faces multiples (top, front, side) et dégradés prononcés
+- 📊 Base noire accentuée occupant plus de la moitié de la hauteur des barres pour meilleure visibilité
+- 🎯 Couleurs moins flashy avec opacités réduites pour une intégration visuelle plus harmonieuse
+- 📏 Colonnes du tableau réorganisées : échange MAC/Hostname, colonnes adaptatives avec `table-auto`
+- 📱 Responsive amélioré : texte sur deux lignes (`break-words`, `whitespace-normal`) pour adaptation aux petits écrans
+- 🎨 "Info Scans" refactorisé : boutons "Rafraîchir" et "Scanner" côte à côte, stats vendors et scan auto en dessous
+- ⏰ Affichage des "Prochains scans automatiques" (Full Scan et Refresh) dans la colonne gauche
+- 🎭 Animation pulse sur les lignes du tableau pendant les scans automatiques
+- 🎨 Badge "Auto Full Scan" ou "Auto Refresh" avec animation pulse pendant les scans automatiques
+
+### 🔧 Modifié
+
+**Plugin Scan Réseau - Base Vendors IEEE OUI**
+- 🔄 `WIRESHARK_MANUF_URL` remplacé par `IEEE_OUI_URL` pointant vers `https://standards-oui.ieee.org/oui/oui.txt`
+- 📝 `MANUF_FILE_PATH` renommé en `OUI_FILE_PATH` (`data/oui.txt`)
+- 🔧 `downloadManufFile()` renommé en `downloadOuiFile()` avec support du format IEEE OUI
+- 🔧 `parseAndUpdateDatabase()` : nouveau parser IEEE OUI avec extraction multi-lignes
+- 🔧 `validateManufFile()` renommé en `validateOuiFile()` avec validation spécifique IEEE OUI
+- 📊 Validation améliorée : détection HTML limitée aux 500 premiers caractères pour éviter les faux positifs
+- 🔄 `updateDatabase()` : utilisation directe du fichier local `oui.txt` s'il existe et est valide
+- 📝 Messages de log améliorés indiquant "IEEE OUI database" au lieu de "Wireshark manuf"
+
+**Plugin Scan Réseau - Tableau des Résultats**
+- 📐 `table-fixed` remplacé par `table-auto` pour adaptation automatique des colonnes
+- 📏 Colonnes avec `min-w-[...]` pour largeurs minimales : Hostname (200px), Vendor (200px), MAC (140px), Last Seen (100px)
+- 🔄 Ordre des colonnes modifié : IP, Hostname, Vendor, MAC, Statut, Latence, Dernière vue, Actions
+- 📝 Suppression de `truncate` sur les cellules, ajout de `break-words` et `whitespace-normal`
+- 🎨 `items-center` remplacé par `items-start` pour alignement en haut sur les cellules multi-lignes
+- 🔄 `flex-wrap` ajouté aux cellules contenant badges/boutons pour meilleur affichage
+
+**Plugin Scan Réseau - Mini Barres Graphiques**
+- 🎨 Réimplémentation complète avec effet 3D utilisant plusieurs `div` (top, front, side)
+- 🌈 Dégradé linéaire sur la face frontale : transition du haut (clair) vers le bas (sombre/noir)
+- 🎨 Couleurs ajustées : `topLight` (+15 au lieu de +40), `midColor` (-10), opacités réduites (0.7/0.6)
+- 📊 Base noire (`baseBlack`) occupant plus de 50% de la hauteur pour accentuation visuelle
+- 🎨 Couleur "Total IPs" ajustée : `#9ca3af` (gray-400) au lieu de `#4b5563` (gray-600)
+- 🎨 Couleur "Offline" ajustée : `#f87171` (red-400) au lieu de `#ef4444` (red-500) pour correspondre à l'icône du tableau
+- 📝 Texte "Total IPs" en `text-gray-200` au lieu de `text-gray-400` pour meilleure lisibilité
+
+**Plugin Scan Réseau - Interface "Info Scans"**
+- 📐 Layout en deux colonnes (`grid grid-cols-1 md:grid-cols-2 gap-4`)
+- 📍 Colonne gauche : "Dernier Scan" et "Prochains scans automatiques" (Full Scan et Refresh)
+- 📍 Colonne droite : Boutons "Rafraîchir" et "Scanner" (taille réduite : `px-2 py-1`, `text-xs`, `gap-1.5`, `size={12}`)
+- 📊 Stats "Base vendors" et "Scan auto" affichées en dessous des boutons dans la colonne droite
+- 🎨 Badge "Actif" sans animation/transition (`style={{ transition: 'none' }}`) pour éviter les glitches
+
+**API Routes**
+- 🔄 Route `DELETE /api/network-scan/clear` déplacée avant `DELETE /api/network-scan/:id` pour éviter les conflits
+- ✅ Route `/api/network-scan/clear` confirmée pour supprimer tous les scans et l'historique
+
+### 🐛 Corrigé
+
+**Backend - Configuration Base de Données**
+- ✅ Correction de `ReferenceError: require is not defined` dans `dbConfig.ts` : suppression du `require()` problématique
+- ✅ `wiresharkAutoUpdate` récupéré directement depuis `AppConfigRepository` ou valeur par défaut `false`
+- ✅ `saveDatabaseConfig` utilise maintenant correctement `import()` dynamique pour `WiresharkVendorService`
+- ✅ Route `/api/database/config` mise à jour pour `await saveDatabaseConfig(config)` (fonction async)
+
+**Plugin Scan Réseau - Détection Vendors**
+- ✅ Correction de la logique de détection : utilisation de la MAC Freebox si la MAC système n'est pas détectée
+- ✅ Amélioration de `getVendorWithSource()` : tentative explicite de `getVendorFromFreeboxByIp()` même sans MAC système
+- ✅ Correction de la variable `macToUse` pour utiliser correctement la MAC Freebox si disponible
+
+**Interface Utilisateur**
+- ✅ Correction du glitch sur le badge "Actif" dans "Info Scans" : suppression de l'animation/transition
+- ✅ Correction de l'affichage des colonnes : adaptation automatique avec `table-auto` et largeurs minimales
+- ✅ Correction de la troncature du texte : support du texte sur deux lignes avec `break-words` et `whitespace-normal`
+- ✅ Correction de l'ordre des colonnes : MAC et Hostname échangés comme demandé
+
+**Performance et Affichage**
+- ✅ Amélioration des couleurs des barres graphiques : moins flashy, base noire plus prononcée
+- ✅ Ajustement de la couleur rouge "Offline" pour correspondre à l'icône du tableau (`text-red-400`)
+
+---
+
 ## [0.2.0] - 2025-12-23
 
 ### ✨ Ajouté

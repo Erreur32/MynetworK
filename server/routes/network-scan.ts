@@ -1206,6 +1206,45 @@ router.post('/update-wireshark-vendors', requireAuth, requireAdmin, autoLog('net
 }));
 
 /**
+ * DELETE /api/network-scan/clear
+ * Clear all scan history (admin only)
+ * IMPORTANT: Must be defined BEFORE /:id route to avoid route conflict
+ */
+router.delete('/clear', requireAuth, requireAdmin, autoLog('network-scan', 'clear'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        // Delete all scan entries
+        const deletedScans = NetworkScanRepository.deleteAll();
+        
+        // Also purge all history entries (history is linked via foreign key, but we'll clean it explicitly)
+        const deletedHistory = NetworkScanRepository.purgeHistory(0); // 0 days = delete all
+        
+        // Optimize database after purge
+        NetworkScanRepository.optimizeDatabase();
+
+        logger.info('NetworkScan', `Cleared all scan data: ${deletedScans} scans, ${deletedHistory} history entries deleted`);
+
+        res.json({
+            success: true,
+            result: {
+                deletedScans,
+                deletedHistory,
+                totalDeleted: deletedScans + deletedHistory
+            },
+            message: `All scan data cleared: ${deletedScans} scans and ${deletedHistory} history entries deleted`
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to clear scan data:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to clear scan data',
+                code: 'CLEAR_ERROR'
+            }
+        });
+    }
+}));
+
+/**
  * GET /api/network-scan/:id
  * Get details of a specific IP
  */
@@ -1335,44 +1374,6 @@ router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostna
             error: {
                 message: error.message || 'Failed to update hostname',
                 code: 'UPDATE_HOSTNAME_ERROR'
-            }
-        });
-    }
-}));
-
-/**
- * DELETE /api/network-scan/clear
- * Clear all scan history (admin only)
- */
-router.delete('/clear', requireAuth, requireAdmin, autoLog('network-scan', 'clear'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-        // Delete all scan entries
-        const deletedScans = NetworkScanRepository.deleteAll();
-        
-        // Also purge all history entries (history is linked via foreign key, but we'll clean it explicitly)
-        const deletedHistory = NetworkScanRepository.purgeHistory(0); // 0 days = delete all
-        
-        // Optimize database after purge
-        NetworkScanRepository.optimizeDatabase();
-
-        logger.info('NetworkScan', `Cleared all scan data: ${deletedScans} scans, ${deletedHistory} history entries deleted`);
-
-        res.json({
-            success: true,
-            result: {
-                deletedScans,
-                deletedHistory,
-                totalDeleted: deletedScans + deletedHistory
-            },
-            message: `All scan data cleared: ${deletedScans} scans and ${deletedHistory} history entries deleted`
-        });
-    } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to clear scan data:', error);
-        return res.status(500).json({
-            success: false,
-            error: {
-                message: error.message || 'Failed to clear scan data',
-                code: 'CLEAR_ERROR'
             }
         });
     }

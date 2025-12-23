@@ -54,7 +54,7 @@ services:
       # Persistent storage for:
       # - Freebox authentication token (freebox_token.json)
       # - SQLite database (dashboard.db)
-      # - Wireshark vendor database file (manuf.txt)
+      # - IEEE OUI vendor database file (oui.txt)
       # - Application configuration
       - ./data:/app/data
       

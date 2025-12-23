@@ -1,13 +1,16 @@
 /**
  * Wireshark Vendor Database Service
  * 
- * Downloads and parses the Wireshark manuf file for complete vendor detection
- * Updates automatically from: https://raw.githubusercontent.com/wireshark/wireshark/master/manuf
- * Alternative: https://gitlab.com/wireshark/wireshark/-/raw/master/manuf
+ * Downloads and parses the IEEE OUI database for complete vendor detection
+ * Updates automatically from: https://standards-oui.ieee.org/oui/oui.txt
+ * Alternative: https://mac2vendor.com/download/oui-database.sqlite (SQLite format)
  * 
- * Format: OUI (tab) Short Name (tab) Full Vendor Name
- * Example: 00:00:00		Xerox		Xerox Corporation
- * Logic: Extract AA:BB:CC (OUI), lookup in database, use full vendor name (3rd column)
+ * IEEE OUI Format (multi-line):
+ * 28-6F-B9   (hex)		Nokia Shanghai Bell Co., Ltd.
+ * 286FB9     (base 16)		Nokia Shanghai Bell Co., Ltd.
+ * 				Address lines...
+ * 
+ * Logic: Extract OUI from hex format (XX-XX-XX), convert to AA:BB:CC, lookup in database
  * If not found → Unknown / Randomized
  */
 
@@ -21,9 +24,11 @@ import { exec } from 'child_process';
 
 const execAsync = promisify(exec);
 
-const WIRESHARK_MANUF_URL = 'https://raw.githubusercontent.com/wireshark/wireshark/master/manuf';
-const WIRESHARK_MANUF_URL_ALT = 'https://gitlab.com/wireshark/wireshark/-/raw/master/manuf';
-const MANUF_FILE_PATH = path.join(process.cwd(), 'data', 'manuf.txt');
+// IEEE OUI Official Database (primary source)
+const IEEE_OUI_URL = 'https://standards-oui.ieee.org/oui/oui.txt';
+// Alternative: SQLite database from mac2vendor.com
+const MAC2VENDOR_SQLITE_URL = 'https://mac2vendor.com/download/oui-database.sqlite';
+const MANUF_FILE_PATH = path.join(process.cwd(), 'data', 'oui.txt');
 const LAST_UPDATE_KEY = 'wireshark_manuf_last_update';
 const AUTO_UPDATE_ENABLED_KEY = 'wireshark_auto_update_enabled';
 const UPDATE_INTERVAL_DAYS = 7; // Update every 7 days
@@ -382,24 +387,32 @@ export class WiresharkVendorService {
             // Read and check content
             const fileContent = fs.readFileSync(filePath, 'utf8');
             
-            // Check for HTML error pages
-            if (fileContent.includes('<html') || fileContent.includes('<!DOCTYPE') || fileContent.includes('404') || fileContent.includes('Not Found')) {
+            // Check for HTML error pages (but be careful - IEEE OUI file might contain "404" in addresses)
+            // Only flag as HTML if we see actual HTML tags at the start of the file
+            const firstLines = fileContent.substring(0, 500).toLowerCase();
+            if (firstLines.includes('<!doctype') || firstLines.includes('<html') || 
+                (firstLines.includes('<head') && firstLines.includes('<body'))) {
                 return { isValid: false, reason: 'File appears to be an HTML error page', fileSize };
             }
 
-            // Check for expected content markers
-            if (!fileContent.includes('00:00:00') && !fileContent.includes('00:00:01')) {
-                return { isValid: false, reason: 'File does not contain expected OUI entries', fileSize };
+            // Check for expected content markers (IEEE OUI format: XX-XX-XX (hex))
+            // IEEE OUI file should start with header like "OUI/MA-L" or contain "(hex)" markers
+            if (!fileContent.includes('(hex)') && !fileContent.includes('(base 16)') && 
+                !fileContent.includes('OUI/MA-L') && !fileContent.match(/^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}/m)) {
+                return { isValid: false, reason: 'File does not appear to be in IEEE OUI format (missing hex/base16 markers or OUI entries)', fileSize };
             }
 
-            // Quick count of parseable vendors (lines with OUI format)
+            // Quick count of parseable vendors (lines with IEEE OUI format: XX-XX-XX (hex))
             const lines = fileContent.split('\n');
             let vendorCount = 0;
-            const ouiPattern = /^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}/i;
+            const ouiHexPattern = /^[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}\s+\(hex\)/;
             
             for (const line of lines) {
                 const trimmed = line.trim();
-                if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('!') && ouiPattern.test(trimmed)) {
+                // Count lines matching IEEE OUI hex format: XX-XX-XX (hex)
+                if (trimmed && !trimmed.startsWith('OUI/MA-L') && !trimmed.startsWith('company_id') && 
+                    !trimmed.startsWith('Organization') && !trimmed.startsWith('Address') &&
+                    !trimmed.match(/^-+$/) && ouiHexPattern.test(trimmed)) {
                     vendorCount++;
                 }
             }
@@ -492,8 +505,8 @@ export class WiresharkVendorService {
     }
 
     /**
-     * Download the manuf file from Wireshark GitHub
-     * Saves the file locally to data/manuf.txt for offline use
+     * Download the IEEE OUI database file
+     * Saves the file locally to data/oui.txt for offline use
      */
     private static async downloadManufFile(): Promise<void> {
         try {
@@ -504,14 +517,14 @@ export class WiresharkVendorService {
                 logger.info('WiresharkVendorService', `Created data directory: ${dataDir}`);
             }
 
-            // Try primary URL first, then fallback to alternative
-            const urlsToTry = [WIRESHARK_MANUF_URL, WIRESHARK_MANUF_URL_ALT];
+            // Try IEEE OUI official database (primary source)
+            const urlsToTry = [IEEE_OUI_URL];
             let downloadSuccess = false;
             let lastError: Error | null = null;
             
             for (const url of urlsToTry) {
                 try {
-                    logger.info('WiresharkVendorService', `Downloading manuf file from ${url}...`);
+                    logger.info('WiresharkVendorService', `Downloading IEEE OUI database from ${url}...`);
                     
                     // Use curl or fetch to download
                     // Try curl first (more reliable in Docker)
@@ -532,9 +545,11 @@ export class WiresharkVendorService {
                         // Check if file is suspiciously small (likely an error page)
                         if (fileStats.size < 1000) {
                             const fileContent = fs.readFileSync(MANUF_FILE_PATH, 'utf8');
-                            // Check if it's HTML (error page) or contains error messages
-                            if (fileContent.includes('<html') || fileContent.includes('<!DOCTYPE') || fileContent.includes('404') || fileContent.includes('Not Found')) {
-                                throw new Error(`Downloaded file appears to be an error page (${fileStats.size} bytes, contains HTML)`);
+                            // Check if it's HTML (error page) - only check first 500 chars to avoid false positives
+                            const firstChars = fileContent.substring(0, 500).toLowerCase();
+                            if (firstChars.includes('<!doctype') || firstChars.includes('<html') || 
+                                (firstChars.includes('<head') && firstChars.includes('<body'))) {
+                                throw new Error(`Downloaded file appears to be an HTML error page (${fileStats.size} bytes, contains HTML tags)`);
                             }
                             // If it's very small but not HTML, it might still be invalid
                             if (fileStats.size < 100) {
@@ -542,7 +557,7 @@ export class WiresharkVendorService {
                             }
                         }
                         
-                        logger.info('WiresharkVendorService', `Downloaded manuf file to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using curl from ${url}`);
+                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using curl from ${url}`);
                         downloadSuccess = true;
                         break; // Success, exit loop
                     } catch (curlError: any) {
@@ -569,9 +584,11 @@ export class WiresharkVendorService {
                             throw new Error('Fetched content is empty');
                         }
                         
-                        // Check if response is HTML (error page)
-                        if (text.includes('<html') || text.includes('<!DOCTYPE') || text.includes('404') || text.includes('Not Found')) {
-                            throw new Error(`Fetched content appears to be an error page (${text.length} bytes, contains HTML)`);
+                        // Check if response is HTML (error page) - only check first 500 chars to avoid false positives
+                        const firstChars = text.substring(0, 500).toLowerCase();
+                        if (firstChars.includes('<!doctype') || firstChars.includes('<html') || 
+                            (firstChars.includes('<head') && firstChars.includes('<body'))) {
+                            throw new Error(`Fetched content appears to be an HTML error page (${text.length} bytes, contains HTML tags)`);
                         }
                         
                         // Check minimum size
@@ -582,7 +599,7 @@ export class WiresharkVendorService {
                         fs.writeFileSync(MANUF_FILE_PATH, text, 'utf8');
                         
                         const fileStats = fs.statSync(MANUF_FILE_PATH);
-                        logger.info('WiresharkVendorService', `Downloaded manuf file to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using fetch from ${url}`);
+                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using fetch from ${url}`);
                         downloadSuccess = true;
                         break; // Success, exit loop
                     }
@@ -594,7 +611,7 @@ export class WiresharkVendorService {
             }
             
             if (!downloadSuccess) {
-                throw new Error(`Failed to download manuf file from all URLs. Last error: ${lastError?.message || 'Unknown error'}`);
+                throw new Error(`Failed to download IEEE OUI database from all URLs. Last error: ${lastError?.message || 'Unknown error'}`);
             }
             
             // Validate downloaded file using comprehensive validation
@@ -609,16 +626,19 @@ export class WiresharkVendorService {
             
             logger.info('WiresharkVendorService', `Downloaded file validated successfully: ${validation.fileSize} bytes, ${validation.vendorCount} vendors`);
         } catch (error: any) {
-            logger.error('WiresharkVendorService', `Failed to download manuf file: ${error.message || error}`);
+            logger.error('WiresharkVendorService', `Failed to download IEEE OUI database: ${error.message || error}`);
             throw error;
         }
     }
 
     /**
-     * Parse the manuf file and update the database
-     * Format: OUI (tab or spaces) Short Name (tab) Full Vendor Name
-     * Example: 00:00:00		Xerox		Xerox Corporation
-     * Logic: Extract AA:BB:CC (OUI), lookup in database, use full vendor name (3rd column if available, else 2nd)
+     * Parse the IEEE OUI file and update the database
+     * Format: Multi-line entries with OUI in hex format (XX-XX-XX) and organization name
+     * Example:
+     *   28-6F-B9   (hex)		Nokia Shanghai Bell Co., Ltd.
+     *   286FB9     (base 16)		Nokia Shanghai Bell Co., Ltd.
+     *   				Address lines...
+     * Logic: Extract OUI from hex format (XX-XX-XX), convert to AA:BB:CC, extract organization name
      * Validates file before parsing and uses plugins as fallback if parsing fails
      */
     private static async parseAndUpdateDatabase(): Promise<void> {
@@ -628,7 +648,7 @@ export class WiresharkVendorService {
         }
 
         if (!fs.existsSync(MANUF_FILE_PATH)) {
-            throw new Error(`Manuf file not found: ${MANUF_FILE_PATH}`);
+            throw new Error(`OUI file not found: ${MANUF_FILE_PATH}`);
         }
 
         // Validate file before parsing
@@ -664,7 +684,7 @@ export class WiresharkVendorService {
         const fileContent = fs.readFileSync(MANUF_FILE_PATH, 'utf8');
         const lines = fileContent.split('\n');
         
-        logger.info('WiresharkVendorService', `Parsing validated manuf file: ${lines.length} lines, file size: ${fileContent.length} bytes, estimated vendors: ${validation.vendorCount}`);
+        logger.info('WiresharkVendorService', `Parsing validated IEEE OUI file: ${lines.length} lines, file size: ${fileContent.length} bytes, estimated vendors: ${validation.vendorCount}`);
         
         // Start transaction for better performance
         db.exec('BEGIN TRANSACTION');
@@ -677,111 +697,109 @@ export class WiresharkVendorService {
             let inserted = 0;
             let skipped = 0;
             let sampleLines: string[] = [];
+            let currentOui: string | null = null;
+            let currentVendor: string | null = null;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                
-                // Skip comments and empty lines
                 const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) {
+                
+                // Skip empty lines and header lines
+                if (!trimmed) {
+                    // Reset state on empty line (end of entry)
+                    if (currentOui && currentVendor) {
+                        try {
+                            insertStmt.run(currentOui, currentVendor);
+                            inserted++;
+                            if (sampleLines.length < 5) {
+                                sampleLines.push(`Entry ending at line ${i}: OUI: ${currentOui}, Vendor: ${currentVendor}`);
+                            }
+                        } catch (error: any) {
+                            if (!error.message?.includes('UNIQUE constraint')) {
+                                logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
+                            }
+                            skipped++;
+                        }
+                        currentOui = null;
+                        currentVendor = null;
+                    }
                     continue;
                 }
-
-                // Parse line: OUI (tab or spaces) Short Name (tab) Full Vendor Name
-                // Format examples:
-                //   00:00:00		Xerox		Xerox Corporation  (3 columns with tabs)
-                //   00:00:0A		OmronTateisi	Omron Tateisi Electronics Co.  (3 columns)
-                //   00:00:01    Xerox    (2 columns with spaces)
                 
-                // First try: split by one or more tabs
-                let parts = trimmed.split(/\t+/);
-                
-                // If no tabs, try splitting by multiple spaces (2 or more)
-                if (parts.length === 1) {
-                    parts = trimmed.split(/\s{2,}/);
+                // Skip header lines and comments
+                if (trimmed.startsWith('OUI/MA-L') || trimmed.startsWith('company_id') || 
+                    trimmed.startsWith('Organization') || trimmed.startsWith('Address') ||
+                    trimmed.match(/^-+$/)) {
+                    continue;
                 }
                 
-                // If still only one part, try single space split
-                if (parts.length === 1) {
-                    const spaceMatch = trimmed.match(/^([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})\s+(.+)$/);
-                    if (spaceMatch) {
-                        parts = [spaceMatch[1], spaceMatch[2]];
+                // Parse IEEE OUI format:
+                // Format 1: XX-XX-XX   (hex)		Organization Name
+                // Format 2: XXXXXX     (base 16)		Organization Name (duplicate, skip)
+                // Format 3: 			Address lines (skip)
+                
+                // Match hex format line: XX-XX-XX   (hex)		Organization Name
+                const hexMatch = trimmed.match(/^([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})\s+\(hex\)\s+(.+)$/);
+                if (hexMatch) {
+                    // Convert XX-XX-XX to aa:bb:cc format
+                    const oui = `${hexMatch[1].toLowerCase()}:${hexMatch[2].toLowerCase()}:${hexMatch[3].toLowerCase()}`;
+                    const vendor = hexMatch[4].trim();
+                    
+                    if (vendor.length > 0) {
+                        // If we already have an entry, save it first
+                        if (currentOui && currentVendor) {
+                            try {
+                                insertStmt.run(currentOui, currentVendor);
+                                inserted++;
+                                if (sampleLines.length < 5) {
+                                    sampleLines.push(`Entry at line ${i}: OUI: ${currentOui}, Vendor: ${currentVendor}`);
+                                }
+                            } catch (error: any) {
+                                if (!error.message?.includes('UNIQUE constraint')) {
+                                    logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
+                                }
+                                skipped++;
+                            }
+                        }
+                        currentOui = oui;
+                        currentVendor = vendor;
                     }
+                    continue;
                 }
                 
-                if (parts.length >= 3) {
-                    // Format with 3 columns: OUI, Short Name, Full Name
-                    const oui = parts[0].trim().toLowerCase();
-                    const vendor = parts[2].trim(); // Use full vendor name (3rd column)
-                    
-                    // Validate OUI format (AA:BB:CC)
-                    if (!/^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$/i.test(oui)) {
-                        skipped++;
-                        continue;
+                // Match base16 format line: XXXXXX     (base 16)		Organization Name (duplicate, skip)
+                const base16Match = trimmed.match(/^[0-9A-Fa-f]{6}\s+\(base 16\)\s+(.+)$/);
+                if (base16Match) {
+                    // This is a duplicate entry, skip it (we already have it from hex format)
+                    continue;
+                }
+                
+                // Skip address lines (lines that start with spaces/tabs and don't match OUI patterns)
+                if (line.startsWith('\t') || line.startsWith(' ')) {
+                    continue;
+                }
+            }
+            
+            // Don't forget the last entry if file doesn't end with empty line
+            if (currentOui && currentVendor) {
+                try {
+                    insertStmt.run(currentOui, currentVendor);
+                    inserted++;
+                    if (sampleLines.length < 5) {
+                        sampleLines.push(`Last entry: OUI: ${currentOui}, Vendor: ${currentVendor}`);
                     }
-                    
-                    // Skip if vendor is empty
-                    if (vendor.length < 1) {
-                        skipped++;
-                        continue;
+                } catch (error: any) {
+                    if (!error.message?.includes('UNIQUE constraint')) {
+                        logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
                     }
-
-                    try {
-                        insertStmt.run(oui, vendor);
-                        inserted++;
-                        // Keep sample lines for debugging (first 5 successful inserts)
-                        if (sampleLines.length < 5) {
-                            sampleLines.push(`Line ${i + 1}: "${trimmed}" -> OUI: ${oui}, Vendor: ${vendor}`);
-                        }
-                    } catch (error: any) {
-                        // Skip duplicates (shouldn't happen with PRIMARY KEY, but just in case)
-                        if (!error.message?.includes('UNIQUE constraint')) {
-                            logger.debug('WiresharkVendorService', `Failed to insert ${oui}: ${error.message}`);
-                        }
-                        skipped++;
-                    }
-                } else if (parts.length === 2) {
-                    // Format with 2 columns: OUI, Vendor Name
-                    const oui = parts[0].trim().toLowerCase();
-                    const vendor = parts[1].trim();
-                    
-                    // Validate OUI format
-                    if (!/^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$/i.test(oui)) {
-                        skipped++;
-                        continue;
-                    }
-                    
-                    if (vendor.length < 1) {
-                        skipped++;
-                        continue;
-                    }
-
-                    try {
-                        insertStmt.run(oui, vendor);
-                        inserted++;
-                        // Keep sample lines for debugging
-                        if (sampleLines.length < 5) {
-                            sampleLines.push(`Line ${i + 1}: "${trimmed}" -> OUI: ${oui}, Vendor: ${vendor}`);
-                        }
-                    } catch (error: any) {
-                        if (!error.message?.includes('UNIQUE constraint')) {
-                            logger.debug('WiresharkVendorService', `Failed to insert ${oui}: ${error.message}`);
-                        }
-                        skipped++;
-                    }
-                } else {
                     skipped++;
-                    // Log first few skipped lines for debugging
-                    if (skipped <= 5) {
-                        logger.debug('WiresharkVendorService', `Skipped line ${i + 1}: "${trimmed}" (parts: ${parts.length})`);
-                    }
                 }
             }
 
             // Commit transaction
             db.exec('COMMIT');
             
-            logger.info('WiresharkVendorService', `Parsed manuf file: ${inserted} vendors inserted, ${skipped} lines skipped`);
+            logger.info('WiresharkVendorService', `Parsed IEEE OUI database: ${inserted} vendors inserted, ${skipped} lines skipped`);
             if (sampleLines.length > 0) {
                 logger.debug('WiresharkVendorService', `Sample parsed lines:\n${sampleLines.join('\n')}`);
             }
@@ -789,7 +807,7 @@ export class WiresharkVendorService {
             // Validate that enough vendors were inserted
             if (inserted === 0) {
                 logger.error('WiresharkVendorService', 'No vendors were inserted! Check file format and parsing logic.');
-                throw new Error('No vendors were inserted from manuf file');
+                throw new Error('No vendors were inserted from IEEE OUI database');
             }
             
             if (inserted < MIN_VENDORS_COUNT) {
@@ -820,7 +838,7 @@ export class WiresharkVendorService {
             }
         } catch (error) {
             db.exec('ROLLBACK');
-            logger.error('WiresharkVendorService', 'Failed to parse manuf file:', error);
+            logger.error('WiresharkVendorService', 'Failed to parse IEEE OUI database:', error);
             
             // If parsing failed completely, try plugins as fallback
             try {
@@ -851,9 +869,9 @@ export class WiresharkVendorService {
     }
 
     /**
-     * Update the vendor database from Wireshark
-     * Downloads the manuf file, parses it, and stores vendors in local database
-     * The file is saved locally in data/manuf.txt for offline use
+     * Update the vendor database from IEEE OUI
+     * Downloads the IEEE OUI database file, parses it, and stores vendors in local database
+     * The file is saved locally in data/oui.txt for offline use
      * @returns Object with source ('downloaded' | 'local' | 'plugins') and vendor count
      */
     static async updateDatabase(): Promise<{ source: 'downloaded' | 'local' | 'plugins'; vendorCount: number }> {
@@ -875,7 +893,7 @@ export class WiresharkVendorService {
                 }
             }
 
-            // Download the manuf file (saves to data/manuf.txt locally)
+            // Download the IEEE OUI database file (saves to data/oui.txt locally)
             try {
                 await this.downloadManufFile();
             } catch (downloadError: any) {
@@ -915,7 +933,7 @@ export class WiresharkVendorService {
             
             // Verify file was downloaded
             if (!fs.existsSync(MANUF_FILE_PATH)) {
-                throw new Error(`Manuf file was not downloaded to ${MANUF_FILE_PATH}`);
+                throw new Error(`IEEE OUI database file was not downloaded to ${MANUF_FILE_PATH}`);
             }
             
             // Validate downloaded file
@@ -924,7 +942,7 @@ export class WiresharkVendorService {
                 throw new Error(`Downloaded file validation failed: ${validation.reason}`);
             }
             
-            logger.info('WiresharkVendorService', `Manuf file downloaded and validated: ${validation.fileSize} bytes, ${validation.vendorCount} vendors`);
+            logger.info('WiresharkVendorService', `IEEE OUI database downloaded and validated: ${validation.fileSize} bytes, ${validation.vendorCount} vendors`);
             
             // Parse and update database
             await this.parseAndUpdateDatabase();
