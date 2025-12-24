@@ -997,7 +997,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                 <span className="text-gray-400">Prochain Full Scan:</span>
                                                 <span className="text-gray-300">
                                                     {formatNextExecution(
-                                                        autoStatus.fullScan.lastExecution?.timestamp || null,
+                                                        (autoStatus.fullScan.lastExecution?.type === 'auto' 
+                                                            ? autoStatus.fullScan.lastExecution?.timestamp 
+                                                            : null) || null,
                                                         autoStatus.fullScan.config.interval
                                                     )}
                                                 </span>
@@ -1011,7 +1013,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                 <span className="text-gray-400">Prochain Refresh:</span>
                                                 <span className="text-gray-300">
                                                     {formatNextExecution(
-                                                        autoStatus.refresh.lastExecution?.timestamp || null,
+                                                        (autoStatus.refresh.lastExecution?.type === 'auto' 
+                                                            ? autoStatus.refresh.lastExecution?.timestamp 
+                                                            : null) || null,
                                                         autoStatus.refresh.config.interval
                                                     )}
                                                 </span>
