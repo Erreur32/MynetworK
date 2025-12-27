@@ -81,6 +81,12 @@ class NetworkScanSchedulerService {
                     this.verifySchedulersStarted();
                 }, 2000); // Wait 2 more seconds to verify schedulers are running
                 
+                // Trigger a quick refresh on startup to update stats and ensure everything is up to date
+                // This runs after schedulers are initialized (with additional delay for database readiness)
+                setTimeout(() => {
+                    this.triggerStartupRefresh();
+                }, 8000); // Wait 8 seconds total (5s initial + 3s additional) to ensure everything is ready
+                
                 logger.info('NetworkScanScheduler', 'Network scan scheduler initialized successfully');
             } catch (error) {
                 logger.error('NetworkScanScheduler', 'Failed to initialize scheduler:', error);
@@ -564,6 +570,43 @@ class NetworkScanSchedulerService {
      */
     isManualScanInProgress(): boolean {
         return this.manualScanInProgress;
+    }
+
+    /**
+     * Trigger a quick refresh on startup to update stats and ensure everything is up to date
+     * This runs automatically after Docker restart
+     */
+    private async triggerStartupRefresh(): Promise<void> {
+        try {
+            // Only trigger refresh if plugin is enabled
+            if (!this.isPluginEnabled()) {
+                logger.info('NetworkScanScheduler', 'Plugin is disabled - skipping startup refresh');
+                return;
+            }
+
+            // Check if there are any existing IPs to refresh
+            // Use NetworkScanRepository directly to check for existing IPs
+            const { NetworkScanRepository } = await import('../database/models/NetworkScan.js');
+            const existingScans = NetworkScanRepository.find({ limit: 1 });
+            if (existingScans.length === 0) {
+                logger.info('NetworkScanScheduler', 'No existing IPs found - skipping startup refresh');
+                return;
+            }
+
+            // Get total count for logging
+            const allScans = NetworkScanRepository.find({ limit: 10000 });
+            const totalIps = allScans.length;
+            logger.info('NetworkScanScheduler', `Triggering startup refresh for ${totalIps} existing IPs...`);
+            
+            // Trigger a quick refresh (ping only, no MAC/hostname detection)
+            const result = await networkScanService.refreshExistingIps('quick');
+            
+            logger.info('NetworkScanScheduler', `Startup refresh completed: ${result.online} online, ${result.offline} offline, ${result.scanned} scanned in ${result.duration}ms`);
+        } catch (error: any) {
+            // Don't fail startup if refresh fails - just log the error
+            logger.error('NetworkScanScheduler', `Failed to trigger startup refresh: ${error.message || error}`);
+            logger.debug('NetworkScanScheduler', `Startup refresh error stack: ${error.stack || 'N/A'}`);
+        }
     }
 
     /**
