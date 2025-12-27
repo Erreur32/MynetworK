@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import { pluginManager } from '../services/pluginManager.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { freeboxApi } from '../services/freeboxApi.js';
+import { networkScanService } from '../services/networkScanService.js';
 
 const router = Router();
 
@@ -124,6 +125,29 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
 
         // Get Scanner data (from network_scans table)
         const scanData = NetworkScanRepository.findByIp(ip);
+        
+        // Perform real-time ping to get current status
+        let currentStatus = scanData?.status || 'unknown';
+        let currentLatency = scanData?.pingLatency;
+        
+        try {
+            logger.debug('Search', `Performing real-time ping for IP ${ip} to verify current status...`);
+            const pingResult = await networkScanService.pingHost(ip);
+            if (pingResult.success) {
+                currentStatus = 'online';
+                if (pingResult.latency !== undefined) {
+                    currentLatency = pingResult.latency;
+                }
+                logger.debug('Search', `IP ${ip} is currently online (latency: ${currentLatency}ms)`);
+            } else {
+                currentStatus = 'offline';
+                logger.debug('Search', `IP ${ip} is currently offline`);
+            }
+        } catch (error: any) {
+            logger.debug('Search', `Failed to ping IP ${ip} for real-time status check:`, error.message);
+            // Keep existing status if ping fails
+        }
+        
         if (scanData) {
             aggregatedData.scanner = {
                 mac: scanData.mac,
@@ -131,12 +155,18 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                 vendor: scanData.vendor,
                 hostnameSource: scanData.hostnameSource,
                 vendorSource: scanData.vendorSource,
-                status: scanData.status,
-                pingLatency: scanData.pingLatency,
+                status: currentStatus, // Use real-time status instead of stored status
+                pingLatency: currentLatency, // Use real-time latency if available
                 firstSeen: scanData.firstSeen,
                 lastSeen: scanData.lastSeen,
                 scanCount: scanData.scanCount,
                 additionalInfo: scanData.additionalInfo
+            };
+        } else if (currentStatus === 'online') {
+            // If IP is online but not in database, create a minimal entry for display
+            aggregatedData.scanner = {
+                status: currentStatus,
+                pingLatency: currentLatency
             };
         }
 
@@ -164,15 +194,37 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                 const systemStats = freeboxStats?.system as any;
                 if (systemStats?.dhcp) {
                     const dhcpLeases = [...(systemStats.dhcp.leases || []), ...(systemStats.dhcp.staticLeases || [])];
-                    const dhcpLease = dhcpLeases.find((l: any) => l.ip === ip);
+                    // Find DHCP lease matching the IP - check multiple possible fields
+                    const dhcpLease = dhcpLeases.find((l: any) => {
+                        // Check various possible IP fields
+                        return l.ip === ip || 
+                               l.hostname === ip || 
+                               l.host === ip ||
+                               (l.static_ip && l.static_ip === ip) ||
+                               (l.l3connectivities && Array.isArray(l.l3connectivities) && l.l3connectivities.some((conn: any) => conn.addr === ip));
+                    });
                     if (dhcpLease) {
                         aggregatedData.freebox = aggregatedData.freebox || {};
+                        // Extract IP from various possible locations
+                        const leaseIp = dhcpLease.ip || 
+                                      dhcpLease.static_ip || 
+                                      (dhcpLease.l3connectivities && Array.isArray(dhcpLease.l3connectivities) && dhcpLease.l3connectivities[0]?.addr) ||
+                                      ip;
                         aggregatedData.freebox.dhcp = {
-                            hostname: dhcpLease.hostname || dhcpLease.host,
-                            mac: dhcpLease.mac,
-                            static: dhcpLease.static || false,
-                            ...dhcpLease
+                            ip: leaseIp,
+                            hostname: dhcpLease.hostname || dhcpLease.host || dhcpLease.primary_name,
+                            mac: dhcpLease.mac || dhcpLease.l2ident?.id,
+                            static: dhcpLease.static !== undefined ? dhcpLease.static : (systemStats.dhcp.staticLeases?.includes(dhcpLease) || false),
+                            expires: dhcpLease.expires,
+                            lease_time: dhcpLease.lease_time || dhcpLease.leaseTime,
+                            comment: dhcpLease.comment || dhcpLease.description,
+                            ...dhcpLease // Include all original fields
                         };
+                        logger.debug('Search', `Found DHCP lease for IP ${ip}:`, {
+                            static: aggregatedData.freebox.dhcp.static,
+                            hostname: aggregatedData.freebox.dhcp.hostname,
+                            mac: aggregatedData.freebox.dhcp.mac
+                        });
                     }
                 }
 

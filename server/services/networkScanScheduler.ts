@@ -75,12 +75,18 @@ class NetworkScanSchedulerService {
                 
                 this.loadAndStartScanScheduler();
                 this.loadAndStartRefreshScheduler();
+                
+                // Verify schedulers are started after a short delay
+                setTimeout(() => {
+                    this.verifySchedulersStarted();
+                }, 2000); // Wait 2 more seconds to verify schedulers are running
+                
                 logger.info('NetworkScanScheduler', 'Network scan scheduler initialized successfully');
             } catch (error) {
                 logger.error('NetworkScanScheduler', 'Failed to initialize scheduler:', error);
                 logger.error('NetworkScanScheduler', 'Error stack:', (error as Error).stack);
             }
-        }, 3000); // Wait 3 seconds for database to be ready (Docker may need more time)
+        }, 5000); // Wait 5 seconds for database to be ready (Docker may need more time)
     }
 
     /**
@@ -159,10 +165,22 @@ class NetworkScanSchedulerService {
     private loadAndStartRefreshScheduler() {
         try {
             // Unified config is already loaded in loadAndStartScanScheduler
-            // This method is kept for backward compatibility
+            // However, we need to verify that refresh scheduler is actually started
             const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
             if (unifiedConfigStr) {
-                // Already handled in loadAndStartScanScheduler
+                try {
+                    const unifiedConfig: UnifiedAutoScanConfig = JSON.parse(unifiedConfigStr);
+                    // Verify that refresh scheduler is started if it should be
+                    if (unifiedConfig.enabled && unifiedConfig.refresh?.enabled && this.isPluginEnabled()) {
+                        // If refresh should be enabled but task is null, restart it
+                        if (!this.refreshTask) {
+                            logger.warn('NetworkScanScheduler', 'Refresh scheduler should be enabled but task is null - restarting...');
+                            this.updateUnifiedConfig(unifiedConfig);
+                        }
+                    }
+                } catch (e) {
+                    logger.error('NetworkScanScheduler', 'Failed to parse unified config in loadAndStartRefreshScheduler:', e);
+                }
                 return;
             }
             
@@ -546,6 +564,64 @@ class NetworkScanSchedulerService {
      */
     isManualScanInProgress(): boolean {
         return this.manualScanInProgress;
+    }
+
+    /**
+     * Verify that schedulers are started correctly after initialization
+     * This helps detect issues after container restart
+     */
+    private verifySchedulersStarted(): void {
+        try {
+            const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
+            if (!unifiedConfigStr) {
+                logger.debug('NetworkScanScheduler', 'No unified config found - skipping verification');
+                return;
+            }
+
+            const unifiedConfig: UnifiedAutoScanConfig = JSON.parse(unifiedConfigStr);
+            
+            if (!unifiedConfig.enabled) {
+                logger.debug('NetworkScanScheduler', 'Unified config is disabled - schedulers should not be running');
+                return;
+            }
+
+            if (!this.isPluginEnabled()) {
+                logger.debug('NetworkScanScheduler', 'Plugin is disabled - schedulers should not be running');
+                return;
+            }
+
+            // Check full scan scheduler
+            if (unifiedConfig.fullScan?.enabled) {
+                if (!this.scanTask) {
+                    logger.warn('NetworkScanScheduler', 'Full scan scheduler should be enabled but task is null - restarting...');
+                    this.updateUnifiedConfig(unifiedConfig);
+                } else {
+                    const status = this.scanTask.getStatus();
+                    logger.info('NetworkScanScheduler', `Full scan scheduler status: ${status}`);
+                    if (status !== 'scheduled' && status !== 'idle') {
+                        logger.warn('NetworkScanScheduler', `Full scan scheduler has unexpected status: ${status} - restarting...`);
+                        this.updateUnifiedConfig(unifiedConfig);
+                    }
+                }
+            }
+
+            // Check refresh scheduler
+            if (unifiedConfig.refresh?.enabled) {
+                if (!this.refreshTask) {
+                    logger.warn('NetworkScanScheduler', 'Refresh scheduler should be enabled but task is null - restarting...');
+                    this.updateUnifiedConfig(unifiedConfig);
+                } else {
+                    const status = this.refreshTask.getStatus();
+                    logger.info('NetworkScanScheduler', `Refresh scheduler status: ${status}`);
+                    if (status !== 'scheduled' && status !== 'idle') {
+                        logger.warn('NetworkScanScheduler', `Refresh scheduler has unexpected status: ${status} - restarting...`);
+                        this.updateUnifiedConfig(unifiedConfig);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('NetworkScanScheduler', 'Failed to verify schedulers:', error);
+        }
     }
 }
 

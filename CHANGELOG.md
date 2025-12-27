@@ -3,6 +3,51 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.4] - 2025-12-27
+
+### ✨ Ajouté
+
+**Page Scan Réseau - Protection contre les Scans Multiples**
+- 🛡️ Protection côté serveur pour empêcher les scans simultanés
+- 🔒 Vérification de l'état du scan avant d'en démarrer un nouveau
+- ⚠️ Messages d'erreur clairs si un scan est déjà en cours
+- 🚫 Protection côté client contre les clics multiples rapides
+
+**Page Scan Réseau - Ajout Manuel d'IP**
+- ➕ Nouvelle fonctionnalité pour ajouter manuellement une IP à scanner
+- 📝 Modal avec champs IP, MAC (optionnel) et hostname (optionnel)
+- 🔍 Scan immédiat de l'IP ajoutée avec détection MAC et hostname
+- 💾 Enregistrement dans la base de données avec source "manual"
+
+### 🔧 Modifié
+
+**Page Scan Réseau - Affichage des Prochains Scans**
+- 🎨 Amélioration du visuel des prochains scans (Full Scan et Refresh)
+- 🏷️ Badges colorés pour distinguer "Complet" (violet) et "Rapide" (bleu)
+- 📐 Alignement parfait des badges entre les différents types de scans
+- 📝 Texte simplifié : "Full Scan" et "Refresh" au lieu de "Prochain Full Scan"
+- 🎯 Badges positionnés avant le temps pour meilleure lisibilité
+
+**Scanner Réseau - Détection Windows Améliorée**
+- 🪟 Amélioration de la détection des machines Windows
+- ⚡ Correction du parsing des latences très faibles (< 1ms)
+- 🔍 Détection améliorée des pings Linux vers Windows avec indicateurs `icmp_seq=`
+- ✅ Acceptation des latences de 0ms comme pings réussis
+
+### 🐛 Corrigé
+
+**Scanner Réseau - Détection Windows**
+- ✅ Correction du problème où les PC Windows n'étaient pas détectés lors des scans
+- ✅ Correction du parsing de latence qui excluait les valeurs de 0ms
+- ✅ Amélioration de la détection des pings réussis même avec latence très faible
+
+**Scanner Réseau - Scans Multiples**
+- ✅ Correction du problème où plusieurs scans pouvaient se lancer simultanément
+- ✅ Protection contre les scans multiples côté serveur et client
+- ✅ Prévention des conflits entre scans manuels et automatiques
+
+---
+
 ## [0.2.3] - 2025-12-24
 
 ### ✨ Ajouté

@@ -91,6 +91,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [scanType, setScanType] = useState<'full' | 'quick'>('full');
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
     const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
+    const [showAddIpModal, setShowAddIpModal] = useState(false);
+    const [manualIp, setManualIp] = useState('');
+    const [manualMac, setManualMac] = useState('');
+    const [manualHostname, setManualHostname] = useState('');
+    const [isAddingIp, setIsAddingIp] = useState(false);
     
     // Filters - Load from localStorage or use defaults
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>(() => {
@@ -410,6 +415,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
 
     const handleScan = async () => {
+        // Prevent multiple simultaneous scans
+        if (isScanning || isRefreshing) {
+            return;
+        }
+
         setIsScanning(true);
         setCurrentScanRange(scanRange || (autoDetect ? 'Auto-détection' : '192.168.1.0/24'));
         setScanProgress(null);
@@ -492,7 +502,56 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         }
     };
 
+    const handleAddManualIp = async () => {
+        if (!manualIp.trim()) {
+            alert('Veuillez saisir une adresse IP');
+            return;
+        }
+
+        // Validate IP format
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipRegex.test(manualIp.trim())) {
+            alert('Format d\'adresse IP invalide');
+            return;
+        }
+
+        setIsAddingIp(true);
+        try {
+            const response = await api.post('/api/network-scan/add-manual', {
+                ip: manualIp.trim(),
+                mac: manualMac.trim() || undefined,
+                hostname: manualHostname.trim() || undefined,
+                scanType: scanType
+            });
+
+            if (response.success && response.result) {
+                const result = response.result as { message?: string; ip?: string; status?: string };
+                alert(result.message || 'IP ajoutée avec succès');
+                // Reset form
+                setManualIp('');
+                setManualMac('');
+                setManualHostname('');
+                setShowAddIpModal(false);
+                // Refresh the list
+                await fetchHistory();
+                await fetchStats();
+            } else {
+                alert(response.error?.message || 'Erreur lors de l\'ajout de l\'IP');
+            }
+        } catch (error: any) {
+            console.error('Add manual IP failed:', error);
+            alert('Erreur lors de l\'ajout: ' + (error.message || 'Erreur inconnue'));
+        } finally {
+            setIsAddingIp(false);
+        }
+    };
+
     const handleRefresh = async () => {
+        // Prevent multiple simultaneous scans
+        if (isScanning || isRefreshing) {
+            return;
+        }
+
         setIsRefreshing(true);
         setCurrentScanRange('Rafraîchissement des IPs existantes');
         setScanProgress(null);
@@ -991,11 +1050,18 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 
                                 {/* Prochains scans automatiques */}
                                 {autoStatus && autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) && (
-                                    <div className="pt-2 border-t border-gray-800 space-y-1">
+                                    <div className="pt-2 border-t border-gray-800 space-y-2">
                                         {autoStatus.fullScan.config.enabled && (
-                                            <div className="flex items-center gap-2 text-xs whitespace-nowrap overflow-x-auto">
-                                                <span className="text-gray-400">Prochain Full Scan:</span>
-                                                <span className="text-gray-300">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-gray-300 font-medium w-14">Full Scan</span>
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
+                                                    autoStatus.fullScan.config.scanType === 'full'
+                                                        ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                        : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                                }`}>
+                                                    {autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                                </span>
+                                                <span className="text-gray-400">
                                                     {formatNextExecution(
                                                         (autoStatus.fullScan.lastExecution?.type === 'auto' 
                                                             ? autoStatus.fullScan.lastExecution?.timestamp 
@@ -1003,24 +1069,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                                         autoStatus.fullScan.config.interval
                                                     )}
                                                 </span>
-                                                <span className="text-gray-500">
-                                                    ({autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'})
-                                                </span>
                                             </div>
                                         )}
                                         {autoStatus.refresh.config.enabled && (
-                                            <div className="flex items-center gap-2 text-xs whitespace-nowrap overflow-x-auto">
-                                                <span className="text-gray-400">Prochain Refresh:</span>
-                                                <span className="text-gray-300">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-gray-300 font-medium w-14">Refresh</span>
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
+                                                    autoStatus.refresh.config.scanType === 'full'
+                                                        ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                        : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                                }`}>
+                                                    {autoStatus.refresh.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                                </span>
+                                                <span className="text-gray-400">
                                                     {formatNextExecution(
                                                         (autoStatus.refresh.lastExecution?.type === 'auto' 
                                                             ? autoStatus.refresh.lastExecution?.timestamp 
                                                             : null) || null,
                                                         autoStatus.refresh.config.interval
                                                     )}
-                                                </span>
-                                                <span className="text-gray-500">
-                                                    ({autoStatus.refresh.config.scanType === 'full' ? 'Complet' : 'Rapide'})
                                                 </span>
                                             </div>
                                         )}
@@ -1031,7 +1098,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             {/* Colonne 2 : Boutons d'action et stats */}
                             <div className="space-y-3">
                                 {/* Boutons d'action */}
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-3 gap-2">
                                     <button
                                         onClick={handleRefresh}
                                         disabled={isRefreshing}
@@ -1047,6 +1114,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     >
                                         <Play size={12} className={isScanning ? 'animate-spin' : ''} />
                                         Scanner
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAddIpModal(true)}
+                                        disabled={isScanning || isRefreshing}
+                                        className="w-full px-2 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg border border-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
+                                        title="Ajouter une IP manuellement"
+                                    >
+                                        <Network size={12} />
+                                        Ajouter IP
                                     </button>
                                 </div>
                                 
@@ -1586,6 +1662,120 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 type="button"
                             >
                                 Fermer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Manual IP Modal */}
+            {showAddIpModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-theme-secondary rounded-lg border border-theme shadow-xl max-w-md w-full mx-4">
+                        <div className="p-6 border-b border-theme">
+                            <h2 className="text-xl font-bold text-theme-primary flex items-center gap-2">
+                                <Network size={20} />
+                                Ajouter une IP manuellement
+                            </h2>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                    Adresse IP <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={manualIp}
+                                    onChange={(e) => setManualIp(e.target.value)}
+                                    placeholder="192.168.1.100"
+                                    className="w-full px-4 py-2 bg-theme-tertiary border border-theme rounded-lg text-theme-primary focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    disabled={isAddingIp}
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                    MAC (optionnel)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={manualMac}
+                                    onChange={(e) => setManualMac(e.target.value)}
+                                    placeholder="aa:bb:cc:dd:ee:ff"
+                                    className="w-full px-4 py-2 bg-theme-tertiary border border-theme rounded-lg text-theme-primary focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    disabled={isAddingIp}
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                    Hostname (optionnel)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={manualHostname}
+                                    onChange={(e) => setManualHostname(e.target.value)}
+                                    placeholder="Mon-PC"
+                                    className="w-full px-4 py-2 bg-theme-tertiary border border-theme rounded-lg text-theme-primary focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    disabled={isAddingIp}
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2 text-sm text-theme-tertiary">
+                                <span>Type de scan:</span>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={scanType === 'full'}
+                                        onChange={() => setScanType('full')}
+                                        disabled={isAddingIp}
+                                        className="text-cyan-500"
+                                    />
+                                    <span>Complet</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={scanType === 'quick'}
+                                        onChange={() => setScanType('quick')}
+                                        disabled={isAddingIp}
+                                        className="text-cyan-500"
+                                    />
+                                    <span>Rapide</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 p-6 border-t border-theme">
+                            <button
+                                onClick={() => {
+                                    setShowAddIpModal(false);
+                                    setManualIp('');
+                                    setManualMac('');
+                                    setManualHostname('');
+                                }}
+                                disabled={isAddingIp}
+                                className="px-4 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 rounded-lg border border-gray-500/30 transition-colors disabled:opacity-50"
+                            >
+                                Annuler
+                            </button>
+                            <button
+                                onClick={handleAddManualIp}
+                                disabled={isAddingIp || !manualIp.trim()}
+                                className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg border border-orange-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isAddingIp ? (
+                                    <>
+                                        <RefreshCw size={16} className="animate-spin" />
+                                        Ajout en cours...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Network size={16} />
+                                        Ajouter
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

@@ -130,6 +130,13 @@ export class NetworkScanService {
         duration: number;
         detectionSummary?: { mac: number; vendor: number; hostname: number };
     }> {
+        // Check if a scan is already in progress
+        if (this.currentScanProgress && this.currentScanProgress.isActive) {
+            const progress = this.currentScanProgress;
+            logger.warn('NetworkScanService', `Scan already in progress: ${progress.scanned}/${progress.total} scanned. Rejecting new scan request.`);
+            throw new Error(`A scan is already in progress (${progress.scanned}/${progress.total} IPs scanned). Please wait for it to complete.`);
+        }
+
         const startTime = Date.now();
         
         // Parse IP range to get list of IPs to scan
@@ -451,6 +458,112 @@ export class NetworkScanService {
     }
 
     /**
+     * Scan a single IP address manually
+     * 
+     * @param ip IP address to scan
+     * @param fullScan If true, get MAC, vendor, and hostname; if false, ping only
+     * @param manualMac Optional MAC address provided manually
+     * @param manualHostname Optional hostname provided manually
+     * @returns NetworkScan entry or null if failed
+     */
+    async scanSingleIp(ip: string, fullScan: boolean = true, manualMac?: string, manualHostname?: string): Promise<NetworkScan | null> {
+        if (!this.isValidIp(ip)) {
+            logger.error('NetworkScanService', `Invalid IP address: ${ip}`);
+            return null;
+        }
+
+        try {
+            // Ping the IP first
+            const pingResult = await this.pingHost(ip);
+            const existing = NetworkScanRepository.findByIp(ip);
+            
+            // Prepare scan data
+            const scanData: CreateNetworkScanInput = {
+                ip,
+                status: pingResult.success ? 'online' : 'offline',
+                pingLatency: pingResult.latency
+            };
+
+            // Use manual MAC if provided, otherwise try to detect
+            if (manualMac) {
+                scanData.mac = manualMac;
+                scanData.vendorSource = 'manual';
+            } else if (fullScan) {
+                try {
+                    const mac = await this.getMacAddress(ip);
+                    if (mac) {
+                        scanData.mac = mac;
+                    } else if (existing?.mac) {
+                        // Preserve existing MAC if detection failed
+                        scanData.mac = existing.mac;
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[${ip}] MAC detection failed: ${error.message}`);
+                    if (existing?.mac) {
+                        scanData.mac = existing.mac;
+                    }
+                }
+            }
+
+            // Use manual hostname if provided, otherwise try to detect
+            if (manualHostname) {
+                scanData.hostname = manualHostname;
+                scanData.hostnameSource = 'manual';
+            } else if (fullScan && !manualHostname) {
+                try {
+                    const hostnameResult = await this.getHostnameWithSource(ip, existing);
+                    if (hostnameResult) {
+                        scanData.hostname = hostnameResult.hostname;
+                        scanData.hostnameSource = hostnameResult.source;
+                    } else if (existing?.hostname) {
+                        scanData.hostname = existing.hostname;
+                        scanData.hostnameSource = existing.hostnameSource;
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[${ip}] Hostname detection failed: ${error.message}`);
+                    if (existing?.hostname) {
+                        scanData.hostname = existing.hostname;
+                        scanData.hostnameSource = existing.hostnameSource;
+                    }
+                }
+            }
+
+            // Detect vendor if we have a MAC
+            if (scanData.mac && fullScan) {
+                try {
+                    const vendorResult = await this.getVendorWithSource(scanData.mac, ip, existing);
+                    if (vendorResult) {
+                        scanData.vendor = vendorResult.vendor;
+                        scanData.vendorSource = vendorResult.source;
+                    } else if (existing?.vendor && existing.vendor.trim() !== '--') {
+                        scanData.vendor = existing.vendor;
+                        scanData.vendorSource = existing.vendorSource;
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[${ip}] Vendor detection failed: ${error.message}`);
+                    if (existing?.vendor && existing.vendor.trim() !== '--') {
+                        scanData.vendor = existing.vendor;
+                        scanData.vendorSource = existing.vendorSource;
+                    }
+                }
+            }
+
+            // Save to database
+            const savedScan = NetworkScanRepository.upsert(scanData);
+            
+            // Record in history
+            NetworkScanRepository.addHistoryEntry(savedScan.ip, savedScan.status, savedScan.pingLatency);
+            
+            logger.info('NetworkScanService', `[${ip}] Manual scan completed: status=${savedScan.status}, mac=${savedScan.mac || 'none'}, hostname=${savedScan.hostname || 'none'}`);
+            
+            return savedScan;
+        } catch (error: any) {
+            logger.error('NetworkScanService', `[${ip}] Failed to scan single IP: ${error.message || error}`);
+            return null;
+        }
+    }
+
+    /**
      * Refresh existing IPs in the database (re-ping known IPs)
      * 
      * @param scanType 'full' for ping + MAC + hostname, 'quick' for ping only
@@ -464,6 +577,13 @@ export class NetworkScanService {
     }> {
         const startTime = Date.now();
         
+        // Check if a scan is already in progress
+        if (this.currentScanProgress && this.currentScanProgress.isActive) {
+            const progress = this.currentScanProgress;
+            logger.warn('NetworkScanService', `Scan already in progress: ${progress.scanned}/${progress.total} scanned. Rejecting refresh request.`);
+            throw new Error(`A scan is already in progress (${progress.scanned}/${progress.total} IPs scanned). Please wait for it to complete.`);
+        }
+
         // Get all existing IPs from database
         const existingScans = NetworkScanRepository.find({ limit: 10000 });
         const ipsToRefresh = existingScans.map(scan => scan.ip);
@@ -982,27 +1102,71 @@ export class NetworkScanService {
             // If stdout contains latency info, ping succeeded
             const latency = this.parsePingLatency(stdout);
             
-            if (latency !== null && latency > 0) {
+            // IMPORTANT: latency can be 0 (for very fast responses <1ms), which is still a successful ping
+            if (latency !== null && latency >= 0) {
                 // Log first few successful pings for debugging
                 if (Math.random() < 0.05) { // Log ~5% of successful pings
                     logger.debug('NetworkScanService', `[${ip}] Ping successful, latency: ${latency}ms`);
                 }
-            return {
-                success: true,
+                return {
+                    success: true,
                     latency: latency
                 };
             }
             
             // No latency found - ping failed (host unreachable, timeout, etc.)
             // This is normal if devices block ICMP or are offline
-            // Only log if we got output but no latency (parsing issue) - reduce logging
-            if (stdout && stdout.length > 0 && stdout.includes('PING')) {
+            // Check for Windows-specific success indicators even without explicit latency
+            if (stdout && stdout.length > 0) {
+                // Windows: Check for "Reply from" which indicates successful ping
+                if (stdout.includes('Reply from') && stdout.includes('TTL')) {
+                    // Windows ping succeeded but latency parsing might have failed
+                    // Try one more time with improved parsing
+                    const retryLatency = this.parsePingLatency(stdout);
+                    if (retryLatency !== null && retryLatency >= 0) {
+                        logger.debug('NetworkScanService', `[${ip}] Windows ping successful (retry parse), latency: ${retryLatency}ms`);
+                        return {
+                            success: true,
+                            latency: retryLatency
+                        };
+                    }
+                    // If still no latency but we have "Reply from", assume success with 0ms
+                    logger.debug('NetworkScanService', `[${ip}] Windows ping successful (Reply from detected), assuming <1ms`);
+                    return {
+                        success: true,
+                        latency: 0
+                    };
+                }
+                
+                // Linux: Check for successful ping indicators (icmp_seq, bytes from, etc.)
+                // Format: "64 bytes from 192.168.1.50: icmp_seq=1 ttl=128 time=0.342 ms"
+                if (stdout.includes('icmp_seq=') && stdout.includes('bytes from')) {
+                    // Linux ping succeeded but latency parsing might have failed
+                    // Try to extract latency from output
+                    const retryLatency = this.parsePingLatency(stdout);
+                    if (retryLatency !== null && retryLatency >= 0) {
+                        logger.debug('NetworkScanService', `[${ip}] Linux ping successful (retry parse), latency: ${retryLatency}ms`);
+                        return {
+                            success: true,
+                            latency: retryLatency
+                        };
+                    }
+                    // If we see icmp_seq but no parsed latency, assume very fast response
+                    logger.debug('NetworkScanService', `[${ip}] Linux ping successful (icmp_seq detected), assuming <1ms`);
+                    return {
+                        success: true,
+                        latency: 0
+                    };
+                }
+                
                 // Check if ping started but didn't receive response (timeout)
                 // This is normal behavior for devices blocking ICMP
                 const hasTimeout = stdout.includes('no answer') || 
                                  stdout.includes('timeout') || 
                                  stdout.includes('100% packet loss') ||
-                                 (stdout.includes('PING') && !stdout.includes('time=') && !stdout.includes('time<'));
+                                 stdout.includes('Request timed out') ||
+                                 stdout.includes('Destination host unreachable') ||
+                                 (stdout.includes('PING') && !stdout.includes('time=') && !stdout.includes('time<') && !stdout.includes('Reply from'));
                 
                 if (hasTimeout) {
                     // Normal timeout - device may be blocking ICMP, don't log
@@ -1013,7 +1177,7 @@ export class NetworkScanService {
                 const logCount = Math.floor(Math.random() * 100);
                 if (logCount < 5) {
                     logger.debug('NetworkScanService', `[${ip}] Ping output without latency (may be parsing issue). Command: ${command}`);
-                    logger.debug('NetworkScanService', `[${ip}] Output: ${stdout.substring(0, 200)}`);
+                    logger.debug('NetworkScanService', `[${ip}] Output: ${stdout.substring(0, 300)}`);
                 }
             }
             return { success: false };
@@ -2151,13 +2315,38 @@ export class NetworkScanService {
             return null;
         }
         
-        // Windows formats:
+        // Windows formats (improved detection):
         // "Reply from 192.168.1.1: bytes=32 time<1ms TTL=64"
         // "Reply from 192.168.1.1: bytes=32 time=1ms TTL=64"
+        // "Reply from 192.168.1.1: bytes=32 time=10ms TTL=64"
+        // Also check for "Reply" keyword which indicates success on Windows
         const windowsMatch = output.match(/time[<=](\d+)ms/i);
         if (windowsMatch) {
             const latency = parseInt(windowsMatch[1], 10);
             return latency >= 0 ? latency : null;
+        }
+        
+        // Windows alternative: Check for "Reply from" without explicit time (very fast response)
+        // If we see "Reply from" but no time, assume <1ms (0ms)
+        if (output.includes('Reply from') && output.includes('TTL') && !output.match(/time[<=]/i)) {
+            // Windows ping sometimes shows "Reply from" without time for very fast responses
+            return 0; // <1ms response
+        }
+        
+        // Windows: Check for successful ping indicators even without explicit latency
+        // "Ping statistics for 192.168.1.1: Packets: Sent = 1, Received = 1, Lost = 0 (0% loss)"
+        if (output.includes('Received = 1') && output.includes('Lost = 0')) {
+            // Ping succeeded but latency might be in a different format
+            // Try to find any time value
+            const anyTimeMatch = output.match(/(\d+)\s*ms/i);
+            if (anyTimeMatch) {
+                const latency = parseInt(anyTimeMatch[1], 10);
+                if (latency >= 0 && latency < 10000) {
+                    return latency;
+                }
+            }
+            // If no explicit time but packet received, assume very fast (<1ms)
+            return 0;
         }
         
         // Linux formats:

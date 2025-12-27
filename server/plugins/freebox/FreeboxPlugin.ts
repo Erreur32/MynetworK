@@ -349,14 +349,19 @@ export class FreeboxPlugin extends BasePlugin {
             let activeLeases = 0;
             let totalConfigured = 0;
 
+            // Store DHCP leases for IP lookup
             if (dhcpLeasesResult.status === 'fulfilled' && dhcpLeasesResult.value.success && Array.isArray(dhcpLeasesResult.value.result)) {
                 activeLeases = dhcpLeasesResult.value.result.length;
                 totalConfigured += activeLeases;
+                // Store leases for IP details lookup
+                dhcpStats.leases = dhcpLeasesResult.value.result;
             }
 
             if (dhcpStaticLeasesResult.status === 'fulfilled' && dhcpStaticLeasesResult.value.success && Array.isArray(dhcpStaticLeasesResult.value.result)) {
                 const staticCount = dhcpStaticLeasesResult.value.result.length;
                 totalConfigured += staticCount;
+                // Store static leases for IP details lookup
+                dhcpStats.staticLeases = dhcpStaticLeasesResult.value.result;
             }
 
             if (activeLeases > 0) {

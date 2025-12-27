@@ -33,6 +33,78 @@ interface SearchResultData {
     results: SearchResult[];
 }
 
+interface IpDetailsResponse {
+    ip: string;
+    freebox?: {
+        name?: string;
+        mac?: string;
+        dhcp?: {
+            static?: boolean;
+            hostname?: string;
+            mac?: string;
+            ip?: string;
+            expires?: number;
+            lease_time?: number;
+            comment?: string;
+        };
+        portForwarding?: Array<{
+            id?: string | number;
+            wan_port_start: number;
+            wan_port_end?: number;
+            lan_port: number;
+            lan_ip: string;
+            ip_proto?: string;
+            protocol?: string;
+            enabled?: boolean;
+            comment?: string;
+            src_ip?: string;
+        }>;
+    };
+    unifi?: {
+        client?: {
+            name?: string;
+            mac?: string;
+            hostname?: string;
+            ip?: string;
+            is_wired?: boolean;
+            is_wireless?: boolean;
+            ssid?: string;
+            essid?: string;
+            ap_name?: string;
+            ap_mac?: string;
+            sw_port?: number | string;
+            sw_port_idx?: number;
+            sw_mac?: string;
+            sw_name?: string;
+            rssi?: number;
+            signal?: number;
+            tx_rate?: number;
+            rx_rate?: number;
+        };
+        ap?: {
+            name?: string;
+            mac?: string;
+            ip?: string;
+            model?: string;
+            ssids?: string[];
+        };
+        switch?: {
+            name?: string;
+            mac?: string;
+            ip?: string;
+            model?: string;
+        };
+    };
+    scanner?: {
+        mac?: string;
+        hostname?: string;
+        vendor?: string;
+        status?: string;
+        pingLatency?: number;
+        lastSeen?: string;
+    };
+}
+
 const ITEMS_PER_PAGE = 20;
 
 interface SearchPageProps {
@@ -59,7 +131,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [isExactIpSearch, setIsExactIpSearch] = useState(false); // Track if search is an exact IP
     
     // Search options
-    const [exactMatch, setExactMatch] = useState(false);
+    const [exactMatch, setExactMatch] = useState(true); // Default to exact match mode
     const [caseSensitive, setCaseSensitive] = useState(false);
     const [showOnlyActive, setShowOnlyActive] = useState(true); // Filter by default to show only active devices
     const [pingEnabled, setPingEnabled] = useState(false);
@@ -301,7 +373,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             if (isIp && exactMatch) {
                 setIsExactIpSearch(true);
                 try {
-                    const ipDetailsResponse = await api.get(`/api/search/ip-details/${trimmedQuery}`);
+                    const ipDetailsResponse = await api.get<IpDetailsResponse>(`/api/search/ip-details/${trimmedQuery}`);
                     if (ipDetailsResponse.success && ipDetailsResponse.result) {
                         // Debug: log UniFi client data
                         if (ipDetailsResponse.result.unifi?.client) {
@@ -593,7 +665,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         setHasSearched(false);
         setSelectedPlugins([]);
         setSelectedTypes([]);
-        setExactMatch(false);
+        setExactMatch(true);
         setCaseSensitive(false);
         setShowOnlyActive(true);
         setPingEnabled(false);
@@ -800,7 +872,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         showOnlyActive ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Actif seulement</span>
+                                <span>IP Actif</span>
                                 <CheckCircle size={12} className={showOnlyActive ? 'text-emerald-400' : 'text-theme-tertiary'} />
                             </button>
                             
@@ -814,19 +886,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-200 font-medium ${
                                     pingEnabled
                                         ? 'opacity-50 cursor-not-allowed bg-theme-secondary border-theme text-theme-tertiary'
-                                        : exactMatch
+                                        : !exactMatch
                                             ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
                                             : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
                                 }`}
                             >
                                 <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
-                                    exactMatch ? 'bg-blue-500' : 'bg-theme-tertiary'
+                                    !exactMatch ? 'bg-blue-500' : 'bg-theme-tertiary'
                                 }`}>
                                     <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-md ${
-                                        exactMatch ? 'translate-x-5' : 'translate-x-0'
+                                        !exactMatch ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Exacte</span>
+                                <span>Étendu</span>
                             </button>
                             
                             <button
@@ -891,7 +963,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         pingEnabled ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Ping automatique des résultats </span>
+                                <span>Ping</span>
                             </button>
                         </div>
 
@@ -1064,6 +1136,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             }`}>
                                                 <Home size={14} />
                                                 {ipDetails.freebox.dhcp.static ? 'RÉSERVATION' : 'DHCP'}
+                                            </span>
+                                        )}
+                                        
+                                        {/* Port Forwarding Badge */}
+                                        {ipDetails.freebox?.portForwarding && Array.isArray(ipDetails.freebox.portForwarding) && ipDetails.freebox.portForwarding.length > 0 && (
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/20 border border-orange-500/50 text-orange-400">
+                                                <Router size={14} />
+                                                PORT ({ipDetails.freebox.portForwarding.length})
                                             </span>
                                         )}
                                     </div>
@@ -1353,29 +1433,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                 )}
 
-                                {/* DHCP Card */}
-                                {ipDetails.freebox?.dhcp && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
-                                            <Home size={12} />
-                                            DHCP
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium w-fit ${
-                                                ipDetails.freebox.dhcp.static
-                                                    ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                                                    : 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
-                                            }`}>
-                                                <Home size={12} />
-                                                {ipDetails.freebox.dhcp.static ? 'RÉSERVATION' : 'DHCP'}
-                                            </span>
-                                            {ipDetails.freebox.dhcp.hostname && (
-                                                <span className="text-xs text-theme-tertiary mt-1">Hostname: {ipDetails.freebox.dhcp.hostname}</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Vendor Card */}
                                 {ipDetails.scanner?.vendor && (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
@@ -1405,43 +1462,158 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                 )}
 
-                                {/* Port Forwarding Card */}
+                            </div>
+
+                            {/* DHCP and Port Forwarding at the bottom */}
+                            <div className="mt-6 space-y-4">
+                                {/* DHCP Card - Full width */}
+                                {ipDetails.freebox?.dhcp && (
+                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-5 hover:bg-theme-secondary/40 transition-colors">
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-4 flex items-center gap-1.5">
+                                            <Home size={14} />
+                                            Configuration DHCP Freebox
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                                                    ipDetails.freebox.dhcp.static
+                                                        ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                                                        : 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                }`}>
+                                                    <Home size={14} />
+                                                    {ipDetails.freebox.dhcp.static ? 'RÉSERVATION STATIQUE' : 'DHCP DYNAMIQUE'}
+                                                </span>
+                                            </div>
+                                            {ipDetails.freebox.dhcp.hostname && (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">Hostname</span>
+                                                    <span className="text-sm font-medium text-theme-primary">{ipDetails.freebox.dhcp.hostname}</span>
+                                                </div>
+                                            )}
+                                            {ipDetails.freebox.dhcp.mac && (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">MAC</span>
+                                                    <span className="text-sm font-mono text-theme-primary">{formatMac(ipDetails.freebox.dhcp.mac)}</span>
+                                                </div>
+                                            )}
+                                            {ipDetails.freebox.dhcp.ip && (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">IP</span>
+                                                    <span className="text-sm font-mono text-theme-primary">{ipDetails.freebox.dhcp.ip}</span>
+                                                </div>
+                                            )}
+                                            {ipDetails.freebox.dhcp.comment && (
+                                                <div className="flex flex-col gap-1 md:col-span-2 lg:col-span-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">Commentaire</span>
+                                                    <span className="text-sm text-theme-secondary">{ipDetails.freebox.dhcp.comment}</span>
+                                                </div>
+                                            )}
+                                            {ipDetails.freebox.dhcp.expires && (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">Expire le</span>
+                                                    <span className="text-sm text-theme-secondary">
+                                                        {formatDate(new Date(ipDetails.freebox.dhcp.expires * 1000).toISOString())}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {ipDetails.freebox.dhcp.lease_time && (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs font-semibold text-theme-tertiary uppercase">Durée du bail</span>
+                                                    <span className="text-sm text-theme-secondary">
+                                                        {ipDetails.freebox.dhcp.lease_time} secondes ({Math.floor(ipDetails.freebox.dhcp.lease_time / 3600)}h)
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Port Forwarding - Individual Cards */}
                                 {ipDetails.freebox?.portForwarding && Array.isArray(ipDetails.freebox.portForwarding) && ipDetails.freebox.portForwarding.length > 0 && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors md:col-span-2 lg:col-span-3">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-3">Règles de Port</div>
-                                        <div className="flex flex-col gap-2">
-                                            {ipDetails.freebox.portForwarding.map((rule: any, idx: number) => (
-                                                <div key={rule.id || idx} className="flex flex-col gap-1 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                                                            rule.enabled
-                                                                ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
-                                                                : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
-                                                        }`}>
-                                                            {rule.enabled ? '✓ Actif' : '✗ Inactif'}
-                                                        </span>
-                                                        <span className="text-xs text-theme-tertiary">
-                                                            {rule.ip_proto?.toUpperCase() || 'TCP'}
-                                                        </span>
-                                                        {rule.comment && (
-                                                            <span className="text-xs font-medium text-theme-primary">{rule.comment}</span>
+                                    <div>
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-3 flex items-center gap-2">
+                                            <Router size={14} />
+                                            Redirections de Port ({ipDetails.freebox.portForwarding.length})
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            {ipDetails.freebox.portForwarding.map((rule: any, idx: number) => {
+                                                const protocol = (rule.ip_proto || rule.protocol || 'TCP').toUpperCase();
+                                                const wanPortEnd = rule.wan_port_end && rule.wan_port_end !== rule.wan_port_start 
+                                                    ? `-${rule.wan_port_end}` 
+                                                    : '';
+                                                const isEnabled = rule.enabled !== false;
+                                                
+                                                return (
+                                                    <div 
+                                                        key={rule.id || idx} 
+                                                        className={`bg-theme-secondary/30 rounded-lg border p-4 hover:bg-theme-secondary/40 transition-all ${
+                                                            isEnabled
+                                                                ? 'border-orange-500/50 shadow-lg shadow-orange-500/10'
+                                                                : 'border-gray-500/30 opacity-60'
+                                                        }`}
+                                                    >
+                                                        {/* Header */}
+                                                        <div className="flex items-start justify-between gap-2 mb-3">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold ${
+                                                                    isEnabled
+                                                                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
+                                                                        : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
+                                                                }`}>
+                                                                    {isEnabled ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                                                                    {isEnabled ? 'Actif' : 'Inactif'}
+                                                                </span>
+                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                                                                    protocol === 'TCP' 
+                                                                        ? 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                                                        : protocol === 'UDP'
+                                                                        ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                                        : 'bg-theme-secondary border border-theme text-theme-secondary'
+                                                                }`}>
+                                                                    {protocol}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Port Mapping - Visual Flow */}
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex-1 bg-blue-500/10 border border-blue-500/30 rounded px-3 py-2">
+                                                                    <div className="text-xs text-theme-tertiary uppercase mb-0.5">WAN</div>
+                                                                    <div className="text-sm font-mono font-semibold text-blue-400">
+                                                                        {rule.wan_port_start}{wanPortEnd}
+                                                                    </div>
+                                                                </div>
+                                                                <ArrowUpDown size={18} className="text-orange-400 flex-shrink-0" />
+                                                                <div className="flex-1 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">
+                                                                    <div className="text-xs text-theme-tertiary uppercase mb-0.5">LAN</div>
+                                                                    <div className="text-sm font-mono font-semibold text-green-400">
+                                                                        {ipDetails.ip}:{rule.lan_port}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Comment and Source IP */}
+                                                        {(rule.comment || rule.src_ip) && (
+                                                            <div className="mt-3 pt-3 border-t border-theme/30 space-y-1.5">
+                                                                {rule.comment && (
+                                                                    <div className="text-xs text-theme-secondary">
+                                                                        <span className="text-theme-tertiary">Commentaire: </span>
+                                                                        <span className="text-theme-primary">{rule.comment}</span>
+                                                                    </div>
+                                                                )}
+                                                                {rule.src_ip && (
+                                                                    <div className="text-xs text-theme-secondary">
+                                                                        <span className="text-theme-tertiary">Source IP: </span>
+                                                                        <span className="font-mono text-theme-primary">{rule.src_ip}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </div>
-                                                    <div className="flex items-center gap-2 text-xs text-theme-secondary">
-                                                        <span className="font-mono">
-                                                            WAN: {rule.wan_port_start}
-                                                            {rule.wan_port_end && rule.wan_port_end !== rule.wan_port_start && `-${rule.wan_port_end}`}
-                                                        </span>
-                                                        <span>→</span>
-                                                        <span className="font-mono">
-                                                            LAN: {rule.lan_ip}:{rule.lan_port}
-                                                        </span>
-                                                    </div>
-                                                    {rule.src_ip && (
-                                                        <span className="text-xs text-theme-tertiary">Source IP: {rule.src_ip}</span>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}

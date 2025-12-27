@@ -1286,6 +1286,87 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
 }));
         
 /**
+ * POST /api/network-scan/add-manual
+ * Add an IP address manually to scan
+ * 
+ * Body:
+ * {
+ *   ip: string (required)
+ *   mac?: string (optional)
+ *   hostname?: string (optional)
+ *   scanType?: 'full' | 'quick' (default: 'full')
+ * }
+ */
+router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { ip, mac, hostname, scanType = 'full' } = req.body;
+
+    // Validate IP format
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(ip)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'Invalid IP address format',
+                code: 'INVALID_IP'
+            }
+        });
+    }
+
+    // Validate scanType
+    if (scanType !== 'full' && scanType !== 'quick') {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'scanType must be "full" or "quick"',
+                code: 'INVALID_SCAN_TYPE'
+            }
+        });
+    }
+
+    try {
+        // Ping the IP first to check if it's online
+        const pingResult = await networkScanService.pingHost(ip);
+        
+        // Scan the IP (ping + MAC + hostname if full scan, or just ping if quick)
+        const scanResult = await networkScanService.scanSingleIp(ip, scanType === 'full', mac, hostname);
+        
+        if (scanResult) {
+            res.json({
+                success: true,
+                result: {
+                    ip: scanResult.ip,
+                    status: scanResult.status,
+                    pingLatency: scanResult.pingLatency,
+                    mac: scanResult.mac,
+                    hostname: scanResult.hostname,
+                    vendor: scanResult.vendor,
+                    message: pingResult.success 
+                        ? 'IP ajoutée et scannée avec succès' 
+                        : 'IP ajoutée mais hors ligne (ping échoué)'
+                }
+            });
+        } else {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Failed to scan IP address',
+                    code: 'SCAN_FAILED'
+                }
+            });
+        }
+    } catch (error: any) {
+        logger.error('NetworkScan', `Failed to add manual IP ${ip}:`, error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to add IP address',
+                code: 'ADD_IP_ERROR'
+            }
+        });
+    }
+}));
+
+/**
  * DELETE /api/network-scan/:id
  * Delete a specific IP from history
  */
