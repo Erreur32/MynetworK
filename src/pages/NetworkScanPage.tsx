@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -14,6 +14,7 @@ import { usePolling } from '../hooks/usePolling';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
+import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 
 interface NetworkScanPageProps {
     onBack: () => void;
@@ -96,6 +97,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [manualMac, setManualMac] = useState('');
     const [manualHostname, setManualHostname] = useState('');
     const [isAddingIp, setIsAddingIp] = useState(false);
+    
+    // Latency monitoring state
+    const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
+    const [latencyStats, setLatencyStats] = useState<Record<string, { avg1h: number | null; max: number | null }>>({});
+    const [selectedIpForGraph, setSelectedIpForGraph] = useState<string | null>(null);
+    const [showLatencyModal, setShowLatencyModal] = useState(false);
     
     // Filters - Load from localStorage or use defaults
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>(() => {
@@ -209,7 +216,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
     const fetchStatsHistory = useCallback(async () => {
         try {
-            const response = await api.get<Array<{ time: string; total: number; online: number; offline: number }>>('/api/network-scan/stats-history?hours=24');
+            const response = await api.get<Array<{ time: string; total: number; online: number; offline: number }>>('/api/network-scan/stats-history?hours=48');
             if (response.success && response.result) {
                 // Ensure we have valid data (filter out any invalid entries)
                 const validData = response.result.filter(h => 
@@ -322,6 +329,66 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         }
     }, []);
 
+    // Fetch latency monitoring status and stats
+    const fetchMonitoringData = useCallback(async () => {
+        if (scans.length === 0) return;
+        
+        try {
+            const ips = scans.map(scan => scan.ip);
+            
+            // Fetch monitoring status in batch
+            const statusResponse = await api.post<Record<string, boolean>>('/api/latency-monitoring/status/batch', { ips });
+            if (statusResponse.success && statusResponse.result) {
+                setMonitoringStatus(statusResponse.result);
+            }
+            
+            // Fetch stats only for IPs with monitoring enabled
+            const enabledIps = ips.filter(ip => statusResponse.success && statusResponse.result?.[ip]);
+            if (enabledIps.length > 0) {
+                const statsResponse = await api.post<Record<string, { avg1h: number | null; max: number | null }>>('/api/latency-monitoring/stats/batch', { ips: enabledIps });
+                if (statsResponse.success && statsResponse.result) {
+                    setLatencyStats(statsResponse.result);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch monitoring data:', error);
+        }
+    }, [scans]);
+
+    // Toggle monitoring for an IP
+    const handleToggleMonitoring = async (ip: string, enabled: boolean) => {
+        try {
+            const endpoint = enabled ? `/api/latency-monitoring/enable/${ip}` : `/api/latency-monitoring/disable/${ip}`;
+            const response = await api.post(endpoint);
+            
+            if (response.success) {
+                setMonitoringStatus(prev => ({ ...prev, [ip]: enabled }));
+                // Refresh stats if enabled
+                if (enabled) {
+                    setTimeout(() => fetchMonitoringData(), 1000);
+                } else {
+                    // Remove stats if disabled
+                    setLatencyStats(prev => {
+                        const newStats = { ...prev };
+                        delete newStats[ip];
+                        return newStats;
+                    });
+                }
+            } else {
+                alert(response.error?.message || 'Erreur lors de la modification du monitoring');
+            }
+        } catch (error: any) {
+            console.error('Failed to toggle monitoring:', error);
+            alert('Erreur lors de la modification du monitoring: ' + (error.message || 'Erreur inconnue'));
+        }
+    };
+
+    // Open latency graph modal
+    const handleOpenLatencyGraph = (ip: string) => {
+        setSelectedIpForGraph(ip);
+        setShowLatencyModal(true);
+    };
+
     useEffect(() => {
         fetchPlugins();
         fetchStats();
@@ -336,6 +403,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             fetchHistory();
         }
     }, [defaultConfigLoaded, fetchHistory]);
+
+    // Fetch monitoring data when scans change
+    useEffect(() => {
+        if (scans.length > 0) {
+            fetchMonitoringData();
+        }
+    }, [scans, fetchMonitoringData]);
 
     // Cleanup polling interval on unmount
     useEffect(() => {
@@ -1172,25 +1246,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     
                     {/* Total IPs - 1 colonne */}
                     <Card title="Total IPs">
-                        <div className="text-3xl font-bold text-gray-200 text-center mb-2">{stats.total}</div>
-                        <div className="h-12 mt-2">
-                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel="Total IPs" />
+                        <div className="text-3xl font-bold text-gray-200 text-center mb-1">{stats.total}</div>
+                        <div className="h-16 mt-1">
+                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel="Total IPs" height={64} fadeFromBottom={true} />
                         </div>
                     </Card>
                     
                     {/* Online - 1 colonne */}
                     <Card title="Online">
-                        <div className="text-3xl font-bold text-emerald-400 text-center mb-2">{stats.online}</div>
-                        <div className="h-12 mt-2">
-                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel="Online" />
+                        <div className="text-3xl font-bold text-emerald-400 text-center mb-1">{stats.online}</div>
+                        <div className="h-16 mt-1">
+                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel="Online" height={64} />
                         </div>
                     </Card>
                     
                     {/* Offline - 1 colonne */}
                     <Card title="Offline">
-                        <div className="text-3xl font-bold text-red-400 text-center mb-2">{stats.offline}</div>
-                        <div className="h-12 mt-2">
-                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel="Offline" />
+                        <div className="text-3xl font-bold text-red-400 text-center mb-1">{stats.offline}</div>
+                        <div className="h-16 mt-1">
+                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel="Offline" height={64} />
                         </div>
                     </Card>
                 </div>
@@ -1340,7 +1414,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 <div className="overflow-x-auto">
                     <table className="w-full table-auto">
                         <colgroup>
-                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
+                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[120px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-gray-800">
@@ -1410,6 +1484,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         )}
                                     </div>
                                 </th>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400">
+                                    <span>Avg1h</span>
+                                </th>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400">
+                                    <span>Max</span>
+                                </th>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400">
+                                    <span>Monitoring</span>
+                                </th>
                                 <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
                                     if (sortBy === 'last_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('last_seen'); setSortOrder('asc'); }
@@ -1427,7 +1510,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <tbody>
                             {filteredScans.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-8 text-gray-500">
+                                    <td colSpan={11} className="text-center py-8 text-gray-500">
                                         {isScanning || isRefreshing ? (
                                             <div className="flex items-center justify-center gap-2">
                                                 <RefreshCw size={16} className="animate-spin text-blue-400" />
@@ -1439,18 +1522,22 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredScans.map((scan) => (
+                                filteredScans.map((scan, index) => (
                                     <tr 
                                         key={scan.id} 
-                                        className={`border-b border-gray-800 hover:bg-[#1a1a1a] transition-colors ${
+                                        className={`border-b border-gray-800/50 transition-all duration-200 cursor-pointer hover:bg-[#1d1d1d] hover:shadow-lg hover:border-gray-700 ${
+                                            index % 2 === 0 
+                                                ? 'bg-[#111111]' 
+                                                : 'bg-[#0e1013a3]'
+                                        } ${
                                             ((isScanning || isRefreshing) || (autoStatus && ((autoStatus.fullScan.scheduler.running) || (autoStatus.refresh.scheduler.running)))) && scan.status === 'online' 
-                                                ? 'animate-pulse bg-blue-500/5' 
+                                                ? 'animate-pulse' 
                                                 : ''
                                         }`}
                                     >
                                         <td className={`py-3 px-4 text-sm font-mono break-words ${
-                                            scan.status === 'offline' ? 'text-gray-500' : 'text-gray-200'
-                                        }`} title={scan.ip}>{scan.ip}</td>
+                                            scan.status === 'offline' ? 'text-gray-500' : ''
+                                        }`} style={scan.status !== 'offline' ? { color: 'rgb(152, 181, 238)' } : {}} title={scan.ip}>{scan.ip}</td>
                                         <td className="py-3 px-4 text-sm text-gray-300">
                                             {editingHostname === scan.ip ? (
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1531,6 +1618,40 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`} title={formatLatency(scan.pingLatency)}>
                                                 {formatLatency(scan.pingLatency)}
                                             </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span className={`text-sm font-medium ${latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? getLatencyColor(latencyStats[scan.ip].avg1h!) : 'text-gray-500'}`}>
+                                                {latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? `${latencyStats[scan.ip].avg1h!.toFixed(3)}ms` : '--'}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <span className={`text-sm font-medium ${latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? getLatencyColor(latencyStats[scan.ip].max!) : 'text-gray-500'}`}>
+                                                {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${latencyStats[scan.ip].max!.toFixed(3)}ms` : '--'}
+                                            </span>
+                                        </td>
+                                        <td className="py-3 px-4">
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleToggleMonitoring(scan.ip, !monitoringStatus[scan.ip])}
+                                                    className="p-1 hover:bg-blue-500/10 rounded transition-colors"
+                                                    title={monitoringStatus[scan.ip] ? 'Désactiver le monitoring' : 'Activer le monitoring'}
+                                                >
+                                                    {monitoringStatus[scan.ip] ? (
+                                                        <ToggleRight size={18} className="text-blue-400" />
+                                                    ) : (
+                                                        <ToggleLeft size={18} className="text-gray-500" />
+                                                    )}
+                                                </button>
+                                                {monitoringStatus[scan.ip] && (
+                                                    <button
+                                                        onClick={() => handleOpenLatencyGraph(scan.ip)}
+                                                        className="p-1 hover:bg-green-500/10 text-green-400 rounded transition-colors"
+                                                        title="Voir le graphique de latence"
+                                                    >
+                                                        <BarChart2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="py-3 px-4 text-sm text-gray-400 break-words whitespace-normal" title={formatRelativeTime(scan.lastSeen)}>
                                             {formatRelativeTime(scan.lastSeen)}
@@ -1780,6 +1901,18 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Latency Monitoring Modal */}
+            {showLatencyModal && selectedIpForGraph && (
+                <LatencyMonitoringModal
+                    isOpen={showLatencyModal}
+                    onClose={() => {
+                        setShowLatencyModal(false);
+                        setSelectedIpForGraph(null);
+                    }}
+                    ip={selectedIpForGraph}
+                />
             )}
         </div>
     );

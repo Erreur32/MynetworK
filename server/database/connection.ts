@@ -235,6 +235,30 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Latency monitoring table (tracks which IPs have continuous monitoring enabled)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS latency_monitoring (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL UNIQUE,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ip) REFERENCES network_scans(ip) ON DELETE CASCADE
+        )
+    `);
+
+    // Latency measurements table (stores individual ping measurements for monitored IPs)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS latency_measurements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT NOT NULL,
+            latency REAL,
+            packet_loss INTEGER NOT NULL DEFAULT 0,
+            measured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ip) REFERENCES latency_monitoring(ip) ON DELETE CASCADE
+        )
+    `);
+
     // Create indexes for better performance
     database.exec(`
         CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
@@ -249,6 +273,11 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_ip ON network_scan_history(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_seen_at ON network_scan_history(seen_at);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_status ON network_scan_history(status);
+        CREATE INDEX IF NOT EXISTS idx_latency_monitoring_ip ON latency_monitoring(ip);
+        CREATE INDEX IF NOT EXISTS idx_latency_monitoring_enabled ON latency_monitoring(enabled);
+        CREATE INDEX IF NOT EXISTS idx_latency_measurements_ip ON latency_measurements(ip);
+        CREATE INDEX IF NOT EXISTS idx_latency_measurements_measured_at ON latency_measurements(measured_at);
+        CREATE INDEX IF NOT EXISTS idx_latency_measurements_ip_measured_at ON latency_measurements(ip, measured_at);
     `);
 
     logger.success('Database', 'Schema initialized');

@@ -238,15 +238,29 @@ import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
 import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
+import latencyMonitoringRoutes from './routes/latency-monitoring.js';
 import databaseRoutes from './routes/database.js';
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
 import './services/networkScanScheduler.js';
+// Initialize latency monitoring scheduler
+import { latencyMonitoringScheduler } from './services/latencyMonitoringScheduler.js';
 // Initialize database purge service (loads configs from database)
 import { initializePurgeService } from './services/databasePurgeService.js';
 
 // Initialize database purge service (after database is initialized and routes are imported)
 initializePurgeService();
+
+// Initialize latency monitoring scheduler (after database is ready)
+// Start with a small delay to ensure database is fully initialized
+setTimeout(() => {
+    try {
+        latencyMonitoringScheduler.start();
+        logger.success('Server', 'Latency monitoring scheduler initialized');
+    } catch (error) {
+        logger.error('Server', 'Failed to initialize latency monitoring scheduler:', error);
+    }
+}, 6000); // Wait 6 seconds for database to be ready
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
@@ -256,6 +270,7 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/docs', apiDocsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/network-scan', networkScanRoutes);
+app.use('/api/latency-monitoring', latencyMonitoringRoutes);
 app.use('/api/database', databaseRoutes);
 
 // Existing Freebox routes (kept for backward compatibility)

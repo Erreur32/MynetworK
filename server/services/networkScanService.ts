@@ -194,12 +194,13 @@ export class NetworkScanService {
                 
                 if (result.status === 'fulfilled' && result.value.success) {
                     const latency = result.value.latency;
-                    if (latency !== undefined && latency > 0) {
+                    // Collect latency for metrics (including 0ms)
+                    if (latency !== undefined && latency >= 0) {
                         latencies.push(latency);
-                    } else {
+                    } else if (latency === undefined) {
                         // IP is online but no latency - log for debugging (only first few to avoid spam)
                         if (scanned < 5) {
-                            logger.debug('NetworkScanService', `[${ip}] IP is online but latency is ${latency} (may be blocked by firewall or parsing issue)`);
+                            logger.debug('NetworkScanService', `[${ip}] IP is online but latency is undefined (may be blocked by firewall or parsing issue)`);
                         }
                     }
                     const existing = NetworkScanRepository.findByIp(ip);
@@ -2320,9 +2321,15 @@ export class NetworkScanService {
         // "Reply from 192.168.1.1: bytes=32 time=1ms TTL=64"
         // "Reply from 192.168.1.1: bytes=32 time=10ms TTL=64"
         // Also check for "Reply" keyword which indicates success on Windows
-        const windowsMatch = output.match(/time[<=](\d+)ms/i);
+        // Try to match decimal values first (some Windows versions may show decimals)
+        const windowsMatchDecimal = output.match(/time[<=]([\d.]+)\s*ms/i);
+        if (windowsMatchDecimal) {
+            const latency = parseFloat(windowsMatchDecimal[1]);
+            return latency >= 0 ? latency : null;
+        }
+        const windowsMatch = output.match(/time[<=](\d+)\s*ms/i);
         if (windowsMatch) {
-            const latency = parseInt(windowsMatch[1], 10);
+            const latency = parseFloat(windowsMatch[1]);
             return latency >= 0 ? latency : null;
         }
         
@@ -2337,10 +2344,10 @@ export class NetworkScanService {
         // "Ping statistics for 192.168.1.1: Packets: Sent = 1, Received = 1, Lost = 0 (0% loss)"
         if (output.includes('Received = 1') && output.includes('Lost = 0')) {
             // Ping succeeded but latency might be in a different format
-            // Try to find any time value
-            const anyTimeMatch = output.match(/(\d+)\s*ms/i);
+            // Try to find any time value (with decimals)
+            const anyTimeMatch = output.match(/([\d.]+)\s*ms/i);
             if (anyTimeMatch) {
-                const latency = parseInt(anyTimeMatch[1], 10);
+                const latency = parseFloat(anyTimeMatch[1]);
                 if (latency >= 0 && latency < 10000) {
                     return latency;
                 }
@@ -2355,7 +2362,7 @@ export class NetworkScanService {
         // "64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=123 ms"
         const linuxMatch = output.match(/time[=:]\s*([\d.]+)\s*ms/i);
         if (linuxMatch) {
-            const latency = Math.round(parseFloat(linuxMatch[1]));
+            const latency = parseFloat(linuxMatch[1]);
             return latency >= 0 ? latency : null;
         }
         
@@ -2364,14 +2371,14 @@ export class NetworkScanService {
         // "rtt min/avg/max/mdev = 0.123/0.456/0.789/0.123 ms"
         const rttMatch = output.match(/rtt\s+min\/avg\/max\/mdev\s*=\s*[\d.]+\/([\d.]+)\/[\d.]+\/[\d.]+/i);
         if (rttMatch) {
-            const latency = Math.round(parseFloat(rttMatch[1]));
+            const latency = parseFloat(rttMatch[1]);
             return latency >= 0 ? latency : null;
         }
         
         // Check for "time" keyword with number (fallback)
         const genericMatch = output.match(/time[=:]\s*([\d.]+)/i);
         if (genericMatch) {
-            const latency = Math.round(parseFloat(genericMatch[1]));
+            const latency = parseFloat(genericMatch[1]);
             // Assume milliseconds if value is reasonable (< 10000ms)
             if (latency >= 0 && latency < 10000) {
                 return latency;

@@ -6,6 +6,7 @@
  */
 
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
+import { LatencyMonitoringRepository } from '../database/models/LatencyMonitoring.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { logger } from '../utils/logger.js';
 import cron from 'node-cron';
@@ -87,6 +88,7 @@ export function executePurge(): {
     historyDeleted: number;
     scansDeleted: number;
     offlineDeleted: number;
+    latencyMeasurementsDeleted: number;
     totalDeleted: number;
 } {
     const config = getRetentionConfig();
@@ -107,12 +109,16 @@ export function executePurge(): {
         // Purge old scan entries (longer retention, but after offline purge)
         const scansDeleted = NetworkScanRepository.purgeOldScans(config.scanRetentionDays);
         
-        const totalDeleted = historyDeleted + scansDeleted + offlineDeleted;
+        // Purge latency measurements older than 30 days
+        const latencyMeasurementsDeleted = LatencyMonitoringRepository.deleteOldMeasurements(30);
+        
+        const totalDeleted = historyDeleted + scansDeleted + offlineDeleted + latencyMeasurementsDeleted;
         
         logger.info('DatabasePurgeService', `Purge completed: ${totalDeleted} entries deleted`, {
             historyDeleted,
             scansDeleted,
-            offlineDeleted
+            offlineDeleted,
+            latencyMeasurementsDeleted
         });
         
         // Optimize database after purge (only if significant data was deleted)
@@ -125,6 +131,7 @@ export function executePurge(): {
             historyDeleted,
             scansDeleted,
             offlineDeleted,
+            latencyMeasurementsDeleted,
             totalDeleted
         };
     } catch (error) {

@@ -164,6 +164,7 @@ interface MiniBarChartProps {
   height?: number;
   labels?: string[]; // Optional labels for tooltips (dates/times)
   valueLabel?: string; // Label for the value (e.g., "Online", "Total", "Offline")
+  fadeFromBottom?: boolean; // Add transparency gradient from bottom to soften top color
 }
 
 export const MiniBarChart: React.FC<MiniBarChartProps> = ({
@@ -171,7 +172,8 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
   color,
   height = 24,
   labels,
-  valueLabel = 'Valeur'
+  valueLabel = 'Valeur',
+  fadeFromBottom = false
 }) => {
   const maxValue = Math.max(...data, 1);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -263,10 +265,28 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
                   pointerEvents: 'none'
                 }}
               />
+              
+              {/* Dégradé de transparence depuis le bas pour adoucir la couleur claire du haut */}
+              {fadeFromBottom && (
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(to bottom, 
+                      rgba(0, 0, 0, 0.55) 0%, 
+                      rgba(0, 0, 0, 0.35) 30%, 
+                      rgba(0, 0, 0, 0.15) 60%, 
+                      rgba(0, 0, 0, 0) 100%)`
+                  }}
+                />
+              )}
             </div>
             
             {showTooltip && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-50 pointer-events-none">
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-50 pointer-events-none" style={{ 
+                left: idx === 0 ? '0' : idx === data.length - 1 ? 'auto' : '50%',
+                right: idx === data.length - 1 ? '0' : 'auto',
+                transform: idx === 0 ? 'translateX(0)' : idx === data.length - 1 ? 'translateX(0)' : 'translateX(-50%)'
+              }}>
                 <div className="font-medium">{label}</div>
                 <div className="text-gray-300">{valueLabel}: {value}</div>
                 <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">

@@ -1191,22 +1191,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             </div>
 
                             {/* Modern Multi-Column Grid Display */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                 {/* IP Card */}
                                 <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
                                     <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">IP</div>
-                                    <div className="text-theme-primary font-mono font-medium text-lg">{ipDetails.ip}</div>
-                                </div>
-
-                                {/* MAC Card */}
-                                {(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac) && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">MAC</div>
-                                        <div className="text-theme-primary font-mono text-lg">
+                                    <div className="text-theme-primary font-mono font-medium text-lg mb-2">{ipDetails.ip}</div>
+                                    {(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac) && (
+                                        <div className="text-theme-tertiary font-mono text-sm">
                                             {formatMac(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac)}
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
 
                                 {/* Switch Card (for wired clients) */}
                                 {ipDetails.unifi?.client?.is_wired && (
@@ -1434,7 +1429,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 )}
 
                                 {/* Vendor Card */}
-                                {ipDetails.scanner?.vendor && (
+                                {ipDetails.scanner?.vendor !== undefined && 
+                                 ipDetails.scanner?.vendor !== null && 
+                                 ipDetails.scanner?.vendor !== '' && 
+                                 ipDetails.scanner?.vendor !== '0' &&
+                                 ipDetails.scanner?.vendor?.trim() !== '' &&
+                                 ipDetails.scanner?.vendor?.toLowerCase() !== 'unknown' && (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
                                         <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">Vendor</div>
                                         <div className="text-theme-primary font-medium">{ipDetails.scanner.vendor}</div>
@@ -1442,7 +1442,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 )}
 
                                 {/* Latency Card */}
-                                {ipDetails.scanner?.pingLatency && (
+                                {ipDetails.scanner?.pingLatency !== undefined && 
+                                 ipDetails.scanner?.pingLatency !== null &&
+                                 typeof ipDetails.scanner.pingLatency === 'number' &&
+                                 ipDetails.scanner.pingLatency >= 0 && (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
                                         <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">Latence</div>
                                         <div className={`text-lg font-medium ${getLatencyColor(ipDetails.scanner.pingLatency)}`}>
@@ -1473,7 +1476,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             <Home size={14} />
                                             Configuration DHCP Freebox
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <div className="flex items-center gap-2">
                                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
                                                     ipDetails.freebox.dhcp.static

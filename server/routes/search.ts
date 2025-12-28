@@ -149,10 +149,24 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
         }
         
         if (scanData) {
+            // Filter out invalid vendor values (0, empty, null, undefined, "unknown", "0")
+            // Handle both string and number types
+            let vendor: string | undefined = undefined;
+            if (scanData.vendor) {
+                const vendorStr = String(scanData.vendor).trim();
+                if (vendorStr !== '' && 
+                    vendorStr !== '0' && 
+                    vendorStr.toLowerCase() !== 'unknown' &&
+                    vendorStr.toLowerCase() !== 'null' &&
+                    vendorStr.toLowerCase() !== 'undefined') {
+                    vendor = vendorStr;
+                }
+            }
+            
             aggregatedData.scanner = {
                 mac: scanData.mac,
                 hostname: scanData.hostname,
-                vendor: scanData.vendor,
+                vendor: vendor, // Only include vendor if it's valid
                 hostnameSource: scanData.hostnameSource,
                 vendorSource: scanData.vendorSource,
                 status: currentStatus, // Use real-time status instead of stored status

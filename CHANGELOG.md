@@ -3,6 +3,96 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.5] - 2025-12-28
+
+### ✨ Ajouté
+
+**Monitoring de Latence - Système Complet**
+- 📊 Nouveau système de monitoring de latence inspiré de Lagident
+- 🎯 Activation/désactivation du monitoring par IP depuis la page scanner
+- 📈 Graphique scatter chart avec affichage des mesures de latence sur plusieurs jours
+- 🎨 Graphique identique à Lagident : axes Latency/Loss/Temps, couleurs vert/orange/rouge selon la latence
+- 📊 Statistiques affichées : Avg1h, Min, Max, Packet Loss %
+- 🔄 Mesures automatiques toutes les 15 secondes pour les IPs surveillées
+- 💾 Stockage des mesures avec valeurs décimales précises (REAL au lieu de INTEGER)
+
+**Page Scanner - Colonnes Statistiques Latence**
+- 📊 Nouvelles colonnes "Avg1h" et "Max" dans le tableau scanner
+- 🎨 Couleurs dynamiques selon la valeur de latence (vert < 50ms, jaune/orange 50-150ms, rouge > 150ms)
+- 📈 Affichage des valeurs avec 3 décimales pour précision maximale
+- 🔘 Colonne "Monitoring" avec toggle pour activer/désactiver le suivi
+- 📊 Icône graphique cliquable pour voir le graphique de latence si monitoring activé
+
+**Graphique de Latence - Modal Complet**
+- 🖼️ Modal plein écran avec graphique scatter chart haute qualité
+- 📅 Affichage des données sur 90 jours avec tous les points
+- 🎯 Format adaptatif de l'axe X selon la période (DD/MM HH:MM pour < 2 jours, DD/MM HHh pour 2-7 jours, DD/MM pour > 7 jours)
+- 📊 Échelle Y dynamique avec algorithme identique à Lagident (démarre à 0, padding adaptatif)
+- 🎨 Couleurs des points selon la latence (vert < 50ms, jaune 50-100ms, orange 100-150ms, rouge > 150ms)
+- 📉 Représentation des pertes de paquets par lignes rouges sur l'axe Loss
+- 🎨 Barre de légende avec dégradé de couleurs (LOW/HIGH)
+- 📊 Fond sombre pour meilleur contraste visuel
+
+**Page Scanner - Améliorations Visuelles**
+- 🎨 Couleurs alternées pour les lignes paires/impaires du tableau (meilleure différenciation)
+- 🖱️ Effet hover amélioré sur les lignes avec ombre et transition fluide
+- 🎨 Colonne IP avec couleur personnalisée rgb(152, 181, 238) pour meilleure visibilité
+- 📊 Barres statistiques agrandies (64px au lieu de 48px) pour remplir le cadre
+- 🎨 Dégradé de transparence depuis le bas pour adoucir la couleur claire du haut (Total IPs)
+- 📅 Période des barres augmentée à 48 heures (au lieu de 24h)
+- 🔧 Tooltips repositionnés pour éviter qu'ils soient coupés sur les bords
+
+**Dashboard - Widget Scanner**
+- 🎨 Style unifié avec la page scanner pour "Dernier Scan" et "Prochains scans"
+- 🏷️ Badges "Complet" et "Rapide" alignés avec la page principale
+- 📐 Format identique pour cohérence visuelle
+
+### 🔧 Modifié
+
+**Scanner Réseau - Parsing de Latence**
+- 🔧 Parsing amélioré pour conserver les valeurs décimales (parseFloat au lieu de parseInt)
+- 📊 Support des valeurs décimales pour Windows et Linux
+- 💾 Stockage des latences avec décimales dans la base de données (REAL au lieu de INTEGER)
+- ✅ Correction pour inclure les latences de 0ms comme valeurs valides
+
+**Base de Données - Schéma Latence**
+- 💾 Table `latency_measurements` avec colonne `latency` en REAL pour valeurs décimales
+- 💾 Table `network_scans` avec colonne `ping_latency` en REAL pour valeurs décimales
+- 🔄 Migration automatique lors de la création des tables
+
+**Graphique de Latence - Affichage**
+- 📊 Affichage des valeurs avec 3 décimales dans le tooltip et les statistiques
+- 🎯 Échelle Y adaptative avec algorithme identique à Lagident
+- 📅 Format de l'axe X adaptatif selon la période affichée
+- 🎨 Fond du graphique plus sombre (#0f0f0f) pour meilleur contraste
+
+**Page Scanner - Tableau**
+- 🎨 Couleurs de fond alternées : lignes paires (#111111), lignes impaires (#0e1013a3)
+- 🖱️ Hover uniforme sur toutes les lignes avec fond #1d1d1d
+- 📐 Transitions fluides pour tous les effets visuels
+
+### 🐛 Corrigé
+
+**Monitoring de Latence - Valeurs à 0ms**
+- ✅ Correction du problème où toutes les valeurs affichaient 0ms dans le graphique
+- ✅ Conversion explicite des valeurs avec Number() lors de l'enregistrement
+- ✅ Affichage correct des valeurs décimales dans le graphique
+
+**Scanner Réseau - Latence Manquante**
+- ✅ Correction pour que les équipements Linux et Windows aient leur latence enregistrée
+- ✅ Condition modifiée pour inclure les latences de 0ms (latency >= 0 au lieu de latency > 0)
+- ✅ Parsing amélioré pour détecter les latences très faibles (< 1ms)
+
+**TypeScript - Typage**
+- ✅ Ajout de l'interface NetworkScanResponse pour typer la réponse API
+- ✅ Correction de l'erreur "Property 'hostname' does not exist on type 'unknown'"
+
+**Tooltips - Positionnement**
+- ✅ Repositionnement des tooltips pour éviter qu'ils soient coupés sur les bords
+- ✅ Alignement à gauche pour la première barre, à droite pour la dernière
+
+---
+
 ## [0.2.4] - 2025-12-27
 
 ### ✨ Ajouté

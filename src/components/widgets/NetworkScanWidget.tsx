@@ -36,7 +36,7 @@ interface AutoStatus {
         } | null;
     };
     refresh: {
-        config: { enabled: boolean; interval: number };
+        config: { enabled: boolean; interval: number; scanType?: 'full' | 'quick' };
         scheduler: { enabled: boolean; running: boolean };
         lastExecution: {
             timestamp: string;
@@ -293,10 +293,10 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     {/* Last scan - Same format as Info Scans */}
                     <div className="pt-2 border-t border-gray-800">
                         <div className="text-xs space-y-2">
-                            <div className="text-gray-400 mb-1">Dernier Scan:</div>
+                            <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
                             {autoStatus?.lastScan ? (
                                 <div className="mb-2">
-                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <div className="flex items-center gap-2 mb-1">
                                         {autoStatus.lastScan.isManual ? (
                                             <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
                                         ) : (
@@ -304,13 +304,13 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                         )}
                                         <span className="text-gray-400">
                                             {autoStatus.lastScan.type === 'full' ? (
-                                                <>Full Scan ({autoStatus.lastScan.scanType})</>
+                                                <>Full Scan <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                             ) : (
-                                                <>Refresh ({autoStatus.lastScan.scanType})</>
+                                                <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                             )}
                                         </span>
                                         <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
-                                        <span className="text-gray-500 text-xs">
+                                        <span className="text-gray-500 text-xs mt-0.5">
                                             {formatRelativeTime(autoStatus.lastScan.timestamp)}
                                         </span>
                                     </div>
@@ -322,7 +322,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                 </div>
                             ) : lastScan ? (
                                 <div className="mb-2">
-                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <div className="flex items-center gap-2 mb-1">
                                         <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
                                         <span className="text-gray-300">Scan</span>
                                         <span className="text-gray-300 font-medium">{formatDate(lastScan.toISOString())}</span>
@@ -335,65 +335,51 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                 <div className="text-gray-500">Aucun scan effectué</div>
                             )}
                             
-                            {/* Afficher les scans auto activés */}
-                            {autoStatus && autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? (
-                                <div className="pt-2 border-t border-gray-800 space-y-1">
+                            {/* Prochains scans automatiques - Même style que Info Scans */}
+                            {autoStatus && autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) && (
+                                <div className="pt-2 border-t border-gray-800 space-y-2">
                                     {autoStatus.fullScan.config.enabled && (
-                                        <div className="flex items-center gap-2 text-xs whitespace-nowrap overflow-x-auto">
-                                            <CheckCircle size={12} className="text-emerald-400 flex-shrink-0" />
-                                            <span className="text-gray-300">Auto</span>
-                                            <span className="text-gray-300">Full scan ({autoStatus.fullScan.config.scanType})</span>
-                                            {autoStatus.fullScan.lastExecution ? (
-                                                <>
-                                                    <span className="text-gray-500">
-                                                        {formatDate(autoStatus.fullScan.lastExecution.timestamp)}
-                                                    </span>
-                                                    <span className="text-gray-400">
-                                                        {formatRelativeTime(autoStatus.fullScan.lastExecution.timestamp)}
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-500">
-                                                    {formatNextExecution(null, autoStatus.fullScan.config.interval)}
-                                                </span>
-                                            )}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-gray-300 font-medium w-14">Full Scan</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
+                                                autoStatus.fullScan.config.scanType === 'full'
+                                                    ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                    : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                            }`}>
+                                                {autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                            </span>
+                                            <span className="text-gray-400">
+                                                {formatNextExecution(
+                                                    (autoStatus.fullScan.lastExecution?.type === 'auto' 
+                                                        ? autoStatus.fullScan.lastExecution?.timestamp 
+                                                        : null) || null,
+                                                    autoStatus.fullScan.config.interval
+                                                )}
+                                            </span>
                                         </div>
                                     )}
                                     {autoStatus.refresh.config.enabled && (
-                                        <div className="flex items-center gap-2 text-xs whitespace-nowrap overflow-x-auto">
-                                            <CheckCircle size={12} className="text-blue-400 flex-shrink-0" />
-                                            <span className="text-gray-300">Auto</span>
-                                            <span className="text-gray-300">Refresh (quick)</span>
-                                            {autoStatus.refresh.lastExecution ? (
-                                                <>
-                                                    <span className="text-gray-500">
-                                                        {formatDate(autoStatus.refresh.lastExecution.timestamp)}
-                                                    </span>
-                                                    <span className="text-gray-400">
-                                                        {formatRelativeTime(autoStatus.refresh.lastExecution.timestamp)}
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-500">
-                                                    {formatNextExecution(null, autoStatus.refresh.config.interval)}
-                                                </span>
-                                            )}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-gray-300 font-medium w-14">Refresh</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
+                                                (autoStatus.refresh.config.scanType || 'quick') === 'full'
+                                                    ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                    : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                            }`}>
+                                                {(autoStatus.refresh.config.scanType || 'quick') === 'full' ? 'Complet' : 'Rapide'}
+                                            </span>
+                                            <span className="text-gray-400">
+                                                {formatNextExecution(
+                                                    (autoStatus.refresh.lastExecution?.type === 'auto' 
+                                                        ? autoStatus.refresh.lastExecution?.timestamp 
+                                                        : null) || null,
+                                                    autoStatus.refresh.config.interval
+                                                )}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
-                            ) : autoStatusLoading ? (
-                                <div className="text-gray-500 text-xs pt-2 border-t border-gray-800">
-                                    Chargement...
-                                </div>
-                            ) : autoStatus && !autoStatus.enabled ? (
-                                <div className="text-gray-500 text-xs pt-2 border-t border-gray-800">
-                                    Scan automatique désactivé
-                                </div>
-                            ) : autoStatus && autoStatus.enabled && !autoStatus.fullScan.config.enabled && !autoStatus.refresh.config.enabled ? (
-                                <div className="text-gray-500 text-xs pt-2 border-t border-gray-800">
-                                    Aucun scan auto configuré
-                                </div>
-                            ) : null}
+                            )}
                         </div>
                     </div>
 
