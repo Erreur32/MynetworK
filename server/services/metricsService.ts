@@ -29,6 +29,49 @@ export interface MetricsConfig {
 }
 
 /**
+ * Convert a value to a valid Prometheus number
+ * Handles objects, null, undefined, and ensures numeric output
+ */
+function toPrometheusNumber(value: any): number {
+    // If value is null or undefined, return 0
+    if (value === null || value === undefined) {
+        return 0;
+    }
+    
+    // If value is already a number, return it
+    if (typeof value === 'number') {
+        return isNaN(value) || !isFinite(value) ? 0 : value;
+    }
+    
+    // If value is a boolean, convert to 0 or 1
+    if (typeof value === 'boolean') {
+        return value ? 1 : 0;
+    }
+    
+    // If value is an object, try to extract numeric value
+    if (typeof value === 'object') {
+        // If it has a 'value' property, use that
+        if ('value' in value && typeof value.value === 'number') {
+            return toPrometheusNumber(value.value);
+        }
+        // If it has a 'usage' property, use that (for CPU)
+        if ('usage' in value && typeof value.usage === 'number') {
+            return toPrometheusNumber(value.usage);
+        }
+        // If it has a 'percentage' property, use that (for memory/disk)
+        if ('percentage' in value && typeof value.percentage === 'number') {
+            return toPrometheusNumber(value.percentage);
+        }
+        // Otherwise, return 0 (don't convert object to string)
+        return 0;
+    }
+    
+    // Try to parse as number
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed;
+}
+
+/**
  * Generate Prometheus metrics format
  */
 export async function generatePrometheusMetrics(): Promise<string> {
@@ -44,27 +87,39 @@ export async function generatePrometheusMetrics(): Promise<string> {
                 
                 // CPU
                 if (sys.cpu !== undefined) {
+                    const cpuUsage = typeof sys.cpu === 'object' && sys.cpu !== null ? sys.cpu.usage : sys.cpu;
+                    const cpuValue = toPrometheusNumber(cpuUsage);
                     lines.push(`# HELP mynetwork_cpu_usage CPU usage percentage`);
                     lines.push(`# TYPE mynetwork_cpu_usage gauge`);
-                    lines.push(`mynetwork_cpu_usage ${sys.cpu || 0}`);
+                    lines.push(`mynetwork_cpu_usage ${cpuValue}`);
                 }
                 
                 // Memory
                 if (sys.memory) {
+                    const memTotal = toPrometheusNumber(sys.memory.total);
+                    const memUsed = toPrometheusNumber(sys.memory.used);
+                    const memFree = toPrometheusNumber(sys.memory.free);
+                    
                     lines.push(`# HELP mynetwork_memory_total Total memory in bytes`);
                     lines.push(`# TYPE mynetwork_memory_total gauge`);
-                    lines.push(`mynetwork_memory_total ${sys.memory.total || 0}`);
+                    lines.push(`mynetwork_memory_total ${memTotal}`);
                     
                     lines.push(`# HELP mynetwork_memory_used Used memory in bytes`);
                     lines.push(`# TYPE mynetwork_memory_used gauge`);
-                    lines.push(`mynetwork_memory_used ${sys.memory.used || 0}`);
+                    lines.push(`mynetwork_memory_used ${memUsed}`);
                     
                     lines.push(`# HELP mynetwork_memory_free Free memory in bytes`);
                     lines.push(`# TYPE mynetwork_memory_free gauge`);
-                    lines.push(`mynetwork_memory_free ${sys.memory.free || 0}`);
+                    lines.push(`mynetwork_memory_free ${memFree}`);
                     
-                    if (sys.memory.total && sys.memory.used) {
-                        const usagePercent = (sys.memory.used / sys.memory.total) * 100;
+                    // Use percentage from API if available, otherwise calculate
+                    if (sys.memory.percentage !== undefined) {
+                        const usagePercent = toPrometheusNumber(sys.memory.percentage);
+                        lines.push(`# HELP mynetwork_memory_usage Memory usage percentage`);
+                        lines.push(`# TYPE mynetwork_memory_usage gauge`);
+                        lines.push(`mynetwork_memory_usage ${usagePercent.toFixed(2)}`);
+                    } else if (memTotal > 0 && memUsed > 0) {
+                        const usagePercent = (memUsed / memTotal) * 100;
                         lines.push(`# HELP mynetwork_memory_usage Memory usage percentage`);
                         lines.push(`# TYPE mynetwork_memory_usage gauge`);
                         lines.push(`mynetwork_memory_usage ${usagePercent.toFixed(2)}`);
@@ -83,13 +138,19 @@ export async function generatePrometheusMetrics(): Promise<string> {
                     lines.push(`# TYPE mynetwork_disk_usage gauge`);
                     
                     sys.disks.forEach((disk: any, index: number) => {
-                        const mountpoint = disk.mountpoint || `/disk${index}`;
-                        const labels = `{mountpoint="${mountpoint}",device="${disk.device || 'unknown'}"}`;
+                        const mountpoint = (disk.mountpoint || disk.mount || `/disk${index}`).replace(/"/g, '\\"');
+                        const device = (disk.device || 'unknown').replace(/"/g, '\\"');
+                        const labels = `{mountpoint="${mountpoint}",device="${device}"}`;
                         
-                        if (disk.total) lines.push(`mynetwork_disk_total${labels} ${disk.total}`);
-                        if (disk.used) lines.push(`mynetwork_disk_used${labels} ${disk.used}`);
-                        if (disk.free) lines.push(`mynetwork_disk_free${labels} ${disk.free}`);
-                        if (disk.usage) lines.push(`mynetwork_disk_usage${labels} ${disk.usage}`);
+                        const diskTotal = toPrometheusNumber(disk.total);
+                        const diskUsed = toPrometheusNumber(disk.used);
+                        const diskFree = toPrometheusNumber(disk.free);
+                        const diskUsage = disk.percentage !== undefined ? toPrometheusNumber(disk.percentage) : (diskTotal > 0 && diskUsed > 0 ? (diskUsed / diskTotal) * 100 : 0);
+                        
+                        if (diskTotal > 0) lines.push(`mynetwork_disk_total${labels} ${diskTotal}`);
+                        if (diskUsed > 0) lines.push(`mynetwork_disk_used${labels} ${diskUsed}`);
+                        if (diskFree > 0) lines.push(`mynetwork_disk_free${labels} ${diskFree}`);
+                        if (diskUsage > 0) lines.push(`mynetwork_disk_usage${labels} ${diskUsage.toFixed(2)}`);
                     });
                 }
             }
@@ -106,13 +167,16 @@ export async function generatePrometheusMetrics(): Promise<string> {
             if (networkData.success && networkData.result) {
                 const net = networkData.result;
                 
+                const netDownload = toPrometheusNumber(net.download);
+                const netUpload = toPrometheusNumber(net.upload);
+                
                 lines.push(`# HELP mynetwork_network_download Download speed in bytes per second`);
                 lines.push(`# TYPE mynetwork_network_download gauge`);
-                lines.push(`mynetwork_network_download ${net.download || 0}`);
+                lines.push(`mynetwork_network_download ${netDownload}`);
                 
                 lines.push(`# HELP mynetwork_network_upload Upload speed in bytes per second`);
                 lines.push(`# TYPE mynetwork_network_upload gauge`);
-                lines.push(`mynetwork_network_upload ${net.upload || 0}`);
+                lines.push(`mynetwork_network_upload ${netUpload}`);
             }
         }
     } catch (error) {
@@ -131,46 +195,53 @@ export async function generatePrometheusMetrics(): Promise<string> {
             // Network stats from plugins
             if (stats.network) {
                 if (stats.network.download !== undefined) {
+                    const downloadValue = toPrometheusNumber(stats.network.download);
                     lines.push(`# HELP mynetwork_plugin_network_download Plugin download speed in bytes per second`);
                     lines.push(`# TYPE mynetwork_plugin_network_download gauge`);
-                    lines.push(`mynetwork_plugin_network_download${pluginLabels} ${stats.network.download}`);
+                    lines.push(`mynetwork_plugin_network_download${pluginLabels} ${downloadValue}`);
                 }
                 if (stats.network.upload !== undefined) {
+                    const uploadValue = toPrometheusNumber(stats.network.upload);
                     lines.push(`# HELP mynetwork_plugin_network_upload Plugin upload speed in bytes per second`);
                     lines.push(`# TYPE mynetwork_plugin_network_upload gauge`);
-                    lines.push(`mynetwork_plugin_network_upload${pluginLabels} ${stats.network.upload}`);
+                    lines.push(`mynetwork_plugin_network_upload${pluginLabels} ${uploadValue}`);
                 }
             }
             
             // System stats from plugins
             if (stats.system) {
                 if (stats.system.uptime !== undefined) {
+                    const uptimeValue = toPrometheusNumber(stats.system.uptime);
                     lines.push(`# HELP mynetwork_plugin_uptime Plugin uptime in seconds`);
                     lines.push(`# TYPE mynetwork_plugin_uptime gauge`);
-                    lines.push(`mynetwork_plugin_uptime${pluginLabels} ${stats.system.uptime}`);
+                    lines.push(`mynetwork_plugin_uptime${pluginLabels} ${uptimeValue}`);
                 }
                 if (stats.system.temperature !== undefined) {
+                    const tempValue = toPrometheusNumber(stats.system.temperature);
                     lines.push(`# HELP mynetwork_plugin_temperature Plugin temperature in Celsius`);
                     lines.push(`# TYPE mynetwork_plugin_temperature gauge`);
-                    lines.push(`mynetwork_plugin_temperature${pluginLabels} ${stats.system.temperature}`);
+                    lines.push(`mynetwork_plugin_temperature${pluginLabels} ${tempValue}`);
                 }
                 if (stats.system.memory) {
-                    if (stats.system.memory.total) {
+                    if (stats.system.memory.total !== undefined) {
+                        const memTotalValue = toPrometheusNumber(stats.system.memory.total);
                         lines.push(`# HELP mynetwork_plugin_memory_total Plugin total memory in bytes`);
                         lines.push(`# TYPE mynetwork_plugin_memory_total gauge`);
-                        lines.push(`mynetwork_plugin_memory_total${pluginLabels} ${stats.system.memory.total}`);
+                        lines.push(`mynetwork_plugin_memory_total${pluginLabels} ${memTotalValue}`);
                     }
-                    if (stats.system.memory.used) {
+                    if (stats.system.memory.used !== undefined) {
+                        const memUsedValue = toPrometheusNumber(stats.system.memory.used);
                         lines.push(`# HELP mynetwork_plugin_memory_used Plugin used memory in bytes`);
                         lines.push(`# TYPE mynetwork_plugin_memory_used gauge`);
-                        lines.push(`mynetwork_plugin_memory_used${pluginLabels} ${stats.system.memory.used}`);
+                        lines.push(`mynetwork_plugin_memory_used${pluginLabels} ${memUsedValue}`);
                     }
                 }
                 if (stats.system.cpu) {
                     if (stats.system.cpu.usage !== undefined) {
+                        const cpuUsageValue = toPrometheusNumber(stats.system.cpu.usage);
                         lines.push(`# HELP mynetwork_plugin_cpu_usage Plugin CPU usage percentage`);
                         lines.push(`# TYPE mynetwork_plugin_cpu_usage gauge`);
-                        lines.push(`mynetwork_plugin_cpu_usage${pluginLabels} ${stats.system.cpu.usage}`);
+                        lines.push(`mynetwork_plugin_cpu_usage${pluginLabels} ${cpuUsageValue}`);
                     }
                 }
             }
@@ -215,24 +286,28 @@ export async function generatePrometheusMetrics(): Promise<string> {
             if (pluginId === 'scan-reseau' && stats.system) {
                 const sys = stats.system as any;
                 if (sys.totalIps !== undefined) {
+                    const totalIpsValue = toPrometheusNumber(sys.totalIps);
                     lines.push(`# HELP mynetwork_scan_total_ips Total number of scanned IP addresses`);
                     lines.push(`# TYPE mynetwork_scan_total_ips gauge`);
-                    lines.push(`mynetwork_scan_total_ips${pluginLabels} ${sys.totalIps}`);
+                    lines.push(`mynetwork_scan_total_ips${pluginLabels} ${totalIpsValue}`);
                 }
                 if (sys.onlineIps !== undefined) {
+                    const onlineIpsValue = toPrometheusNumber(sys.onlineIps);
                     lines.push(`# HELP mynetwork_scan_online_ips Number of online IP addresses`);
                     lines.push(`# TYPE mynetwork_scan_online_ips gauge`);
-                    lines.push(`mynetwork_scan_online_ips${pluginLabels} ${sys.onlineIps}`);
+                    lines.push(`mynetwork_scan_online_ips${pluginLabels} ${onlineIpsValue}`);
                 }
                 if (sys.offlineIps !== undefined) {
+                    const offlineIpsValue = toPrometheusNumber(sys.offlineIps);
                     lines.push(`# HELP mynetwork_scan_offline_ips Number of offline IP addresses`);
                     lines.push(`# TYPE mynetwork_scan_offline_ips gauge`);
-                    lines.push(`mynetwork_scan_offline_ips${pluginLabels} ${sys.offlineIps}`);
+                    lines.push(`mynetwork_scan_offline_ips${pluginLabels} ${offlineIpsValue}`);
                 }
                 if (sys.unknownIps !== undefined) {
+                    const unknownIpsValue = toPrometheusNumber(sys.unknownIps);
                     lines.push(`# HELP mynetwork_scan_unknown_ips Number of unknown status IP addresses`);
                     lines.push(`# TYPE mynetwork_scan_unknown_ips gauge`);
-                    lines.push(`mynetwork_scan_unknown_ips${pluginLabels} ${sys.unknownIps}`);
+                    lines.push(`mynetwork_scan_unknown_ips${pluginLabels} ${unknownIpsValue}`);
                 }
             }
             
@@ -473,15 +548,24 @@ export async function generateInfluxDBMetrics(): Promise<string> {
                 
                 // CPU
                 if (sys.cpu !== undefined) {
-                    lines.push(`mynetwork,type=cpu usage=${sys.cpu || 0} ${timestamp}`);
+                    const cpuUsage = typeof sys.cpu === 'object' && sys.cpu !== null ? sys.cpu.usage : sys.cpu;
+                    const cpuValue = toPrometheusNumber(cpuUsage);
+                    lines.push(`mynetwork,type=cpu usage=${cpuValue} ${timestamp}`);
                 }
                 
                 // Memory
                 if (sys.memory) {
-                    const mem = sys.memory;
-                    lines.push(`mynetwork,type=memory total=${mem.total || 0}i,used=${mem.used || 0}i,free=${mem.free || 0}i ${timestamp}`);
-                    if (mem.total && mem.used) {
-                        const usagePercent = (mem.used / mem.total) * 100;
+                    const memTotal = toPrometheusNumber(sys.memory.total);
+                    const memUsed = toPrometheusNumber(sys.memory.used);
+                    const memFree = toPrometheusNumber(sys.memory.free);
+                    lines.push(`mynetwork,type=memory total=${Math.round(memTotal)}i,used=${Math.round(memUsed)}i,free=${Math.round(memFree)}i ${timestamp}`);
+                    
+                    // Use percentage from API if available, otherwise calculate
+                    if (sys.memory.percentage !== undefined) {
+                        const usagePercent = toPrometheusNumber(sys.memory.percentage);
+                        lines.push(`mynetwork,type=memory usage=${usagePercent.toFixed(2)} ${timestamp}`);
+                    } else if (memTotal > 0 && memUsed > 0) {
+                        const usagePercent = (memUsed / memTotal) * 100;
                         lines.push(`mynetwork,type=memory usage=${usagePercent.toFixed(2)} ${timestamp}`);
                     }
                 }
@@ -489,13 +573,20 @@ export async function generateInfluxDBMetrics(): Promise<string> {
                 // Disk
                 if (sys.disks && Array.isArray(sys.disks)) {
                     sys.disks.forEach((disk: any) => {
-                        const mountpoint = (disk.mountpoint || 'unknown').replace(/[ ,=]/g, '_');
+                        const mountpoint = (disk.mountpoint || disk.mount || 'unknown').replace(/[ ,=]/g, '_');
                         const device = (disk.device || 'unknown').replace(/[ ,=]/g, '_');
-                        if (disk.total || disk.used || disk.free) {
-                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} total=${disk.total || 0}i,used=${disk.used || 0}i,free=${disk.free || 0}i ${timestamp}`);
+                        
+                        const diskTotal = toPrometheusNumber(disk.total);
+                        const diskUsed = toPrometheusNumber(disk.used);
+                        const diskFree = toPrometheusNumber(disk.free);
+                        
+                        if (diskTotal > 0 || diskUsed > 0 || diskFree > 0) {
+                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} total=${Math.round(diskTotal)}i,used=${Math.round(diskUsed)}i,free=${Math.round(diskFree)}i ${timestamp}`);
                         }
-                        if (disk.usage !== undefined) {
-                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} usage=${disk.usage} ${timestamp}`);
+                        
+                        const diskUsage = disk.percentage !== undefined ? toPrometheusNumber(disk.percentage) : (diskTotal > 0 && diskUsed > 0 ? (diskUsed / diskTotal) * 100 : 0);
+                        if (diskUsage > 0) {
+                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} usage=${diskUsage.toFixed(2)} ${timestamp}`);
                         }
                     });
                 }
@@ -512,7 +603,9 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             const networkData = await networkResponse.json();
             if (networkData.success && networkData.result) {
                 const net = networkData.result;
-                lines.push(`mynetwork,type=network download=${net.download || 0}i,upload=${net.upload || 0}i ${timestamp}`);
+                const netDownload = toPrometheusNumber(net.download);
+                const netUpload = toPrometheusNumber(net.upload);
+                lines.push(`mynetwork,type=network download=${Math.round(netDownload)}i,upload=${Math.round(netUpload)}i ${timestamp}`);
             }
         }
     } catch (error) {
@@ -532,8 +625,14 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             if (stats.network) {
                 const net = stats.network;
                 const netFields: string[] = [];
-                if (net.download !== undefined) netFields.push(`download=${net.download}i`);
-                if (net.upload !== undefined) netFields.push(`upload=${net.upload}i`);
+                if (net.download !== undefined) {
+                    const downloadValue = toPrometheusNumber(net.download);
+                    netFields.push(`download=${Math.round(downloadValue)}i`);
+                }
+                if (net.upload !== undefined) {
+                    const uploadValue = toPrometheusNumber(net.upload);
+                    netFields.push(`upload=${Math.round(uploadValue)}i`);
+                }
                 if (netFields.length > 0) {
                     lines.push(`mynetwork,type=plugin_network,plugin=${pluginTag} ${netFields.join(',')} ${timestamp}`);
                 }
@@ -544,16 +643,37 @@ export async function generateInfluxDBMetrics(): Promise<string> {
                 const sys = stats.system;
                 const sysFields: string[] = [];
                 
-                if (sys.uptime !== undefined) sysFields.push(`uptime=${sys.uptime}i`);
-                if (sys.temperature !== undefined) sysFields.push(`temperature=${sys.temperature}`);
+                if (sys.uptime !== undefined) {
+                    const uptimeValue = toPrometheusNumber(sys.uptime);
+                    sysFields.push(`uptime=${Math.round(uptimeValue)}i`);
+                }
+                if (sys.temperature !== undefined) {
+                    const tempValue = toPrometheusNumber(sys.temperature);
+                    sysFields.push(`temperature=${tempValue}`);
+                }
                 if (sys.memory) {
-                    if (sys.memory.total !== undefined) sysFields.push(`memory_total=${sys.memory.total}i`);
-                    if (sys.memory.used !== undefined) sysFields.push(`memory_used=${sys.memory.used}i`);
-                    if (sys.memory.free !== undefined) sysFields.push(`memory_free=${sys.memory.free}i`);
+                    if (sys.memory.total !== undefined) {
+                        const memTotalValue = toPrometheusNumber(sys.memory.total);
+                        sysFields.push(`memory_total=${Math.round(memTotalValue)}i`);
+                    }
+                    if (sys.memory.used !== undefined) {
+                        const memUsedValue = toPrometheusNumber(sys.memory.used);
+                        sysFields.push(`memory_used=${Math.round(memUsedValue)}i`);
+                    }
+                    if (sys.memory.free !== undefined) {
+                        const memFreeValue = toPrometheusNumber(sys.memory.free);
+                        sysFields.push(`memory_free=${Math.round(memFreeValue)}i`);
+                    }
                 }
                 if (sys.cpu) {
-                    if (sys.cpu.usage !== undefined) sysFields.push(`cpu_usage=${sys.cpu.usage}`);
-                    if (sys.cpu.cores !== undefined) sysFields.push(`cpu_cores=${sys.cpu.cores}i`);
+                    if (sys.cpu.usage !== undefined) {
+                        const cpuUsageValue = toPrometheusNumber(sys.cpu.usage);
+                        sysFields.push(`cpu_usage=${cpuUsageValue}`);
+                    }
+                    if (sys.cpu.cores !== undefined) {
+                        const cpuCoresValue = toPrometheusNumber(sys.cpu.cores);
+                        sysFields.push(`cpu_cores=${Math.round(cpuCoresValue)}i`);
+                    }
                 }
                 
                 if (sysFields.length > 0) {
@@ -588,10 +708,22 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             if (pluginId === 'scan-reseau' && stats.system) {
                 const sys = stats.system as any;
                 const scanFields: string[] = [];
-                if (sys.totalIps !== undefined) scanFields.push(`total_ips=${sys.totalIps}i`);
-                if (sys.onlineIps !== undefined) scanFields.push(`online_ips=${sys.onlineIps}i`);
-                if (sys.offlineIps !== undefined) scanFields.push(`offline_ips=${sys.offlineIps}i`);
-                if (sys.unknownIps !== undefined) scanFields.push(`unknown_ips=${sys.unknownIps}i`);
+                if (sys.totalIps !== undefined) {
+                    const totalIpsValue = toPrometheusNumber(sys.totalIps);
+                    scanFields.push(`total_ips=${Math.round(totalIpsValue)}i`);
+                }
+                if (sys.onlineIps !== undefined) {
+                    const onlineIpsValue = toPrometheusNumber(sys.onlineIps);
+                    scanFields.push(`online_ips=${Math.round(onlineIpsValue)}i`);
+                }
+                if (sys.offlineIps !== undefined) {
+                    const offlineIpsValue = toPrometheusNumber(sys.offlineIps);
+                    scanFields.push(`offline_ips=${Math.round(offlineIpsValue)}i`);
+                }
+                if (sys.unknownIps !== undefined) {
+                    const unknownIpsValue = toPrometheusNumber(sys.unknownIps);
+                    scanFields.push(`unknown_ips=${Math.round(unknownIpsValue)}i`);
+                }
                 if (scanFields.length > 0) {
                     lines.push(`mynetwork,type=scan_reseau,plugin=${pluginTag} ${scanFields.join(',')} ${timestamp}`);
                 }

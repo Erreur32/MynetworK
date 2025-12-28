@@ -3,6 +3,44 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.6] - 2025-12-28
+
+### 🐛 Corrigé
+
+**Exports Prometheus - Parsing des Valeurs**
+- ✅ Correction de l'erreur `strconv.ParseFloat: parsing "[object": invalid syntax`
+- ✅ Fonction utilitaire `toPrometheusNumber()` pour convertir toutes les valeurs en nombres valides
+- ✅ Gestion correcte des objets (extraction automatique de `usage`, `percentage`, `value`)
+- ✅ Protection contre les valeurs null, undefined, NaN et Infinity
+- ✅ Conversion des booléens en 0 ou 1 pour Prometheus
+
+**Exports Prometheus - Métriques Système**
+- ✅ Correction de `mynetwork_cpu_usage` : utilisation de `sys.cpu.usage` au lieu de l'objet `sys.cpu`
+- ✅ Correction de `mynetwork_memory_*` : utilisation de `toPrometheusNumber()` pour toutes les valeurs
+- ✅ Gestion du `percentage` depuis l'API ou calcul automatique si manquant
+- ✅ Correction de `mynetwork_disk_*` : gestion correcte de `mountpoint` vs `mount` et conversion des valeurs
+
+**Exports Prometheus - Métriques Réseau et Plugins**
+- ✅ Correction de toutes les métriques réseau (download/upload) avec conversion sécurisée
+- ✅ Correction des métriques plugins (uptime, temperature, memory, cpu) avec extraction correcte des valeurs
+- ✅ Correction des métriques scan réseau (totalIps, onlineIps, offlineIps, unknownIps)
+- ✅ Protection de toutes les valeurs contre les objets non convertis
+
+**Exports InfluxDB - Cohérence**
+- ✅ Application des mêmes corrections pour les exports InfluxDB
+- ✅ Conversion sécurisée de toutes les valeurs avec `toPrometheusNumber()`
+- ✅ Arrondi correct des valeurs entières pour InfluxDB (`i` suffix)
+
+### 🔧 Modifié
+
+**Service Métriques - Architecture**
+- 🔧 Ajout de la fonction utilitaire `toPrometheusNumber()` pour centraliser la conversion des valeurs
+- 🔧 Extraction automatique des propriétés numériques depuis les objets (`usage`, `percentage`, `value`)
+- 🔧 Gestion unifiée des cas limites (null, undefined, objets, NaN, Infinity)
+- 🔧 Application cohérente de la conversion sur toutes les métriques (Prometheus et InfluxDB)
+
+---
+
 ## [0.2.5] - 2025-12-28
 
 ### ✨ Ajouté
