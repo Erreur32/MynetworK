@@ -51,30 +51,7 @@ const dnsReverseAsync = promisify(dns.reverse);
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
 const PING_TIMEOUT = isWindows ? 3000 : 3000; // 3 seconds timeout (increased for Docker)
-
-// Detect high-latency environments (VM, Docker with network overhead)
-// Adjust timeouts and concurrency based on environment
-const isDocker = isDockerEnv();
-// In Docker/VM environments, reduce concurrency and increase timeouts to avoid saturation
-const MAX_CONCURRENT_PINGS = isDocker ? 15 : 20; // Reduced for Docker/VM environments
-
-// MAC detection timeouts - increased for Docker/VM environments with higher latency
-// Base timeouts (for native environments)
-const MAC_TIMEOUT_IP_NEIGH_GET = 3000; // ip neigh get (forces ARP request)
-const MAC_TIMEOUT_IP_NEIGH_SHOW = 2000; // ip neigh show (read-only, faster)
-const MAC_TIMEOUT_PROC_ARP = 2000; // /proc/net/arp read
-const MAC_TIMEOUT_ARP_SCAN = 6000; // arp-scan (scans entire network)
-const MAC_TIMEOUT_ARP_CMD = 3000; // arp -n command
-
-// Multiplier for Docker/VM environments (increased latency)
-const MAC_TIMEOUT_MULTIPLIER = isDocker ? 2.0 : 1.0; // Double timeouts in Docker/VM
-
-// Calculated timeouts
-const MAC_TIMEOUT_IP_NEIGH_GET_ADJUSTED = Math.floor(MAC_TIMEOUT_IP_NEIGH_GET * MAC_TIMEOUT_MULTIPLIER);
-const MAC_TIMEOUT_IP_NEIGH_SHOW_ADJUSTED = Math.floor(MAC_TIMEOUT_IP_NEIGH_SHOW * MAC_TIMEOUT_MULTIPLIER);
-const MAC_TIMEOUT_PROC_ARP_ADJUSTED = Math.floor(MAC_TIMEOUT_PROC_ARP * MAC_TIMEOUT_MULTIPLIER);
-const MAC_TIMEOUT_ARP_SCAN_ADJUSTED = Math.floor(MAC_TIMEOUT_ARP_SCAN * MAC_TIMEOUT_MULTIPLIER);
-const MAC_TIMEOUT_ARP_CMD_ADJUSTED = Math.floor(MAC_TIMEOUT_ARP_CMD * MAC_TIMEOUT_MULTIPLIER);
+const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operations
 
 /**
  * Detect if running in Docker container
@@ -170,12 +147,6 @@ export class NetworkScanService {
         }
 
         logger.info('NetworkScanService', `Starting scan of ${ipsToScan.length} IPs (type: ${scanType})`);
-        
-        // Log environment-specific settings for debugging
-        if (isDocker) {
-            logger.info('NetworkScanService', `Docker/VM environment detected: Using adjusted timeouts (multiplier: ${MAC_TIMEOUT_MULTIPLIER}x) and reduced concurrency (${MAX_CONCURRENT_PINGS} concurrent pings)`);
-            logger.info('NetworkScanService', `MAC detection timeouts: ip_neigh_get=${MAC_TIMEOUT_IP_NEIGH_GET_ADJUSTED}ms, ip_neigh_show=${MAC_TIMEOUT_IP_NEIGH_SHOW_ADJUSTED}ms, proc_arp=${MAC_TIMEOUT_PROC_ARP_ADJUSTED}ms`);
-        }
 
         // Check Wireshark vendor database status at start of scan
         if (scanType === 'full') {
@@ -221,39 +192,7 @@ export class NetworkScanService {
                 const result = pingResults[j];
                 scanned++;
                 
-                // Check if ping was successful (only IPs that respond are discovered)
-                const pingSuccess = result.status === 'fulfilled' && result.value && result.value.success === true;
-                
-                if (!pingSuccess) {
-                    // IP is offline (ping failed, timeout, or error)
-                    // Only update existing IPs that were previously online
-                    // NEVER create new entries for IPs that don't respond
-                    const existing = NetworkScanRepository.findByIp(ip);
-                    if (existing && existing.status === 'online') {
-                        // Update existing online IP to offline
-                        const updatedScan = NetworkScanRepository.update(ip, {
-                            status: 'offline',
-                            lastSeen: new Date()
-                        });
-                        if (updatedScan) {
-                            NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
-                        }
-                        updated++;
-                    }
-                    // If IP doesn't exist, skip it completely - it was never discovered
-                    // This ensures we only discover IPs that are UP (online)
-                    
-                    // Update progress tracking
-                    if (this.currentScanProgress) {
-                        this.currentScanProgress.scanned = scanned;
-                        this.currentScanProgress.updated = updated;
-                    }
-                    continue; // Skip to next IP - don't process offline IPs further
-                }
-                
-                // IP is ONLINE (ping succeeded) - this is the only case where we create/update entries
-                // IMPORTANT: Only IPs that respond to ping are discovered and added to the database
-                if (pingSuccess) {
+                if (result.status === 'fulfilled' && result.value.success) {
                     const latency = result.value.latency;
                     // Collect latency for metrics (including 0ms)
                     if (latency !== undefined && latency >= 0) {
@@ -291,11 +230,6 @@ export class NetworkScanService {
                     if (scanType === 'full') {
                         let macToUse: string | null = null;
                         try {
-                            // Add small delay in Docker/VM environments to avoid network saturation
-                            // This helps prevent timeouts when multiple MAC detection requests happen simultaneously
-                            if (isDocker && j > 0) {
-                                await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay between MAC detections
-                            }
                             const mac = await this.getMacAddress(ip);
                             if (mac) {
                                 macToUse = mac;
@@ -444,9 +378,27 @@ export class NetworkScanService {
                         this.currentScanProgress.found = found;
                         this.currentScanProgress.updated = updated;
                     }
+                } else {
+                    // IP is offline - update existing entry if it exists
+                    const existing = NetworkScanRepository.findByIp(ip);
+                    if (existing && existing.status === 'online') {
+                        const updatedScan = NetworkScanRepository.update(ip, {
+                            status: 'offline',
+                            lastSeen: new Date()
+                        });
+                        if (updatedScan) {
+                            // Record in history table
+                            NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
+                        }
+                        updated++;
+                    }
+                    
+                    // Update progress tracking for offline IPs too
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.updated = updated;
+                    }
                 }
-                // Note: Offline IPs are handled above in the !pingSuccess block
-                // This ensures we ONLY discover IPs that are UP (online)
             }
             
             // Small delay between batches to avoid overwhelming the system
@@ -539,10 +491,6 @@ export class NetworkScanService {
                 scanData.vendorSource = 'manual';
             } else if (fullScan) {
                 try {
-                    // Add small delay in Docker/VM environments to avoid network saturation
-                    if (isDocker) {
-                        await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
-                    }
                     const mac = await this.getMacAddress(ip);
                     if (mac) {
                         scanData.mac = mac;
@@ -715,10 +663,6 @@ export class NetworkScanService {
                     if (scanType === 'full') {
                         let macToUse: string | null = null;
                         try {
-                            // Add small delay in Docker/VM environments to avoid network saturation
-                            if (isDocker && j > 0) {
-                                await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay between MAC detections
-                            }
                             const mac = await this.getMacAddress(ip);
                             if (mac) {
                                 macToUse = mac;
@@ -1289,21 +1233,13 @@ export class NetworkScanService {
             } else {
                 // Linux/Mac: Try multiple methods for better detection (like WatchYourLAN)
                 
-                // Log environment info for first IP to help diagnose issues
-                const isFirstAttempt = Math.random() < 0.01; // Log ~1% of attempts for diagnostics
-                if (isFirstAttempt) {
-                    const hostPathPrefix = getHostPathPrefix();
-                    logger.info('NetworkScanService', `[MAC] Environment: Docker=${isDocker}, HostPathPrefix=${hostPathPrefix || 'none'}, Timeouts=${MAC_TIMEOUT_MULTIPLIER}x`);
-                }
-                
                 // Method 1: Try ip neigh get (forces ARP request if not in table)
                 // This is more reliable than 'show' as it will query if needed
                 // In Docker, we need to ensure we can access the host's network namespace
-                // Increased timeout for Docker/VM environments
                 try {
                     // First try to force an ARP request
-                    logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip} (timeout: ${MAC_TIMEOUT_IP_NEIGH_GET_ADJUSTED}ms)...`);
-                    const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: MAC_TIMEOUT_IP_NEIGH_GET_ADJUSTED });
+                    logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip}...`);
+                    const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: 3000 });
                     logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${stdout.substring(0, 100)}`);
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
@@ -1319,19 +1255,11 @@ export class NetworkScanService {
                         logger.debug('NetworkScanService', `[MAC] No MAC pattern found in ip neigh output for ${ip}`);
                     }
                 } catch (error: any) {
-                    // Log more details for first few failures to help diagnose
-                    const errorDetails = error.message || String(error);
-                    const isTimeout = errorDetails.includes('timeout') || errorDetails.includes('ETIMEDOUT') || error.signal === 'SIGTERM';
-                    if (isFirstAttempt || Math.random() < 0.05) { // Log ~5% of errors
-                        logger.warn('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${errorDetails}${isTimeout ? ' (TIMEOUT)' : ''}`);
-                    } else {
-                        logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${errorDetails}`);
-                    }
+                    logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${error.message || error}`);
                     // Try alternative: ip neigh show (read-only, faster)
-                    // Increased timeout for Docker/VM environments
                     try {
-                        logger.debug('NetworkScanService', `[MAC] Trying ip neigh show (fallback) for ${ip} (timeout: ${MAC_TIMEOUT_IP_NEIGH_SHOW_ADJUSTED}ms)...`);
-                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: MAC_TIMEOUT_IP_NEIGH_SHOW_ADJUSTED });
+                        logger.debug('NetworkScanService', `[MAC] Trying ip neigh show (fallback) for ${ip}...`);
+                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: 1000 });
                         const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                         if (match) {
                             const mac = match[0].toLowerCase().replace(/-/g, ':');
@@ -1341,12 +1269,7 @@ export class NetworkScanService {
                             }
                         }
                     } catch (error2: any) {
-                        const error2Details = error2.message || String(error2);
-                        if (isFirstAttempt || Math.random() < 0.05) {
-                            logger.warn('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2Details}`);
-                        } else {
-                            logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2Details}`);
-                        }
+                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
                     }
                 }
                 
@@ -1357,27 +1280,10 @@ export class NetworkScanService {
                     ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']  // Try host first, then container
                     : ['/proc/net/arp'];  // Only container path
                 
-                // Log available paths for first attempt (diagnostic)
-                if (isFirstAttempt) {
-                    logger.info('NetworkScanService', `[MAC] ARP paths to try: ${arpPaths.join(', ')}`);
-                }
-                
                 for (const arpPath of arpPaths) {
                     try {
-                        // Check if file exists first (better error message)
-                        const fsSync = require('fs').accessSync;
-                        try {
-                            fsSync(arpPath);
-                        } catch (accessError) {
-                            if (isFirstAttempt || Math.random() < 0.1) {
-                                logger.warn('NetworkScanService', `[MAC] ARP file not accessible: ${arpPath} (check Docker volume mount)`);
-                            }
-                            continue; // Skip to next path
-                        }
-                        
-                        // Increased timeout for Docker/VM environments
-                        logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip} (timeout: ${MAC_TIMEOUT_PROC_ARP_ADJUSTED}ms)...`);
-                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: MAC_TIMEOUT_PROC_ARP_ADJUSTED });
+                        logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip}...`);
+                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
                         logger.debug('NetworkScanService', `[MAC] ${arpPath} output for ${ip}: ${stdout.substring(0, 100)}`);
                         const parts = stdout.trim().split(/\s+/);
                         if (parts.length >= 4 && parts[3] !== '00:00:00:00:00:00') {
@@ -1392,29 +1298,22 @@ export class NetworkScanService {
                             logger.debug('NetworkScanService', `[MAC] No valid MAC found in ${arpPath} for ${ip}`);
                         }
                     } catch (error: any) {
-                        const errorDetails = error.message || String(error);
-                        if (isFirstAttempt || Math.random() < 0.1) {
-                            logger.warn('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${errorDetails}`);
-                        } else {
-                            logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${errorDetails}`);
-                        }
+                        logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${error.message || error}`);
                         // Continue to next path
                     }
                 }
                 
                 // Method 3: Try arp-scan if available (like WatchYourLAN)
                 // arp-scan is more reliable for network scanning but requires root/privileges
-                // Increased timeout for Docker/VM environments
                 try {
                     // Get network interface for arp-scan
                     const networkInterface = this.getNetworkInterface();
                     if (networkInterface) {
                         // arp-scan -l -q -x (local network, quiet, exit after first match)
                         // Note: arp-scan scans entire network, so we parse output for our IP
-                        logger.debug('NetworkScanService', `[MAC] Trying arp-scan for ${ip} (timeout: ${MAC_TIMEOUT_ARP_SCAN_ADJUSTED}ms)...`);
                         const { stdout } = await execAsync(
                             `arp-scan -l -q -x -I ${networkInterface} 2>/dev/null | grep ${ip}`,
-                            { timeout: MAC_TIMEOUT_ARP_SCAN_ADJUSTED }
+                            { timeout: 5000 }
                         );
                         const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                         if (match) {
@@ -1431,10 +1330,8 @@ export class NetworkScanService {
                 }
                 
                 // Method 4: Fallback to traditional arp command
-                // Increased timeout for Docker/VM environments
                 try {
-                    logger.debug('NetworkScanService', `[MAC] Trying arp -n for ${ip} (timeout: ${MAC_TIMEOUT_ARP_CMD_ADJUSTED}ms)...`);
-                    const { stdout } = await execAsync(`arp -n ${ip}`, { timeout: MAC_TIMEOUT_ARP_CMD_ADJUSTED });
+                    const { stdout } = await execAsync(`arp -n ${ip}`, { timeout: 2000 });
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
