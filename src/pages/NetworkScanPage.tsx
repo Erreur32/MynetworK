@@ -514,13 +514,65 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             fetchHistory();
             fetchStats();
             
-            // Fetch scan progress
+            // Fetch scan progress or final results
             try {
-                const progressResponse = await api.get('/api/network-scan/progress');
+                const progressResponse = await api.get<{
+                    result?: {
+                        status?: 'in_progress' | 'completed';
+                        scanned?: number;
+                        total?: number;
+                        found?: number;
+                        updated?: number;
+                        duration?: number;
+                        range?: string;
+                        scanType?: string;
+                        detectionSummary?: { mac: number; vendor: number; hostname: number };
+                    } | null;
+                }>('/api/network-scan/progress');
+                
                 if (progressResponse.success && progressResponse.result) {
-                    setScanProgress(progressResponse.result);
+                    const result = progressResponse.result;
+                    
+                    if (result.status === 'completed') {
+                        // Scan completed, store final results and stop polling
+                        setLastScanSummary({
+                            range: result.range || scanRange || 'Auto-détection',
+                            scanned: result.scanned || 0,
+                            found: result.found || 0,
+                            updated: result.updated || 0,
+                            duration: result.duration || 0,
+                            detectionSummary: result.detectionSummary
+                        });
+                        setScanProgress(null);
+                        setIsScanning(false);
+                        setCurrentScanRange('');
+                        clearInterval(interval);
+                        setScanPollingInterval(null);
+                        
+                        // Final refresh after scan completes
+                        await fetchStats();
+                        await fetchHistory();
+                    } else if (result.status === 'in_progress') {
+                        // Scan still in progress, update progress
+                        setScanProgress({
+                            scanned: result.scanned || 0,
+                            total: result.total || 0,
+                            found: result.found || 0,
+                            updated: result.updated || 0
+                        });
+                    } else {
+                        // Legacy format (no status field) - assume in progress if has scanned/total
+                        if (result.scanned !== undefined && result.total !== undefined) {
+                            setScanProgress({
+                                scanned: result.scanned,
+                                total: result.total,
+                                found: result.found || 0,
+                                updated: result.updated || 0
+                            });
+                        }
+                    }
                 } else if (progressResponse.success && !progressResponse.result) {
-                    // Scan completed, clear progress
+                    // No scan in progress and no results (shouldn't happen during scan, but handle gracefully)
                     setScanProgress(null);
                 }
             } catch (error) {
@@ -530,15 +582,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         setScanPollingInterval(interval);
         
         try {
+            // Start scan (returns immediately with "scan started" status)
             const response = await api.post<{
                 result?: {
-                range: string;
-                scanType: string;
-                scanned: number;
-                found: number;
-                updated: number;
-                duration: number;
-                    detectionSummary?: { mac: number; vendor: number; hostname: number };
+                    message: string;
+                    range: string;
+                    scanType: string;
+                    status: string;
                 };
             }>('/api/network-scan/scan', {
                 range: scanRange || undefined,
@@ -547,41 +597,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             });
 
             if (response.success && response.result) {
-                // Store scan summary
-                const result = response.result as {
-                    range: string;
-                    scanType: string;
-                    scanned: number;
-                    found: number;
-                    updated: number;
-                    duration: number;
-                    detectionSummary?: { mac: number; vendor: number; hostname: number };
-                };
-                setLastScanSummary({
-                    range: result.range || scanRange || 'Auto-détection',
-                    scanned: result.scanned || 0,
-                    found: result.found || 0,
-                    updated: result.updated || 0,
-                    duration: result.duration || 0,
-                    detectionSummary: result.detectionSummary
-                });
-                
-                // Final refresh after scan completes
-                await fetchStats();
-                await fetchHistory();
+                // Scan started successfully, polling will handle progress and results
+                // The polling interval already set above will check for progress and final results
             } else {
-                alert(response.error?.message || 'Erreur lors du scan');
+                setIsScanning(false);
+                setCurrentScanRange('');
+                setScanProgress(null);
+                clearInterval(interval);
+                setScanPollingInterval(null);
+                alert(response.error?.message || 'Erreur lors du démarrage du scan');
             }
         } catch (error: any) {
             console.error('Scan failed:', error);
-            alert('Erreur lors du scan: ' + (error.message || 'Erreur inconnue'));
-        } finally {
             setIsScanning(false);
             setCurrentScanRange('');
             setScanProgress(null);
-            // Stop polling when scan is done
             clearInterval(interval);
             setScanPollingInterval(null);
+            alert('Erreur lors du démarrage du scan: ' + (error.message || 'Erreur inconnue'));
         }
     };
 

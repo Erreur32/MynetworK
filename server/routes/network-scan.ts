@@ -123,31 +123,44 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
         const { networkScanScheduler } = await import('../services/networkScanScheduler.js');
         networkScanScheduler.pauseAutoScans();
 
-    try {
-        const result = await networkScanService.scanNetwork(scanRange, scanType);
+        // Start scan in background (non-blocking)
+        // The scan will run asynchronously and results will be available via /progress endpoint
+        networkScanService.scanNetwork(scanRange, scanType)
+            .then((result) => {
+                // Track last manual scan
+                AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
+                    type: 'full',
+                    scanType: scanType,
+                    range: scanRange,
+                    timestamp: new Date().toISOString(),
+                    result: result
+                }));
+                logger.info('NetworkScan', `Scan completed successfully: ${result.scanned} scanned, ${result.found} found, ${result.updated} updated`);
+            })
+            .catch((error: any) => {
+                logger.error('NetworkScan', 'Background scan failed:', error);
+                logger.error('NetworkScan', 'Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    range: scanRange,
+                    scanType
+                });
+            })
+            .finally(() => {
+                // Always resume auto scans after manual scan completes (success or failure)
+                networkScanScheduler.resumeAutoScans();
+            });
 
-        // Track last manual scan
-        AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
-            type: 'full',
-            scanType: scanType,
-            range: scanRange,
-            timestamp: new Date().toISOString(),
-            result: result
-        }));
-
+        // Return immediately with scan started status
         res.json({
             success: true,
             result: {
+                message: 'Scan started',
                 range: scanRange,
                 scanType,
-                    ...result,
-                    detectionSummary: result.detectionSummary // Include detection summary in response
+                status: 'started'
             }
         });
-        } finally {
-            // Always resume auto scans after manual scan completes (success or failure)
-            networkScanScheduler.resumeAutoScans();
-        }
     } catch (error: any) {
         logger.error('NetworkScan', 'Scan failed:', error);
         logger.error('NetworkScan', 'Error details:', {
@@ -192,21 +205,38 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
 
 /**
  * GET /api/network-scan/progress
- * Get current scan progress (if a scan is in progress)
+ * Get current scan progress (if a scan is in progress) or last scan result (if scan completed)
  */
 router.get('/progress', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const progress = networkScanService.getScanProgress();
     
-    if (!progress) {
+    if (progress) {
+        // Scan is still in progress
         return res.json({
             success: true,
-            result: null
+            result: {
+                ...progress,
+                status: 'in_progress'
+            }
         });
     }
     
-    res.json({
+    // Scan is not in progress, check if we have final results
+    const lastResult = networkScanService.getLastScanResult();
+    if (lastResult) {
+        return res.json({
+            success: true,
+            result: {
+                ...lastResult,
+                status: 'completed'
+            }
+        });
+    }
+    
+    // No scan in progress and no results available
+    return res.json({
         success: true,
-        result: progress
+        result: null
     });
 }));
 

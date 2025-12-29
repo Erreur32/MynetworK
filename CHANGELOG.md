@@ -3,6 +3,49 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.0] - 2025-12-29
+
+### 🐛 Corrigé
+
+**Scan Réseau - Erreur 504 Gateway Timeout**
+- ✅ Correction de l'erreur 504 lors des scans longs (>60 secondes)
+- ✅ Le scan est maintenant asynchrone : démarre immédiatement sans bloquer la requête HTTP
+- ✅ Plus de timeout HTTP : le scan continue en arrière-plan pendant que le frontend suit le progrès
+- ✅ Résolution définitive du problème de timeout sur les scans de grandes plages réseau
+
+### ✨ Ajouté
+
+**Scan Réseau - Architecture Asynchrone**
+- ✅ Route POST `/api/network-scan/scan` retourne immédiatement avec statut "scan démarré"
+- ✅ Stockage des résultats finaux dans `NetworkScanService` pour récupération via polling
+- ✅ Endpoint GET `/api/network-scan/progress` retourne les résultats finaux une fois le scan terminé
+- ✅ Frontend adapté pour gérer la réponse asynchrone et récupérer automatiquement les résultats
+- ✅ Meilleure expérience utilisateur : suivi du progrès en temps réel sans erreurs
+
+**Service Scan Réseau - Gestion des Résultats**
+- ✅ Ajout du champ `lastScanResult` pour stocker les résultats finaux du scan
+- ✅ Méthode `getLastScanResult()` pour récupérer les résultats après completion
+- ✅ Nettoyage automatique des résultats lors du démarrage d'un nouveau scan
+
+### 🔧 Modifié
+
+**Route POST `/api/network-scan/scan`**
+- 🔧 Scan démarré en arrière-plan avec `Promise.then()` au lieu d'attendre la completion
+- 🔧 Gestion des erreurs asynchrones avec logs détaillés
+- 🔧 Retour immédiat avec statut "started" pour éviter les timeouts HTTP
+
+**Route GET `/api/network-scan/progress`**
+- 🔧 Retourne le progrès si scan en cours (`status: 'in_progress'`)
+- 🔧 Retourne les résultats finaux si scan terminé (`status: 'completed'`)
+- 🔧 Format unifié pour le progrès et les résultats finaux
+
+**Frontend - NetworkScanPage.tsx**
+- 🔧 `handleScan()` adapté pour gérer la réponse "scan démarré"
+- 🔧 Polling mis à jour pour détecter automatiquement la completion et récupérer les résultats
+- 🔧 Gestion du format legacy (sans champ `status`) pour compatibilité
+
+---
+
 ## [0.2.9] - 2025-12-29
 
 ---

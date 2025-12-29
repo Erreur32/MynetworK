@@ -116,6 +116,17 @@ export class NetworkScanService {
         updated: number;
         isActive: boolean;
     } | null = null;
+    
+    // Last scan result (stored after scan completes, cleared when new scan starts)
+    private lastScanResult: {
+        range: string;
+        scanType: 'full' | 'quick';
+        scanned: number;
+        found: number;
+        updated: number;
+        duration: number;
+        detectionSummary?: { mac: number; vendor: number; hostname: number };
+    } | null = null;
     /**
      * Scan a network range for active IP addresses
      * 
@@ -147,6 +158,9 @@ export class NetworkScanService {
         }
 
         logger.info('NetworkScanService', `Starting scan of ${ipsToScan.length} IPs (type: ${scanType})`);
+
+        // Clear last scan result when starting a new scan
+        this.lastScanResult = null;
 
         // Check Wireshark vendor database status at start of scan
         if (scanType === 'full') {
@@ -446,16 +460,22 @@ export class NetworkScanService {
         // Record metrics AFTER scan completes (not during, to avoid performance impact)
         metricsCollector.recordScanComplete(duration, scanned, found, updated, latencies);
 
-        // Clear progress tracking after scan completes
-        this.currentScanProgress = null;
-
-        return {
+        // Store final results before clearing progress
+        const finalResult = {
+            range,
+            scanType,
             scanned,
             found,
             updated,
             duration,
             detectionSummary
         };
+        this.lastScanResult = finalResult;
+
+        // Clear progress tracking after scan completes
+        this.currentScanProgress = null;
+
+        return finalResult;
     }
 
     /**
@@ -2261,6 +2281,21 @@ export class NetworkScanService {
      */
     getScanProgress(): { scanned: number; total: number; found: number; updated: number; isActive: boolean } | null {
         return this.currentScanProgress;
+    }
+
+    /**
+     * Get last scan result (stored after scan completes)
+     */
+    getLastScanResult(): {
+        range: string;
+        scanType: 'full' | 'quick';
+        scanned: number;
+        found: number;
+        updated: number;
+        duration: number;
+        detectionSummary?: { mac: number; vendor: number; hostname: number };
+    } | null {
+        return this.lastScanResult;
     }
 
     /**
