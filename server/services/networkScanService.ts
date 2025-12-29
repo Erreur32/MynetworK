@@ -221,11 +221,13 @@ export class NetworkScanService {
                 const result = pingResults[j];
                 scanned++;
                 
-                // Handle rejected promises (errors/timeouts)
-                if (result.status === 'rejected') {
-                    logger.debug('NetworkScanService', `[${ip}] Ping promise rejected: ${result.reason?.message || result.reason || 'Unknown error'}`);
-                    // Treat rejected promises as offline, but only update existing entries
-                    // Don't create new entries for IPs that never responded (to avoid polluting DB)
+                // Check if ping was successful (only IPs that respond are discovered)
+                const pingSuccess = result.status === 'fulfilled' && result.value && result.value.success === true;
+                
+                if (!pingSuccess) {
+                    // IP is offline (ping failed, timeout, or error)
+                    // Only update existing IPs that were previously online
+                    // NEVER create new entries for IPs that don't respond
                     const existing = NetworkScanRepository.findByIp(ip);
                     if (existing && existing.status === 'online') {
                         // Update existing online IP to offline
@@ -238,17 +240,20 @@ export class NetworkScanService {
                         }
                         updated++;
                     }
-                    // If IP doesn't exist, don't create it - it was never discovered
+                    // If IP doesn't exist, skip it completely - it was never discovered
+                    // This ensures we only discover IPs that are UP (online)
                     
                     // Update progress tracking
                     if (this.currentScanProgress) {
                         this.currentScanProgress.scanned = scanned;
                         this.currentScanProgress.updated = updated;
                     }
-                    continue; // Skip to next IP
+                    continue; // Skip to next IP - don't process offline IPs further
                 }
                 
-                if (result.status === 'fulfilled' && result.value.success) {
+                // IP is ONLINE (ping succeeded) - this is the only case where we create/update entries
+                // IMPORTANT: Only IPs that respond to ping are discovered and added to the database
+                if (pingSuccess) {
                     const latency = result.value.latency;
                     // Collect latency for metrics (including 0ms)
                     if (latency !== undefined && latency >= 0) {
@@ -439,30 +444,9 @@ export class NetworkScanService {
                         this.currentScanProgress.found = found;
                         this.currentScanProgress.updated = updated;
                     }
-                } else {
-                    // IP is offline (ping failed or returned success=false)
-                    const existing = NetworkScanRepository.findByIp(ip);
-                    if (existing && existing.status === 'online') {
-                        // Update existing online IP to offline
-                        const updatedScan = NetworkScanRepository.update(ip, {
-                            status: 'offline',
-                            lastSeen: new Date()
-                        });
-                        if (updatedScan) {
-                            // Record in history table
-                            NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
-                        }
-                        updated++;
-                    }
-                    // If IP doesn't exist or is already offline, don't create/update it
-                    // Only IPs that respond to ping are added to the database
-                    
-                    // Update progress tracking for offline IPs too
-                    if (this.currentScanProgress) {
-                        this.currentScanProgress.scanned = scanned;
-                        this.currentScanProgress.updated = updated;
-                    }
                 }
+                // Note: Offline IPs are handled above in the !pingSuccess block
+                // This ensures we ONLY discover IPs that are UP (online)
             }
             
             // Small delay between batches to avoid overwhelming the system
