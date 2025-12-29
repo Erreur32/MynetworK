@@ -3,6 +3,48 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.7] - 2025-12-29
+
+### 🐛 Corrigé
+
+**Scan Réseau - IPs Manquantes (Bug Critique)**
+- ✅ Correction du problème "une IP sur deux" manquante lors des scans
+- ✅ Gestion correcte des promesses rejetées (timeouts/erreurs de ping)
+- ✅ Les promesses rejetées sont maintenant capturées et traitées comme IPs offline
+- ✅ Sauvegarde des nouvelles IPs offline dans la base de données
+- ✅ Toutes les IPs scannées apparaissent maintenant dans les résultats, même si elles sont offline
+- ✅ Logs de débogage ajoutés pour identifier les problèmes de ping
+
+**Scan Réseau - Déclaration Variable Dupliquée**
+- ✅ Correction de l'erreur de compilation : `The symbol "isFirstAttempt" has already been declared`
+- ✅ Suppression de la déclaration dupliquée dans la détection MAC
+
+### ✨ Ajouté
+
+**Interface Utilisateur - Affichage Durée Scan**
+- ✅ Affichage de la durée du scan dans les résultats (format lisible : "1m 23s" ou "45.2s")
+- ✅ Fonction utilitaire `formatDuration()` pour formater la durée de manière cohérente
+- ✅ Durée affichée pour les scans "full" et "refresh"
+- ✅ Format adaptatif : minutes + secondes si >= 60s, secondes avec décimales sinon
+
+**Documentation - Troubleshooting Réseau Lent**
+- ✅ Guide complet dans `Doc_Dev/TROUBLESHOOTING_MAC_DETECTION.md`
+- ✅ Documentation des 7 problèmes potentiels sur réseau lent
+- ✅ Valeurs actuelles documentées pour tous les timeouts et paramètres de concurrence
+- ✅ Recommandations de configuration pour réseau très lent (>50ms latence)
+- ✅ Commandes de diagnostic pour identifier les problèmes de latence
+- ✅ Instructions pour ajuster les timeouts et la concurrence selon le réseau
+
+### 🔧 Modifié
+
+**Service Scan Réseau - Traitement des Résultats**
+- 🔧 Amélioration du traitement des résultats de ping avec gestion explicite des promesses rejetées
+- 🔧 Séparation claire entre IPs online, offline et erreurs
+- 🔧 Meilleure gestion des nouvelles IPs offline pour qu'elles apparaissent dans les résultats
+- 🔧 Logs améliorés pour le débogage des problèmes de scan
+
+---
+
 ## [0.2.6] - 2025-12-28
 
 ### 🐛 Corrigé

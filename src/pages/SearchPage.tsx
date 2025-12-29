@@ -414,7 +414,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     } else {
                         // Fallback to regular search if IP details fail
                         setIsExactIpSearch(false);
-                        const response = await api.post<SearchResultData>('/api/search', {
+            const response = await api.post<SearchResultData>('/api/search', {
                             query: trimmedQuery,
                             pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
                             types: selectedTypes.length > 0 ? selectedTypes : undefined,
@@ -452,27 +452,27 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 // Regular search
                 const response = await api.post<SearchResultData>('/api/search', {
                     query: trimmedQuery,
-                    pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
-                    types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                    exactMatch,
-                    caseSensitive
-                });
+                pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
+                types: selectedTypes.length > 0 ? selectedTypes : undefined,
+                exactMatch,
+                caseSensitive
+            });
 
-                if (response.success && response.result?.results) {
-                    // Display results immediately
-                    setResults(response.result.results);
-                    
-                    // If ping automatic is enabled, ping all local IPs in results (non-blocking)
-                    // This runs in the background, results are already displayed
-                    if (pingEnabled) {
-                        // Don't await - let it run in background while results are displayed
-                        pingAllResults(response.result.results);
-                    }
-                } else {
-                    // Handle API error response
-                    const errorMsg = response.error?.message || 'Erreur lors de la recherche';
-                    setError(errorMsg);
-                    setResults([]);
+            if (response.success && response.result?.results) {
+                // Display results immediately
+                setResults(response.result.results);
+                
+                // If ping automatic is enabled, ping all local IPs in results (non-blocking)
+                // This runs in the background, results are already displayed
+                if (pingEnabled) {
+                    // Don't await - let it run in background while results are displayed
+                    pingAllResults(response.result.results);
+                }
+            } else {
+                // Handle API error response
+                const errorMsg = response.error?.message || 'Erreur lors de la recherche';
+                setError(errorMsg);
+                setResults([]);
                 }
             }
         } catch (err: any) {

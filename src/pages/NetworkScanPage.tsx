@@ -74,6 +74,15 @@ interface AutoStatus {
     } | null;
 }
 
+// Format duration in milliseconds to human-readable string (e.g., "1m 23s" or "45.2s")
+const formatDuration = (durationMs: number): string => {
+    if (durationMs >= 60000) {
+        const minutes = Math.floor(durationMs / 60000);
+        const seconds = Math.floor((durationMs % 60000) / 1000);
+        return `${minutes}m ${seconds}s`;
+    }
+    return `${(durationMs / 1000).toFixed(1)}s`;
+};
 
 export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const { plugins, fetchPlugins } = usePluginStore();
@@ -1331,7 +1340,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 </div>
                                 <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
                                     <span className="text-gray-400">Durée:</span>
-                                    <span className="text-gray-200 ml-1 font-medium">{(lastScanSummary.duration / 1000).toFixed(1)}s</span>
+                                    <span className="text-gray-200 ml-1 font-medium">{formatDuration(lastScanSummary.duration)}</span>
                                 </div>
                                 <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
                                     <span className="text-gray-400">Scannés:</span>

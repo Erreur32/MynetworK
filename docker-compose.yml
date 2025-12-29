@@ -70,7 +70,7 @@ services:
       # Mount Docker socket (read-only) to enable Docker version detection and stats
       # Required for system server widget to display Docker information
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      
+
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro

@@ -50,14 +50,13 @@ const dnsReverseAsync = promisify(dns.reverse);
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
-const PING_TIMEOUT = isWindows ? 5000 : 5000; // 5 seconds timeout (increased for better detection)
+const PING_TIMEOUT = isWindows ? 3000 : 3000; // 3 seconds timeout (increased for Docker)
 
 // Detect high-latency environments (VM, Docker with network overhead)
 // Adjust timeouts and concurrency based on environment
 const isDocker = isDockerEnv();
 // In Docker/VM environments, reduce concurrency and increase timeouts to avoid saturation
-// Reduced concurrency helps prevent network saturation and improves detection rate
-const MAX_CONCURRENT_PINGS = isDocker ? 12 : 18; // Reduced to improve detection reliability
+const MAX_CONCURRENT_PINGS = isDocker ? 15 : 20; // Reduced for Docker/VM environments
 
 // MAC detection timeouts - increased for Docker/VM environments with higher latency
 // Base timeouts (for native environments)
@@ -221,6 +220,41 @@ export class NetworkScanService {
                 const ip = batch[j];
                 const result = pingResults[j];
                 scanned++;
+                
+                // Handle rejected promises (errors/timeouts)
+                if (result.status === 'rejected') {
+                    logger.debug('NetworkScanService', `[${ip}] Ping promise rejected: ${result.reason?.message || result.reason || 'Unknown error'}`);
+                    // Treat rejected promises as offline
+                    const existing = NetworkScanRepository.findByIp(ip);
+                    if (existing && existing.status === 'online') {
+                        const updatedScan = NetworkScanRepository.update(ip, {
+                            status: 'offline',
+                            lastSeen: new Date()
+                        });
+                        if (updatedScan) {
+                            NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
+                        }
+                        updated++;
+                    } else if (!existing) {
+                        // New IP that failed to ping - save as offline
+                        const scanData: CreateNetworkScanInput = {
+                            ip,
+                            status: 'offline',
+                            pingLatency: undefined
+                        };
+                        const savedScan = NetworkScanRepository.upsert(scanData);
+                        NetworkScanRepository.addHistoryEntry(savedScan.ip, savedScan.status, savedScan.pingLatency);
+                        found++;
+                    }
+                    
+                    // Update progress tracking
+                    if (this.currentScanProgress) {
+                        this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.found = found;
+                        this.currentScanProgress.updated = updated;
+                    }
+                    continue; // Skip to next IP
+                }
                 
                 if (result.status === 'fulfilled' && result.value.success) {
                     const latency = result.value.latency;
@@ -414,9 +448,10 @@ export class NetworkScanService {
                         this.currentScanProgress.updated = updated;
                     }
                 } else {
-                    // IP is offline - update existing entry if it exists
+                    // IP is offline (ping failed or returned success=false)
                     const existing = NetworkScanRepository.findByIp(ip);
                     if (existing && existing.status === 'online') {
+                        // Update existing online IP to offline
                         const updatedScan = NetworkScanRepository.update(ip, {
                             status: 'offline',
                             lastSeen: new Date()
@@ -426,11 +461,23 @@ export class NetworkScanService {
                             NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
                         }
                         updated++;
+                    } else if (!existing) {
+                        // New IP that is offline - save it anyway so it appears in results
+                        const scanData: CreateNetworkScanInput = {
+                            ip,
+                            status: 'offline',
+                            pingLatency: undefined
+                        };
+                        const savedScan = NetworkScanRepository.upsert(scanData);
+                        NetworkScanRepository.addHistoryEntry(savedScan.ip, savedScan.status, savedScan.pingLatency);
+                        found++;
                     }
+                    // If existing.status === 'offline', no update needed (already offline)
                     
                     // Update progress tracking for offline IPs too
                     if (this.currentScanProgress) {
                         this.currentScanProgress.scanned = scanned;
+                        this.currentScanProgress.found = found;
                         this.currentScanProgress.updated = updated;
                     }
                 }
@@ -1137,10 +1184,9 @@ export class NetworkScanService {
                 : `${pingCommand} ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
             
             // Execute ping command - our custom execAsync doesn't reject on non-zero exit codes
-            // Increase timeout buffer for Docker environments and slow networks
-            const timeoutBuffer = isDocker ? 2000 : 1000; // 2 seconds buffer for Docker, 1 second for native
+            // Increase timeout buffer for Docker environments
             const { stdout, stderr } = await execAsync(command, {
-                timeout: PING_TIMEOUT + timeoutBuffer
+                timeout: PING_TIMEOUT + 1000 // Add 1 second buffer for Docker
             });
             
             // Check if ping was successful by looking for latency in output
