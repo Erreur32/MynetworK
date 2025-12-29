@@ -50,13 +50,14 @@ const dnsReverseAsync = promisify(dns.reverse);
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
-const PING_TIMEOUT = isWindows ? 3000 : 3000; // 3 seconds timeout (increased for Docker)
+const PING_TIMEOUT = isWindows ? 5000 : 5000; // 5 seconds timeout (increased for better detection)
 
 // Detect high-latency environments (VM, Docker with network overhead)
 // Adjust timeouts and concurrency based on environment
 const isDocker = isDockerEnv();
 // In Docker/VM environments, reduce concurrency and increase timeouts to avoid saturation
-const MAX_CONCURRENT_PINGS = isDocker ? 15 : 20; // Reduced for Docker/VM environments
+// Reduced concurrency helps prevent network saturation and improves detection rate
+const MAX_CONCURRENT_PINGS = isDocker ? 12 : 18; // Reduced to improve detection reliability
 
 // MAC detection timeouts - increased for Docker/VM environments with higher latency
 // Base timeouts (for native environments)
@@ -1136,9 +1137,10 @@ export class NetworkScanService {
                 : `${pingCommand} ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
             
             // Execute ping command - our custom execAsync doesn't reject on non-zero exit codes
-            // Increase timeout buffer for Docker environments
+            // Increase timeout buffer for Docker environments and slow networks
+            const timeoutBuffer = isDocker ? 2000 : 1000; // 2 seconds buffer for Docker, 1 second for native
             const { stdout, stderr } = await execAsync(command, {
-                timeout: PING_TIMEOUT + 1000 // Add 1 second buffer for Docker
+                timeout: PING_TIMEOUT + timeoutBuffer
             });
             
             // Check if ping was successful by looking for latency in output
@@ -1344,7 +1346,6 @@ export class NetworkScanService {
                     : ['/proc/net/arp'];  // Only container path
                 
                 // Log available paths for first attempt (diagnostic)
-                const isFirstAttempt = Math.random() < 0.01;
                 if (isFirstAttempt) {
                     logger.info('NetworkScanService', `[MAC] ARP paths to try: ${arpPaths.join(', ')}`);
                 }
