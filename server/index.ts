@@ -325,8 +325,9 @@ app.use(errorHandler);
 const server = http.createServer(app);
 
 // Increase server timeouts for long-running requests (network scans can take longer in Docker/VM)
-// Default Node.js timeout is 2 minutes (120000ms), we keep it at 2 minutes to match Vite proxy
-server.timeout = 120000; // 2 minutes (120000ms) - matches Vite proxy timeout, conservative for production
+// Network scans can take 3-5 minutes for large ranges (254 IPs) with full scan (ping + MAC + hostname)
+// Increased to 5 minutes to accommodate slow networks and Docker environments
+server.timeout = 300000; // 5 minutes (300000ms) - increased for network scans on slow networks
 server.keepAliveTimeout = 65000; // 65 seconds (slightly higher than default 60s)
 server.headersTimeout = 66000; // 66 seconds (must be > keepAliveTimeout)
 
@@ -389,13 +390,70 @@ function getHostMachineIP(): string | null {
           if (fsSync.existsSync(operstatePath)) {
             const operstate = fsSync.readFileSync(operstatePath, 'utf8').trim();
             if (operstate === 'up') {
-              // Try to get IP from /host/proc/net/route or use default gateway
-              // For simplicity, we'll use the Docker default gateway pattern
-              // In most cases, the host IP can be found by checking the default route
-              // But parsing /proc/net/route is complex, so we'll use a simpler fallback
-              // The host IP is typically the gateway IP (172.17.0.1 for default bridge)
-              // But that's not the actual host IP. We need the host's actual IP.
-              // For now, return null and let the caller use container IP as fallback
+              // Try to read IP from /host/proc/net/route (default gateway)
+              // Or from network interface address files
+              const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
+              if (fsSync.existsSync(routePath)) {
+                const routeContent = fsSync.readFileSync(routePath, 'utf8');
+                const lines = routeContent.split('\n');
+                
+                // Find the default route (destination 00000000) and get gateway
+                for (const line of lines) {
+                  if (line.startsWith('Iface') || !line.trim()) continue;
+                  const parts = line.trim().split(/\s+/);
+                  if (parts.length >= 2 && parts[1] === '00000000' && parts[0] === ifaceName) {
+                    // Found default route for this interface, get gateway IP (parts[2])
+                    const gatewayHex = parts[2];
+                    if (gatewayHex && gatewayHex.length === 8) {
+                      // Convert hex to IP (little-endian)
+                      const ipParts = [
+                        parseInt(gatewayHex.substring(6, 8), 16),
+                        parseInt(gatewayHex.substring(4, 6), 16),
+                        parseInt(gatewayHex.substring(2, 4), 16),
+                        parseInt(gatewayHex.substring(0, 2), 16)
+                      ];
+                      const gatewayIP = ipParts.join('.');
+                      
+                      // Skip Docker bridge gateways (172.17-31.x.x)
+                      if (gatewayIP.startsWith('172.')) {
+                        const parts = gatewayIP.split('.').map(Number);
+                        if (parts.length === 4 && parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
+                          continue; // Skip Docker gateway
+                        }
+                      }
+                      
+              // Try to read IP address from /host/proc/net/if_inet6 or /host/sys/class/net/<iface>/address
+              // But those don't directly give IPv4. Instead, try to read from host's network interfaces
+              // by executing a command in the host namespace or reading from mounted files
+              // For now, try to get IP from container's networkInterfaces but filter Docker networks
+              const networkInterfaces = os.networkInterfaces();
+              for (const [name, addrs] of Object.entries(networkInterfaces)) {
+                // Skip Docker interfaces
+                if (name.startsWith('docker') || name.startsWith('veth') || name.startsWith('br-')) {
+                  continue;
+                }
+                for (const addr of addrs || []) {
+                  if (addr.family === 'IPv4' && !addr.internal) {
+                    // Skip Docker network ranges (172.17-31.x.x)
+                    if (addr.address.startsWith('172.')) {
+                      const parts = addr.address.split('.').map(Number);
+                      if (parts.length === 4 && parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
+                        continue; // Skip Docker IP
+                      }
+                    }
+                    // Found a valid IP, but this is container IP, not host IP
+                    // We need to read from host filesystem
+                  }
+                }
+              }
+              
+              // Try to read IP from host's /proc/net/route by parsing the interface address
+              // This is complex, so for dev mode, suggest using HOST_IP env var
+              // For now, return null to use container IP as fallback
+                    }
+                  }
+                }
+              }
             }
           }
         } catch {
@@ -514,10 +572,11 @@ server.listen(port, host, () => {
       wsUrl = `ws://${fallbackIP}:${dashboardPort}/ws/connection`;
     }
   } else if (isDockerDev) {
-    // Docker dev mode: use host ports from docker-compose.dev.yml (DASHBOARD_PORT and SERVER_PORT)
+    // Docker dev mode: use host ports from docker-compose.local.yml
     // These are the ports exposed on the host machine, not the container ports
-    const dashboardPort = process.env.DASHBOARD_PORT || '3666'; // Host port for frontend
-    const serverPort = process.env.SERVER_PORT || '3668'; // Host port for backend
+    // Default port matches docker-compose.local.yml: ${DASHBOARD_PORT:-3000}:3000
+    const dashboardPort = process.env.DASHBOARD_PORT || '3000'; // Host port for frontend
+    const serverPort = process.env.SERVER_PORT || port.toString(); // Use actual server port
     const networkIP = getNetworkIP();
     
     if (hostIP) {

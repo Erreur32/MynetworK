@@ -40,6 +40,10 @@ services:
       #- PORT=3000
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
+      # HOST_IP: IP address of the host machine on the local network
+      # If not set, the container will try to auto-detect, but may use container IP
+      # Example: HOST_IP=192.168.1.100
+      - HOST_IP=${HOST_IP:-192.168.1.150}
       # ⚠️ SECURITE CRITIQUE : JWT_SECRET - Secret pour signer les tokens JWT
       # 
       # IMPORTANT : Ne JAMAIS utiliser la valeur par défaut en production !

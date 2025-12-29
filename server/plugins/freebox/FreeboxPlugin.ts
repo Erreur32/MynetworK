@@ -214,6 +214,10 @@ export class FreeboxPlugin extends BasePlugin {
 
         try {
             // Fetch data from Freebox API in parallel
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:226',message:'Starting parallel API calls',data:{endpointCount:8},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            const parallelStartTime = Date.now();
             const [
                 devicesResult,
                 connectionResult,
@@ -233,6 +237,12 @@ export class FreeboxPlugin extends BasePlugin {
                 this.apiService.getPortForwardingRules(),
                 this.apiService.getWifiBss()
             ]);
+            const parallelDuration = Date.now() - parallelStartTime;
+            // #region agent log
+            const results = [devicesResult,connectionResult,systemResult,dhcpConfigResult,dhcpLeasesResult,dhcpStaticLeasesResult,portForwardResult,wifiBssResult];
+            const endpoints = ['lan/browser/pub','connection','system','dhcp/config','dhcp/dynamic_lease','dhcp/static_lease','fw/redir','wifi/bss'];
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:236',message:'Parallel API calls completed',data:{totalDuration:parallelDuration,results:results.map((r,i)=>({endpoint:endpoints[i],status:r.status,success:r.status==='fulfilled'?r.value.success:false}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
 
             // Verify we're still authenticated after API calls
             // If session expired during calls, clear sensitive data

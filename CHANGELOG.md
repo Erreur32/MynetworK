@@ -3,6 +3,69 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.2.8] - 2025-12-29
+
+### 🐛 Corrigé
+
+**Scan Réseau - Gestion des IPs Offline**
+- ✅ Correction : Les nouvelles IPs offline jamais découvertes ne sont plus créées dans la base de données
+- ✅ Seules les IPs qui répondent au ping sont ajoutées (comportement original restauré)
+- ✅ Les IPs existantes qui passent de "online" à "offline" sont correctement mises à jour
+- ✅ Évite la pollution de la base de données et les scans trop lents
+
+**Scan Réseau - Erreur Compilation**
+- ✅ Correction de l'erreur : `The symbol "isFirstAttempt" has already been declared`
+- ✅ Suppression de la déclaration dupliquée dans la détection MAC
+
+**Freebox Revolution - Timeouts API**
+- ✅ Correction spécifique pour Freebox Revolution uniquement (ne touche pas Pop, Ultra, Delta)
+- ✅ Timeout API augmenté à 20 secondes pour Revolution (au lieu de 10s)
+- ✅ Les autres modèles Freebox conservent le timeout de 10 secondes (inchangé)
+- ✅ Méthode `isRevolutionModel()` pour détecter uniquement la Revolution
+- ✅ Résout les erreurs `AbortError` sur les endpoints `/dhcp/dynamic_lease/`, `/fw/redir/`, `/lan/browser/pub/`
+
+**Timeout HTTP Serveur**
+- ✅ Timeout HTTP augmenté de 2 minutes à 5 minutes pour les scans réseau longs
+- ✅ Évite les erreurs 504 Gateway Timeout sur les scans de grandes plages
+
+**Docker Local - Configuration**
+- ✅ Correction du port par défaut affiché pour docker-compose.local.yml (3000 au lieu de 3666)
+- ✅ Ajout du support de la variable d'environnement `HOST_IP` pour spécifier l'IP de l'hôte
+- ✅ Documentation ajoutée dans docker-compose.local.yml pour configurer HOST_IP
+
+### ✨ Ajouté
+
+**Interface Utilisateur - Affichage Durée Scan**
+- ✅ Affichage de la durée du scan dans les résultats avec format lisible
+- ✅ Format adaptatif : "1m 23s" si >= 60s, "45.2s" sinon
+- ✅ Durée affichée pour les scans "full" et "refresh"
+- ✅ Fonction utilitaire `formatDuration()` pour formatage cohérent
+
+**Documentation - Troubleshooting Réseau Lent**
+- ✅ Guide complet dans `Doc_Dev/TROUBLESHOOTING_MAC_DETECTION.md`
+- ✅ Documentation des 7 problèmes potentiels sur réseau lent
+- ✅ Valeurs actuelles documentées pour tous les timeouts et paramètres
+- ✅ Recommandations de configuration pour réseau très lent (>50ms latence)
+- ✅ Commandes de diagnostic pour identifier les problèmes
+
+### 🔧 Modifié
+
+**Service Scan Réseau - Traitement des Résultats**
+- 🔧 Amélioration du traitement des promesses rejetées avec gestion explicite
+- 🔧 Séparation claire entre IPs online, offline et erreurs
+- 🔧 Logs améliorés pour le débogage des problèmes de scan
+- 🔧 Meilleure robustesse face aux erreurs réseau
+
+**Service Freebox API - Timeout Adaptatif**
+- 🔧 Détection automatique du modèle Freebox (Revolution vs autres)
+- 🔧 Timeout adaptatif selon le modèle détecté
+- 🔧 Logs de débogage pour identifier le modèle et le timeout utilisé
+
+**Configuration Docker Local**
+- 🔧 Support de la variable d'environnement `HOST_IP` pour spécifier l'IP de l'hôte
+- 🔧 Port par défaut corrigé pour correspondre au mapping docker-compose.local.yml
+
+---
 ## [0.2.7] - 2025-12-29
 
 ### 🐛 Corrigé

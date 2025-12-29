@@ -224,9 +224,11 @@ export class NetworkScanService {
                 // Handle rejected promises (errors/timeouts)
                 if (result.status === 'rejected') {
                     logger.debug('NetworkScanService', `[${ip}] Ping promise rejected: ${result.reason?.message || result.reason || 'Unknown error'}`);
-                    // Treat rejected promises as offline
+                    // Treat rejected promises as offline, but only update existing entries
+                    // Don't create new entries for IPs that never responded (to avoid polluting DB)
                     const existing = NetworkScanRepository.findByIp(ip);
                     if (existing && existing.status === 'online') {
+                        // Update existing online IP to offline
                         const updatedScan = NetworkScanRepository.update(ip, {
                             status: 'offline',
                             lastSeen: new Date()
@@ -235,22 +237,12 @@ export class NetworkScanService {
                             NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
                         }
                         updated++;
-                    } else if (!existing) {
-                        // New IP that failed to ping - save as offline
-                        const scanData: CreateNetworkScanInput = {
-                            ip,
-                            status: 'offline',
-                            pingLatency: undefined
-                        };
-                        const savedScan = NetworkScanRepository.upsert(scanData);
-                        NetworkScanRepository.addHistoryEntry(savedScan.ip, savedScan.status, savedScan.pingLatency);
-                        found++;
                     }
+                    // If IP doesn't exist, don't create it - it was never discovered
                     
                     // Update progress tracking
                     if (this.currentScanProgress) {
                         this.currentScanProgress.scanned = scanned;
-                        this.currentScanProgress.found = found;
                         this.currentScanProgress.updated = updated;
                     }
                     continue; // Skip to next IP
@@ -461,23 +453,13 @@ export class NetworkScanService {
                             NetworkScanRepository.addHistoryEntry(updatedScan.ip, updatedScan.status, updatedScan.pingLatency);
                         }
                         updated++;
-                    } else if (!existing) {
-                        // New IP that is offline - save it anyway so it appears in results
-                        const scanData: CreateNetworkScanInput = {
-                            ip,
-                            status: 'offline',
-                            pingLatency: undefined
-                        };
-                        const savedScan = NetworkScanRepository.upsert(scanData);
-                        NetworkScanRepository.addHistoryEntry(savedScan.ip, savedScan.status, savedScan.pingLatency);
-                        found++;
                     }
-                    // If existing.status === 'offline', no update needed (already offline)
+                    // If IP doesn't exist or is already offline, don't create/update it
+                    // Only IPs that respond to ping are added to the database
                     
                     // Update progress tracking for offline IPs too
                     if (this.currentScanProgress) {
                         this.currentScanProgress.scanned = scanned;
-                        this.currentScanProgress.found = found;
                         this.currentScanProgress.updated = updated;
                     }
                 }

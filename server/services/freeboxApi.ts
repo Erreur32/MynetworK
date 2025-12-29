@@ -182,12 +182,23 @@ class FreeboxApiService {
             body: body ? JSON.stringify(body) : undefined
         };
 
+        const requestStartTime = Date.now();
+        // Check if model is Revolution - if so, use longer timeout (ONLY for Revolution)
+        const isRevolution = this.isRevolutionModel();
+        const timeoutValue = isRevolution ? 20000 : config.freebox.requestTimeout; // 20s for Revolution, 10s for others
         try {
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:186',message:'Request start',data:{method,url,timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
+            const timeout = setTimeout(() => controller.abort(), timeoutValue);
 
             const response = await fetch(url, {...options, signal: controller.signal});
             clearTimeout(timeout);
+            const requestDuration = Date.now() - requestStartTime;
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:192',message:'Request success',data:{method,url,duration:requestDuration,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
 
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
@@ -204,6 +215,11 @@ class FreeboxApiService {
             const data = await response.json() as FreeboxApiResponse<T>;
             return data;
         } catch (error) {
+            const requestDuration = Date.now() - requestStartTime;
+            const isAbortError = error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'));
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:207',message:'Request failed',data:{method,url,duration:requestDuration,isAbortError,errorName:error instanceof Error ? error.name : 'unknown',errorMsg:error instanceof Error ? error.message : String(error),timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
             console.error(`[FreeboxAPI] Request failed: ${method} ${url}`, error);
             // Return error response instead of throwing
             return {
@@ -435,6 +451,20 @@ class FreeboxApiService {
     // Get cached version info (call getApiVersion first to populate)
     getVersionInfo(): VersionInfo | null {
         return this.versionInfo;
+    }
+
+    /**
+     * Check if the detected Freebox model is Revolution
+     * Returns true ONLY for Revolution, false for all other models (Pop, Ultra, Delta, etc.)
+     * This allows applying Revolution-specific fixes without affecting other models
+     */
+    private isRevolutionModel(): boolean {
+        if (!this.versionInfo) {
+            return false;
+        }
+        const modelName = (this.versionInfo.box_model_name || this.versionInfo.box_model || '').toLowerCase();
+        // Only return true for Revolution - all other models (Pop, Ultra, Delta) return false
+        return modelName.includes('revolution') || modelName.includes('v6') || modelName.includes('fbxgw1');
     }
 
     async getSystemInfo(): Promise<FreeboxApiResponse> {

@@ -103,6 +103,9 @@ export const config = {
     apiVersion: process.env.FREEBOX_API_VERSION || 'v14',
 
     // Timeouts
+    // #region agent log
+    // Note: Timeout value logged at request time in freeboxApi.ts
+    // #endregion
     requestTimeout: 10000,
 
     // Token storage file path (absolute path for Docker compatibility)

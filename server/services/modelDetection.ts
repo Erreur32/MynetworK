@@ -98,6 +98,9 @@ class ModelDetectionService {
       }
 
       const versionData = apiVersion.result as ApiVersionResponse;
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'modelDetection.ts:100',message:'Model detection result',data:{boxModelName:versionData.box_model_name,boxModel:versionData.box_model,boxFlavor:versionData.box_flavor},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const modelName = versionData.box_model_name || versionData.box_model || versionData.device_name || 'Unknown';
       const boxFlavor = (versionData.box_flavor === 'full' ? 'full' : 'light') as BoxFlavor;
 
@@ -111,6 +114,9 @@ class ModelDetectionService {
 
       // Detect model from name
       const model = detectModelFromName(modelName);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'modelDetection.ts:116',message:'Detected model',data:{modelName,detectedModel:model,boxFlavor},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
       // Build capabilities
       this.capabilities = buildCapabilities(model, modelName, boxFlavor);
