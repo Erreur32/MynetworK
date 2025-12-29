@@ -324,6 +324,12 @@ app.use(errorHandler);
 // Create HTTP server (needed for WebSocket)
 const server = http.createServer(app);
 
+// Increase server timeouts for long-running requests (network scans can take longer in Docker/VM)
+// Default Node.js timeout is 2 minutes (120000ms), we keep it at 2 minutes to match Vite proxy
+server.timeout = 120000; // 2 minutes (120000ms) - matches Vite proxy timeout, conservative for production
+server.keepAliveTimeout = 65000; // 65 seconds (slightly higher than default 60s)
+server.headersTimeout = 66000; // 66 seconds (must be > keepAliveTimeout)
+
 // Log upgrade requests for debugging (only in verbose mode to reduce noise)
 if (process.env.DEBUG_UPGRADE === 'true') {
 server.on('upgrade', (request, socket, head) => {

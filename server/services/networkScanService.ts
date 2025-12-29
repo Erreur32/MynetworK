@@ -1275,6 +1275,13 @@ export class NetworkScanService {
             } else {
                 // Linux/Mac: Try multiple methods for better detection (like WatchYourLAN)
                 
+                // Log environment info for first IP to help diagnose issues
+                const isFirstAttempt = Math.random() < 0.01; // Log ~1% of attempts for diagnostics
+                if (isFirstAttempt) {
+                    const hostPathPrefix = getHostPathPrefix();
+                    logger.info('NetworkScanService', `[MAC] Environment: Docker=${isDocker}, HostPathPrefix=${hostPathPrefix || 'none'}, Timeouts=${MAC_TIMEOUT_MULTIPLIER}x`);
+                }
+                
                 // Method 1: Try ip neigh get (forces ARP request if not in table)
                 // This is more reliable than 'show' as it will query if needed
                 // In Docker, we need to ensure we can access the host's network namespace
@@ -1298,7 +1305,14 @@ export class NetworkScanService {
                         logger.debug('NetworkScanService', `[MAC] No MAC pattern found in ip neigh output for ${ip}`);
                     }
                 } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${error.message || error}`);
+                    // Log more details for first few failures to help diagnose
+                    const errorDetails = error.message || String(error);
+                    const isTimeout = errorDetails.includes('timeout') || errorDetails.includes('ETIMEDOUT') || error.signal === 'SIGTERM';
+                    if (isFirstAttempt || Math.random() < 0.05) { // Log ~5% of errors
+                        logger.warn('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${errorDetails}${isTimeout ? ' (TIMEOUT)' : ''}`);
+                    } else {
+                        logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${errorDetails}`);
+                    }
                     // Try alternative: ip neigh show (read-only, faster)
                     // Increased timeout for Docker/VM environments
                     try {
@@ -1313,7 +1327,12 @@ export class NetworkScanService {
                             }
                         }
                     } catch (error2: any) {
-                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
+                        const error2Details = error2.message || String(error2);
+                        if (isFirstAttempt || Math.random() < 0.05) {
+                            logger.warn('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2Details}`);
+                        } else {
+                            logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2Details}`);
+                        }
                     }
                 }
                 
@@ -1324,8 +1343,25 @@ export class NetworkScanService {
                     ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']  // Try host first, then container
                     : ['/proc/net/arp'];  // Only container path
                 
+                // Log available paths for first attempt (diagnostic)
+                const isFirstAttempt = Math.random() < 0.01;
+                if (isFirstAttempt) {
+                    logger.info('NetworkScanService', `[MAC] ARP paths to try: ${arpPaths.join(', ')}`);
+                }
+                
                 for (const arpPath of arpPaths) {
                     try {
+                        // Check if file exists first (better error message)
+                        const fsSync = require('fs').accessSync;
+                        try {
+                            fsSync(arpPath);
+                        } catch (accessError) {
+                            if (isFirstAttempt || Math.random() < 0.1) {
+                                logger.warn('NetworkScanService', `[MAC] ARP file not accessible: ${arpPath} (check Docker volume mount)`);
+                            }
+                            continue; // Skip to next path
+                        }
+                        
                         // Increased timeout for Docker/VM environments
                         logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip} (timeout: ${MAC_TIMEOUT_PROC_ARP_ADJUSTED}ms)...`);
                         const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: MAC_TIMEOUT_PROC_ARP_ADJUSTED });
@@ -1343,7 +1379,12 @@ export class NetworkScanService {
                             logger.debug('NetworkScanService', `[MAC] No valid MAC found in ${arpPath} for ${ip}`);
                         }
                     } catch (error: any) {
-                        logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${error.message || error}`);
+                        const errorDetails = error.message || String(error);
+                        if (isFirstAttempt || Math.random() < 0.1) {
+                            logger.warn('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${errorDetails}`);
+                        } else {
+                            logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${errorDetails}`);
+                        }
                         // Continue to next path
                     }
                 }

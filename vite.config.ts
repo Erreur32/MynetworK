@@ -52,8 +52,8 @@ export default defineConfig({
         target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
         changeOrigin: true,
         secure: false,
-        timeout: 60000, // Increased timeout for long-running requests like ping
-        proxyTimeout: 60000,
+        timeout: 120000, // 2 minutes timeout for full network scans (increased from 60s to handle Docker/VM latency)
+        proxyTimeout: 120000, // 2 minutes proxy timeout
         configure: (proxy, _options) => {
           proxy.on('error', (err, req, res) => {
             // Suppress ECONNREFUSED errors during backend restart - they are normal
