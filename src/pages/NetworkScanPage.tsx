@@ -517,23 +517,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             // Fetch scan progress or final results
             try {
                 const progressResponse = await api.get<{
-                    result?: {
-                        status?: 'in_progress' | 'completed';
-                        scanned?: number;
-                        total?: number;
-                        found?: number;
-                        updated?: number;
-                        duration?: number;
-                        range?: string;
-                        scanType?: string;
-                        detectionSummary?: { mac: number; vendor: number; hostname: number };
-                    } | null;
-                }>('/api/network-scan/progress');
+                    status?: 'in_progress' | 'completed';
+                    scanned?: number;
+                    total?: number;
+                    found?: number;
+                    updated?: number;
+                    duration?: number;
+                    range?: string;
+                    scanType?: string;
+                    detectionSummary?: { mac: number; vendor: number; hostname: number };
+                } | null>('/api/network-scan/progress');
                 
                 if (progressResponse.success && progressResponse.result) {
                     const result = progressResponse.result;
                     
-                    if (result.status === 'completed') {
+                    if (result && result.status === 'completed') {
                         // Scan completed, store final results and stop polling
                         setLastScanSummary({
                             range: result.range || scanRange || 'Auto-détection',
@@ -552,7 +550,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         // Final refresh after scan completes
                         await fetchStats();
                         await fetchHistory();
-                    } else if (result.status === 'in_progress') {
+                    } else if (result && result.status === 'in_progress') {
                         // Scan still in progress, update progress
                         setScanProgress({
                             scanned: result.scanned || 0,
@@ -560,7 +558,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             found: result.found || 0,
                             updated: result.updated || 0
                         });
-                    } else {
+                    } else if (result) {
                         // Legacy format (no status field) - assume in progress if has scanned/total
                         if (result.scanned !== undefined && result.total !== undefined) {
                             setScanProgress({
