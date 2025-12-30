@@ -265,11 +265,45 @@ export const SystemServerWidget: React.FC = () => {
                             <HardDrive size={16} />
                             <span>Disques ({systemInfo.disks.length})</span>
                         </div>
-                        {systemInfo.disks.map((disk, index) => (
+                        {systemInfo.disks.map((disk, index) => {
+                            // Helper function to get display name for disk
+                            // If mount point is a system file path (/etc/resolv.conf, /etc/hostname, /etc/hosts), use "Disque N"
+                            // Otherwise, use the mount point name or try to extract device name
+                            const getDiskDisplayName = (mount: string, index: number): string => {
+                                // List of system file paths to hide
+                                const systemPaths = ['/etc/resolv.conf', '/etc/hostname', '/etc/hosts'];
+                                
+                                // If mount is a system file path, return "Disque N"
+                                if (systemPaths.includes(mount)) {
+                                    return `Disque ${index + 1}`;
+                                }
+                                
+                                // Try to extract device name from mount point (e.g., /dev/sda1 -> sda1)
+                                // Or use the mount point itself if it's a valid path
+                                if (mount.startsWith('/dev/')) {
+                                    return mount.replace('/dev/', '');
+                                }
+                                
+                                // If mount point looks like a file path (starts with /), try to get the last part
+                                if (mount.startsWith('/')) {
+                                    // For mount points like /mnt/disk1, use the last part
+                                    const parts = mount.split('/').filter(p => p);
+                                    if (parts.length > 0) {
+                                        return parts[parts.length - 1];
+                                    }
+                                }
+                                
+                                // Fallback: use mount point as-is if it's not a system path
+                                return mount || `Disque ${index + 1}`;
+                            };
+                            
+                            const diskDisplayName = getDiskDisplayName(disk.mount, index);
+                            
+                            return (
                             <div key={index} className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-gray-400 font-mono text-xs">
-                                        {disk.mount}
+                                        {diskDisplayName}
                                     </span>
                                     <span className="text-white text-xs">
                                         {formatBytes(disk.used)} / {formatBytes(disk.total)}
@@ -286,7 +320,8 @@ export const SystemServerWidget: React.FC = () => {
                                     <span>{(disk.percentage ?? 0).toFixed(1)}%</span>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : systemInfo.disk.total > 0 && (
                     <div className="space-y-2">

@@ -88,12 +88,15 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                 const hasStats = !!stats;
                                 const isActive = plugin.enabled && plugin.connectionStatus;
 
-                                // Get API information from plugin properties (same as administration panel)
-                                const apiMode = plugin.apiMode;
-                                const apiVersion = plugin.apiVersion;
-                                const controllerFirmware = plugin.controllerFirmware;
-                                const firmware = plugin.firmware;
-                                const playerFirmware = plugin.playerFirmware;
+                                // Get API information from pluginStats.system (where firmware/apiVersion are stored)
+                                // Fallback to plugin properties if not available in stats (for backward compatibility)
+                                const systemStats = stats?.system as any;
+                                const apiMode = plugin.apiMode || systemStats?.apiMode;
+                                const apiVersion = plugin.apiVersion || systemStats?.apiVersion;
+                                // For UniFi, firmware is stored as 'version' in systemStats
+                                const controllerFirmware = plugin.controllerFirmware || systemStats?.controllerFirmware || systemStats?.version;
+                                const firmware = plugin.firmware || systemStats?.firmware;
+                                const playerFirmware = plugin.playerFirmware || systemStats?.playerFirmware;
 
                                 const source =
                                     stats && typeof (stats as any).source === 'string'
@@ -168,10 +171,15 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                 <span className="text-[10px] text-gray-500">
                                                     {(() => {
                                                         // Display real firmware version instead of plugin code version
-                                                        if (plugin.id === 'freebox' && plugin.firmware) {
-                                                            return `Firmware ${plugin.firmware}`;
-                                                        } else if (plugin.id === 'unifi' && plugin.controllerFirmware) {
-                                                            return `Firmware ${plugin.controllerFirmware}`;
+                                                        // Get firmware from systemStats (where it's stored after getStats call)
+                                                        const systemStats = stats?.system as any;
+                                                        const freeboxFirmware = plugin.firmware || systemStats?.firmware;
+                                                        const unifiFirmware = plugin.controllerFirmware || systemStats?.controllerFirmware || systemStats?.version;
+                                                        
+                                                        if (plugin.id === 'freebox' && freeboxFirmware) {
+                                                            return `Firmware ${freeboxFirmware}`;
+                                                        } else if (plugin.id === 'unifi' && unifiFirmware) {
+                                                            return `Firmware ${unifiFirmware}`;
                                                         }
                                                         // Fallback to plugin version if no firmware available
                                                         return `Version ${plugin.version || 'n/a'}`;

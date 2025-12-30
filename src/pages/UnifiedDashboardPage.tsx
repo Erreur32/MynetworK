@@ -30,6 +30,13 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
         fetchPlugins();
     }, [fetchPlugins]);
 
+    // Fetch stats immediately after plugins are loaded to display firmware/apiVersion info
+    useEffect(() => {
+        if (plugins.length > 0 && plugins.some(p => p.enabled)) {
+            fetchAllStats();
+        }
+    }, [plugins, fetchAllStats]);
+
     // Poll plugin stats every 30 seconds
     usePolling(fetchAllStats, {
         enabled: plugins.some(p => p.enabled),
