@@ -67,6 +67,53 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 ---
 
+## [0.3.6] - 2025-12-30
+
+### 🐛 Corrigé
+
+**Route `/api/network-scan/database-size-estimate` - Erreur 404**
+- ✅ Correction de l'erreur 404 sur l'endpoint `/api/network-scan/database-size-estimate`
+- ✅ Déplacement de la route avant la route dynamique `/:id` pour éviter les conflits de routage
+- ✅ La route est maintenant correctement accessible depuis l'interface de maintenance
+
+**Affichage "Rapide" au lieu de "Full" pour Full Scan**
+- ✅ Correction de l'affichage du type de scan dans le widget dashboard et la page scan
+- ✅ Le badge "Full Scan" affiche maintenant toujours "Complet" au lieu de "Rapide"
+- ✅ Le dernier scan de type "full" affiche correctement "Complet" dans les deux interfaces
+
+### ✨ Ajouté
+
+**Badge Plage IP**
+- ✅ Ajout d'un badge cyan affichant la plage IP scannée dans le widget dashboard
+- ✅ Ajout d'un badge cyan affichant la plage IP scannée dans la page scan réseau
+- ✅ Badge affiché dans le dernier scan et dans les prochains scans automatiques
+- ✅ Badge également disponible dans la colonne de gauche sous "Base vendors" avec label "Réseau:"
+
+**Tri pour Toutes les Colonnes**
+- ✅ Ajout du tri pour les colonnes "Avg1h", "Max" et "Monitoring" dans le tableau des scans
+- ✅ Tri côté client utilisant les données déjà chargées (`latencyStats` et `monitoringStatus`)
+- ✅ Indicateurs visuels (flèches) pour toutes les colonnes triables
+- ✅ La colonne "Actions" reste non triable comme prévu
+
+### 🔧 Modifié
+
+**Réorganisation Section "Info Scans"**
+- 🔧 Le "Dernier Scan" est maintenant affiché sous les sections "Full Scan" et "Refresh"
+- 🔧 Ajout d'une bordure supérieure pour séparer visuellement le dernier scan
+- 🔧 Meilleure organisation visuelle de l'information
+
+**Positionnement Badge Réseau**
+- 🔧 Badge réseau retiré de la ligne "Full Scan" dans la colonne de gauche
+- 🔧 Badge réseau déplacé dans la colonne de gauche sous "Base vendors" avec label "Réseau:"
+- 🔧 Badge réseau déplacé après le temps dans le widget dashboard (après "Dans Xh (HH:MM)")
+- 🔧 Alignement des labels "Base vendors:", "Réseau:" et "Scan auto:" avec largeur fixe pour cohérence visuelle
+
+**Widget Dashboard - Scan Réseau**
+- 🔧 Réorganisation de l'ordre des éléments dans la ligne "Full Scan"
+- 🔧 Ordre final : "Full Scan" → "Complet" → "Dans Xh (HH:MM)" → Badge réseau
+
+---
+
 ## [0.3.4] - 2025-12-30
 
 ### 🐛 Corrigé

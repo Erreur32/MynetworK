@@ -68,6 +68,23 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     const [loading, setLoading] = useState(false);
     const [autoStatus, setAutoStatus] = useState<AutoStatus | null>(null);
     const [autoStatusLoading, setAutoStatusLoading] = useState(true);
+    const [scanRange, setScanRange] = useState<string>('192.168.1.0/24');
+
+    // Fetch default scan range
+    useEffect(() => {
+        const fetchDefaultConfig = async () => {
+            try {
+                const response = await api.get<{ defaultRange: string; defaultAutoDetect: boolean }>('/api/network-scan/default-config');
+                if (response.success && response.result) {
+                    setScanRange(response.result.defaultRange);
+                }
+            } catch (error) {
+                console.error('Failed to fetch default config:', error);
+            }
+        };
+        
+        fetchDefaultConfig();
+    }, []);
 
     // Fetch auto status
     useEffect(() => {
@@ -304,21 +321,21 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                         )}
                                         <span className="text-gray-400">
                                             {autoStatus.lastScan.type === 'full' ? (
-                                                <>Full Scan <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
+                                                <>Full Scan <span className="text-gray-500">(Complet)</span></>
                                             ) : (
                                                 <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                             )}
                                         </span>
+                                        {autoStatus.lastScan.range && (
+                                            <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
+                                                {autoStatus.lastScan.range}
+                                            </span>
+                                        )}
                                         <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
                                         <span className="text-gray-500 text-xs mt-0.5">
                                             {formatRelativeTime(autoStatus.lastScan.timestamp)}
                                         </span>
                                     </div>
-                                    {autoStatus.lastScan.range && (
-                                        <div className="text-gray-500 text-xs mt-0.5">
-                                            Plage: {autoStatus.lastScan.range}
-                                        </div>
-                                    )}
                                 </div>
                             ) : lastScan ? (
                                 <div className="mb-2">
@@ -341,12 +358,8 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     {autoStatus.fullScan.config.enabled && (
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-gray-300 font-medium w-14">Full Scan</span>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
-                                                autoStatus.fullScan.config.scanType === 'full'
-                                                    ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
-                                                    : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
-                                            }`}>
-                                                {autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                            <span className="px-2 py-0.5 rounded text-xs font-medium w-16 text-center bg-purple-500/20 border border-purple-500/50 text-purple-400">
+                                                Complet
                                             </span>
                                             <span className="text-gray-400">
                                                 {formatNextExecution(
@@ -356,6 +369,11 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                                     autoStatus.fullScan.config.interval
                                                 )}
                                             </span>
+                                            {scanRange && (
+                                                <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
+                                                    {scanRange}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                     {autoStatus.refresh.config.enabled && (

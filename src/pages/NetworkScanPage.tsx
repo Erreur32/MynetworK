@@ -129,11 +129,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     });
     const [searchFilter, setSearchFilter] = useState<string>('');
     const [debouncedSearchFilter, setDebouncedSearchFilter] = useState<string>('');
-    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor'>(() => {
+    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'avg1h' | 'max' | 'monitoring'>(() => {
         try {
             const saved = localStorage.getItem('networkScan_sortBy');
-            if (saved && ['ip', 'last_seen', 'first_seen', 'status', 'ping_latency', 'hostname', 'mac', 'vendor'].includes(saved)) {
-                return saved as 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor';
+            if (saved && ['ip', 'last_seen', 'first_seen', 'status', 'ping_latency', 'hostname', 'mac', 'vendor', 'avg1h', 'max', 'monitoring'].includes(saved)) {
+                return saved as 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'avg1h' | 'max' | 'monitoring';
             }
         } catch (error) {
             console.warn('Failed to load sortBy from localStorage:', error);
@@ -923,7 +923,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     // This ensures that even if server-side filtering has issues, client-side will catch it
     // Optimized with useMemo to avoid recalculating on every render
     const filteredScans = useMemo(() => {
-        return scans.filter(scan => {
+        let filtered = scans.filter(scan => {
             if (statusFilter !== 'all' && scan.status !== statusFilter) return false;
             if (searchFilter) {
                 const searchLower = searchFilter.toLowerCase().trim();
@@ -948,7 +948,35 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             }
             return true;
         });
-    }, [scans, statusFilter, searchFilter]);
+
+        // Client-side sorting for avg1h, max, and monitoring (server-side sorting for others)
+        if (sortBy === 'avg1h' || sortBy === 'max' || sortBy === 'monitoring') {
+            filtered = [...filtered].sort((a, b) => {
+                if (sortBy === 'avg1h') {
+                    const aVal = latencyStats[a.ip]?.avg1h ?? null;
+                    const bVal = latencyStats[b.ip]?.avg1h ?? null;
+                    if (aVal === null && bVal === null) return 0;
+                    if (aVal === null) return 1;
+                    if (bVal === null) return -1;
+                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+                } else if (sortBy === 'max') {
+                    const aVal = latencyStats[a.ip]?.max ?? null;
+                    const bVal = latencyStats[b.ip]?.max ?? null;
+                    if (aVal === null && bVal === null) return 0;
+                    if (aVal === null) return 1;
+                    if (bVal === null) return -1;
+                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+                } else if (sortBy === 'monitoring') {
+                    const aVal = monitoringStatus[a.ip] ? 1 : 0;
+                    const bVal = monitoringStatus[b.ip] ? 1 : 0;
+                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+                }
+                return 0;
+            });
+        }
+
+        return filtered;
+    }, [scans, statusFilter, searchFilter, sortBy, sortOrder, latencyStats, monitoringStatus]);
 
     // Optimize chart data calculations with useMemo
     const totalChartData = useMemo(() => {
@@ -1121,52 +1149,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Colonne 1 : Informations des scans */}
                             <div className="space-y-2 text-xs">
-                                <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
-                                {/* Afficher le dernier scan avec son type et sa date exacte */}
-                                {autoStatus?.lastScan ? (
-                                    <div className="mb-2">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            {autoStatus.lastScan.isManual ? (
-                                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
-                                            ) : (
-                                                <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">Auto</span>
-                                            )}
-                                            <span className="text-gray-400">
-                                                {autoStatus.lastScan.type === 'full' ? (
-                                                    <>Full Scan <span className="text-gray-500">(Full)</span></>
-                                                ) : (
-                                                    <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
-                                                )}
-                                            </span>
-                                            <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
-                                            <span className="text-gray-500 text-xs mt-0.5">
-                                            {formatRelativeTime(autoStatus.lastScan.timestamp)} </span>
-                                        </div>
-
-                                        {autoStatus.lastScan.range && (
-                                            <div className="text-gray-500 text-xs mt-0.5">
-                                                Plage: {autoStatus.lastScan.range}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : stats?.lastScan ? (
-                                    <div className="mb-2">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
-                                            <span className="text-gray-300">Scan</span> <span className="text-gray-300 font-medium">{formatDate(stats.lastScan)}</span>
-                                        </div>
-                        
-                                        <div className="text-gray-500 text-xs mt-0.5">
-                                            {formatRelativeTime(stats.lastScan)}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-gray-500">Aucun scan effectué</div>
-                                )}
-                                
                                 {/* Prochains scans automatiques */}
                                 {autoStatus && autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) && (
-                                    <div className="pt-2 border-t border-gray-800 space-y-2">
+                                    <div className="space-y-2 mb-2">
                                         {autoStatus.fullScan.config.enabled && (
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="text-gray-300 font-medium w-14">Full Scan</span>
@@ -1205,6 +1190,45 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         )}
                                     </div>
                                 )}
+                                
+                                <div className="pt-2 border-t border-gray-800">
+                                    <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
+                                    {/* Afficher le dernier scan avec son type et sa date exacte */}
+                                    {autoStatus?.lastScan ? (
+                                        <div className="mb-2">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                {autoStatus.lastScan.isManual ? (
+                                                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">Auto</span>
+                                                )}
+                                                <span className="text-gray-400">
+                                                    {autoStatus.lastScan.type === 'full' ? (
+                                                        <>Full Scan <span className="text-gray-500">(Full)</span></>
+                                                    ) : (
+                                                        <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
+                                                    )}
+                                                </span>
+                                                <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
+                                                <span className="text-gray-500 text-xs mt-0.5">
+                                                {formatRelativeTime(autoStatus.lastScan.timestamp)} </span>
+                                            </div>
+                                        </div>
+                                    ) : stats?.lastScan ? (
+                                        <div className="mb-2">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
+                                                <span className="text-gray-300">Scan</span> <span className="text-gray-300 font-medium">{formatDate(stats.lastScan)}</span>
+                                            </div>
+                            
+                                            <div className="text-gray-500 text-xs mt-0.5">
+                                                {formatRelativeTime(stats.lastScan)}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-gray-500">Aucun scan effectué</div>
+                                    )}
+                                </div>
                             </div>
                             
                             {/* Colonne 2 : Boutons d'action et stats */}
@@ -1280,19 +1304,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         <Network size={12} />
                                         Ajouter IP
                                     </button>
+                                    
                                 </div>
                                 
                                 {/* Stats vendors et scan auto */}
                                 <div className="pt-2 border-t border-gray-800 space-y-2">
                                     {/* Info base vendors IEEE OUI */}
                                     {wiresharkVendorStats && (
-                                        <div className="flex items-center gap-2 text-xs">
-                                            <span className="text-gray-400">Base vendors:</span>
-                                            {wiresharkVendorStats.totalVendors > 0 ? (
-                                                <>
-                                                    <span className="text-emerald-400 font-medium">{wiresharkVendorStats.totalVendors.toLocaleString()}</span>
-                                                    {wiresharkVendorStats.lastUpdate && (
-                                                        <span className="text-gray-500">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <span className="text-gray-400 w-20">Base vendors:</span>
+                                                {wiresharkVendorStats.totalVendors > 0 ? (
+                                                    <>
+                                                        <span className="text-emerald-400 font-medium">{wiresharkVendorStats.totalVendors.toLocaleString()}</span>
+                                                        {wiresharkVendorStats.lastUpdate && (
+                                                            <span className="text-gray-500">
                                                             (mise à jour: {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })})
                                                         </span>
                                                     )}
@@ -1300,18 +1326,27 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             ) : (
                                                 <span className="text-orange-400">Non chargée</span>
                                             )}
+                                            </div>
+                                            {scanRange && (
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className="text-gray-400 w-20">Réseau:</span>
+                                                    <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
+                                                        {scanRange}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                     
                                     {/* Scan auto actif ou pas */}
                                     {autoStatusLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span>Scan auto:</span>
+                                            <span className="w-20">Scan auto:</span>
                                             <span>Chargement...</span>
                                         </div>
                                     ) : autoStatus ? (
                                         <div className="flex items-center gap-2 text-xs">
-                                            <span className="text-gray-400">Scan auto:</span>
+                                            <span className="text-gray-400 w-20">Scan auto:</span>
                                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                                 autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled)
                                                     ? 'bg-emerald-500/20 text-emerald-400'
@@ -1566,14 +1601,38 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400">
-                                    <span>Avg1h</span>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                    if (sortBy === 'avg1h') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('avg1h'); setSortOrder('asc'); }
+                                }}>
+                                    <div className="flex items-center gap-2">
+                                        <span>Avg1h</span>
+                                        {sortBy === 'avg1h' && (
+                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                        )}
+                                    </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400">
-                                    <span>Max</span>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                    if (sortBy === 'max') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('max'); setSortOrder('asc'); }
+                                }}>
+                                    <div className="flex items-center gap-2">
+                                        <span>Max</span>
+                                        {sortBy === 'max' && (
+                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                        )}
+                                    </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400">
-                                    <span>Monitoring</span>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                    if (sortBy === 'monitoring') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('monitoring'); setSortOrder('asc'); }
+                                }}>
+                                    <div className="flex items-center gap-2">
+                                        <span>Monitoring</span>
+                                        {sortBy === 'monitoring' && (
+                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                        )}
+                                    </div>
                                 </th>
                                 <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
                                     if (sortBy === 'last_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');

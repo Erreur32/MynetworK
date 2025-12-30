@@ -1269,6 +1269,31 @@ router.delete('/clear', requireAuth, requireAdmin, autoLog('network-scan', 'clea
 }));
 
 /**
+ * GET /api/network-scan/database-size-estimate
+ * Get database size estimation (current, estimated after purge, estimated freed space)
+ * IMPORTANT: Must be defined BEFORE /:id route to avoid route conflict
+ */
+router.get('/database-size-estimate', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const estimate = estimateDatabaseSize();
+        
+        res.json({
+            success: true,
+            result: estimate
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to estimate database size:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to estimate database size',
+                code: 'SIZE_ESTIMATE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
  * GET /api/network-scan/:id
  * Get details of a specific IP
  */
@@ -1886,30 +1911,6 @@ router.post('/optimize-database', requireAuth, requireAdmin, autoLog('network-sc
             error: {
                 message: error.message || 'Failed to optimize database',
                 code: 'OPTIMIZE_ERROR'
-            }
-        });
-    }
-}));
-
-/**
- * GET /api/network-scan/database-size-estimate
- * Get database size estimation (current, estimated after purge, estimated freed space)
- */
-router.get('/database-size-estimate', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    try {
-        const estimate = estimateDatabaseSize();
-        
-        res.json({
-            success: true,
-            result: estimate
-        });
-    } catch (error: any) {
-        logger.error('NetworkScan', 'Failed to estimate database size:', error);
-        return res.status(500).json({
-            success: false,
-            error: {
-                message: error.message || 'Failed to estimate database size',
-                code: 'SIZE_ESTIMATE_ERROR'
             }
         });
     }
