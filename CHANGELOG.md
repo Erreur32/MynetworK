@@ -3,6 +3,53 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.2] - 2025-12-30
+
+### 🐛 Corrigé
+
+**Détection MAC dans Docker - Plugins en Priorité**
+- ✅ Réorganisation de `getMacAddress()` pour utiliser les plugins activés (Freebox, UniFi) EN PREMIER selon la configuration de priorité
+- ✅ Les méthodes système (ARP, `/proc/net/arp`) sont utilisées comme fallback si les plugins échouent ou ne sont pas activés
+- ✅ Garantie que les méthodes système fonctionnent correctement même sans plugins (essentiel pour Docker)
+- ✅ Correction du problème où certaines IPs n'avaient aucune MAC détectée dans Docker avec seulement le plugin Scanner activé
+
+**Détection MAC - Support UniFi**
+- ✅ Ajout de la méthode `getMacFromUniFi()` pour récupérer les MAC depuis le plugin UniFi
+- ✅ Recherche dans `unifiPlugin.getStats().devices` par IP
+- ✅ Validation du format MAC avant retour
+
+**Détection Vendor - Fonctionnement sans Plugins**
+- ✅ Garantie que la détection de vendor fonctionne même sans plugins grâce à la base de données Wireshark/OUI
+- ✅ `getVendorWithSource()` utilise déjà le plugin "scanner" dans la priorité par défaut
+- ✅ La plupart des MAC adresses peuvent être identifiées via la base de données OUI même sans plugins
+
+### ✨ Ajouté
+
+**Détection MAC - Méthode UniFi**
+- ✅ Nouvelle méthode `getMacFromUniFi(ip: string)` dans `NetworkScanService`
+- ✅ Support complet de la détection MAC depuis UniFi Controller
+- ✅ Recherche par IP dans les devices UniFi (access points, switches, clients)
+
+### 🔧 Modifié
+
+**NetworkScanService - Ordre de Détection MAC**
+- 🔧 `getMacAddress()` réorganisé pour essayer les plugins activés en premier selon la priorité configurée
+- 🔧 Si aucun plugin n'est activé OU si tous les plugins échouent, utilisation des méthodes système
+- 🔧 Les méthodes système restent disponibles et fonctionnent même sans plugins
+- 🔧 Logs améliorés pour indiquer quelle méthode (plugin ou système) a réussi/échoué
+
+**NetworkScanService - Logs de Diagnostic**
+- 🔧 Logs détaillés ajoutés pour chaque tentative de détection MAC
+- 🔧 Logs indiquant les raisons d'échec (plugin non activé, pas de données, erreur réseau, etc.)
+- 🔧 Logs du résultat final (MAC trouvée ou non, source utilisée)
+- 🔧 Logs de débogage dans `getMacFromFreebox()` et `getMacFromUniFi()`
+
+**Refresh Existing IPs**
+- 🔧 `refreshExistingIps()` utilise automatiquement la nouvelle logique de détection MAC via `getMacAddress()`
+- 🔧 Les MAC détectées lors du refresh sont correctement sauvegardées
+
+---
+
 ## [0.3.1] - 2025-12-30
 
 ### 🐛 Corrigé

@@ -1242,13 +1242,61 @@ export class NetworkScanService {
      * @returns MAC address or null if not found
      */
     async getMacAddress(ip: string): Promise<string | null> {
+        logger.info('NetworkScanService', `[MAC] Starting MAC detection for ${ip}`);
+        
         try {
+            // Step 1: Try plugins first (if any are enabled) according to priority configuration
+            // This ensures plugins are used before system methods, which may fail in Docker
+            const config = PluginPriorityConfigService.getConfig();
+            const priority = config.vendorPriority; // Use vendorPriority as it includes all plugins (freebox, unifi, scanner)
+            
+            // Filter to only plugins that can provide MAC addresses (freebox, unifi)
+            const macPlugins = priority.filter(p => p === 'freebox' || p === 'unifi');
+            
+            if (macPlugins.length > 0) {
+                logger.info('NetworkScanService', `[MAC] Trying plugins in priority order: ${macPlugins.join(', ')}`);
+                
+                for (const pluginName of macPlugins) {
+                    try {
+                        if (pluginName === 'freebox') {
+                            const mac = await this.getMacFromFreebox(ip);
+                            if (mac) {
+                                logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} from Freebox plugin`);
+                                return mac;
+                            }
+                        } else if (pluginName === 'unifi') {
+                            const mac = await this.getMacFromUniFi(ip);
+                            if (mac) {
+                                logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} from UniFi plugin`);
+                                return mac;
+                            }
+                        }
+                    } catch (error: any) {
+                        logger.debug('NetworkScanService', `[MAC] Plugin ${pluginName} failed for ${ip}: ${error.message || error}`);
+                        // Continue to next plugin
+                    }
+                }
+                
+                logger.info('NetworkScanService', `[MAC] All plugins failed or returned no MAC for ${ip}, trying system methods...`);
+            } else {
+                logger.info('NetworkScanService', `[MAC] No MAC-capable plugins enabled for ${ip}, using system methods only`);
+            }
+            
+            // Step 2: Try system methods (fallback if no plugins or all plugins failed)
+            // These methods should work even without plugins, especially important in Docker
             if (isWindows) {
                 // Windows: arp -a
-                const { stdout } = await execAsync(`arp -a ${ip}`);
-                const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                if (match) {
-                    return match[0].toLowerCase().replace(/-/g, ':');
+                logger.debug('NetworkScanService', `[MAC] Trying Windows arp -a for ${ip}...`);
+                try {
+                    const { stdout } = await execAsync(`arp -a ${ip}`);
+                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                    if (match) {
+                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                        logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} using Windows arp`);
+                        return mac;
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[MAC] Windows arp failed for ${ip}: ${error.message || error}`);
                 }
             } else {
                 // Linux/Mac: Try multiple methods for better detection (like WatchYourLAN)
@@ -1360,24 +1408,17 @@ export class NetworkScanService {
                             return mac;
                         }
                     }
-                } catch {
-                    // Continue to next method
-                }
-                
-                // Method 5: Try Freebox plugin as fallback (if hostname is detected from Freebox, MAC should be available)
-                try {
-                    const macFromFreebox = await this.getMacFromFreebox(ip);
-                    if (macFromFreebox) {
-                        logger.info('NetworkScanService', `[MAC] Found MAC ${macFromFreebox} for ${ip} from Freebox plugin`);
-                        return macFromFreebox;
-                    }
                 } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] Freebox fallback failed for ${ip}: ${error.message || error}`);
+                    logger.debug('NetworkScanService', `[MAC] Traditional arp command failed for ${ip}: ${error.message || error}`);
+                    // Continue - all system methods have been tried
                 }
             }
+            
+            // All methods (plugins and system) have been tried and failed
+            logger.info('NetworkScanService', `[MAC] ✗ All detection methods failed for ${ip}`);
         } catch (error) {
-            // All methods failed
-            logger.debug('NetworkScanService', `Failed to get MAC for ${ip}:`, error);
+            // Unexpected error during MAC detection
+            logger.error('NetworkScanService', `[MAC] Unexpected error during MAC detection for ${ip}:`, error);
         }
         
         return null;
@@ -1392,11 +1433,13 @@ export class NetworkScanService {
         try {
             const freeboxPlugin = pluginManager.getPlugin('freebox');
             if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[MAC] Freebox plugin not available or disabled for ${ip}`);
                 return null;
             }
             
             const stats = await freeboxPlugin.getStats();
             if (!stats?.devices || !Array.isArray(stats.devices)) {
+                logger.debug('NetworkScanService', `[MAC] No devices found in Freebox stats for ${ip}`);
                 return null;
             }
             
@@ -1411,9 +1454,50 @@ export class NetworkScanService {
                 } else {
                     logger.debug('NetworkScanService', `[MAC] Invalid MAC format from Freebox for ${ip}: ${mac}`);
                 }
+            } else {
+                logger.debug('NetworkScanService', `[MAC] Device not found in Freebox stats for ${ip}`);
             }
         } catch (error: any) {
             logger.debug('NetworkScanService', `[MAC] Freebox lookup failed for ${ip}: ${error.message || error}`);
+        }
+        return null;
+    }
+
+    /**
+     * Get MAC address from UniFi plugin
+     * @param ip IP address
+     * @returns MAC address or null if not found
+     */
+    private async getMacFromUniFi(ip: string): Promise<string | null> {
+        try {
+            const unifiPlugin = pluginManager.getPlugin('unifi');
+            if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[MAC] UniFi plugin not available or disabled for ${ip}`);
+                return null;
+            }
+            
+            const stats = await unifiPlugin.getStats();
+            if (!stats?.devices || !Array.isArray(stats.devices)) {
+                logger.debug('NetworkScanService', `[MAC] No devices found in UniFi stats for ${ip}`);
+                return null;
+            }
+            
+            // Find device by IP (devices can be access points, switches, or clients)
+            const device = stats.devices.find((d: any) => d.ip === ip);
+            if (device && device.mac) {
+                const mac = device.mac.toLowerCase().trim();
+                // Validate MAC format
+                if (/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/.test(mac)) {
+                    logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} from UniFi`);
+                    return mac.replace(/-/g, ':');
+                } else {
+                    logger.debug('NetworkScanService', `[MAC] Invalid MAC format from UniFi for ${ip}: ${mac}`);
+                }
+            } else {
+                logger.debug('NetworkScanService', `[MAC] Device not found in UniFi stats for ${ip}`);
+            }
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `[MAC] UniFi lookup failed for ${ip}: ${error.message || error}`);
         }
         return null;
     }
