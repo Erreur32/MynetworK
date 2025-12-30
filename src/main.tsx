@@ -8,7 +8,7 @@ import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.3.7';
+const APP_VERSION = '0.3.8';
 
 // Console log with colored background
 const logAppInfo = () => {
@@ -49,6 +49,19 @@ if (import.meta.env.PROD) {
     }
     // Log all other errors normally
     originalConsoleError.apply(console, args);
+  };
+  
+  // Suppress deprecated StorageType.persistent warning in production
+  // This warning comes from dependencies using the old storage API
+  const originalConsoleWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    const message = args.join(' ');
+    // Suppress only the StorageType.persistent deprecation warning
+    if (message.includes('StorageType.persistent is deprecated')) {
+      return; // Ignore silently
+    }
+    // Keep all other warnings
+    originalConsoleWarn.apply(console, args);
   };
 }
 

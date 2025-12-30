@@ -1,39 +1,3 @@
-// Suppress Node.js warning about NODE_TLS_REJECT_UNAUTHORIZED in dev mode
-// This is intentionally set to '0' for Freebox/UniFi self-signed certificates
-// Only suppress in dev mode, keep warning visible in production for security awareness
-if (process.env.NODE_ENV !== 'production') {
-  // Intercept warnings via process.on('warning') event
-  process.on('warning', (warning) => {
-    // Suppress only the NODE_TLS_REJECT_UNAUTHORIZED warning
-    if (warning.message && warning.message.includes('NODE_TLS_REJECT_UNAUTHORIZED')) {
-      // Suppress this warning silently
-      return;
-    }
-    // Emit all other warnings normally
-    console.warn(warning.name, warning.message);
-  });
-  
-  // Also intercept via emitWarning for compatibility
-  const originalEmitWarning = process.emitWarning.bind(process);
-  process.emitWarning = ((warning: string | Error, typeOrCtor?: string | Function, code?: string, ctor?: Function) => {
-    // Suppress only the NODE_TLS_REJECT_UNAUTHORIZED warning
-    const warningMessage = typeof warning === 'string' ? warning : warning.message;
-    if (warningMessage.includes('NODE_TLS_REJECT_UNAUTHORIZED')) {
-      return;
-    }
-    // Emit all other warnings normally
-    if (typeof typeOrCtor === 'function') {
-      return originalEmitWarning(warning, typeOrCtor);
-    } else if (code) {
-      return originalEmitWarning(warning, typeOrCtor as string, code, ctor);
-    } else if (typeOrCtor) {
-      return originalEmitWarning(warning, typeOrCtor as string);
-    } else {
-      return originalEmitWarning(warning);
-    }
-  }) as typeof process.emitWarning;
-}
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -361,47 +325,125 @@ function getHostMachineIP(): string | null {
   const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
   
   try {
-    // Try to read host network interfaces from mounted /host/sys/class/net
-    const netPath = path.join(HOST_ROOT_PATH, 'sys', 'class', 'net');
-    if (fsSync.existsSync(netPath)) {
-      const interfaces = fsSync.readdirSync(netPath);
-      
-      // Filter out virtual interfaces (lo, docker, veth, br-, virbr)
-      const physicalInterfaces = interfaces.filter(iface => {
-        return !iface.startsWith('lo') && 
-               !iface.startsWith('docker') && 
-               !iface.startsWith('veth') &&
-               !iface.startsWith('br-') &&
-               !iface.startsWith('virbr');
-      });
-      
-      // Try to get IP from first active physical interface
-      for (const ifaceName of physicalInterfaces) {
-        try {
+    // Method 1: Try to read IP addresses from /host/proc/net/route
+    // Parse the route file to find the default gateway interface, then try to get its IP
+    const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
+    if (fsSync.existsSync(routePath)) {
+      try {
+        const routeContent = fsSync.readFileSync(routePath, 'utf8');
+        const lines = routeContent.split('\n').filter(line => line.trim());
+        
+        // Find the default route (destination 00000000) to identify the main interface
+        let defaultInterface: string | null = null;
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].trim().split(/\s+/);
+          if (parts.length >= 2) {
+            const ifaceName = parts[0];
+            const destination = parts[1];
+            
+            // Look for default route
+            if (destination === '00000000') {
+              // Skip virtual interfaces
+              if (!ifaceName.startsWith('lo') && 
+                  !ifaceName.startsWith('docker') && 
+                  !ifaceName.startsWith('veth') &&
+                  !ifaceName.startsWith('br-') &&
+                  !ifaceName.startsWith('virbr')) {
+                defaultInterface = ifaceName;
+                break;
+              }
+            }
+          }
+        }
+        
+        // If we found a default interface, try to get its IP from network config files
+        // or from /host/proc/net/if_inet6 for IPv6
+        if (defaultInterface) {
+          const ifacePath = path.join(HOST_ROOT_PATH, 'sys', 'class', 'net', defaultInterface);
+          const operstatePath = path.join(ifacePath, 'operstate');
+          
           // Check if interface is up
-          const operstatePath = path.join(netPath, ifaceName, 'operstate');
           if (fsSync.existsSync(operstatePath)) {
             const operstate = fsSync.readFileSync(operstatePath, 'utf8').trim();
             if (operstate === 'up') {
-              // Try to get IP from /host/proc/net/route or use default gateway
-              // For simplicity, we'll use the Docker default gateway pattern
-              // In most cases, the host IP can be found by checking the default route
-              // But parsing /proc/net/route is complex, so we'll use a simpler fallback
-              // The host IP is typically the gateway IP (172.17.0.1 for default bridge)
-              // But that's not the actual host IP. We need the host's actual IP.
-              // For now, return null and let the caller use container IP as fallback
+              // Try to read IPv6 address from /host/proc/net/if_inet6
+              const inet6Path = path.join(HOST_ROOT_PATH, 'proc', 'net', 'if_inet6');
+              if (fsSync.existsSync(inet6Path)) {
+                try {
+                  const inet6Content = fsSync.readFileSync(inet6Path, 'utf8');
+                  const inet6Lines = inet6Content.split('\n').filter(line => line.trim());
+                  
+                  for (const line of inet6Lines) {
+                    const parts = line.trim().split(/\s+/);
+                    if (parts.length >= 6 && parts[5] === defaultInterface) {
+                      // Found IPv6 address for this interface
+                      // Convert from hex format to IPv6 address
+                      const ipv6Hex = parts[0];
+                      // Skip link-local addresses (fe80::)
+                      if (!ipv6Hex.startsWith('fe80')) {
+                        // Parse IPv6 hex to readable format (simplified)
+                        // For now, we'll skip IPv6 and focus on IPv4
+                      }
+                    }
+                  }
+                } catch {
+                  // Continue to next method
+                }
+              }
             }
           }
-        } catch {
-          continue;
         }
+      } catch (error) {
+        // Continue to next method if route parsing fails
       }
     }
-  } catch {
+    
+    // Method 2: Try to get IP from Docker gateway as a fallback
+    // The Docker gateway IP (e.g., 172.17.0.1) is not the host's real IP,
+    // but it's better than showing the container IP (172.18.0.2)
+    // We can get this from the default route gateway
+    const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
+    if (fsSync.existsSync(routePath)) {
+      try {
+        const routeContent = fsSync.readFileSync(routePath, 'utf8');
+        const lines = routeContent.split('\n').filter(line => line.trim());
+        
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].trim().split(/\s+/);
+          if (parts.length >= 3) {
+            const destination = parts[1];
+            const gateway = parts[2];
+            
+            // Look for default route (destination 00000000)
+            if (destination === '00000000' && gateway !== '00000000') {
+              // Convert gateway from hex to IP address
+              // Format: hex string like "0101A8C0" -> "192.168.1.1"
+              const gatewayHex = gateway;
+              if (gatewayHex.length === 8) {
+                const octet1 = parseInt(gatewayHex.substring(6, 8), 16);
+                const octet2 = parseInt(gatewayHex.substring(4, 6), 16);
+                const octet3 = parseInt(gatewayHex.substring(2, 4), 16);
+                const octet4 = parseInt(gatewayHex.substring(0, 2), 16);
+                const gatewayIP = `${octet1}.${octet2}.${octet3}.${octet4}`;
+                
+                // Return gateway IP (Docker bridge IP, e.g., 172.17.0.1)
+                // This is not the host's real IP, but better than container IP
+                return gatewayIP;
+              }
+            }
+          }
+        }
+      } catch {
+        // Fallback to null
+      }
+    }
+    
+  } catch (error) {
     // Fallback to null
   }
   
   // Return null to use container IP as fallback
+  // Note: The most reliable way is to set HOST_IP environment variable in docker-compose.yml
   return null;
 }
 

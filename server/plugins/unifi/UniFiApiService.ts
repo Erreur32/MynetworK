@@ -7,16 +7,35 @@
  * - Site Manager API: https://developer.ui.com/site-manager-api/gettingstarted/
  */
 
-// UniFi controllers often use self-signed certificates, so we disable TLS verification
-// This is considered acceptable here because communication is limited to the local UniFi
-// controller or trusted Site Manager API endpoints. If an administrator prefers strict
-// TLS verification, they can explicitly set NODE_TLS_REJECT_UNAUTHORIZED in the
-// environment, which will bypass this override.
-if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 import { logger } from '../../utils/logger.js';
+
+// Create HTTPS agent with disabled certificate verification for UniFi self-signed certificates
+// This is considered acceptable here because communication is limited to the local UniFi
+// controller or trusted Site Manager API endpoints. Using undici Agent instead of global
+// NODE_TLS_REJECT_UNAUTHORIZED for better security
+let insecureAgent: any = null;
+
+// Lazy initialization of undici Agent to avoid import errors
+const getInsecureAgent = (): any => {
+    if (!insecureAgent) {
+        try {
+            // Dynamic import of undici (built-in in Node.js 18+)
+            const { Agent } = require('undici');
+            insecureAgent = new Agent({
+                connect: {
+                    rejectUnauthorized: false
+                }
+            });
+        } catch (error) {
+            // Fallback: if undici is not available, we'll use the global env var
+            // This should not happen in Node.js 18+, but provides a fallback
+            logger.warn('UniFi', 'undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+            insecureAgent = {}; // Dummy object to avoid null checks
+        }
+    }
+    return insecureAgent;
+};
 
 export interface UniFiDevice {
     _id: string;
@@ -169,13 +188,20 @@ export class UniFiApiService {
             try {
                 const baseUrl = this.url.replace(/\/+$/, '');
                 const logoutUrl = `${baseUrl}/api/logout`;
-                await fetch(logoutUrl, {
+                // Use insecure agent for UniFi self-signed certificates
+                const agent = getInsecureAgent();
+                const fetchOptions: RequestInit = {
                     method: 'POST',
                     headers: {
                         'Cookie': this.sessionCookie,
                         'Accept': 'application/json'
                     }
-                }).catch(() => {
+                };
+                // Only add dispatcher if agent is available (undici)
+                if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                    (fetchOptions as any).dispatcher = agent;
+                }
+                await fetch(logoutUrl, fetchOptions).catch(() => {
                     // Ignore errors on logout, as the session may already be invalid
                 });
             } catch (error) {
@@ -207,13 +233,21 @@ export class UniFiApiService {
             throw new Error('API key not set');
         }
 
-        const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, {
+        // Use insecure agent for UniFi self-signed certificates (only for local controller, not Site Manager)
+        // Site Manager API uses valid certificates, but we use the same agent for consistency
+        const agent = getInsecureAgent();
+        const fetchOptions: RequestInit = {
             headers: {
                 'X-API-Key': this.apiKey, // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
-        });
+        };
+        // Only add dispatcher if agent is available (undici)
+        if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+            (fetchOptions as any).dispatcher = agent;
+        }
+        const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, fetchOptions);
 
         if (!response.ok) {
             if (response.status === 429) {
@@ -265,14 +299,21 @@ export class UniFiApiService {
 
         logger.debug('UniFi', `Attempting login to: ${baseUrl} (username: ${this.username.trim()})`);
 
-        const response = await fetch(loginUrl, {
+        // Use insecure agent for UniFi self-signed certificates
+        const agent = getInsecureAgent();
+        const fetchOptions: RequestInit = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
             body: JSON.stringify(loginPayload)
-        });
+        };
+        // Only add dispatcher if agent is available (undici)
+        if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+            (fetchOptions as any).dispatcher = agent;
+        }
+        const response = await fetch(loginUrl, fetchOptions);
 
         if (!response.ok) {
             // Try to get more details from the response body
@@ -362,13 +403,20 @@ export class UniFiApiService {
         const url = `${baseUrl}${normalizedPath}`;
 
         const doRequest = async (): Promise<T> => {
-            const response = await fetch(url, {
+            // Use insecure agent for UniFi self-signed certificates
+            const agent = getInsecureAgent();
+            const fetchOptions: RequestInit = {
                 method: 'GET',
                 headers: {
                     'Cookie': this.sessionCookie as string,
                     'Accept': 'application/json'
                 }
-            });
+            };
+            // Only add dispatcher if agent is available (undici)
+            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                (fetchOptions as any).dispatcher = agent;
+            }
+            const response = await fetch(url, fetchOptions);
 
             if (response.status === 401 || response.status === 403) {
                 throw new Error(`UNIFI_SESSION_EXPIRED_${response.status}`);

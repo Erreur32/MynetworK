@@ -4,9 +4,32 @@ import path from 'path';
 import {config, API_ENDPOINTS} from '../../config.js';
 import { logger } from '../../utils/logger.js';
 
-// Freebox uses self-signed certificates, so we need to disable TLS verification
+// Create HTTPS agent with disabled certificate verification for Freebox self-signed certificates
 // This is safe since we're only communicating with the local Freebox
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// Using undici Agent instead of global NODE_TLS_REJECT_UNAUTHORIZED for better security
+let insecureAgent: any = null;
+
+// Lazy initialization of undici Agent to avoid import errors
+const getInsecureAgent = (): any => {
+    if (!insecureAgent) {
+        try {
+            // Dynamic import of undici (built-in in Node.js 18+)
+            const { Agent } = require('undici');
+            insecureAgent = new Agent({
+                connect: {
+                    rejectUnauthorized: false
+                }
+            });
+        } catch (error) {
+            // Fallback: if undici is not available, we'll use the global env var
+            // This should not happen in Node.js 18+, but provides a fallback
+            logger.warn('FreeboxAPI', 'undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+            insecureAgent = {}; // Dummy object to avoid null checks
+        }
+    }
+    return insecureAgent;
+};
 
 interface TokenData {
     appToken: string;
@@ -155,7 +178,17 @@ export class FreeboxApiService {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
 
-            const response = await fetch(url, {...options, signal: controller.signal});
+            // Use insecure agent for Freebox self-signed certificates
+            const agent = getInsecureAgent();
+            const fetchOptions: RequestInit = {
+                ...options,
+                signal: controller.signal
+            };
+            // Only add dispatcher if agent is available (undici)
+            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                (fetchOptions as any).dispatcher = agent;
+            }
+            const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
 
             // Check if response is JSON
@@ -350,7 +383,16 @@ export class FreeboxApiService {
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
-            const response = await fetch(url, {signal: controller.signal});
+            // Use insecure agent for Freebox self-signed certificates
+            const agent = getInsecureAgent();
+            const fetchOptions: RequestInit = {
+                signal: controller.signal
+            };
+            // Only add dispatcher if agent is available (undici)
+            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                (fetchOptions as any).dispatcher = agent;
+            }
+            const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
             const data = await response.json();
             // Cache version info for later use
@@ -662,12 +704,19 @@ export class FreeboxApiService {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
 
-            const response = await fetch(url, {
+            // Use insecure agent for Freebox self-signed certificates
+            const agent = getInsecureAgent();
+            const fetchOptions: RequestInit = {
                 method: 'POST',
                 headers,
                 body: params.toString(),
                 signal: controller.signal
-            });
+            };
+            // Only add dispatcher if agent is available (undici)
+            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                (fetchOptions as any).dispatcher = agent;
+            }
+            const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
 
             const data = await response.json() as FreeboxApiResponse;
@@ -722,11 +771,18 @@ export class FreeboxApiService {
         console.log('[FreeboxAPI] addDownloadFromFile headers:', headers);
 
         try {
-            const response = await fetch(url, {
+            // Use insecure agent for Freebox self-signed certificates
+            const agent = getInsecureAgent();
+            const fetchOptions: RequestInit = {
                 method: 'POST',
                 headers,
                 body: fullBody
-            });
+            };
+            // Only add dispatcher if agent is available (undici)
+            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+                (fetchOptions as any).dispatcher = agent;
+            }
+            const response = await fetch(url, fetchOptions);
 
             const rawText = await response.text();
             console.log('[FreeboxAPI] addDownloadFromFile response status:', response.status);

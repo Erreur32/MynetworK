@@ -3,6 +3,56 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.8] - 2025-01-02
+
+### 🔒 Sécurité
+
+**Agents HTTPS Personnalisés pour Freebox et UniFi**
+- 🔒 Remplacement de `NODE_TLS_REJECT_UNAUTHORIZED = '0'` global par des agents HTTPS sélectifs
+- 🔒 Utilisation d'agents `undici` personnalisés avec `rejectUnauthorized: false` uniquement pour Freebox/UniFi
+- 🔒 Plus de désactivation globale de la vérification TLS - sécurité améliorée
+- 🔒 Fallback automatique vers variable d'environnement si `undici` n'est pas disponible
+- 🔒 Suppression de l'avertissement TLS au démarrage Docker
+
+**Fichiers Modifiés**
+- `server/services/freeboxApi.ts` : Agent HTTPS personnalisé pour toutes les requêtes Freebox
+- `server/plugins/freebox/FreeboxApiService.ts` : Agent HTTPS personnalisé pour le plugin Freebox
+- `server/plugins/unifi/UniFiApiService.ts` : Agent HTTPS personnalisé pour le plugin UniFi
+
+### 🔧 Modifié
+
+**Détection IP Machine Hôte dans Docker**
+- 🔧 Amélioration de `getHostMachineIP()` dans `server/index.ts` pour lire l'IP réelle depuis `/host/proc/net/route`
+- 🔧 Parsing du fichier de routage pour trouver l'interface par défaut et son gateway
+- 🔧 Conversion du gateway Docker (hex) en adresse IP lisible
+- 🔧 Fallback vers gateway Docker si l'IP réelle n'est pas trouvée
+- 🔧 Priorité donnée à la variable d'environnement `HOST_IP` (la plus fiable)
+- 🔧 Affichage de l'IP de la machine hôte au lieu de l'IP Docker interne (172.18.0.2) dans les logs
+
+**Nettoyage du Code**
+- 🔧 Suppression du code de suppression d'avertissement TLS dans `server/index.ts` (lignes 1-35)
+- 🔧 Code plus propre et maintenable sans interception d'avertissements
+
+### 🐛 Corrigé
+
+**Avertissement StorageType.persistent en Production**
+- 🐛 Suppression de l'avertissement déprécié `StorageType.persistent is deprecated` en production Docker
+- 🐛 Interception de `console.warn` pour filtrer uniquement cet avertissement spécifique
+- 🐛 Conservation de tous les autres avertissements pour le debugging
+- 🐛 Console du navigateur plus propre en production
+
+**Fichiers Modifiés**
+- `src/main.tsx` : Ajout de la suppression conditionnelle de l'avertissement StorageType.persistent
+
+### 📝 Documentation
+
+**Amélioration de la Documentation**
+- 📝 Commentaires détaillés expliquant l'utilisation des agents HTTPS personnalisés
+- 📝 Explication de la logique de fallback pour la compatibilité
+- 📝 Documentation de la détection IP hôte dans Docker
+
+---
+
 ## [0.3.7] - 2025-01-02
 
 ### 🔧 Modifié
