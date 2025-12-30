@@ -44,6 +44,8 @@ class FreeboxApiService {
     private challenge: string | null = null;
     private permissions: Record<string, boolean> = {};
     private versionInfo: VersionInfo | null = null;
+    // Endpoint locks to prevent concurrent calls to the same endpoint
+    private endpointLocks: Map<string, Promise<FreeboxApiResponse>> = new Map();
 
     constructor() {
         this.baseUrl = config.freebox.url;
@@ -225,9 +227,91 @@ class FreeboxApiService {
             return {
                 success: false,
                 error_code: 'request_failed',
-                msg: error instanceof Error ? error.message : 'Request failed'
-            };
+                msg: error instanceof Error ? error.message : 'Request failed',
+                // Store error type for retry logic
+                _isAbortError: isAbortError
+            } as FreeboxApiResponse<T> & { _isAbortError?: boolean };
         }
+    }
+
+    /**
+     * Make HTTP request with lock to prevent concurrent calls to the same endpoint
+     * If a request to the same endpoint is already in progress, reuse the existing promise
+     * 
+     * @param method HTTP method
+     * @param endpoint API endpoint path
+     * @param body Request body (optional)
+     * @param authenticated Whether to include authentication token
+     * @returns Promise resolving to API response
+     */
+    private async requestWithLock<T>(
+        method: string,
+        endpoint: string,
+        body?: unknown,
+        authenticated = true
+    ): Promise<FreeboxApiResponse<T>> {
+        const lockKey = `${method}:${endpoint}`;
+        const existingLock = this.endpointLocks.get(lockKey);
+        
+        if (existingLock) {
+            // Réutiliser la promesse existante
+            return existingLock as Promise<FreeboxApiResponse<T>>;
+        }
+        
+        // Create promise with retry for Revolution slow endpoints
+        const promise = this.requestWithRetry(method, endpoint, body, authenticated)
+            .finally(() => {
+                // Libérer le verrou après la requête (succès ou échec)
+                this.endpointLocks.delete(lockKey);
+            });
+        
+        this.endpointLocks.set(lockKey, promise);
+        return promise;
+    }
+
+    /**
+     * Make HTTP request with retry and exponential backoff for Revolution slow endpoints
+     * Only retries on AbortError (timeout) and only for Revolution model on slow endpoints
+     * 
+     * @param method HTTP method
+     * @param endpoint API endpoint path
+     * @param body Request body (optional)
+     * @param authenticated Whether to include authentication token
+     * @param maxRetries Maximum number of retry attempts (default: 2)
+     * @returns Promise resolving to API response
+     */
+    private async requestWithRetry<T>(
+        method: string,
+        endpoint: string,
+        body?: unknown,
+        authenticated = true,
+        maxRetries = 2
+    ): Promise<FreeboxApiResponse<T>> {
+        const isRevolution = this.isRevolutionModel();
+        const isSlowEndpoint = this.isSlowEndpoint(endpoint);
+        
+        // Retry uniquement pour Revolution et endpoints lents
+        const shouldRetry = isRevolution && isSlowEndpoint && maxRetries > 0;
+        
+        const response = await this.request<T>(method, endpoint, body, authenticated);
+        
+        // Check if request failed and should be retried
+        if (!response.success && shouldRetry && maxRetries > 0) {
+            const responseWithError = response as FreeboxApiResponse<T> & { _isAbortError?: boolean };
+            const isAbortError = responseWithError._isAbortError || 
+                                (response.error_code === 'request_failed' && 
+                                 response.msg && 
+                                 (response.msg.includes('aborted') || response.msg.includes('AbortError')));
+            
+            if (isAbortError) {
+                // Timeout - retry with exponential backoff
+                const delay = Math.pow(2, maxRetries - 1) * 1000; // 1s, 2s
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.requestWithRetry(method, endpoint, body, authenticated, maxRetries - 1);
+            }
+        }
+        
+        return response;
     }
 
     // HMAC-SHA1 password computation
@@ -454,6 +538,22 @@ class FreeboxApiService {
     }
 
     /**
+     * Check if an endpoint is known to be slow on Revolution
+     * 
+     * @param endpoint API endpoint path
+     * @returns True if endpoint is slow, false otherwise
+     */
+    private isSlowEndpoint(endpoint: string): boolean {
+        const slowEndpoints = [
+            '/dhcp/dynamic_lease/',
+            '/dhcp/static_lease/',
+            '/fw/redir/',
+            '/lan/browser/pub/'
+        ];
+        return slowEndpoints.some(slow => endpoint.includes(slow));
+    }
+
+    /**
      * Get timeout value for a specific endpoint based on model and endpoint characteristics
      * Some endpoints are slower on Revolution and need longer timeouts
      * 
@@ -466,19 +566,12 @@ class FreeboxApiService {
             return config.freebox.requestTimeout; // 10s par défaut pour les autres modèles
         }
         
-        // Endpoints connus pour être lents sur Revolution
-        const slowEndpoints = [
-            '/dhcp/dynamic_lease/',
-            '/dhcp/static_lease/',
-            '/fw/redir/',
-            '/lan/browser/pub/'
-        ];
-        
-        if (slowEndpoints.some(slow => endpoint.includes(slow))) {
-            return 30000; // 30s pour endpoints lents sur Revolution
+        // Endpoints lents sur Revolution : 45s (augmenté de 30s)
+        if (this.isSlowEndpoint(endpoint)) {
+            return 45000; // 45s pour endpoints lents sur Revolution
         }
         
-        return 20000; // 20s pour autres endpoints sur Revolution
+        return 25000; // 25s pour autres endpoints sur Revolution (augmenté de 20s)
     }
 
     /**
@@ -496,7 +589,7 @@ class FreeboxApiService {
     }
 
     async getSystemInfo(): Promise<FreeboxApiResponse> {
-        const result = await this.request('GET', API_ENDPOINTS.SYSTEM);
+        const result = await this.requestWithLock('GET', API_ENDPOINTS.SYSTEM);
         // console.log('[FreeboxAPI] System info result:', JSON.stringify(result, null, 2));
         return result;
     }
@@ -522,31 +615,31 @@ class FreeboxApiService {
     // ==================== CONNECTION ====================
 
     async getConnectionStatus(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONNECTION);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION);
     }
 
     async getConnectionConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONNECTION_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION_CONFIG);
     }
 
     async updateConnectionConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.CONNECTION_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.CONNECTION_CONFIG, data);
     }
 
     async getIpv6Config(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONNECTION_IPV6);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION_IPV6);
     }
 
     async updateIpv6Config(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.CONNECTION_IPV6, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.CONNECTION_IPV6, data);
     }
 
     async getFtthInfo(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONNECTION_FTTH);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION_FTTH);
     }
 
     async getConnectionLogs(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONNECTION_LOGS);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION_LOGS);
     }
 
     // ==================== RRD (Monitoring) ====================
@@ -562,215 +655,215 @@ class FreeboxApiService {
         if (dateEnd) body.date_end = dateEnd;
         if (fields) body.fields = fields;
 
-        return this.request('POST', API_ENDPOINTS.RRD, body);
+        return this.requestWithLock('POST', API_ENDPOINTS.RRD, body);
     }
 
     // ==================== WIFI ====================
 
     async getWifiConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_CONFIG);
     }
 
     async setWifiConfig(enabled: boolean): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.WIFI_CONFIG, {enabled});
+        return this.requestWithLock('PUT', API_ENDPOINTS.WIFI_CONFIG, {enabled});
     }
 
     async getWifiAps(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_AP);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_AP);
     }
 
     async getWifiApStations(apId: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.WIFI_AP}${apId}/stations/`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.WIFI_AP}${apId}/stations/`);
     }
 
     async getWifiBss(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_BSS);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_BSS);
     }
 
     async updateWifiBss(bssId: string, params: { enabled: boolean }): Promise<FreeboxApiResponse> {
         // API expects: { config: { enabled: true/false } }
-        return this.request('PUT', `${API_ENDPOINTS.WIFI_BSS}${bssId}`, {config: params});
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.WIFI_BSS}${bssId}`, {config: params});
     }
 
     async getWifiStations(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_STATIONS);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_STATIONS);
     }
 
     async getWifiMacFilter(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_MAC_FILTER);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_MAC_FILTER);
     }
 
     async getWifiPlanning(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.WIFI_PLANNING);
+        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_PLANNING);
     }
 
     async updateWifiPlanning(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.WIFI_PLANNING, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.WIFI_PLANNING, data);
     }
 
     async getWpsStatus(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/wifi/wps/sessions/');
+        return this.requestWithLock('GET', '/wifi/wps/sessions/');
     }
 
     async startWps(): Promise<FreeboxApiResponse> {
         // WPS session start - POST to create a new WPS session
         // bss_id 0 = main 2.4GHz, 1 = 5GHz, etc.
-        return this.request('POST', '/wifi/wps/sessions/', {bss_id: 0});
+        return this.requestWithLock('POST', '/wifi/wps/sessions/', {bss_id: 0});
     }
 
     async stopWps(): Promise<FreeboxApiResponse> {
         // WPS session stop - DELETE current session
-        return this.request('DELETE', '/wifi/wps/sessions/');
+        return this.requestWithLock('DELETE', '/wifi/wps/sessions/');
     }
 
     // WiFi Temporary Disable (v13.0+)
     async getWifiTempDisableStatus(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/wifi/temp_disable/');
+        return this.requestWithLock('GET', '/wifi/temp_disable/');
     }
 
     async setWifiTempDisable(duration: number): Promise<FreeboxApiResponse> {
         // Duration in seconds (0 to cancel)
-        return this.request('POST', '/wifi/temp_disable/', { duration });
+        return this.requestWithLock('POST', '/wifi/temp_disable/', { duration });
     }
 
     async cancelWifiTempDisable(): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', '/wifi/temp_disable/');
+        return this.requestWithLock('DELETE', '/wifi/temp_disable/');
     }
 
     // WiFi Custom Key / Guest Network (v14.0+)
     async getWifiCustomKeyConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/wifi/custom_key/config/');
+        return this.requestWithLock('GET', '/wifi/custom_key/config/');
     }
 
     async updateWifiCustomKeyConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', '/wifi/custom_key/config/', data);
+        return this.requestWithLock('PUT', '/wifi/custom_key/config/', data);
     }
 
     async getWifiCustomKeys(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/wifi/custom_key/');
+        return this.requestWithLock('GET', '/wifi/custom_key/');
     }
 
     async createWifiCustomKey(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', '/wifi/custom_key/', data);
+        return this.requestWithLock('POST', '/wifi/custom_key/', data);
     }
 
     async deleteWifiCustomKey(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `/wifi/custom_key/${id}`);
+        return this.requestWithLock('DELETE', `/wifi/custom_key/${id}`);
     }
 
     // WiFi MLO - Multi Link Operation (v14.0+ - WiFi 7)
     async getWifiMloConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/wifi/mlo/config/');
+        return this.requestWithLock('GET', '/wifi/mlo/config/');
     }
 
     async updateWifiMloConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', '/wifi/mlo/config/', data);
+        return this.requestWithLock('PUT', '/wifi/mlo/config/', data);
     }
 
     // ==================== LAN ====================
 
     async getLanConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.LAN_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.LAN_CONFIG);
     }
 
     async updateLanConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.LAN_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.LAN_CONFIG, data);
     }
 
     async getLanBrowserInterfaces(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.LAN_BROWSER);
+        return this.requestWithLock('GET', API_ENDPOINTS.LAN_BROWSER);
     }
 
     async getLanHosts(interfaceName: string): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.LAN_BROWSER.replace('interfaces/', '')}${interfaceName}/`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.LAN_BROWSER.replace('interfaces/', '')}${interfaceName}/`);
     }
 
     async wakeOnLan(interfaceName: string, mac: string, password?: string): Promise<FreeboxApiResponse> {
-        return this.request('POST', `${API_ENDPOINTS.LAN_WOL}${interfaceName}/`, {mac, password});
+        return this.requestWithLock('POST', `${API_ENDPOINTS.LAN_WOL}${interfaceName}/`, {mac, password});
     }
 
     // ==================== DHCP ====================
 
     async getDhcpConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DHCP_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.DHCP_CONFIG);
     }
 
     async updateDhcpConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.DHCP_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.DHCP_CONFIG, data);
     }
 
     async getDhcpLeases(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DHCP_DYNAMIC_LEASES);
+        return this.requestWithLock('GET', API_ENDPOINTS.DHCP_DYNAMIC_LEASES);
     }
 
     async getDhcpStaticLeases(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DHCP_STATIC_LEASES);
+        return this.requestWithLock('GET', API_ENDPOINTS.DHCP_STATIC_LEASES);
     }
 
     async getDhcpStaticLease(id: string): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`);
     }
 
     async addDhcpStaticLease(mac: string, ip: string, comment?: string): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.DHCP_STATIC_LEASES, {mac, ip, comment: comment || ''});
+        return this.requestWithLock('POST', API_ENDPOINTS.DHCP_STATIC_LEASES, {mac, ip, comment: comment || ''});
     }
 
     async updateDhcpStaticLease(id: string, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`, data);
     }
 
     async deleteDhcpStaticLease(id: string): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.DHCP_STATIC_LEASES}${id}`);
     }
 
     // ==================== DOWNLOADS ====================
 
     async getDownloads(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DOWNLOADS);
+        return this.requestWithLock('GET', API_ENDPOINTS.DOWNLOADS);
     }
 
     async getDownload(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}`);
     }
 
     async getDownloadTrackers(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/trackers`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/trackers`);
     }
 
     async getDownloadPeers(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/peers`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/peers`);
     }
 
     async getDownloadFiles(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/files`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/files`);
     }
 
     async updateDownloadFile(taskId: number, fileId: string, priority: string): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.DOWNLOADS}${taskId}/files/${fileId}`, { priority });
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.DOWNLOADS}${taskId}/files/${fileId}`, { priority });
     }
 
     async getDownloadPieces(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/pieces`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/pieces`);
     }
 
     async getDownloadBlacklist(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/blacklist`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/blacklist`);
     }
 
     async emptyDownloadBlacklist(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.DOWNLOADS}${id}/blacklist/empty`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.DOWNLOADS}${id}/blacklist/empty`);
     }
 
     async getDownloadLog(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/log`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.DOWNLOADS}${id}/log`);
     }
 
     async updateDownload(id: number, data: { status?: string; io_priority?: string }): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.DOWNLOADS}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.DOWNLOADS}${id}`, data);
     }
 
     async deleteDownload(id: number, deleteFiles = false): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.DOWNLOADS}${id}?delete_files=${deleteFiles}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.DOWNLOADS}${id}?delete_files=${deleteFiles}`);
     }
 
     async addDownload(downloadUrl: string, downloadDir?: string): Promise<FreeboxApiResponse> {
@@ -880,15 +973,15 @@ class FreeboxApiService {
     }
 
     async getDownloadStats(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DOWNLOADS_STATS);
+        return this.requestWithLock('GET', API_ENDPOINTS.DOWNLOADS_STATS);
     }
 
     async getDownloadConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.DOWNLOADS_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.DOWNLOADS_CONFIG);
     }
 
     async updateDownloadConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.DOWNLOADS_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.DOWNLOADS_CONFIG, data);
     }
 
     // ==================== FILE SYSTEM ====================
@@ -896,16 +989,16 @@ class FreeboxApiService {
     async listFiles(path: string): Promise<FreeboxApiResponse> {
         // For root path, call /fs/ls/ without encoded path
         if (path === '/' || path === '') {
-            return this.request('GET', API_ENDPOINTS.FS_LIST);
+            return this.requestWithLock('GET', API_ENDPOINTS.FS_LIST);
         }
         // Path is already base64 encoded (as returned by the Freebox API)
         // Don't re-encode it, use it directly
-        return this.request('GET', `${API_ENDPOINTS.FS_LIST}${path}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.FS_LIST}${path}`);
     }
 
     async getFileInfo(path: string): Promise<FreeboxApiResponse> {
         // Path is already base64 encoded (as returned by the Freebox API)
-        return this.request('GET', `${API_ENDPOINTS.FS_INFO}${path}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.FS_INFO}${path}`);
     }
 
     async createDirectory(parent: string, dirname: string): Promise<FreeboxApiResponse> {
@@ -914,392 +1007,392 @@ class FreeboxApiService {
         const encodedParent = (parent === '/' || parent === '')
             ? Buffer.from('/').toString('base64')
             : parent;
-        return this.request('POST', API_ENDPOINTS.FS_MKDIR, { parent: encodedParent, dirname });
+        return this.requestWithLock('POST', API_ENDPOINTS.FS_MKDIR, { parent: encodedParent, dirname });
     }
 
     async renameFile(src: string, dst: string): Promise<FreeboxApiResponse> {
         // Src path is already base64 encoded, dst is the new name in clear text (no path)
-        return this.request('POST', API_ENDPOINTS.FS_RENAME, {src, dst});
+        return this.requestWithLock('POST', API_ENDPOINTS.FS_RENAME, {src, dst});
     }
 
     async removeFiles(files: string[]): Promise<FreeboxApiResponse> {
         // Files paths are already base64 encoded
-        return this.request('POST', API_ENDPOINTS.FS_REMOVE, {files});
+        return this.requestWithLock('POST', API_ENDPOINTS.FS_REMOVE, {files});
     }
 
     async copyFiles(files: string[], dst: string, mode: string = 'overwrite'): Promise<FreeboxApiResponse> {
         // Files and dst paths are already base64 encoded
-        return this.request('POST', API_ENDPOINTS.FS_COPY, {files, dst, mode});
+        return this.requestWithLock('POST', API_ENDPOINTS.FS_COPY, {files, dst, mode});
     }
 
     async moveFiles(files: string[], dst: string, mode: string = 'overwrite'): Promise<FreeboxApiResponse> {
         // Files and dst paths are already base64 encoded
-        return this.request('POST', API_ENDPOINTS.FS_MOVE, {files, dst, mode});
+        return this.requestWithLock('POST', API_ENDPOINTS.FS_MOVE, {files, dst, mode});
     }
 
     // ==================== STORAGE ====================
 
     async getDisks(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.STORAGE_DISK);
+        return this.requestWithLock('GET', API_ENDPOINTS.STORAGE_DISK);
     }
 
     async getStorageInfo(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.STORAGE_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.STORAGE_CONFIG);
     }
 
     // ==================== CALLS ====================
 
     async getCallLog(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CALL_LOG);
+        return this.requestWithLock('GET', API_ENDPOINTS.CALL_LOG);
     }
 
     async markCallsAsRead(): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.CALL_LOG_MARK_READ);
+        return this.requestWithLock('POST', API_ENDPOINTS.CALL_LOG_MARK_READ);
     }
 
     async deleteAllCalls(): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.CALL_LOG_DELETE);
+        return this.requestWithLock('POST', API_ENDPOINTS.CALL_LOG_DELETE);
     }
 
     async deleteCall(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.CALL_LOG}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.CALL_LOG}${id}`);
     }
 
     // ==================== CONTACTS ====================
 
     async getContacts(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.CONTACTS);
+        return this.requestWithLock('GET', API_ENDPOINTS.CONTACTS);
     }
 
     async getContact(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.CONTACTS}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.CONTACTS}${id}`);
     }
 
     async createContact(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.CONTACTS, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.CONTACTS, data);
     }
 
     async updateContact(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.CONTACTS}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.CONTACTS}${id}`, data);
     }
 
     async deleteContact(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.CONTACTS}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.CONTACTS}${id}`);
     }
 
     // ==================== TV / PVR ====================
 
     async getTvChannels(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.TV_CHANNELS);
+        return this.requestWithLock('GET', API_ENDPOINTS.TV_CHANNELS);
     }
 
     async getTvBouquets(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.TV_BOUQUETS);
+        return this.requestWithLock('GET', API_ENDPOINTS.TV_BOUQUETS);
     }
 
     async getEpgByTime(timestamp: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.TV_EPG_BY_TIME}${timestamp}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.TV_EPG_BY_TIME}${timestamp}`);
     }
 
     async getPvrConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PVR_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.PVR_CONFIG);
     }
 
     async updatePvrConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.PVR_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.PVR_CONFIG, data);
     }
 
     async getPvrProgrammed(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PVR_PROGRAMMED);
+        return this.requestWithLock('GET', API_ENDPOINTS.PVR_PROGRAMMED);
     }
 
     async createPvrProgrammed(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.PVR_PROGRAMMED, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.PVR_PROGRAMMED, data);
     }
 
     async deletePvrProgrammed(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.PVR_PROGRAMMED}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.PVR_PROGRAMMED}${id}`);
     }
 
     async getPvrFinished(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PVR_FINISHED);
+        return this.requestWithLock('GET', API_ENDPOINTS.PVR_FINISHED);
     }
 
     async deletePvrFinished(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.PVR_FINISHED}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.PVR_FINISHED}${id}`);
     }
 
     // ==================== PARENTAL / PROFILES ====================
 
     async getProfiles(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PROFILE);
+        return this.requestWithLock('GET', API_ENDPOINTS.PROFILE);
     }
 
     async getProfile(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PROFILE}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PROFILE}${id}`);
     }
 
     async createProfile(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.PROFILE, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.PROFILE, data);
     }
 
     async updateProfile(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PROFILE}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.PROFILE}${id}`, data);
     }
 
     async deleteProfile(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.PROFILE}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.PROFILE}${id}`);
     }
 
     async getNetworkControl(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PROFILE_NETWORK_CONTROL);
+        return this.requestWithLock('GET', API_ENDPOINTS.PROFILE_NETWORK_CONTROL);
     }
 
     async getNetworkControlForProfile(profileId: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`);
     }
 
     async updateNetworkControlForProfile(profileId: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}`, data);
     }
 
     // Network Control Rules
     async getNetworkControlRules(profileId: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules`);
     }
 
     async getNetworkControlRule(profileId: number, ruleId: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
     }
 
     async createNetworkControlRule(profileId: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/`, data);
+        return this.requestWithLock('POST', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/`, data);
     }
 
     async updateNetworkControlRule(profileId: number, ruleId: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`, data);
     }
 
     async deleteNetworkControlRule(profileId: number, ruleId: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.PROFILE_NETWORK_CONTROL}${profileId}/rules/${ruleId}`);
     }
 
     async getParentalConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PARENTAL_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.PARENTAL_CONFIG);
     }
 
     async updateParentalConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.PARENTAL_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.PARENTAL_CONFIG, data);
     }
 
     async getParentalFilters(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.PARENTAL_FILTER);
+        return this.requestWithLock('GET', API_ENDPOINTS.PARENTAL_FILTER);
     }
 
     async getParentalFilter(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`);
     }
 
     async createParentalFilter(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.PARENTAL_FILTER, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.PARENTAL_FILTER, data);
     }
 
     async updateParentalFilter(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`, data);
     }
 
     async deleteParentalFilter(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.PARENTAL_FILTER}${id}`);
     }
 
     async getParentalFilterPlanning(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.PARENTAL_FILTER}${id}/planning`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.PARENTAL_FILTER}${id}/planning`);
     }
 
     async updateParentalFilterPlanning(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.PARENTAL_FILTER}${id}/planning`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.PARENTAL_FILTER}${id}/planning`, data);
     }
 
     // ==================== VPN SERVER ====================
 
     // Get list of all VPN servers (openvpn_routed, openvpn_bridge, pptp)
     async getVpnServers(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/vpn/');
+        return this.requestWithLock('GET', '/vpn/');
     }
 
     // Get specific VPN server by ID
     async getVpnServer(serverId: string): Promise<FreeboxApiResponse> {
-        return this.request('GET', `/vpn/${serverId}`);
+        return this.requestWithLock('GET', `/vpn/${serverId}`);
     }
 
     // Get VPN server config by ID
     async getVpnServerConfig(serverId?: string): Promise<FreeboxApiResponse> {
         if (serverId) {
-            return this.request('GET', `/vpn/${serverId}/config/`);
+            return this.requestWithLock('GET', `/vpn/${serverId}/config/`);
         }
         // Legacy: return list of servers
-        return this.request('GET', '/vpn/');
+        return this.requestWithLock('GET', '/vpn/');
     }
 
     // Update VPN server config by ID
     async updateVpnServerConfig(serverId: string, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `/vpn/${serverId}/config/`, data);
+        return this.requestWithLock('PUT', `/vpn/${serverId}/config/`, data);
     }
 
     // Start VPN server
     async startVpnServer(serverId: string): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `/vpn/${serverId}`, {state: 'started'});
+        return this.requestWithLock('PUT', `/vpn/${serverId}`, {state: 'started'});
     }
 
     // Stop VPN server
     async stopVpnServer(serverId: string): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `/vpn/${serverId}`, {state: 'stopped'});
+        return this.requestWithLock('PUT', `/vpn/${serverId}`, {state: 'stopped'});
     }
 
     async getVpnUsers(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VPN_SERVER_USERS);
+        return this.requestWithLock('GET', API_ENDPOINTS.VPN_SERVER_USERS);
     }
 
     async createVpnUser(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.VPN_SERVER_USERS, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.VPN_SERVER_USERS, data);
     }
 
     async deleteVpnUser(login: string): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.VPN_SERVER_USERS}${login}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.VPN_SERVER_USERS}${login}`);
     }
 
     async getVpnConnections(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VPN_SERVER_CONNECTIONS);
+        return this.requestWithLock('GET', API_ENDPOINTS.VPN_SERVER_CONNECTIONS);
     }
 
     // ==================== VPN CLIENT ====================
 
     async getVpnClientConfigs(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VPN_CLIENT_CONFIGS);
+        return this.requestWithLock('GET', API_ENDPOINTS.VPN_CLIENT_CONFIGS);
     }
 
     async getVpnClientStatus(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VPN_CLIENT_STATUS);
+        return this.requestWithLock('GET', API_ENDPOINTS.VPN_CLIENT_STATUS);
     }
 
     // ==================== NAT / PORT FORWARDING ====================
 
     async getPortForwardingRules(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.NAT_PORT_FORWARDING);
+        return this.requestWithLock('GET', API_ENDPOINTS.NAT_PORT_FORWARDING);
     }
 
     async createPortForwardingRule(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.NAT_PORT_FORWARDING, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.NAT_PORT_FORWARDING, data);
     }
 
     async updatePortForwardingRule(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.NAT_PORT_FORWARDING}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.NAT_PORT_FORWARDING}${id}`, data);
     }
 
     async deletePortForwardingRule(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.NAT_PORT_FORWARDING}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.NAT_PORT_FORWARDING}${id}`);
     }
 
     async getDmzConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.NAT_DMZCONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.NAT_DMZCONFIG);
     }
 
     async updateDmzConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.NAT_DMZCONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.NAT_DMZCONFIG, data);
     }
 
     // ==================== FTP ====================
 
     async getFtpConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.FTP_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.FTP_CONFIG);
     }
 
     async updateFtpConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.FTP_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.FTP_CONFIG, data);
     }
 
     // ==================== SWITCH / PORTS ====================
 
     async getSwitchStatus(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.SWITCH_STATUS);
+        return this.requestWithLock('GET', API_ENDPOINTS.SWITCH_STATUS);
     }
 
     async getSwitchPorts(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.SWITCH_PORT);
+        return this.requestWithLock('GET', API_ENDPOINTS.SWITCH_PORT);
     }
 
     // ==================== LCD ====================
 
     async getLcdConfig(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.LCD_CONFIG);
+        return this.requestWithLock('GET', API_ENDPOINTS.LCD_CONFIG);
     }
 
     async updateLcdConfig(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', API_ENDPOINTS.LCD_CONFIG, data);
+        return this.requestWithLock('PUT', API_ENDPOINTS.LCD_CONFIG, data);
     }
 
     // ==================== FREEPLUGS ====================
 
     async getFreeplugs(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.FREEPLUG);
+        return this.requestWithLock('GET', API_ENDPOINTS.FREEPLUG);
     }
 
     // ==================== VM ====================
 
     async getVms(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VM);
+        return this.requestWithLock('GET', API_ENDPOINTS.VM);
     }
 
     async getVm(id: number): Promise<FreeboxApiResponse> {
-        return this.request('GET', `${API_ENDPOINTS.VM}${id}`);
+        return this.requestWithLock('GET', `${API_ENDPOINTS.VM}${id}`);
     }
 
     async createVm(data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('POST', API_ENDPOINTS.VM, data);
+        return this.requestWithLock('POST', API_ENDPOINTS.VM, data);
     }
 
     async updateVm(id: number, data: unknown): Promise<FreeboxApiResponse> {
-        return this.request('PUT', `${API_ENDPOINTS.VM}${id}`, data);
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.VM}${id}`, data);
     }
 
     async deleteVm(id: number): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `${API_ENDPOINTS.VM}${id}`);
+        return this.requestWithLock('DELETE', `${API_ENDPOINTS.VM}${id}`);
     }
 
     async startVm(id: number): Promise<FreeboxApiResponse> {
-        return this.request('POST', `${API_ENDPOINTS.VM}${id}/start`);
+        return this.requestWithLock('POST', `${API_ENDPOINTS.VM}${id}/start`);
     }
 
     async stopVm(id: number): Promise<FreeboxApiResponse> {
-        return this.request('POST', `${API_ENDPOINTS.VM}${id}/stop`);
+        return this.requestWithLock('POST', `${API_ENDPOINTS.VM}${id}/stop`);
     }
 
     async restartVm(id: number): Promise<FreeboxApiResponse> {
-        return this.request('POST', `${API_ENDPOINTS.VM}${id}/restart`);
+        return this.requestWithLock('POST', `${API_ENDPOINTS.VM}${id}/restart`);
     }
 
     async getVmDistros(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VM_DISTROS);
+        return this.requestWithLock('GET', API_ENDPOINTS.VM_DISTROS);
     }
 
     async getVmInfo(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.VM_INFO);
+        return this.requestWithLock('GET', API_ENDPOINTS.VM_INFO);
     }
 
     // ==================== NOTIFICATIONS ====================
 
     async getNotifications(): Promise<FreeboxApiResponse> {
-        return this.request('GET', API_ENDPOINTS.NOTIFICATIONS);
+        return this.requestWithLock('GET', API_ENDPOINTS.NOTIFICATIONS);
     }
 
     // ==================== FILE SHARING ====================
 
     async getShareLinks(): Promise<FreeboxApiResponse> {
-        return this.request('GET', '/share_link/');
+        return this.requestWithLock('GET', '/share_link/');
     }
 
     async getShareLink(token: string): Promise<FreeboxApiResponse> {
-        return this.request('GET', `/share_link/${token}`);
+        return this.requestWithLock('GET', `/share_link/${token}`);
     }
 
     async createShareLink(path: string, expire?: number): Promise<FreeboxApiResponse> {
@@ -1310,11 +1403,11 @@ class FreeboxApiService {
         if (expire) {
             body.expire = expire;
         }
-        return this.request('POST', '/share_link/', body);
+        return this.requestWithLock('POST', '/share_link/', body);
     }
 
     async deleteShareLink(token: string): Promise<FreeboxApiResponse> {
-        return this.request('DELETE', `/share_link/${token}`);
+        return this.requestWithLock('DELETE', `/share_link/${token}`);
     }
 }
 

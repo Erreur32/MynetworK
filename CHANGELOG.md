@@ -3,6 +3,68 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.4] - 2025-12-30
+
+### 🐛 Corrigé
+
+**Freebox Revolution - Appels Simultanés Multiples**
+- ✅ Implémentation d'un système de verrous par endpoint pour éviter les appels simultanés multiples au même endpoint
+- ✅ Si un appel à `/lan/browser/pub/` est déjà en cours, les autres appels réutilisent la même promesse au lieu d'en créer une nouvelle
+- ✅ Élimination des appels parallèles multiples depuis `/api/lan`, `/api/wifi`, et `FreeboxPlugin.getStats()`
+- ✅ Réduction drastique des erreurs `AbortError` causées par la surcharge de la Freebox Revolution
+
+**Freebox Revolution - Timeouts Insuffisants**
+- ✅ Augmentation des timeouts pour Revolution : 45s pour endpoints lents (au lieu de 30s)
+- ✅ Augmentation des timeouts pour Revolution : 25s pour autres endpoints (au lieu de 20s)
+- ✅ Endpoints lents identifiés : `/lan/browser/pub/`, `/dhcp/dynamic_lease/`, `/dhcp/static_lease/`, `/fw/redir/`
+- ✅ Les autres modèles Freebox conservent leurs timeouts par défaut (10s)
+
+**Freebox Revolution - Pas de Retry sur Timeouts**
+- ✅ Implémentation d'un système de retry automatique avec backoff exponentiel pour Revolution
+- ✅ Retry uniquement sur erreurs `AbortError` (timeout) et uniquement pour Revolution sur endpoints lents
+- ✅ Maximum 2 tentatives supplémentaires (3 appels au total) pour éviter de surcharger la Freebox
+- ✅ Délais de retry : 1s puis 2s (backoff exponentiel)
+
+### ✨ Ajouté
+
+**Système de Verrous par Endpoint**
+- ✅ Nouvelle méthode `requestWithLock()` pour éviter les appels simultanés multiples au même endpoint
+- ✅ Map `endpointLocks` pour stocker les promesses en cours par endpoint
+- ✅ Réutilisation automatique de la promesse existante si un appel est déjà en cours
+- ✅ Libération automatique du verrou après résolution de la promesse (succès ou échec)
+
+**Détection des Endpoints Lents**
+- ✅ Nouvelle méthode `isSlowEndpoint()` pour identifier les endpoints problématiques sur Revolution
+- ✅ Liste des endpoints lents : `/dhcp/dynamic_lease/`, `/dhcp/static_lease/`, `/fw/redir/`, `/lan/browser/pub/`
+- ✅ Utilisée pour appliquer des timeouts et retries spécifiques uniquement où nécessaire
+
+**Retry avec Backoff Exponentiel**
+- ✅ Nouvelle méthode `requestWithRetry()` pour retenter automatiquement les timeouts sur Revolution
+- ✅ Backoff exponentiel : délais de 1s puis 2s entre les tentatives
+- ✅ Activation uniquement pour Revolution et uniquement sur endpoints lents
+- ✅ Détection automatique des erreurs `AbortError` pour déclencher le retry
+
+### 🔧 Modifié
+
+**FreeboxApiService - Architecture des Requêtes**
+- 🔧 Toutes les méthodes publiques utilisent maintenant `requestWithLock()` au lieu de `request()` directement
+- 🔧 `requestWithLock()` appelle `requestWithRetry()` en interne pour gérer les retries
+- 🔧 `requestWithRetry()` appelle `request()` en interne avec gestion des retries
+- 🔧 Les méthodes d'authentification (`register`, `login`, `logout`, `getChallenge`) continuent d'utiliser `request()` directement (pas de lock nécessaire)
+
+**FreeboxApiService - Timeouts Adaptatifs**
+- 🔧 `getTimeoutForEndpoint()` retourne maintenant 45s pour endpoints lents sur Revolution (au lieu de 30s)
+- 🔧 `getTimeoutForEndpoint()` retourne maintenant 25s pour autres endpoints sur Revolution (au lieu de 20s)
+- 🔧 Utilisation de `isSlowEndpoint()` pour identifier les endpoints nécessitant des timeouts plus longs
+- 🔧 Les autres modèles Freebox conservent le timeout par défaut (10s)
+
+**Gestion des Erreurs AbortError**
+- 🔧 `request()` ajoute maintenant un flag `_isAbortError` dans la réponse d'erreur pour faciliter la détection
+- 🔧 `requestWithRetry()` détecte les `AbortError` via le flag ou via le message d'erreur
+- 🔧 Retry automatique uniquement si conditions remplies (Revolution + endpoint lent + AbortError)
+
+---
+
 ## [0.3.3] - 2025-12-30
 
 ### 🐛 Corrigé
