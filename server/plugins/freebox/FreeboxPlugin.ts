@@ -15,6 +15,10 @@ export class FreeboxPlugin extends BasePlugin {
     private apiService = freeboxApi;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private readonly KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000; // Check every 2 minutes
+    
+    // Protection against concurrent calls to getStats()
+    private isGettingStats = false;
+    private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
         super('freebox', 'Freebox', '1.0.0');
@@ -167,6 +171,30 @@ export class FreeboxPlugin extends BasePlugin {
     }
 
     async getStats(): Promise<PluginStats> {
+        // Protection against concurrent calls: if a call is already in progress, return the same promise
+        if (this.isGettingStats && this.statsPromise) {
+            console.log('[FreeboxPlugin] getStats() already in progress, reusing existing promise');
+            return this.statsPromise;
+        }
+        
+        // Start new stats retrieval
+        this.isGettingStats = true;
+        this.statsPromise = this._getStatsInternal();
+        
+        try {
+            const result = await this.statsPromise;
+            return result;
+        } finally {
+            this.isGettingStats = false;
+            this.statsPromise = null;
+        }
+    }
+    
+    /**
+     * Internal method to get stats (actual implementation)
+     * Separated from getStats() to enable concurrent call protection
+     */
+    private async _getStatsInternal(): Promise<PluginStats> {
         if (!this.isEnabled()) {
             throw new Error('Freebox plugin is not enabled');
         }
@@ -213,30 +241,46 @@ export class FreeboxPlugin extends BasePlugin {
         }
 
         try {
-            // Fetch data from Freebox API in parallel
+            // Fetch data from Freebox API in groups to avoid overloading Revolution
+            // Group 1: Fast endpoints (system info, connection status)
+            // Group 2: DHCP endpoints (can be slow on Revolution)
+            // Group 3: Network endpoints (port forwarding, WiFi, LAN browser - can be slow)
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:226',message:'Starting parallel API calls',data:{endpointCount:8},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:226',message:'Starting grouped API calls',data:{endpointCount:8},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
             const parallelStartTime = Date.now();
+            
+            // Group 1: Fast endpoints (system info, connection status)
             const [
-                devicesResult,
                 connectionResult,
-                systemResult,
+                systemResult
+            ] = await Promise.allSettled([
+                this.apiService.getConnectionStatus(),
+                this.apiService.getSystemInfo()
+            ]);
+            
+            // Group 2: DHCP endpoints (can be slow on Revolution)
+            const [
                 dhcpConfigResult,
                 dhcpLeasesResult,
-                dhcpStaticLeasesResult,
+                dhcpStaticLeasesResult
+            ] = await Promise.allSettled([
+                this.apiService.getDhcpConfig(),
+                this.apiService.getDhcpLeases(),
+                this.apiService.getDhcpStaticLeases()
+            ]);
+            
+            // Group 3: Network endpoints (port forwarding, WiFi, LAN browser - can be slow)
+            const [
+                devicesResult,
                 portForwardResult,
                 wifiBssResult
             ] = await Promise.allSettled([
                 this.apiService.getLanHosts('pub'),
-                this.apiService.getConnectionStatus(),
-                this.apiService.getSystemInfo(),
-                this.apiService.getDhcpConfig(),
-                this.apiService.getDhcpLeases(),
-                this.apiService.getDhcpStaticLeases(),
                 this.apiService.getPortForwardingRules(),
                 this.apiService.getWifiBss()
             ]);
+            
             const parallelDuration = Date.now() - parallelStartTime;
             // #region agent log
             const results = [devicesResult,connectionResult,systemResult,dhcpConfigResult,dhcpLeasesResult,dhcpStaticLeasesResult,portForwardResult,wifiBssResult];
@@ -403,25 +447,60 @@ export class FreeboxPlugin extends BasePlugin {
             if (wifiBssResult.status === 'fulfilled' && wifiBssResult.value.success && Array.isArray(wifiBssResult.value.result)) {
                 const bssList = wifiBssResult.value.result as any[];
                 console.log('[FreeboxPlugin] WiFi BSS list:', bssList.length, 'items');
+                
+                // Log full BSS data for debugging if no networks found
+                if (bssList.length > 0) {
+                    console.log('[FreeboxPlugin] First BSS item structure:', JSON.stringify(bssList[0], null, 2));
+                }
+                
                 for (const bss of bssList) {
                     // Check if BSS is enabled - check multiple possible locations
                     // Default to enabled if not explicitly disabled (more permissive)
                     const enabled = bss.enabled !== undefined ? bss.enabled : (bss.config?.enabled !== undefined ? bss.config.enabled : true);
                     const isEnabled = enabled !== false && enabled !== 0; // More permissive: only exclude if explicitly false/0
                     
-                    // Get SSID from multiple possible locations
-                    // Priority: ssid > name > id (but skip if id looks like a MAC address)
-                    let ssid = bss.ssid || bss.name;
+                    // Get SSID from multiple possible locations with improved detection
+                    // Try multiple fields in order of priority
+                    let ssid: string | null = null;
                     
-                    // If no ssid/name, try id but only if it doesn't look like a MAC address
-                    if (!ssid && bss.id) {
-                        const idStr = String(bss.id);
+                    // Priority 1: Direct SSID field
+                    if (bss.ssid && typeof bss.ssid === 'string' && bss.ssid.trim() !== '') {
+                        ssid = bss.ssid.trim();
+                    }
+                    // Priority 2: Name field
+                    else if (bss.name && typeof bss.name === 'string' && bss.name.trim() !== '') {
+                        ssid = bss.name.trim();
+                    }
+                    // Priority 3: SSID in config object
+                    else if (bss.config?.ssid && typeof bss.config.ssid === 'string' && bss.config.ssid.trim() !== '') {
+                        ssid = bss.config.ssid.trim();
+                    }
+                    // Priority 4: ID field (but skip if it looks like a MAC address)
+                    else if (bss.id) {
+                        const idStr = String(bss.id).trim();
                         // MAC addresses are typically 12 hex digits (with or without separators)
                         // Skip if it looks like a MAC (contains only hex chars and separators)
                         const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
-                        if (!macPattern.test(idStr)) {
+                        if (!macPattern.test(idStr) && idStr.length > 0) {
                             ssid = idStr;
+                        } else {
+                            console.log('[FreeboxPlugin] Skipping BSS ID that looks like MAC:', idStr);
                         }
+                    }
+                    // Priority 5: Try other possible fields
+                    else if (bss.bssid && typeof bss.bssid === 'string' && bss.bssid.trim() !== '') {
+                        const bssidStr = bss.bssid.trim();
+                        // Only use if it doesn't look like a MAC address
+                        const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
+                        if (!macPattern.test(bssidStr)) {
+                            ssid = bssidStr;
+                        }
+                    }
+                    
+                    // Log if SSID not found for debugging
+                    if (!ssid) {
+                        console.log('[FreeboxPlugin] No SSID found in BSS item. Available fields:', Object.keys(bss));
+                        console.log('[FreeboxPlugin] BSS item content:', JSON.stringify(bss, null, 2));
                     }
                     
                     // Only add if we have a valid SSID (not a MAC address)

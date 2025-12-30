@@ -3,6 +3,45 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.1] - 2025-12-30
+
+### 🐛 Corrigé
+
+**Freebox Revolution - Appels Répétés et Timeouts**
+- ✅ Protection contre les appels simultanés multiples à `getStats()` pour éviter la surcharge
+- ✅ Si un appel est déjà en cours, réutilisation de la même promesse au lieu de créer un nouveau
+- ✅ Réduction des erreurs `AbortError` grâce aux timeouts adaptatifs par endpoint
+- ✅ Endpoints lents (`/dhcp/dynamic_lease/`, `/dhcp/static_lease/`, `/fw/redir/`, `/lan/browser/pub/`) : timeout de 30s sur Revolution
+- ✅ Autres endpoints : timeout de 20s sur Revolution (au lieu de 10s pour les autres modèles)
+
+**Freebox Revolution - Détection WiFi BSS**
+- ✅ Amélioration de la détection SSID avec vérification de plus de champs (`ssid`, `name`, `config.ssid`, `id`, `bssid`)
+- ✅ Logs de débogage ajoutés pour diagnostiquer les problèmes de détection WiFi
+- ✅ Log du contenu complet du premier BSS si aucun réseau n'est trouvé
+- ✅ Meilleure gestion des cas où le SSID est dans un champ non standard
+
+### 🔧 Modifié
+
+**FreeboxPlugin - Protection Concurrente**
+- 🔧 Ajout de `isGettingStats` et `statsPromise` pour protéger contre les appels simultanés
+- 🔧 Refactorisation de `getStats()` avec méthode interne `_getStatsInternal()`
+- 🔧 Réutilisation de la promesse en cours si un appel est déjà actif
+
+**FreeboxApiService - Timeouts Adaptatifs**
+- 🔧 Nouvelle fonction `getTimeoutForEndpoint()` pour timeouts adaptatifs par endpoint
+- 🔧 Timeout de 30s pour endpoints lents sur Revolution uniquement
+- 🔧 Timeout de 20s pour autres endpoints sur Revolution
+- 🔧 Timeout de 10s inchangé pour tous les autres modèles (Pop, Ultra, Delta)
+
+**FreeboxPlugin - Requêtes Parallèles Groupées**
+- 🔧 Requêtes organisées en 3 groupes séquentiels au lieu de toutes en parallèle
+- 🔧 Groupe 1 : endpoints rapides (connection, system)
+- 🔧 Groupe 2 : endpoints DHCP (config, leases)
+- 🔧 Groupe 3 : endpoints réseau (LAN browser, port forwarding, WiFi)
+- 🔧 Évite de surcharger la Freebox Revolution avec trop de requêtes simultanées
+
+---
+
 ## [0.3.0] - 2025-12-29
 
 ### 🐛 Corrigé

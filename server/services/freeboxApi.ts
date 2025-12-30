@@ -185,7 +185,7 @@ class FreeboxApiService {
         const requestStartTime = Date.now();
         // Check if model is Revolution - if so, use longer timeout (ONLY for Revolution)
         const isRevolution = this.isRevolutionModel();
-        const timeoutValue = isRevolution ? 20000 : config.freebox.requestTimeout; // 20s for Revolution, 10s for others
+        const timeoutValue = this.getTimeoutForEndpoint(endpoint, isRevolution);
         try {
             // #region agent log
             fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:186',message:'Request start',data:{method,url,timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -451,6 +451,34 @@ class FreeboxApiService {
     // Get cached version info (call getApiVersion first to populate)
     getVersionInfo(): VersionInfo | null {
         return this.versionInfo;
+    }
+
+    /**
+     * Get timeout value for a specific endpoint based on model and endpoint characteristics
+     * Some endpoints are slower on Revolution and need longer timeouts
+     * 
+     * @param endpoint API endpoint path
+     * @param isRevolution Whether the Freebox model is Revolution
+     * @returns Timeout value in milliseconds
+     */
+    private getTimeoutForEndpoint(endpoint: string, isRevolution: boolean): number {
+        if (!isRevolution) {
+            return config.freebox.requestTimeout; // 10s par défaut pour les autres modèles
+        }
+        
+        // Endpoints connus pour être lents sur Revolution
+        const slowEndpoints = [
+            '/dhcp/dynamic_lease/',
+            '/dhcp/static_lease/',
+            '/fw/redir/',
+            '/lan/browser/pub/'
+        ];
+        
+        if (slowEndpoints.some(slow => endpoint.includes(slow))) {
+            return 30000; // 30s pour endpoints lents sur Revolution
+        }
+        
+        return 20000; // 20s pour autres endpoints sur Revolution
     }
 
     /**
