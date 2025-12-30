@@ -47,7 +47,12 @@ router.post('/login', asyncHandler(async (_req, res) => {
 
   // Notify WebSocket services
   connectionWebSocket.onLogin();
-  freeboxNativeWebSocket.onLogin(); // Start native Freebox WebSocket (API v8+)
+  
+  // Only start Freebox native WebSocket if Freebox plugin is enabled
+  const freeboxPlugin = pluginManager.getPlugin('freebox');
+  if (freeboxPlugin && freeboxPlugin.isEnabled()) {
+    freeboxNativeWebSocket.onLogin(); // Start native Freebox WebSocket (API v8+)
+  }
 
   // Restart Freebox plugin if enabled to ensure it picks up the new session
   // This is especially important after first-time registration/login

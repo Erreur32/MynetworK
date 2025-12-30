@@ -1157,7 +1157,11 @@ const PluginPrioritySection: React.FC = () => {
               />
               <div>
                 <span className="text-sm text-gray-200">Écraser les hostnames existants</span>
-                <p className="text-xs text-gray-400">Si activé, les données des plugins écrasent les hostnames déjà détectés</p>
+                <p className="text-xs text-gray-400">
+                  Si activé, les hostnames détectés par les plugins (Freebox, UniFi) remplaceront les hostnames existants même s'ils sont déjà renseignés.
+                  <br />
+                  <span className="text-gray-500">Recommandé : Activé pour toujours avoir les hostnames les plus récents depuis vos équipements réseau.</span>
+                </p>
               </div>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
@@ -1172,7 +1176,11 @@ const PluginPrioritySection: React.FC = () => {
               />
               <div>
                 <span className="text-sm text-gray-200">Écraser les vendors existants</span>
-                <p className="text-xs text-gray-400">Si activé, les données des plugins écrasent les vendors déjà détectés</p>
+                <p className="text-xs text-gray-400">
+                  Si activé, les vendors détectés par les plugins remplaceront les vendors existants même s'ils sont déjà renseignés.
+                  <br />
+                  <span className="text-gray-500">Note : Les vendors vides ou invalides seront toujours recherchés depuis la base Wireshark/OUI, même si cette option est désactivée.</span>
+                </p>
               </div>
             </label>
           </div>

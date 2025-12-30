@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { freeboxApi } from './freeboxApi.js';
 import { connectionWebSocket } from './connectionWebSocket.js';
+import { pluginManager } from './pluginManager.js';
 
 // Freebox native WebSocket events (API v8+)
 type FreeboxEvent =
@@ -65,8 +66,16 @@ class FreeboxNativeWebSocketService {
   /**
    * Start the native Freebox WebSocket connection
    * Only works with API v8+ (Delta, Pop, Ultra)
+   * Only starts if Freebox plugin is enabled
    */
   async start() {
+    // Check if Freebox plugin is enabled
+    const freeboxPlugin = pluginManager.getPlugin('freebox');
+    if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket connection');
+      return;
+    }
+
     // Check API version - WebSocket events require v8+
     let versionInfo = freeboxApi.getVersionInfo();
 
@@ -97,6 +106,14 @@ class FreeboxNativeWebSocketService {
    */
   private async connect() {
     if (this.isConnecting || this.ws?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    // Check if Freebox plugin is enabled
+    const freeboxPlugin = pluginManager.getPlugin('freebox');
+    if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket connection');
+      this.shouldReconnect = false;
       return;
     }
 
@@ -293,6 +310,14 @@ class FreeboxNativeWebSocketService {
   private scheduleReconnect() {
     if (!this.shouldReconnect) return;
 
+    // Check if Freebox plugin is still enabled before reconnecting
+    const freeboxPlugin = pluginManager.getPlugin('freebox');
+    if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+      console.log('[FBX-WS] Freebox plugin disabled, stopping reconnection attempts');
+      this.shouldReconnect = false;
+      return;
+    }
+
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
@@ -323,8 +348,15 @@ class FreeboxNativeWebSocketService {
 
   /**
    * Called when user logs in
+   * Only starts WebSocket if Freebox plugin is enabled
    */
   onLogin() {
+    // Check if Freebox plugin is enabled before starting WebSocket
+    const freeboxPlugin = pluginManager.getPlugin('freebox');
+    if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket start on login');
+      return;
+    }
     this.start();
   }
 

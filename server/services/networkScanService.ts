@@ -127,6 +127,12 @@ export class NetworkScanService {
         duration: number;
         detectionSummary?: { mac: number; vendor: number; hostname: number };
     } | null = null;
+    
+    // Cache for plugin stats during scan (to avoid repeated getStats() calls)
+    private cachedFreeboxStats: any | null = null;
+    private cachedUniFiStats: any | null = null;
+    private cacheTimestamp: number = 0;
+    private readonly CACHE_TTL = 30000; // 30 seconds cache validity
     /**
      * Scan a network range for active IP addresses
      * 
@@ -161,6 +167,11 @@ export class NetworkScanService {
 
         // Clear last scan result when starting a new scan
         this.lastScanResult = null;
+
+        // Initialize plugin stats cache for full scans (to avoid repeated getStats() calls)
+        if (scanType === 'full') {
+            await this.initializePluginStatsCache();
+        }
 
         // Check Wireshark vendor database status at start of scan
         if (scanType === 'full') {
@@ -475,6 +486,9 @@ export class NetworkScanService {
         // Clear progress tracking after scan completes
         this.currentScanProgress = null;
 
+        // Invalidate plugin stats cache after scan completes
+        this.invalidatePluginStatsCache();
+
         return finalResult;
     }
 
@@ -604,7 +618,7 @@ export class NetworkScanService {
             logger.warn('NetworkScanService', `Scan already in progress: ${progress.scanned}/${progress.total} scanned. Rejecting refresh request.`);
             throw new Error(`A scan is already in progress (${progress.scanned}/${progress.total} IPs scanned). Please wait for it to complete.`);
         }
-
+        
         // Get all existing IPs from database
         const existingScans = NetworkScanRepository.find({ limit: 10000 });
         const ipsToRefresh = existingScans.map(scan => scan.ip);
@@ -619,6 +633,11 @@ export class NetworkScanService {
         }
 
         logger.info('NetworkScanService', `Refreshing ${ipsToRefresh.length} existing IPs (type: ${scanType})`);
+
+        // Initialize plugin stats cache for full scans (to avoid repeated getStats() calls)
+        if (scanType === 'full') {
+            await this.initializePluginStatsCache();
+        }
 
         // Check Wireshark vendor database status at start of refresh
         if (scanType === 'full') {
@@ -871,6 +890,9 @@ export class NetworkScanService {
 
         // Clear progress tracking after refresh completes
         this.currentScanProgress = null;
+
+        // Invalidate plugin stats cache after refresh completes
+        this.invalidatePluginStatsCache();
 
         return {
             scanned,
@@ -1129,8 +1151,8 @@ export class NetworkScanService {
                 if (Math.random() < 0.05) { // Log ~5% of successful pings
                     logger.debug('NetworkScanService', `[${ip}] Ping successful, latency: ${latency}ms`);
                 }
-                return {
-                    success: true,
+            return {
+                success: true,
                     latency: latency
                 };
             }
@@ -1288,9 +1310,9 @@ export class NetworkScanService {
                 // Windows: arp -a
                 logger.debug('NetworkScanService', `[MAC] Trying Windows arp -a for ${ip}...`);
                 try {
-                    const { stdout } = await execAsync(`arp -a ${ip}`);
-                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                    if (match) {
+                const { stdout } = await execAsync(`arp -a ${ip}`);
+                const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
                         logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} using Windows arp`);
                         return mac;
@@ -1389,10 +1411,10 @@ export class NetworkScanService {
                             if (mac !== '00:00:00:00:00:00') {
                                 logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
                                 return mac;
-                            }
-                        }
                     }
-                } catch (error) {
+                }
+            }
+        } catch (error) {
                     // arp-scan not available or failed (may require root privileges)
                     logger.debug('NetworkScanService', `arp-scan not available or failed for ${ip}:`, error);
                 }
@@ -1423,7 +1445,67 @@ export class NetworkScanService {
         
         return null;
     }
-    
+
+    /**
+     * Initialize plugin stats cache at the start of a scan
+     * This avoids repeated getStats() calls which can be slow (especially for Freebox Revolution)
+     */
+    private async initializePluginStatsCache(): Promise<void> {
+        // Clear existing cache
+        this.cachedFreeboxStats = null;
+        this.cachedUniFiStats = null;
+        this.cacheTimestamp = 0;
+
+        // Get plugin priority config to determine which plugins are enabled
+        const config = PluginPriorityConfigService.getConfig();
+        const priority = config.vendorPriority;
+        const macPlugins = priority.filter(p => p === 'freebox' || p === 'unifi');
+
+        // Cache Freebox stats if plugin is enabled
+        if (macPlugins.includes('freebox')) {
+            try {
+                const freeboxPlugin = pluginManager.getPlugin('freebox');
+                if (freeboxPlugin && freeboxPlugin.isEnabled()) {
+                    logger.info('NetworkScanService', '[Cache] Initializing Freebox stats cache...');
+                    this.cachedFreeboxStats = await freeboxPlugin.getStats();
+                    this.cacheTimestamp = Date.now();
+                    logger.info('NetworkScanService', '[Cache] Freebox stats cached successfully');
+                }
+            } catch (error: any) {
+                logger.warn('NetworkScanService', `[Cache] Failed to cache Freebox stats: ${error.message || error}. Will use fallback.`);
+                // Continue without cache - getMacFromFreebox() will call getStats() directly
+            }
+        }
+
+        // Cache UniFi stats if plugin is enabled
+        if (macPlugins.includes('unifi')) {
+            try {
+                const unifiPlugin = pluginManager.getPlugin('unifi');
+                if (unifiPlugin && unifiPlugin.isEnabled()) {
+                    logger.info('NetworkScanService', '[Cache] Initializing UniFi stats cache...');
+                    this.cachedUniFiStats = await unifiPlugin.getStats();
+                    if (!this.cacheTimestamp) {
+                        this.cacheTimestamp = Date.now();
+                    }
+                    logger.info('NetworkScanService', '[Cache] UniFi stats cached successfully');
+                }
+            } catch (error: any) {
+                logger.warn('NetworkScanService', `[Cache] Failed to cache UniFi stats: ${error.message || error}. Will use fallback.`);
+                // Continue without cache - getMacFromUniFi() will call getStats() directly
+            }
+        }
+    }
+
+    /**
+     * Invalidate plugin stats cache after scan completes
+     */
+    private invalidatePluginStatsCache(): void {
+        this.cachedFreeboxStats = null;
+        this.cachedUniFiStats = null;
+        this.cacheTimestamp = 0;
+        logger.debug('NetworkScanService', '[Cache] Plugin stats cache invalidated');
+    }
+
     /**
      * Get MAC address from Freebox plugin
      * @param ip IP address
@@ -1437,7 +1519,16 @@ export class NetworkScanService {
                 return null;
             }
             
-            const stats = await freeboxPlugin.getStats();
+            // Use cached stats if available and still valid, otherwise fetch fresh stats
+            let stats: any;
+            if (this.cachedFreeboxStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
+                stats = this.cachedFreeboxStats;
+                logger.debug('NetworkScanService', `[MAC] Using cached Freebox stats for ${ip}`);
+            } else {
+                // Cache expired or not available, fetch fresh stats
+                stats = await freeboxPlugin.getStats();
+                logger.debug('NetworkScanService', `[MAC] Fetched fresh Freebox stats for ${ip} (cache expired or unavailable)`);
+            }
             if (!stats?.devices || !Array.isArray(stats.devices)) {
                 logger.debug('NetworkScanService', `[MAC] No devices found in Freebox stats for ${ip}`);
                 return null;
@@ -1476,7 +1567,16 @@ export class NetworkScanService {
                 return null;
             }
             
-            const stats = await unifiPlugin.getStats();
+            // Use cached stats if available and still valid, otherwise fetch fresh stats
+            let stats: any;
+            if (this.cachedUniFiStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
+                stats = this.cachedUniFiStats;
+                logger.debug('NetworkScanService', `[MAC] Using cached UniFi stats for ${ip}`);
+            } else {
+                // Cache expired or not available, fetch fresh stats
+                stats = await unifiPlugin.getStats();
+                logger.debug('NetworkScanService', `[MAC] Fetched fresh UniFi stats for ${ip} (cache expired or unavailable)`);
+            }
             if (!stats?.devices || !Array.isArray(stats.devices)) {
                 logger.debug('NetworkScanService', `[MAC] No devices found in UniFi stats for ${ip}`);
                 return null;

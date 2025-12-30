@@ -3,6 +3,62 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.3] - 2025-12-30
+
+### 🐛 Corrigé
+
+**Freebox Plugin - WebSocket au Démarrage**
+- ✅ Le WebSocket Freebox ne démarre plus si le plugin est désactivé
+- ✅ Vérification de l'état du plugin avant chaque tentative de connexion WebSocket
+- ✅ Arrêt automatique des tentatives de reconnexion si le plugin est désactivé
+- ✅ Réduction des logs Freebox inutiles quand le plugin est désactivé
+
+**UniFi Plugin - Appels API Inutiles**
+- ✅ Le plugin UniFi ne fait plus d'appels API si désactivé
+- ✅ Vérification de `isEnabled()` dans `stop()` avant d'appeler `logout()`
+- ✅ Protection contre les appels API inutiles même lors de la réinitialisation du plugin
+
+**Freebox Revolution - Appels Simultanés**
+- ✅ Protection renforcée contre les appels simultanés multiples aux mêmes endpoints
+- ✅ Réduction des erreurs `AbortError` grâce à une meilleure gestion des requêtes parallèles
+
+### ✨ Ajouté
+
+**Optimisation Détection MAC - Cache des Stats Plugins**
+- ✅ Cache des stats Freebox/UniFi pendant le scan pour éviter les appels répétés à `getStats()`
+- ✅ Un seul appel à `getStats()` par plugin au début du scan au lieu d'un par IP
+- ✅ Amélioration significative des performances de scan avec Freebox/UniFi activés
+- ✅ Cache automatiquement invalidé à la fin du scan pour libérer la mémoire
+
+**Documentation Options "Écraser"**
+- ✅ Descriptions détaillées des options "Écraser les hostnames existants" et "Écraser les vendors existants"
+- ✅ Recommandations d'utilisation ajoutées pour guider les utilisateurs
+- ✅ Notes explicatives sur le comportement avec les vendors vides/invalides
+
+### 🔧 Modifié
+
+**NetworkScanService - Cache des Stats Plugins**
+- 🔧 Ajout de `cachedFreeboxStats`, `cachedUniFiStats`, `cacheTimestamp` pour le cache
+- 🔧 Méthode `initializePluginStatsCache()` pour charger les stats une seule fois au début du scan
+- 🔧 Méthode `invalidatePluginStatsCache()` pour nettoyer le cache après le scan
+- 🔧 `getMacFromFreebox()` et `getMacFromUniFi()` utilisent maintenant le cache au lieu d'appeler `getStats()` à chaque fois
+- 🔧 Fallback automatique vers `getStats()` si le cache expire ou n'est pas disponible
+
+**FreeboxNativeWebSocket - Vérification Plugin**
+- 🔧 Vérification de l'état du plugin Freebox avant de démarrer le WebSocket
+- 🔧 Vérification dans `start()`, `connect()`, `scheduleReconnect()`, et `onLogin()`
+- 🔧 Arrêt automatique si le plugin est désactivé pendant une reconnexion
+
+**Routes Auth - WebSocket Conditionnel**
+- 🔧 `freeboxNativeWebSocket.onLogin()` appelé uniquement si le plugin Freebox est activé
+- 🔧 Évite les tentatives de connexion WebSocket inutiles
+
+**SettingsPage - Documentation Améliorée**
+- 🔧 Descriptions plus détaillées des options "Écraser" avec explications claires
+- 🔧 Recommandations et notes importantes ajoutées pour chaque option
+
+---
+
 ## [0.3.2] - 2025-12-30
 
 ### 🐛 Corrigé

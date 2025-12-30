@@ -40,6 +40,35 @@ sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package.
 echo -e "${BLUE}  📝 Mise à jour de src/constants/version.ts...${NC}"
 sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
 
+# 2b. src/main.tsx (logs console)
+echo -e "${BLUE}  📝 Mise à jour de src/main.tsx (logs console)...${NC}"
+# Use perl for more reliable regex matching (works on both GNU and BSD sed)
+if command -v perl &> /dev/null; then
+    perl -i -pe "s/const APP_VERSION = '[0-9]+\.[0-9]+\.[0-9]+';/const APP_VERSION = '$NEW_VERSION';/" src/main.tsx
+else
+    # Fallback to sed with extended regex (GNU sed)
+    sed -i -E "s/const APP_VERSION = '[0-9]+\.[0-9]+\.[0-9]+';/const APP_VERSION = '$NEW_VERSION';/" src/main.tsx 2>/dev/null || \
+    # Fallback to basic sed (BSD sed)
+    sed -i '' "s/const APP_VERSION = '[^']*';/const APP_VERSION = '$NEW_VERSION';/" src/main.tsx
+fi
+
+# 2c. Versions des plugins (Freebox, UniFi, Scan Réseau)
+echo -e "${BLUE}  📝 Mise à jour des versions des plugins...${NC}"
+# Use perl for more reliable regex matching
+if command -v perl &> /dev/null; then
+    perl -i -pe "s/super\('freebox', 'Freebox', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts
+    perl -i -pe "s/super\('unifi', 'UniFi Controller', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts
+    perl -i -pe "s/super\('scan-reseau', 'Scan Réseau', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts
+else
+    # Fallback to sed with extended regex (GNU sed)
+    sed -i -E "s/super\('freebox', 'Freebox', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts 2>/dev/null || \
+    sed -i '' "s/super('freebox', 'Freebox', '[^']*');/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts
+    sed -i -E "s/super\('unifi', 'UniFi Controller', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts 2>/dev/null || \
+    sed -i '' "s/super('unifi', 'UniFi Controller', '[^']*');/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts
+    sed -i -E "s/super\('scan-reseau', 'Scan Réseau', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts 2>/dev/null || \
+    sed -i '' "s/super('scan-reseau', 'Scan Réseau', '[^']*');/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts
+fi
+
 # 3. README.md (badge)
 echo -e "${BLUE}  📝 Mise à jour de README.md...${NC}"
 sed -i "s/MynetworK-$OLD_VERSION/MynetworK-$NEW_VERSION/g" README.md
@@ -150,6 +179,10 @@ echo ""
 echo -e "${CYAN}${BOLD}📋 Fichiers modifiés:${NC}"
 echo -e "  ${BLUE}- package.json${NC}"
 echo -e "  ${BLUE}- src/constants/version.ts${NC}"
+echo -e "  ${BLUE}- src/main.tsx (logs console)${NC}"
+echo -e "  ${BLUE}- server/plugins/freebox/FreeboxPlugin.ts${NC}"
+echo -e "  ${BLUE}- server/plugins/unifi/UniFiPlugin.ts${NC}"
+echo -e "  ${BLUE}- server/plugins/scan-reseau/ScanReseauPlugin.ts${NC}"
 echo -e "  ${BLUE}- README.md${NC}"
 echo -e "  ${BLUE}- CHANGELOG.md${NC}"
 echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"

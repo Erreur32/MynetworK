@@ -13,7 +13,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '1.0.0');
+        super('unifi', 'UniFi Controller', '0.3.3');
         this.apiService = new UniFiApiService();
     }
 
@@ -126,7 +126,11 @@ export class UniFiPlugin extends BasePlugin {
     }
 
     async stop(): Promise<void> {
-        await this.apiService.logout();
+        // Only logout if plugin was enabled and we're actually logged in
+        // This prevents unnecessary API calls when plugin is disabled
+        if (this.isEnabled() && this.apiService.isLoggedIn()) {
+            await this.apiService.logout();
+        }
         await super.stop();
     }
 
