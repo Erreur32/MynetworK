@@ -56,9 +56,10 @@ interface PluginState {
     pluginStats: Record<string, PluginStats | null>;
     isLoading: boolean;
     error: string | null;
+    lastFetchTime: number | null; // Cache timestamp
 
     // Actions
-    fetchPlugins: () => Promise<void>;
+    fetchPlugins: (force?: boolean) => Promise<void>;
     fetchPluginStats: (pluginId: string) => Promise<void>;
     fetchAllStats: () => Promise<void>;
     updatePluginConfig: (pluginId: string, config: { enabled?: boolean; settings?: Record<string, unknown> }) => Promise<boolean>;
@@ -70,22 +71,51 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     pluginStats: {},
     isLoading: false,
     error: null,
+    lastFetchTime: null,
 
-    fetchPlugins: async () => {
+    fetchPlugins: async (force = false) => {
+        const state = get();
+        const CACHE_DURATION = 30000; // 30 seconds
+        
+        // Check cache if not forcing refresh
+        if (!force && state.lastFetchTime && Date.now() - state.lastFetchTime < CACHE_DURATION) {
+            return; // Use cached data
+        }
+
         set({ isLoading: true, error: null });
 
         try {
             const response = await api.get<Plugin[]>('/api/plugins');
             if (response.success && response.result) {
+                // Validate response structure
+                if (!Array.isArray(response.result)) {
+                    throw new Error('Invalid plugins data format: expected array');
+                }
+
+                // Validate each plugin structure
+                const validatedPlugins = response.result.filter((plugin) => {
+                    const isValid = plugin && 
+                        typeof plugin.id === 'string' && 
+                        typeof plugin.name === 'string' && 
+                        typeof plugin.enabled === 'boolean' &&
+                        typeof plugin.version === 'string';
+                    
+                    if (!isValid) {
+                        console.warn('Invalid plugin data structure:', plugin);
+                    }
+                    return isValid;
+                });
+
                 set({
-                    plugins: response.result,
-                    isLoading: false
+                    plugins: validatedPlugins,
+                    isLoading: false,
+                    lastFetchTime: Date.now()
                 });
                 
                 // Log each loaded plugin with colored background (only once at startup)
                 if (!pluginsLogged) {
                     pluginsLogged = true;
-                    response.result.forEach((plugin) => {
+                    validatedPlugins.forEach((plugin) => {
                         const statusColor = plugin.enabled && plugin.connectionStatus 
                             ? '#10b981' // green
                             : plugin.enabled 
@@ -172,8 +202,8 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         try {
             const response = await api.post(`/api/plugins/${pluginId}/config`, config);
             if (response.success) {
-                // Refresh plugins list
-                await get().fetchPlugins();
+                // Force refresh plugins list after config update
+                await get().fetchPlugins(true);
                 return true;
             }
             return false;

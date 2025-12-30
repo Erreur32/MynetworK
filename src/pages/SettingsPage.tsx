@@ -172,15 +172,31 @@ const DatabaseManagementSection: React.FC = () => {
     historyRetentionDays: 30,
     scanRetentionDays: 90,
     offlineRetentionDays: 7,
+    latencyMeasurementsRetentionDays: 30,
+    keepIpsOnPurge: true,
     autoPurgeEnabled: true,
     purgeSchedule: '0 2 * * *' // Daily at 2 AM
   });
+  const [sizeEstimate, setSizeEstimate] = useState<{
+    currentSizeMB: number;
+    estimatedSizeAfterPurgeMB: number;
+    estimatedFreedMB: number;
+  } | null>(null);
   const [databaseStats, setDatabaseStats] = useState<{
     scansCount: number;
     historyCount: number;
     oldestScan: string | null;
     oldestHistory: string | null;
     totalSize: number;
+  } | null>(null);
+  const [dbStats, setDbStats] = useState<{
+    pageSize: number;
+    pageCount: number;
+    cacheSize: number;
+    synchronous: number;
+    journalMode: string;
+    walSize: number;
+    dbSize: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -189,14 +205,37 @@ const DatabaseManagementSection: React.FC = () => {
   const [isPurgingScans, setIsPurgingScans] = useState(false);
   const [isPurgingOffline, setIsPurgingOffline] = useState(false);
   const [isPurgingAll, setIsPurgingAll] = useState(false);
-  const [isClearingAll, setIsClearingAll] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadRetentionConfig();
     loadDatabaseStats();
+    loadSizeEstimate();
+    loadDbStats();
   }, []);
+
+  const loadDbStats = async () => {
+    try {
+      const response = await api.get('/api/database/stats');
+      if (response.success && response.result) {
+        setDbStats(response.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load DB stats:', error);
+    }
+  };
+
+  const loadSizeEstimate = async () => {
+    try {
+      const response = await api.get<{ success: boolean; result: { currentSizeMB: number; estimatedSizeAfterPurgeMB: number; estimatedFreedMB: number } }>('/api/network-scan/database-size-estimate');
+      if (response.success && response.result) {
+        setSizeEstimate(response.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load size estimate:', error);
+    }
+  };
 
   const loadRetentionConfig = async () => {
     try {
@@ -271,12 +310,15 @@ const DatabaseManagementSection: React.FC = () => {
         const totalDeleted = response.result.totalDeleted || 
           (response.result.historyDeleted || 0) + 
           (response.result.scansDeleted || 0) + 
-          (response.result.offlineDeleted || 0);
+          (response.result.offlineDeleted || 0) +
+          (response.result.latencyMeasurementsDeleted || 0);
         setMessage({ 
           type: 'success', 
-          text: `Purge terminée : ${totalDeleted} entrées supprimées (History: ${response.result.historyDeleted || 0}, Scans: ${response.result.scansDeleted || 0}, Offline: ${response.result.offlineDeleted || 0})` 
+          text: `Purge terminée : ${totalDeleted} entrées supprimées (Historique: ${response.result.historyDeleted || 0}, Scans: ${response.result.scansDeleted || 0}, Offline: ${response.result.offlineDeleted || 0}, Latence: ${response.result.latencyMeasurementsDeleted || 0})` 
         });
         loadDatabaseStats();
+        loadSizeEstimate();
+        loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge' });
@@ -302,6 +344,8 @@ const DatabaseManagementSection: React.FC = () => {
           text: `Historique purgé : ${response.result.deleted} entrées supprimées` 
         });
         loadDatabaseStats();
+        loadSizeEstimate();
+        loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge de l\'historique' });
@@ -327,6 +371,8 @@ const DatabaseManagementSection: React.FC = () => {
           text: `Scans purgés : ${response.result.deleted} entrées supprimées` 
         });
         loadDatabaseStats();
+        loadSizeEstimate();
+        loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des scans' });
@@ -352,6 +398,8 @@ const DatabaseManagementSection: React.FC = () => {
           text: `IPs offline purgées : ${response.result.deleted} entrées supprimées` 
         });
         loadDatabaseStats();
+        loadSizeEstimate();
+        loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des IPs offline' });
@@ -364,24 +412,28 @@ const DatabaseManagementSection: React.FC = () => {
   };
 
   const handlePurgeAll = async () => {
-    if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment supprimer TOUTES les données (historique + scans) sans tenir compte de la rétention ? Cette action est irréversible.')) {
+    if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment supprimer TOUTES les données de scan réseau (historique + scans + mesures de latence) sans tenir compte de la rétention ? Cette action est irréversible.')) {
       return;
     }
     setIsPurgingAll(true);
     setMessage(null);
     try {
-      // Purge avec 0 jours = tout supprimer
+      // Purge avec 0 jours = tout supprimer, respecter keepIpsOnPurge
+      const keepIps = retentionConfig.keepIpsOnPurge;
       const historyResponse = await api.post<PurgeResponse>('/api/network-scan/purge/history', { retentionDays: 0 });
-      const scansResponse = await api.post<PurgeResponse>('/api/network-scan/purge/scans', { retentionDays: 0 });
-      const offlineResponse = await api.post<PurgeResponse>('/api/network-scan/purge/offline', { retentionDays: 0 });
+      const scansResponse = await api.post<PurgeResponse>('/api/network-scan/purge/scans', { retentionDays: 0, keepIps });
+      const offlineResponse = await api.post<PurgeResponse>('/api/network-scan/purge/offline', { retentionDays: 0, keepIps });
+      const latencyResponse = await api.post<PurgeResponse>('/api/network-scan/purge/latency', { retentionDays: 0 });
       
-      if (historyResponse.success && scansResponse.success && offlineResponse.success) {
-        const totalDeleted = (historyResponse.result?.deleted || 0) + (scansResponse.result?.deleted || 0) + (offlineResponse.result?.deleted || 0);
+      if (historyResponse.success && scansResponse.success && offlineResponse.success && latencyResponse.success) {
+        const totalDeleted = (historyResponse.result?.deleted || 0) + (scansResponse.result?.deleted || 0) + (offlineResponse.result?.deleted || 0) + (latencyResponse.result?.deleted || 0);
         setMessage({ 
           type: 'success', 
-          text: `Toutes les données supprimées : ${scansResponse.result?.deleted || 0} scans, ${historyResponse.result?.deleted || 0} historique, ${offlineResponse.result?.deleted || 0} offline (Total: ${totalDeleted})` 
+          text: `Toutes les données supprimées : ${scansResponse.result?.deleted || 0} scans, ${historyResponse.result?.deleted || 0} historique, ${offlineResponse.result?.deleted || 0} offline, ${latencyResponse.result?.deleted || 0} mesures de latence (Total: ${totalDeleted})${keepIps ? ' - Les IPs ont été conservées' : ''}` 
         });
         loadDatabaseStats();
+        loadSizeEstimate();
+        loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
         setMessage({ type: 'error', text: 'Erreur lors de la purge complète' });
@@ -393,33 +445,6 @@ const DatabaseManagementSection: React.FC = () => {
     }
   };
 
-  const handleClearAll = async () => {
-    if (!confirm('⚠️ DANGER : Voulez-vous vraiment supprimer TOUTES les données de scan (historique + scans) ? Cette action est irréversible et ne peut être annulée !')) {
-      return;
-    }
-    if (!confirm('Dernière confirmation : Supprimer TOUTES les données de scan ?')) {
-      return;
-    }
-    setIsClearingAll(true);
-    setMessage(null);
-    try {
-      const response = await api.post<ClearAllResponse>('/api/network-scan/purge/clear-all');
-      if (response.success && response.result) {
-        setMessage({ 
-          type: 'success', 
-          text: `Toutes les données supprimées : ${response.result.scansDeleted} scans, ${response.result.historyDeleted} historique` 
-        });
-        loadDatabaseStats();
-        setTimeout(() => setMessage(null), 5000);
-      } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la suppression complète' });
-      }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la suppression complète' });
-    } finally {
-      setIsClearingAll(false);
-    }
-  };
 
   const handleOptimize = async () => {
     if (!confirm('Optimiser la base de données peut prendre quelques instants. Continuer ?')) {
@@ -476,81 +501,114 @@ const DatabaseManagementSection: React.FC = () => {
             </div>
           )}
 
-          <SettingRow
-            label="Rétention de l'historique"
-            description="Nombre de jours à conserver dans l'historique des scans (network_scan_history)"
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={retentionConfig.historyRetentionDays}
-                onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
-                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              />
-              <span className="text-sm text-gray-400">jours</span>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-6">
+              <SettingRow
+                label="Rétention de l'historique"
+                description="Nombre de jours à conserver dans l'historique des scans (network_scan_history)"
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={retentionConfig.historyRetentionDays}
+                    onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
+                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">jours</span>
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                label="Rétention des scans"
+                description="Nombre de jours à conserver les entrées de scan (network_scans)"
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={retentionConfig.scanRetentionDays}
+                    onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
+                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">jours</span>
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                label="Rétention des IPs offline"
+                description="Nombre de jours à conserver les IPs offline (suppression plus rapide)"
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={retentionConfig.offlineRetentionDays}
+                    onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
+                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">jours</span>
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                label="Rétention des mesures de latence"
+                description="Nombre de jours à conserver les mesures de latence (latency_measurements)"
+              >
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={retentionConfig.latencyMeasurementsRetentionDays}
+                    onChange={(e) => setRetentionConfig({ ...retentionConfig, latencyMeasurementsRetentionDays: parseInt(e.target.value) || 30 })}
+                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">jours</span>
+                </div>
+              </SettingRow>
             </div>
-          </SettingRow>
 
-          <SettingRow
-            label="Rétention des scans"
-            description="Nombre de jours à conserver les entrées de scan (network_scans)"
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={retentionConfig.scanRetentionDays}
-                onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
-                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              />
-              <span className="text-sm text-gray-400">jours</span>
+            <div className="space-y-6">
+              <SettingRow
+                label="Garder les IPs lors de la purge"
+                description="Conserver les IPs scannées même après purge pour surveiller le nombre total réel d'IPs du réseau"
+              >
+                <Toggle
+                  enabled={retentionConfig.keepIpsOnPurge}
+                  onChange={(enabled) => setRetentionConfig({ ...retentionConfig, keepIpsOnPurge: enabled })}
+                />
+              </SettingRow>
+
+              <SettingRow
+                label="Purge automatique"
+                description="Activer la purge automatique selon la planification"
+              >
+                <Toggle
+                  enabled={retentionConfig.autoPurgeEnabled}
+                  onChange={(enabled) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: enabled })}
+                />
+              </SettingRow>
+
+              {retentionConfig.autoPurgeEnabled && (
+                <SettingRow
+                  label="Planification de la purge"
+                  description="Expression cron pour la planification (ex: '0 2 * * *' = tous les jours à 2h)"
+                >
+                  <input
+                    type="text"
+                    value={retentionConfig.purgeSchedule}
+                    onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
+                    placeholder="0 2 * * *"
+                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+                  />
+                </SettingRow>
+              )}
             </div>
-          </SettingRow>
-
-          <SettingRow
-            label="Rétention des IPs offline"
-            description="Nombre de jours à conserver les IPs offline (suppression plus rapide)"
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={retentionConfig.offlineRetentionDays}
-                onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
-                className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              />
-              <span className="text-sm text-gray-400">jours</span>
-            </div>
-          </SettingRow>
-
-          <SettingRow
-            label="Purge automatique"
-            description="Activer la purge automatique selon la planification"
-          >
-            <Toggle
-              enabled={retentionConfig.autoPurgeEnabled}
-              onChange={(enabled) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: enabled })}
-            />
-          </SettingRow>
-
-          {retentionConfig.autoPurgeEnabled && (
-            <SettingRow
-              label="Planification de la purge"
-              description="Expression cron pour la planification (ex: '0 2 * * *' = tous les jours à 2h)"
-            >
-              <input
-                type="text"
-                value={retentionConfig.purgeSchedule}
-                onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
-                placeholder="0 2 * * *"
-                className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              />
-            </SettingRow>
-          )}
+          </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
             <button
@@ -565,169 +623,169 @@ const DatabaseManagementSection: React.FC = () => {
         </div>
       </Section>
 
-      <Section title="Statistiques de la base de données" icon={Database} iconColor="purple">
-        <div className="space-y-4">
-          {databaseStats ? (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                  <div className="text-xs text-gray-400 mb-1">Entrées de scan</div>
-                  <div className="text-lg font-semibold text-gray-200">{databaseStats.scansCount.toLocaleString()}</div>
+      <div className="grid grid-cols-2 gap-6">
+        <Section title="Statistiques de la base" icon={Database} iconColor="purple">
+          <div className="space-y-4">
+            {databaseStats ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Entrées de scan</div>
+                    <div className="text-lg font-semibold text-gray-200">{databaseStats.scansCount.toLocaleString()}</div>
+                  </div>
+                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Entrées d'historique</div>
+                    <div className="text-lg font-semibold text-gray-200">{databaseStats.historyCount.toLocaleString()}</div>
+                  </div>
+                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Plus ancien scan</div>
+                    <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
+                  </div>
+                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Plus ancien historique</div>
+                    <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
+                  </div>
                 </div>
-                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                  <div className="text-xs text-gray-400 mb-1">Entrées d'historique</div>
-                  <div className="text-lg font-semibold text-gray-200">{databaseStats.historyCount.toLocaleString()}</div>
-                </div>
-                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                  <div className="text-xs text-gray-400 mb-1">Plus ancien scan</div>
-                  <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
-                </div>
-                <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                  <div className="text-xs text-gray-400 mb-1">Plus ancien historique</div>
-                  <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
-                </div>
+                {sizeEstimate && (
+                  <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="text-xs text-gray-400 mb-2">Estimation de taille</div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Taille actuelle :</span>
+                        <span className="text-gray-200 font-medium">{sizeEstimate.currentSizeMB.toFixed(2)} MB</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Taille estimée (après purge) :</span>
+                        <span className="text-gray-200 font-medium">{sizeEstimate.estimatedSizeAfterPurgeMB.toFixed(2)} MB</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-1 border-t border-gray-700">
+                        <span className="text-gray-400">Espace libéré estimé :</span>
+                        <span className="text-emerald-400 font-medium">~{sizeEstimate.estimatedFreedMB.toFixed(2)} MB</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {dbStats && (
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700">
+                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                      <div className="text-xs text-gray-400 mb-1">Taille de la DB</div>
+                      <div className="text-lg font-semibold text-gray-200">{formatBytes(dbStats.dbSize)}</div>
+                    </div>
+                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                      <div className="text-xs text-gray-400 mb-1">Mode journal</div>
+                      <div className="text-lg font-semibold text-gray-200">{dbStats.journalMode}</div>
+                    </div>
+                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                      <div className="text-xs text-gray-400 mb-1">Taille du cache</div>
+                      <div className="text-lg font-semibold text-gray-200">{formatBytes(Math.abs(dbStats.cacheSize) * 1024)}</div>
+                    </div>
+                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                      <div className="text-xs text-gray-400 mb-1">Mode synchrone</div>
+                      <div className="text-lg font-semibold text-gray-200">
+                        {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                <div>Chargement des statistiques...</div>
               </div>
-              <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                <div className="text-xs text-gray-400 mb-1">Taille estimée</div>
-                <div className="text-lg font-semibold text-gray-200">{formatBytes(databaseStats.totalSize)}</div>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-8 text-gray-400">
-              <Loader2 size={24} className="animate-spin mx-auto mb-2" />
-              <div>Chargement des statistiques...</div>
-            </div>
-          )}
-        </div>
-      </Section>
+            )}
+          </div>
+        </Section>
 
-      <Section title="Actions de maintenance" icon={Trash2} iconColor="red">
+        <Section title="Actions de maintenance" icon={Trash2} iconColor="red">
         <div className="space-y-4">
           <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
             <p className="text-sm text-amber-400 mb-2">
-              <strong>Attention :</strong> Ces actions sont irréversibles. Assurez-vous d'avoir sauvegardé vos données si nécessaire.
+              <strong>⚠️ Attention :</strong> Ces actions sont irréversibles. Assurez-vous d'avoir sauvegardé vos données si nécessaire.
             </p>
           </div>
 
           <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Purge selon rétention configurée</h4>
-              <p className="text-xs text-gray-400 mb-3">
-                Supprime uniquement les données plus anciennes que la rétention configurée ({retentionConfig.scanRetentionDays} jours pour scans, {retentionConfig.historyRetentionDays} jours pour historique)
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={handlePurge}
-                  disabled={isPurging}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  Purge complète (selon rétention)
-                </button>
-              </div>
-            </div>
 
-            <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Purge indépendante</h4>
-              <p className="text-xs text-gray-400 mb-3">
-                Purge séparée pour chaque type de données (selon rétention configurée)
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={handlePurgeHistory}
-                  disabled={isPurgingHistory}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurgingHistory ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
-                  Purge Historique ({retentionConfig.historyRetentionDays}j)
-                </button>
-                <button
-                  onClick={handlePurgeScans}
-                  disabled={isPurgingScans}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurgingScans ? <Loader2 size={16} className="animate-spin" /> : <Network size={16} />}
-                  Purge Scans ({retentionConfig.scanRetentionDays}j)
-                </button>
-                <button
-                  onClick={handlePurgeOffline}
-                  disabled={isPurgingOffline}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurgingOffline ? <Loader2 size={16} className="animate-spin" /> : <Power size={16} />}
-                  Purge Offline ({retentionConfig.offlineRetentionDays}j)
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-semibold text-red-400 mb-2">Purge complète (tout supprimer)</h4>
-              <p className="text-xs text-red-400 mb-3">
-                ⚠️ Supprime TOUTES les données sans tenir compte de la rétention
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={handlePurgeAll}
-                  disabled={isPurgingAll}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurgingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  Purge TOUT (0 jours)
-                </button>
-              </div>
-            </div>
-
-            {(process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') && (
-              <div>
-                <h4 className="text-sm font-semibold text-red-400 mb-2">Mode Développement - Purge complète</h4>
-                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg mb-3">
-                  <p className="text-xs text-red-400">
-                    <strong>⚠️ DANGER :</strong> Cette action supprime TOUTES les données de scan (historique + scans). Utilisé uniquement pour les tests.
-                  </p>
-                </div>
-                <button
-                  onClick={handleClearAll}
-                  disabled={isClearingAll}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isClearingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  Vider TOUT (Dev)
-                </button>
-              </div>
-            )}
-
-            <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Optimisation</h4>
-              <div className="flex flex-wrap gap-3">
+          <div>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Optimisation  </h4>
+ 
+              <div className="flex items-start gap-4">
                 <button
                   onClick={handleOptimize}
                   disabled={isOptimizing}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
                 >
                   {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                  Optimiser la DB (VACUUM)
+                  Optimiser la DB
                 </button>
-                <button
-                  onClick={loadDatabaseStats}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                  Actualiser les stats
-                </button>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400">
+                    Optimisation de la base de données (VACUUM + optimisation index + actualisation stats)
+                  </p>
+                </div>
               </div>
             </div>
+
+
+            <div>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">Nettoyage de la base</h4>
+
+              <div className="flex items-start gap-4">
+                <button
+                  onClick={handlePurge}
+                  disabled={isPurging}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  Nettoyer la base
+                </button>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-400">
+                    Purge selon rétention configurée :
+                    <br />- Historique ({retentionConfig.historyRetentionDays} jours)
+                    <br />- Scans ({retentionConfig.scanRetentionDays} jours)
+                    <br />- IPs offline ({retentionConfig.offlineRetentionDays} jours)
+                    <br />- Mesures de latence ({retentionConfig.latencyMeasurementsRetentionDays} jours)
+                    {retentionConfig.keepIpsOnPurge && (
+                      <><br /><span className="text-emerald-400">✓ Les IPs seront conservées</span></>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold text-red-400 mb-2">Actions dangereuses</h4>
+              <div className="flex items-start gap-4">
+                <button
+                  onClick={handlePurgeAll}
+                  disabled={isPurgingAll}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+                >
+                  {isPurgingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  Tout supprimer
+                </button>
+                {retentionConfig.keepIpsOnPurge && (
+                  <div className="flex-1">
+                    <p className="text-xs text-amber-400">
+                      ⚠️ Note : Supprime les données de scan réseau uniquement, Les IPs seront conservées (option "Garder les IPs" activée)
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
           </div>
         </div>
-      </Section>
+        </Section>
+      </div>
 
       <Section title="Performance de la base de données (Docker)" icon={Sparkles} iconColor="blue">
         <DatabasePerformanceSection />
       </Section>
 
-      <Section title="Priorité des plugins (Hostname/Vendor)" icon={Plug} iconColor="purple">
-        <PluginPrioritySection />
-      </Section>
 
       <Section title="Base de vendors IEEE OUI" icon={HardDrive} iconColor="cyan">
         <WiresharkVendorSection />
@@ -751,6 +809,7 @@ interface PurgeAllResponse {
   historyDeleted?: number;
   scansDeleted?: number;
   offlineDeleted?: number;
+  latencyMeasurementsDeleted?: number;
 }
 
 interface DatabaseStatsResponse {
@@ -759,12 +818,6 @@ interface DatabaseStatsResponse {
   oldestScan?: string;
   oldestHistory?: string;
   totalSize?: number;
-}
-
-interface ClearAllResponse {
-  scansDeleted?: number;
-  historyDeleted?: number;
-  totalDeleted?: number;
 }
 
 interface VendorUpdateResponse {
@@ -1222,22 +1275,12 @@ const DatabasePerformanceSection: React.FC = () => {
     tempStore: 0 as 0 | 1 | 2,
     optimizeForDocker: true
   });
-  const [dbStats, setDbStats] = useState<{
-    pageSize: number;
-    pageCount: number;
-    cacheSize: number;
-    synchronous: number;
-    journalMode: string;
-    walSize: number;
-    dbSize: number;
-  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadDbConfig();
-    loadDbStats();
   }, []);
 
   const loadDbConfig = async () => {
@@ -1257,17 +1300,6 @@ const DatabasePerformanceSection: React.FC = () => {
     }
   };
 
-  const loadDbStats = async () => {
-    try {
-      const response = await api.get('/api/database/stats');
-      if (response.success && response.result) {
-        setDbStats(response.result);
-      }
-    } catch (error: any) {
-      console.error('Failed to load DB stats:', error);
-    }
-  };
-
   const handleSave = async () => {
     setIsSaving(true);
     setMessage(null);
@@ -1276,7 +1308,6 @@ const DatabasePerformanceSection: React.FC = () => {
       if (response.success && response.result) {
         setDbConfig(response.result);
         setMessage({ type: 'success', text: 'Configuration de performance sauvegardée' });
-        loadDbStats();
         setTimeout(() => setMessage(null), 3000);
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
@@ -1317,122 +1348,101 @@ const DatabasePerformanceSection: React.FC = () => {
         </div>
       )}
 
-      {dbStats && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Taille de la DB</div>
-            <div className="text-lg font-semibold text-gray-200">{formatBytes(dbStats.dbSize)}</div>
-          </div>
-          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Mode journal</div>
-            <div className="text-lg font-semibold text-gray-200">{dbStats.journalMode}</div>
-          </div>
-          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Taille du cache</div>
-            <div className="text-lg font-semibold text-gray-200">{formatBytes(Math.abs(dbStats.cacheSize) * 1024)}</div>
-          </div>
-          <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-            <div className="text-xs text-gray-400 mb-1">Mode synchrone</div>
-            <div className="text-lg font-semibold text-gray-200">
-              {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
+
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <SettingRow
+            label="Optimisations Docker"
+            description="Active les optimisations spécifiques pour Docker (checkpoint WAL automatique toutes les 5 min)"
+          >
+            <Toggle
+              enabled={dbConfig.optimizeForDocker}
+              onChange={(enabled) => setDbConfig({ ...dbConfig, optimizeForDocker: enabled })}
+            />
+          </SettingRow>
+
+          <SettingRow
+            label="Checkpoint WAL automatique"
+            description="Active le checkpoint WAL automatique (recommandé pour Docker)"
+          >
+            <Toggle
+              enabled={dbConfig.walAutoCheckpoint}
+              onChange={(enabled) => setDbConfig({ ...dbConfig, walAutoCheckpoint: enabled })}
+            />
+          </SettingRow>
+
+          <SettingRow
+            label="Mode WAL"
+            description="Mode de journalisation (WAL recommandé pour Docker)"
+          >
+            <select
+              value={dbConfig.walMode}
+              onChange={(e) => setDbConfig({ ...dbConfig, walMode: e.target.value as any })}
+              className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              <option value="WAL">WAL (Recommandé)</option>
+              <option value="DELETE">DELETE</option>
+              <option value="TRUNCATE">TRUNCATE</option>
+              <option value="PERSIST">PERSIST</option>
+              <option value="MEMORY">MEMORY</option>
+              <option value="OFF">OFF</option>
+            </select>
+          </SettingRow>
+        </div>
+
+        <div className="space-y-6">
+          <SettingRow
+            label="Mode synchrone"
+            description="0=OFF (rapide, risqué), 1=NORMAL (équilibré), 2=FULL (sûr, lent)"
+          >
+            <select
+              value={dbConfig.synchronous}
+              onChange={(e) => setDbConfig({ ...dbConfig, synchronous: parseInt(e.target.value) as 0 | 1 | 2 })}
+              className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+            >
+              <option value="0">OFF (Rapide)</option>
+              <option value="1">NORMAL (Recommandé)</option>
+              <option value="2">FULL (Sûr)</option>
+            </select>
+          </SettingRow>
+
+          <SettingRow
+            label="Taille du cache (KB)"
+            description="Cache SQLite en KB (négatif = KB, positif = pages). Défaut: -64000 (64 MB)"
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                value={dbConfig.cacheSize}
+                onChange={(e) => setDbConfig({ ...dbConfig, cacheSize: parseInt(e.target.value) || -64000 })}
+                className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-sm text-gray-400">
+                ({formatBytes(Math.abs(dbConfig.cacheSize) * 1024)})
+              </span>
             </div>
-          </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Timeout de verrouillage (ms)"
+            description="Temps d'attente pour les verrous de base de données (défaut: 5000ms)"
+          >
+            <input
+              type="number"
+              min="1000"
+              max="60000"
+              step="1000"
+              value={dbConfig.busyTimeout}
+              onChange={(e) => setDbConfig({ ...dbConfig, busyTimeout: parseInt(e.target.value) || 5000 })}
+              className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+            />
+          </SettingRow>
+
+ 
         </div>
-      )}
-
-      <SettingRow
-        label="Optimisations Docker"
-        description="Active les optimisations spécifiques pour Docker (checkpoint WAL automatique toutes les 5 min)"
-      >
-        <Toggle
-          enabled={dbConfig.optimizeForDocker}
-          onChange={(enabled) => setDbConfig({ ...dbConfig, optimizeForDocker: enabled })}
-        />
-      </SettingRow>
-
-      <SettingRow
-        label="Mode WAL"
-        description="Mode de journalisation (WAL recommandé pour Docker)"
-      >
-        <select
-          value={dbConfig.walMode}
-          onChange={(e) => setDbConfig({ ...dbConfig, walMode: e.target.value as any })}
-          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-        >
-          <option value="WAL">WAL (Recommandé)</option>
-          <option value="DELETE">DELETE</option>
-          <option value="TRUNCATE">TRUNCATE</option>
-          <option value="PERSIST">PERSIST</option>
-          <option value="MEMORY">MEMORY</option>
-          <option value="OFF">OFF</option>
-        </select>
-      </SettingRow>
-
-      <SettingRow
-        label="Mode synchrone"
-        description="0=OFF (rapide, risqué), 1=NORMAL (équilibré), 2=FULL (sûr, lent)"
-      >
-        <select
-          value={dbConfig.synchronous}
-          onChange={(e) => setDbConfig({ ...dbConfig, synchronous: parseInt(e.target.value) as 0 | 1 | 2 })}
-          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-        >
-          <option value="0">OFF (Rapide)</option>
-          <option value="1">NORMAL (Recommandé)</option>
-          <option value="2">FULL (Sûr)</option>
-        </select>
-      </SettingRow>
-
-      <SettingRow
-        label="Taille du cache (KB)"
-        description="Cache SQLite en KB (négatif = KB, positif = pages). Défaut: -64000 (64 MB)"
-      >
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            value={dbConfig.cacheSize}
-            onChange={(e) => setDbConfig({ ...dbConfig, cacheSize: parseInt(e.target.value) || -64000 })}
-            className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-          />
-          <span className="text-sm text-gray-400">
-            ({formatBytes(Math.abs(dbConfig.cacheSize) * 1024)})
-          </span>
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        label="Timeout de verrouillage (ms)"
-        description="Temps d'attente pour les verrous de base de données (défaut: 5000ms)"
-      >
-        <input
-          type="number"
-          min="1000"
-          max="60000"
-          step="1000"
-          value={dbConfig.busyTimeout}
-          onChange={(e) => setDbConfig({ ...dbConfig, busyTimeout: parseInt(e.target.value) || 5000 })}
-          className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-        />
-      </SettingRow>
-
-      <SettingRow
-        label="Checkpoint WAL automatique"
-        description="Active le checkpoint WAL automatique (recommandé pour Docker)"
-      >
-        <Toggle
-          enabled={dbConfig.walAutoCheckpoint}
-          onChange={(enabled) => setDbConfig({ ...dbConfig, walAutoCheckpoint: enabled })}
-        />
-      </SettingRow>
+      </div>
 
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
-        <button
-          onClick={loadDbStats}
-          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm font-medium text-white flex items-center gap-2"
-        >
-          <RefreshCw size={16} />
-          Actualiser stats
-        </button>
         <button
           onClick={handleSave}
           disabled={isSaving}
@@ -3363,11 +3373,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const adminTabs: { id: AdminTab; label: string; icon: React.ElementType; color: string }[] = [
     { id: 'general', label: 'Général', icon: Settings, color: 'blue' },
     { id: 'plugins', label: 'Plugins', icon: Plug, color: 'emerald' },
+    { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
     { id: 'logs', label: 'Logs', icon: FileText, color: 'cyan' },
     { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
     { id: 'exporter', label: 'Exporter', icon: Share2, color: 'amber' },
     { id: 'database', label: 'Base de données', icon: Database, color: 'purple' },
-    { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
     { id: 'backup', label: 'Backup', icon: Download, color: 'orange' },
     { id: 'debug', label: 'Debug', icon: Monitor, color: 'violet' },
     { id: 'info', label: 'Info', icon: Info, color: 'teal' }

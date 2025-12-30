@@ -98,7 +98,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
     const [scanProgress, setScanProgress] = useState<{ scanned: number; total: number; found: number; updated: number } | null>(null);
     const [lastScanSummary, setLastScanSummary] = useState<{ range: string; scanned: number; found: number; updated: number; duration: number; detectionSummary?: { mac: number; vendor: number; hostname: number } } | null>(null);
     const [autoDetect, setAutoDetect] = useState(false);
-    const [scanType, setScanType] = useState<'full' | 'quick'>('full');
+    const [refreshType, setRefreshType] = useState<'full' | 'quick'>('quick'); // Type de refresh (quick/full)
+    const [showRefreshDropdown, setShowRefreshDropdown] = useState(false); // État pour afficher/masquer le dropdown
+    const refreshDropdownRef = useRef<HTMLDivElement>(null); // Référence pour fermer le dropdown au clic extérieur
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
     const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
     const [showAddIpModal, setShowAddIpModal] = useState(false);
@@ -282,11 +284,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
 
     const fetchDefaultConfig = useCallback(async () => {
         try {
-            const response = await api.get<{ defaultRange: string; defaultScanType: 'full' | 'quick'; defaultAutoDetect: boolean }>('/api/network-scan/default-config');
+            const response = await api.get<{ defaultRange: string; defaultAutoDetect: boolean }>('/api/network-scan/default-config');
             if (response.success && response.result) {
                 setScanRange(response.result.defaultRange);
                 setAutoDetect(response.result.defaultAutoDetect);
-                setScanType(response.result.defaultScanType);
+                // scanType n'est plus utilisé - scan complet toujours en 'full'
             }
         } catch (error) {
             console.error('Failed to fetch default config:', error);
@@ -590,8 +592,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                 };
             }>('/api/network-scan/scan', {
                 range: scanRange || undefined,
-                autoDetect: autoDetect || !scanRange,
-                scanType
+                autoDetect: autoDetect || !scanRange
+                // scanType retiré - scan complet toujours en mode 'full'
             });
 
             if (response.success && response.result) {
@@ -634,8 +636,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
             const response = await api.post('/api/network-scan/add-manual', {
                 ip: manualIp.trim(),
                 mac: manualMac.trim() || undefined,
-                hostname: manualHostname.trim() || undefined,
-                scanType: scanType
+                hostname: manualHostname.trim() || undefined
+                // scanType retiré - ajout manuel toujours en mode 'full'
             });
 
             if (response.success && response.result) {
@@ -699,7 +701,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     offline: number;
                     duration: number;
                 };
-            }>('/api/network-scan/refresh', { scanType: 'quick' });
+            }>('/api/network-scan/refresh', { scanType: refreshType });
 
             if (response.success && response.result) {
                 // Store refresh summary
@@ -1131,7 +1133,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             )}
                                             <span className="text-gray-400">
                                                 {autoStatus.lastScan.type === 'full' ? (
-                                                    <>Full Scan <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
+                                                    <>Full Scan <span className="text-gray-500">(Full)</span></>
                                                 ) : (
                                                     <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
                                                 )}
@@ -1168,12 +1170,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                         {autoStatus.fullScan.config.enabled && (
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="text-gray-300 font-medium w-14">Full Scan</span>
-                                                <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
-                                                    autoStatus.fullScan.config.scanType === 'full'
-                                                        ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
-                                                        : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
-                                                }`}>
-                                                    {autoStatus.fullScan.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                                <span className="px-2 py-0.5 rounded text-xs font-medium w-16 text-center bg-purple-500/20 border border-purple-500/50 text-purple-400">
+                                                    Full
                                                 </span>
                                                 <span className="text-gray-400">
                                                     {formatNextExecution(
@@ -1212,19 +1210,63 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             {/* Colonne 2 : Boutons d'action et stats */}
                             <div className="space-y-3">
                                 {/* Boutons d'action */}
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button
-                                        onClick={handleRefresh}
-                                        disabled={isRefreshing}
-                                        className="w-full px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
-                                    >
-                                        <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-                                        Rafraîchir
-                                    </button>
+                                <div className="grid grid-cols-3 gap-1">
+                                    {/* Bouton Refresh avec dropdown */}
+                                    <div className="relative" ref={refreshDropdownRef}>
+                                        <div className="flex">
+                                            <button
+                                                onClick={handleRefresh}
+                                                disabled={isRefreshing}
+                                                className="flex-1 px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-l-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 transition-colors text-xs"
+                                                title={refreshType === 'quick' ? 'Rafraîchir (ping uniquement)' : 'Rafraîchir (ping + MAC + hostname)'}
+                                            >
+                                                <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                                                <span className="truncate">Rafraîchir</span>
+                                            </button>
+                                            <button
+                                                onClick={() => setShowRefreshDropdown(!showRefreshDropdown)}
+                                                disabled={isRefreshing}
+                                                className={`px-1.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-r-lg border border-l-0 border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors text-xs ${showRefreshDropdown ? 'bg-blue-500/20' : ''}`}
+                                                title="Choisir le type de rafraîchissement"
+                                            >
+                                                <ArrowDown size={10} className={`opacity-80 transition-transform duration-200 ${showRefreshDropdown ? 'rotate-180' : ''}`} />
+                                            </button>
+                                        </div>
+                                        {/* Dropdown menu - collé au bouton */}
+                                        {showRefreshDropdown && (
+                                            <div className="absolute left-0 top-full w-full bg-[#1a1a1a] border border-t-0 border-blue-500/30 rounded-b-lg shadow-xl z-50 overflow-hidden">
+                                                <button
+                                                    onClick={() => {
+                                                        setRefreshType('quick');
+                                                        setShowRefreshDropdown(false);
+                                                        handleRefresh();
+                                                    }}
+                                                    disabled={isRefreshing}
+                                                    className={`w-full px-3 py-2 text-xs text-left hover:bg-blue-500/10 transition-colors flex items-center gap-2 ${refreshType === 'quick' ? 'bg-blue-500/20 text-blue-400 font-medium' : 'text-gray-300'}`}
+                                                >
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
+                                                    Rapide
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setRefreshType('full');
+                                                        setShowRefreshDropdown(false);
+                                                        handleRefresh();
+                                                    }}
+                                                    disabled={isRefreshing}
+                                                    className={`w-full px-3 py-2 text-xs text-left hover:bg-blue-500/10 transition-colors flex items-center gap-2 border-t border-gray-800 ${refreshType === 'full' ? 'bg-blue-500/20 text-blue-400 font-medium' : 'text-gray-300'}`}
+                                                >
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
+                                                    Complet
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                     <button
                                         onClick={handleScan}
                                         disabled={isScanning}
                                         className="w-full px-2 py-1 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
+                                        title="Scan complet du réseau (ping + MAC + vendor + hostname)"
                                     >
                                         <Play size={12} className={isScanning ? 'animate-spin' : ''} />
                                         Scanner
@@ -1883,29 +1925,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-2 text-sm text-theme-tertiary">
-                                <span>Type de scan:</span>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        checked={scanType === 'full'}
-                                        onChange={() => setScanType('full')}
-                                        disabled={isAddingIp}
-                                        className="text-cyan-500"
-                                    />
-                                    <span>Complet</span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        checked={scanType === 'quick'}
-                                        onChange={() => setScanType('quick')}
-                                        disabled={isAddingIp}
-                                        className="text-cyan-500"
-                                    />
-                                    <span>Rapide</span>
-                                </label>
-                            </div>
                         </div>
 
                         <div className="flex justify-end gap-3 p-6 border-t border-theme">

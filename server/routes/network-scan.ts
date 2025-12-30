@@ -22,7 +22,10 @@ import {
     purgeHistoryOnly,
     purgeScansOnly,
     purgeOfflineOnly,
-    clearAllScanData
+    purgeLatencyMeasurementsOnly,
+    clearAllScanData,
+    optimizeDatabase,
+    estimateDatabaseSize
 } from '../services/databasePurgeService.js';
 import { PluginPriorityConfigService } from '../services/pluginPriorityConfig.js';
 import { WiresharkVendorService } from '../services/wiresharkVendorService.js';
@@ -31,28 +34,17 @@ const router = Router();
 
 /**
  * POST /api/network-scan/scan
- * Launch a full network scan
+ * Launch a full network scan (always in 'full' mode)
  * 
  * Body:
  * {
  *   range?: string (e.g., "192.168.1.0/24" or "192.168.1.1-254", auto-detect if not provided)
  *   autoDetect?: boolean (default: false)
- *   scanType?: 'full' | 'quick' (default: 'full')
  * }
  */
 router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { range, autoDetect, scanType = 'full' } = req.body;
-
-    // Validate scanType
-    if (scanType !== 'full' && scanType !== 'quick') {
-        return res.status(400).json({
-            success: false,
-            error: {
-                message: 'scanType must be "full" or "quick"',
-                code: 'INVALID_SCAN_TYPE'
-            }
-        });
-    }
+    const { range, autoDetect } = req.body;
+    const scanType = 'full'; // Scan complet toujours en mode 'full'
 
     let scanRange: string;
 
@@ -130,7 +122,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
                 // Track last manual scan
                 AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
                     type: 'full',
-                    scanType: scanType,
+                    scanType: scanType, // Toujours 'full'
                     range: scanRange,
                     timestamp: new Date().toISOString(),
                     result: result
@@ -143,7 +135,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
                     message: error.message,
                     stack: error.stack,
                     range: scanRange,
-                    scanType
+                    scanType: scanType // Toujours 'full'
                 });
             })
             .finally(() => {
@@ -157,7 +149,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
             result: {
                 message: 'Scan started',
                 range: scanRange,
-                scanType,
+                scanType, // Toujours 'full'
                 status: 'started'
             }
         });
@@ -167,7 +159,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
             message: error.message,
             stack: error.stack,
             range: scanRange,
-            scanType
+            scanType: scanType // Toujours 'full'
         });
         
         // Provide more detailed error message with suggestions
@@ -662,7 +654,8 @@ router.post('/refresh-config', requireAuth, autoLog('network-scan', 'refresh-con
 
 /**
  * GET /api/network-scan/default-config
- * Get default scan configuration (default IP range, scan type, etc.)
+ * Get default scan configuration (default IP range, auto-detect, etc.)
+ * Note: defaultScanType retiré - scan complet toujours en mode 'full'
  */
 router.get('/default-config', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
@@ -673,16 +666,18 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
                 success: true,
                 result: {
                     defaultRange: '192.168.1.0/24',
-                    defaultScanType: 'full',
                     defaultAutoDetect: false
+                    // defaultScanType retiré - scan complet toujours en mode 'full'
                 }
             });
         }
 
         const config = JSON.parse(configStr);
+        // Retirer defaultScanType si présent (compatibilité avec anciennes configs)
+        const { defaultScanType, ...configWithoutScanType } = config;
         res.json({
             success: true,
-            result: config
+            result: configWithoutScanType
         });
     } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get default config:', error);
@@ -699,27 +694,17 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
 /**
  * POST /api/network-scan/default-config
  * Save default scan configuration
+ * Note: defaultScanType retiré - scan complet toujours en mode 'full'
  * 
  * Body:
  * {
  *   defaultRange?: string (e.g., "192.168.1.0/24")
- *   defaultScanType?: 'full' | 'quick' (default: 'full')
  *   defaultAutoDetect?: boolean (default: false)
  * }
  */
 router.post('/default-config', requireAuth, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { defaultRange = '192.168.1.0/24', defaultScanType = 'full', defaultAutoDetect = false } = req.body;
-
-    // Validate defaultScanType
-    if (defaultScanType !== 'full' && defaultScanType !== 'quick') {
-        return res.status(400).json({
-            success: false,
-            error: {
-                message: 'defaultScanType must be "full" or "quick"',
-                code: 'INVALID_SCAN_TYPE'
-            }
-        });
-    }
+    const { defaultRange = '192.168.1.0/24', defaultAutoDetect = false } = req.body;
+    // defaultScanType retiré - scan complet toujours en mode 'full'
 
     // Validate defaultRange format (basic validation)
     if (typeof defaultRange !== 'string' || defaultRange.trim() === '') {
@@ -746,8 +731,8 @@ router.post('/default-config', requireAuth, autoLog('network-scan', 'default-con
     try {
         const config = {
             defaultRange: defaultRange.trim(),
-            defaultScanType,
             defaultAutoDetect
+            // defaultScanType retiré - scan complet toujours en mode 'full'
         };
 
         AppConfigRepository.set('network_scan_default', JSON.stringify(config));
@@ -1007,6 +992,8 @@ router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-sca
             historyRetentionDays,
             scanRetentionDays,
             offlineRetentionDays,
+            latencyMeasurementsRetentionDays,
+            keepIpsOnPurge,
             autoPurgeEnabled,
             purgeSchedule
         } = req.body;
@@ -1015,6 +1002,8 @@ router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-sca
         if (historyRetentionDays !== undefined) config.historyRetentionDays = historyRetentionDays;
         if (scanRetentionDays !== undefined) config.scanRetentionDays = scanRetentionDays;
         if (offlineRetentionDays !== undefined) config.offlineRetentionDays = offlineRetentionDays;
+        if (latencyMeasurementsRetentionDays !== undefined) config.latencyMeasurementsRetentionDays = latencyMeasurementsRetentionDays;
+        if (keepIpsOnPurge !== undefined) config.keepIpsOnPurge = keepIpsOnPurge;
         if (autoPurgeEnabled !== undefined) config.autoPurgeEnabled = autoPurgeEnabled;
         if (purgeSchedule !== undefined) config.purgeSchedule = purgeSchedule;
 
@@ -1317,18 +1306,18 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
         
 /**
  * POST /api/network-scan/add-manual
- * Add an IP address manually to scan
+ * Add an IP address manually to scan (always in 'full' mode)
  * 
  * Body:
  * {
  *   ip: string (required)
  *   mac?: string (optional)
  *   hostname?: string (optional)
- *   scanType?: 'full' | 'quick' (default: 'full')
  * }
  */
 router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { ip, mac, hostname, scanType = 'full' } = req.body;
+    const { ip, mac, hostname } = req.body;
+    const scanType = 'full'; // Ajout manuel toujours en mode 'full'
 
     // Validate IP format
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
@@ -1342,23 +1331,12 @@ router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), a
         });
     }
 
-    // Validate scanType
-    if (scanType !== 'full' && scanType !== 'quick') {
-        return res.status(400).json({
-            success: false,
-            error: {
-                message: 'scanType must be "full" or "quick"',
-                code: 'INVALID_SCAN_TYPE'
-            }
-        });
-    }
-
     try {
         // Ping the IP first to check if it's online
         const pingResult = await networkScanService.pingHost(ip);
         
-        // Scan the IP (ping + MAC + hostname if full scan, or just ping if quick)
-        const scanResult = await networkScanService.scanSingleIp(ip, scanType === 'full', mac, hostname);
+        // Scan the IP (ping + MAC + hostname - toujours en mode 'full')
+        const scanResult = await networkScanService.scanSingleIp(ip, true, mac, hostname); // true = full scan
         
         if (scanResult) {
             res.json({
@@ -1507,11 +1485,12 @@ router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostna
  *   fullScan?: {
  *     enabled: boolean
  *     interval: number (minutes: 15, 30, 60, 120, 360, 720, 1440)
- *     scanType: 'full' | 'quick'
+ *     // scanType retiré - scan complet toujours en mode 'full'
  *   }
  *   refresh?: {
  *     enabled: boolean
  *     interval: number (minutes: 5, 10, 15, 30, 60)
+ *     scanType: 'full' | 'quick'
  *   }
  * }
  */
@@ -1539,27 +1518,19 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
                 }
             });
         }
-        if (fullScan.enabled) {
-            const validIntervals = [15, 30, 60, 120, 360, 720, 1440];
-            if (!validIntervals.includes(fullScan.interval)) {
-                return res.status(400).json({
-                    success: false,
-                    error: {
-                        message: `fullScan.interval must be one of: ${validIntervals.join(', ')} minutes`,
-                        code: 'INVALID_FULLSCAN_INTERVAL'
-                    }
-                });
+            if (fullScan.enabled) {
+                const validIntervals = [15, 30, 60, 120, 360, 720, 1440];
+                if (!validIntervals.includes(fullScan.interval)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: {
+                            message: `fullScan.interval must be one of: ${validIntervals.join(', ')} minutes`,
+                            code: 'INVALID_FULLSCAN_INTERVAL'
+                        }
+                    });
+                }
+                // scanType retiré - scan complet toujours en mode 'full'
             }
-            if (fullScan.scanType !== 'full' && fullScan.scanType !== 'quick') {
-                return res.status(400).json({
-                    success: false,
-                    error: {
-                        message: 'fullScan.scanType must be "full" or "quick"',
-                        code: 'INVALID_FULLSCAN_TYPE'
-                    }
-                });
-            }
-        }
     }
 
     // Validate refresh if provided
@@ -1603,8 +1574,8 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
             enabled,
             fullScan: fullScan ? {
                 enabled: fullScan.enabled || false,
-                interval: fullScan.interval || 1440,
-                scanType: fullScan.scanType || 'full'
+                interval: fullScan.interval || 1440
+                // scanType retiré - scan complet toujours en mode 'full'
             } : undefined,
             refresh: refresh ? {
                 enabled: refresh.enabled || false,
@@ -1636,13 +1607,13 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
             const oldConfigSaved = AppConfigRepository.set('network_scan_auto', JSON.stringify({
                 enabled: config.enabled && config.fullScan.enabled,
                 interval: config.fullScan.interval,
-                scanType: config.fullScan.scanType
+                scanType: 'full' // Toujours 'full' pour scan complet
             }));
             if (!oldConfigSaved) {
                 logger.warn('NetworkScan', 'Failed to save old scan config (backward compatibility)');
             }
         } else {
-            AppConfigRepository.set('network_scan_auto', JSON.stringify({ enabled: false, interval: 30, scanType: 'quick' }));
+            AppConfigRepository.set('network_scan_auto', JSON.stringify({ enabled: false, interval: 30, scanType: 'full' })); // Toujours 'full'
         }
 
         if (config.refresh) {
@@ -1766,19 +1737,22 @@ router.post('/purge/history', requireAuth, requireAdmin, autoLog('network-scan',
 /**
  * POST /api/network-scan/purge/scans
  * Purge only scan entries (all scans older than retention)
- * Body: { retentionDays?: number } (0 = delete all, default: use config)
+ * Body: { retentionDays?: number, keepIps?: boolean } (0 = delete all, default: use config)
  */
 router.post('/purge/scans', requireAuth, requireAdmin, autoLog('network-scan', 'purge-scans'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const { retentionDays } = req.body;
-        const days = retentionDays !== undefined ? retentionDays : getRetentionConfig().scanRetentionDays;
-        const deleted = purgeScansOnly(days);
+        const { retentionDays, keepIps } = req.body;
+        const config = getRetentionConfig();
+        const days = retentionDays !== undefined ? retentionDays : config.scanRetentionDays;
+        const keepIpsValue = keepIps !== undefined ? keepIps : config.keepIpsOnPurge;
+        const deleted = purgeScansOnly(days, keepIpsValue);
         
         res.json({
             success: true,
             result: {
                 deleted,
-                retentionDays: days
+                retentionDays: days,
+                keepIps: keepIpsValue
             },
             message: `Scan purge completed: ${deleted} entries deleted`
         });
@@ -1797,19 +1771,22 @@ router.post('/purge/scans', requireAuth, requireAdmin, autoLog('network-scan', '
 /**
  * POST /api/network-scan/purge/offline
  * Purge only offline scan entries
- * Body: { retentionDays?: number } (0 = delete all, default: use config)
+ * Body: { retentionDays?: number, keepIps?: boolean } (0 = delete all, default: use config)
  */
 router.post('/purge/offline', requireAuth, requireAdmin, autoLog('network-scan', 'purge-offline'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const { retentionDays } = req.body;
-        const days = retentionDays !== undefined ? retentionDays : getRetentionConfig().offlineRetentionDays;
-        const deleted = purgeOfflineOnly(days);
+        const { retentionDays, keepIps } = req.body;
+        const config = getRetentionConfig();
+        const days = retentionDays !== undefined ? retentionDays : config.offlineRetentionDays;
+        const keepIpsValue = keepIps !== undefined ? keepIps : config.keepIpsOnPurge;
+        const deleted = purgeOfflineOnly(days, keepIpsValue);
         
         res.json({
             success: true,
             result: {
                 deleted,
-                retentionDays: days
+                retentionDays: days,
+                keepIps: keepIpsValue
             },
             message: `Offline purge completed: ${deleted} entries deleted`
         });
@@ -1820,6 +1797,38 @@ router.post('/purge/offline', requireAuth, requireAdmin, autoLog('network-scan',
             error: {
                 message: error.message || 'Failed to purge offline scans',
                 code: 'PURGE_OFFLINE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/purge/latency
+ * Purge only latency measurements
+ * Body: { retentionDays?: number } (0 = delete all, default: use config)
+ */
+router.post('/purge/latency', requireAuth, requireAdmin, autoLog('network-scan', 'purge-latency'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const { retentionDays } = req.body;
+        const config = getRetentionConfig();
+        const days = retentionDays !== undefined ? retentionDays : config.latencyMeasurementsRetentionDays;
+        const deleted = purgeLatencyMeasurementsOnly(days);
+        
+        res.json({
+            success: true,
+            result: {
+                deleted,
+                retentionDays: days
+            },
+            message: `Latency measurements purge completed: ${deleted} entries deleted`
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to purge latency measurements:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to purge latency measurements',
+                code: 'PURGE_LATENCY_ERROR'
             }
         });
     }
@@ -1857,16 +1866,17 @@ router.post('/purge/clear-all', requireAuth, requireAdmin, autoLog('network-scan
 
 /**
  * POST /api/network-scan/optimize-database
- * Optimize database by running VACUUM
+ * Optimize database by running VACUUM + index optimization + stats
  */
 router.post('/optimize-database', requireAuth, requireAdmin, autoLog('network-scan', 'optimize-database'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        NetworkScanRepository.optimizeDatabase();
+        const result = optimizeDatabase();
         
         res.json({
             success: true,
             result: {
-                message: 'Database optimization completed'
+                ...result,
+                message: result.message || 'Database optimization completed'
             }
         });
     } catch (error: any) {
@@ -1876,6 +1886,30 @@ router.post('/optimize-database', requireAuth, requireAdmin, autoLog('network-sc
             error: {
                 message: error.message || 'Failed to optimize database',
                 code: 'OPTIMIZE_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/database-size-estimate
+ * Get database size estimation (current, estimated after purge, estimated freed space)
+ */
+router.get('/database-size-estimate', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const estimate = estimateDatabaseSize();
+        
+        res.json({
+            success: true,
+            result: estimate
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to estimate database size:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to estimate database size',
+                code: 'SIZE_ESTIMATE_ERROR'
             }
         });
     }

@@ -16,6 +16,8 @@ import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
     const { plugins, pluginStats, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
+    // Get Freebox plugin once for reuse
+    const freeboxPlugin = plugins.find(p => p.id === 'freebox');
     const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn, permissions, freeboxUrl } = useAuthStore();
     const [testingPlugin, setTestingPlugin] = useState<string | null>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
@@ -23,41 +25,38 @@ export const PluginsManagementSection: React.FC = () => {
     const [freeboxLoginModalOpen, setFreeboxLoginModalOpen] = useState(false);
     const [networkScanConfigModalOpen, setNetworkScanConfigModalOpen] = useState(false);
 
+    // Load plugins once on mount (with cache check)
     useEffect(() => {
         fetchPlugins();
-    }, [fetchPlugins]);
+    }, []); // Empty deps - load once only
 
-    // Check Freebox auth status when Freebox plugin is enabled
+    // Check Freebox auth status when Freebox plugin is enabled (only when plugin enabled state changes)
     useEffect(() => {
-        const freeboxPlugin = plugins.find(p => p.id === 'freebox');
-        if (freeboxPlugin?.enabled) {
-            checkFreeboxAuth().then(() => {
-                const authState = useAuthStore.getState();
-                if (!authState.isRegistered && !authState.isRegistering) {
-                    setFreeboxLoginModalOpen(true);
-                } else if (authState.isRegistered && authState.isLoggedIn) {
-                    setFreeboxLoginModalOpen(false);
-                }
-            });
+        const freeboxEnabled = freeboxPlugin?.enabled ?? false;
+        
+        if (freeboxEnabled) {
+            // Only check auth if not already registered/logged in to avoid unnecessary calls
+            const authState = useAuthStore.getState();
+            if (!authState.isRegistered && !authState.isRegistering) {
+                checkFreeboxAuth().then(() => {
+                    const updatedAuthState = useAuthStore.getState();
+                    if (!updatedAuthState.isRegistered && !updatedAuthState.isRegistering) {
+                        setFreeboxLoginModalOpen(true);
+                    } else if (updatedAuthState.isRegistered && updatedAuthState.isLoggedIn) {
+                        setFreeboxLoginModalOpen(false);
+                    }
+                });
+            }
         } else {
             setFreeboxLoginModalOpen(false);
         }
-    }, [plugins, checkFreeboxAuth]);
-    
-    useEffect(() => {
-        if (isFreeboxRegistered && isFreeboxLoggedIn) {
-            setFreeboxLoginModalOpen(false);
-            // Refresh plugins to update connection status after successful login
-            // This ensures the plugin is recognized as connected without requiring a restart
-            fetchPlugins();
-        }
-    }, [isFreeboxRegistered, isFreeboxLoggedIn, fetchPlugins]);
+    }, [freeboxPlugin?.enabled, checkFreeboxAuth]); // Depend on plugin enabled state
 
     const handleToggle = async (pluginId: string, enabled: boolean) => {
-        await updatePluginConfig(pluginId, { enabled });
-        await fetchPlugins();
+        // updatePluginConfig already refreshes plugins internally, no need to call fetchPlugins again
+        const success = await updatePluginConfig(pluginId, { enabled });
         
-        if (pluginId === 'freebox' && enabled) {
+        if (success && pluginId === 'freebox' && enabled) {
             await checkFreeboxAuth();
             const authState = useAuthStore.getState();
             if (!authState.isRegistered) {
@@ -77,12 +76,13 @@ export const PluginsManagementSection: React.FC = () => {
         if (result) {
             setLastTestSuccess(result.connected);
             setLastTestMessage(result.message);
+            // Force refresh plugins to update connection status after test
+            await (fetchPlugins as (force?: boolean) => Promise<void>)(true); // Force refresh to get updated connection status
         } else {
             setLastTestSuccess(false);
             setLastTestMessage('Test de connexion impossible (voir logs backend)');
         }
         setTimeout(() => setTestingPlugin(null), 2000);
-        await fetchPlugins();
     };
 
     const handleConfigure = (pluginId: string) => {
@@ -93,7 +93,8 @@ export const PluginsManagementSection: React.FC = () => {
     const handleConfigClose = () => {
         setConfigModalOpen(false);
         setSelectedPluginId('');
-        fetchPlugins();
+        // Force refresh plugins after config change to get updated settings
+        (fetchPlugins as (force?: boolean) => Promise<void>)(true); // Force refresh
     };
 
     if (isLoading) {
@@ -105,7 +106,6 @@ export const PluginsManagementSection: React.FC = () => {
     }
 
     // Check if Freebox plugin has missing permissions
-    const freeboxPlugin = plugins.find(p => p.id === 'freebox');
     const hasSettingsPermission = permissions.settings === true;
     const showFreeboxPermissionWarning = freeboxPlugin?.enabled && !hasSettingsPermission;
 

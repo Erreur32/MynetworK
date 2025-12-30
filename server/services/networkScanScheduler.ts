@@ -30,12 +30,12 @@ interface UnifiedAutoScanConfig {
     fullScan?: {
         enabled: boolean;
         interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
-        scanType: 'full' | 'quick';
+        // scanType retiré - scan complet toujours en mode 'full'
     };
     refresh?: {
         enabled: boolean;
         interval: number; // minutes: 5, 10, 15, 30, 60
-        scanType: 'full' | 'quick';
+        scanType: 'full' | 'quick'; // Choix entre quick et full pour refresh
     };
 }
 
@@ -138,7 +138,7 @@ class NetworkScanSchedulerService {
                     // Launch in background (don't await) to avoid blocking startup
                     networkScanService.scanNetwork(
                         defaultRange,
-                        unifiedConfig.fullScan.scanType || 'full'
+                        'full' // Toujours 'full' pour scan complet
                     ).then(() => {
                         logger.info('NetworkScanScheduler', `Initial scan on startup completed (range: ${defaultRange})`);
                     }).catch((error) => {
@@ -230,7 +230,8 @@ class NetworkScanSchedulerService {
             return;
         }
 
-        logger.info('NetworkScanScheduler', `Scheduling auto scan: every ${config.interval} minutes (${cronExpression}), type: ${config.scanType}`);
+        const scanType = 'full'; // Scan complet toujours en mode 'full'
+        logger.info('NetworkScanScheduler', `Scheduling auto scan: every ${config.interval} minutes (${cronExpression}), type: ${scanType}`);
 
         this.scanTask = cron.schedule(cronExpression, async () => {
             // Check if plugin is enabled before executing scan
@@ -245,7 +246,7 @@ class NetworkScanSchedulerService {
                 return;
             }
 
-            logger.info('NetworkScanScheduler', `Executing scheduled scan (type: ${config.scanType})...`);
+            logger.info('NetworkScanScheduler', `Executing scheduled scan (type: ${scanType})...`);
             try {
                 // Auto-detect network range
                 const range = networkScanService.getNetworkRange();
@@ -254,7 +255,7 @@ class NetworkScanSchedulerService {
                     return;
                 }
 
-                await networkScanService.scanNetwork(range, config.scanType);
+                await networkScanService.scanNetwork(range, scanType);
                 
                 // Update scheduler metrics: record last run
                 metricsCollector.updateSchedulerMetrics(true, Date.now());
@@ -263,7 +264,7 @@ class NetworkScanSchedulerService {
                 const { AppConfigRepository } = await import('../database/models/AppConfig.js');
                 AppConfigRepository.set('network_scan_last_auto', JSON.stringify({
                     type: 'full',
-                    scanType: config.scanType,
+                    scanType: scanType, // Toujours 'full'
                     range: range,
                     timestamp: new Date().toISOString()
                 }));
@@ -467,11 +468,11 @@ class NetworkScanSchedulerService {
 
         // Update full scan scheduler if configured and enabled
         if (config.fullScan && config.fullScan.enabled) {
-            logger.info('NetworkScanScheduler', `Starting full scan scheduler: interval=${config.fullScan.interval}min, type=${config.fullScan.scanType}`);
+            logger.info('NetworkScanScheduler', `Starting full scan scheduler: interval=${config.fullScan.interval}min, type=full (always)`);
             this.updateScanScheduler({
                 enabled: true,
                 interval: config.fullScan.interval,
-                scanType: config.fullScan.scanType
+                scanType: 'full' // Toujours 'full' pour scan complet
             });
             
             // Update metrics: scheduler enabled

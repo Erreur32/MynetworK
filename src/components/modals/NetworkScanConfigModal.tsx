@@ -26,18 +26,18 @@ interface UnifiedAutoScanConfig {
     fullScan?: {
         enabled: boolean;
         interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
-        scanType: 'full' | 'quick';
+        // scanType retiré - scan complet toujours en mode 'full'
     };
     refresh?: {
         enabled: boolean;
         interval: number; // minutes: 5, 10, 15, 30, 60
-        scanType: 'full' | 'quick';
+        scanType: 'full' | 'quick'; // Choix entre quick et full pour refresh
     };
 }
 
 interface DefaultScanConfig {
     defaultRange: string;
-    defaultScanType: 'full' | 'quick';
+    // defaultScanType retiré - scan complet toujours en mode 'full'
     defaultAutoDetect: boolean;
 }
 
@@ -70,7 +70,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     // New unified config
     const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
         enabled: false,
-        fullScan: { enabled: false, interval: 1440, scanType: 'full' },
+        fullScan: { enabled: false, interval: 1440 }, // scanType retiré - toujours 'full'
         refresh: { enabled: false, interval: 10, scanType: 'quick' }
     });
     
@@ -88,7 +88,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     // Keep old configs for backward compatibility during transition
     const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
     const [refreshConfig, setRefreshConfig] = useState<AutoRefreshConfig>({ enabled: false, interval: 15 });
-    const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultScanType: 'full', defaultAutoDetect: false });
+    const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultAutoDetect: false });
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -271,8 +271,17 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             try {
                 const unifiedResponse = await api.get<UnifiedAutoScanConfig>('/api/network-scan/unified-config');
                 if (unifiedResponse.success && unifiedResponse.result) {
-                    setUnifiedConfig(unifiedResponse.result);
-                    setInitialUnifiedConfig(JSON.parse(JSON.stringify(unifiedResponse.result))); // Deep copy
+                    // Nettoyer scanType de fullScan si présent (compatibilité avec anciennes configs)
+                    const cleanedConfig = {
+                        ...unifiedResponse.result,
+                        fullScan: unifiedResponse.result.fullScan ? {
+                            enabled: unifiedResponse.result.fullScan.enabled,
+                            interval: unifiedResponse.result.fullScan.interval
+                            // scanType retiré explicitement
+                        } : undefined
+                    };
+                    setUnifiedConfig(cleanedConfig);
+                    setInitialUnifiedConfig(JSON.parse(JSON.stringify(cleanedConfig))); // Deep copy
                     setUseUnifiedConfig(true);
                 }
             } catch {
@@ -356,12 +365,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 enabled: unifiedConfig.enabled,
                 fullScan: unifiedConfig.fullScan ? {
                     enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
-                    interval: unifiedConfig.fullScan.interval || 1440,
-                    scanType: unifiedConfig.fullScan.scanType || 'full'
+                    interval: unifiedConfig.fullScan.interval || 1440
+                    // scanType retiré - scan complet toujours en mode 'full'
                 } : {
                     enabled: false,
-                    interval: 1440,
-                    scanType: 'full'
+                    interval: 1440
+                    // scanType retiré - scan complet toujours en mode 'full'
                 },
                 refresh: unifiedConfig.refresh ? {
                     enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
@@ -431,12 +440,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     enabled: unifiedConfig.enabled,
                     fullScan: unifiedConfig.fullScan ? {
                         enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
-                        interval: unifiedConfig.fullScan.interval || 1440,
-                        scanType: unifiedConfig.fullScan.scanType || 'full'
+                        interval: unifiedConfig.fullScan.interval || 1440
+                        // scanType retiré - scan complet toujours en mode 'full'
                     } : {
                         enabled: false,
-                        interval: 1440,
-                        scanType: 'full'
+                        interval: 1440
+                        // scanType retiré - scan complet toujours en mode 'full'
                     },
                     refresh: unifiedConfig.refresh ? {
                         enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
@@ -597,7 +606,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 setUnifiedConfig({ 
                                                     ...unifiedConfig, 
                                                     enabled: newEnabled,
-                                                    fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440, scanType: 'full' },
+                                                    fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440 }, // scanType retiré - toujours 'full'
                                                     refresh: unifiedConfig.refresh || { enabled: false, interval: 10 }
                                                 });
                                             }}
@@ -627,8 +636,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                             fullScan: {
                                                                 ...unifiedConfig.fullScan,
                                                                 enabled: e.target.checked,
-                                                                interval: unifiedConfig.fullScan?.interval ?? 1440,
-                                                                scanType: unifiedConfig.fullScan?.scanType ?? 'full'
+                                                                interval: unifiedConfig.fullScan?.interval ?? 1440
+                                                                // scanType retiré - scan complet toujours en mode 'full'
                                                             }
                                                         })}
                                                         className="w-4 h-4"
@@ -665,23 +674,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                             <option value="1440">24 heures (1 fois par jour)</option>
                                                         </select>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs text-gray-400 mb-1.5">Type de scan</label>
-                                                        <select
-                                                            value={unifiedConfig.fullScan.scanType}
-                                                            onChange={(e) => setUnifiedConfig({
-                                                                ...unifiedConfig,
-                                                                fullScan: {
-                                                                    ...unifiedConfig.fullScan!,
-                                                                    scanType: e.target.value as 'full' | 'quick'
-                                                                }
-                                                            })}
-                                                            className="w-full px-3 py-2 text-sm bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-green-500"
-                                                        >
-                                                            <option value="quick">Rapide (ping uniquement)</option>
-                                                            <option value="full">Complet (ping + MAC + hostname)</option>
-                                                        </select>
-                                                    </div>
+                                                    {/* Type de scan retiré - scan complet toujours en mode 'full' */}
                                                 </div>
                                             )}
                                         </div>
@@ -806,17 +799,6 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                     </div>
                                 )}
 
-                                <div>
-                                    <label className="block text-sm text-gray-400 mb-2">Type de scan par défaut</label>
-                                    <select
-                                        value={defaultConfig.defaultScanType}
-                                        onChange={(e) => setDefaultConfig({ ...defaultConfig, defaultScanType: e.target.value as 'full' | 'quick' })}
-                                        className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
-                                    >
-                                        <option value="quick">Rapide (ping uniquement)</option>
-                                        <option value="full">Complet (ping + MAC + hostname)</option>
-                                    </select>
-                                </div>
                             </div>
                             </div>
                             </div>

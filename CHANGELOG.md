@@ -3,6 +3,70 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.5] - 2025-12-30
+
+### ⚡ Optimisé
+
+**Chargement de l'Onglet Plugins**
+- ✅ Temps de chargement réduit de plusieurs secondes à < 500ms
+- ✅ Retrait des tests de connexion systématiques au chargement de `/api/plugins`
+- ✅ Retrait des appels `getPluginStats()` pour firmware/version au chargement
+- ✅ Vérification légère du statut de connexion sans appels API lourds
+- ✅ Cache intelligent de 30 secondes pour éviter les rechargements inutiles
+- ✅ Réduction drastique des appels API : 1 appel au lieu de 6+ appels au chargement
+
+**Route `/api/plugins`**
+- ✅ Retour uniquement des informations de base depuis la DB et le plugin
+- ✅ Vérification légère du statut de connexion :
+  - Freebox : utilise `freeboxApi.isLoggedIn()` (vérification synchrone, pas d'appel API)
+  - UniFi : utilise `unifiPlugin.apiService.isLoggedIn()` (vérification d'état interne)
+  - Scanner réseau : toujours connecté si activé (pas de connexion externe)
+- ✅ Validation simple de la structure des données retournées
+- ✅ Filtrage automatique des plugins invalides avec warnings
+
+**Composant PluginsManagementSection**
+- ✅ Chargement unique au montage (pas de rechargements multiples)
+- ✅ Retrait des `fetchPlugins()` redondants après chaque action mineure
+- ✅ Optimisation des `useEffect` pour éviter les appels multiples
+- ✅ Vérification conditionnelle de l'authentification Freebox (uniquement si nécessaire)
+
+**Store pluginStore**
+- ✅ Cache avec timestamp (`lastFetchTime`)
+- ✅ Durée du cache : 30 secondes
+- ✅ Paramètre `force` pour forcer le refresh si nécessaire
+- ✅ Validation des données reçues (structure, types)
+- ✅ Filtrage des plugins invalides avec warnings console
+
+### 🔧 Modifié
+
+**Route `/api/plugins` - Architecture**
+- 🔧 Retrait des appels `testPluginConnection()` systématiques pour chaque plugin activé
+- 🔧 Retrait des appels `getPluginStats()` pour récupérer firmware/version
+- 🔧 Utilisation de méthodes légères pour vérifier le statut de connexion
+- 🔧 Validation de la structure des données avant retour
+
+**PluginsManagementSection - Gestion des Appels**
+- 🔧 `useEffect` avec dépendances vides pour charger une seule fois au montage
+- 🔧 Retrait de `fetchPlugins()` après `handleToggle` (déjà géré par `updatePluginConfig`)
+- 🔧 Retrait de `fetchPlugins()` après login Freebox (non nécessaire)
+- 🔧 Conservation uniquement après test de connexion et fermeture de config (avec `force: true`)
+- 🔧 Optimisation du `useEffect` pour Freebox auth (vérification conditionnelle)
+
+**pluginStore - Cache et Validation**
+- 🔧 Ajout du paramètre `force?: boolean` à `fetchPlugins()`
+- 🔧 Vérification du cache avant chaque appel API
+- 🔧 Validation de la structure de réponse (vérification que c'est un tableau)
+- 🔧 Validation de chaque plugin (id, name, enabled, version)
+- 🔧 Filtrage automatique des plugins invalides
+
+### 📝 Documentation
+
+**Optimisation Performance**
+- 📝 Commentaires détaillés expliquant les optimisations dans le code
+- 📝 Explication de la logique de cache et de validation
+
+---
+
 ## [0.3.4] - 2025-12-30
 
 ### 🐛 Corrigé

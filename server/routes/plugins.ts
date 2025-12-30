@@ -13,63 +13,72 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
+import { freeboxApi } from '../services/freeboxApi.js';
 
 const router = Router();
 
 // GET /api/plugins - Get all plugins with their status
+// Optimized: Lightweight connection status check without heavy API calls
 router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const plugins = pluginManager.getAllPlugins();
     
-    const pluginsWithStatus = await Promise.all(
-        plugins.map(async (plugin) => {
-            const dbConfig = PluginConfigRepository.findByPluginId(plugin.getId());
-            const isEnabled = plugin.isEnabled();
-            
-            // Test connection if enabled
-            let connectionStatus = false;
-            if (isEnabled) {
+    const pluginsWithStatus = plugins.map((plugin) => {
+        const dbConfig = PluginConfigRepository.findByPluginId(plugin.getId());
+        const isEnabled = plugin.isEnabled();
+        const pluginId = plugin.getId();
+        
+        // Lightweight connection status check (no API calls)
+        let connectionStatus = false;
+        if (isEnabled) {
+            if (pluginId === 'freebox') {
+                // Check Freebox connection status using lightweight method
+                connectionStatus = freeboxApi.isLoggedIn();
+            } else if (pluginId === 'unifi') {
+                // Check UniFi connection status using plugin's internal state
                 try {
-                    const testResult = await pluginManager.testPluginConnection(plugin.getId());
-                    connectionStatus = testResult.success;
+                    const unifiPlugin = pluginManager.getPlugin('unifi') as any;
+                    if (unifiPlugin && unifiPlugin.apiService) {
+                        // Use the lightweight isLoggedIn() method from UniFiApiService
+                        connectionStatus = unifiPlugin.apiService.isLoggedIn();
+                    } else {
+                        // Fallback: if plugin is enabled and configured, assume not connected yet
+                        connectionStatus = false;
+                    }
                 } catch {
                     connectionStatus = false;
                 }
+            } else if (pluginId === 'scan-reseau') {
+                // Scanner plugin doesn't need external connection - if enabled, it's "connected"
+                connectionStatus = isEnabled;
+            } else {
+                // For other plugins, check if configured
+                connectionStatus = dbConfig !== null;
             }
+        }
+        
+        // Basic plugin info without heavy API calls
+        const pluginData = {
+            id: pluginId,
+            name: plugin.getName(),
+            version: plugin.getVersion(),
+            enabled: isEnabled,
+            configured: dbConfig !== null,
+            connectionStatus,
+            settings: dbConfig?.settings || {}
+        };
 
-            // Get plugin stats to extract version/firmware info
-            let pluginInfo: any = {};
-            if (isEnabled && connectionStatus) {
-                try {
-                    const stats = await pluginManager.getPluginStats(plugin.getId());
-                    if (stats?.system) {
-                        const systemStats = stats.system as any;
-                        // Extract version/firmware info based on plugin type
-                        if (plugin.getId() === 'freebox') {
-                            pluginInfo.firmware = systemStats.firmware;
-                            pluginInfo.playerFirmware = systemStats.playerFirmware;
-                            pluginInfo.apiVersion = systemStats.apiVersion;
-                        } else if (plugin.getId() === 'unifi') {
-                            pluginInfo.controllerFirmware = systemStats.version;
-                            pluginInfo.apiMode = systemStats.apiMode;
-                        }
-                    }
-                } catch {
-                    // Silently fail if stats cannot be retrieved
-                }
-            }
+        // Validate plugin data structure
+        if (!pluginData.id || !pluginData.name || typeof pluginData.enabled !== 'boolean') {
+            logger.warn('Plugin', `Invalid plugin data structure for plugin ${pluginId}`);
+        }
 
-            return {
-                id: plugin.getId(),
-                name: plugin.getName(),
-                version: plugin.getVersion(),
-                enabled: isEnabled,
-                configured: dbConfig !== null,
-                connectionStatus,
-                settings: dbConfig?.settings || {},
-                ...pluginInfo
-            };
-        })
-    );
+        return pluginData;
+    });
+
+    // Validate response structure
+    if (!Array.isArray(pluginsWithStatus)) {
+        throw createError('Invalid plugins data format', 500, 'INVALID_PLUGINS_FORMAT');
+    }
 
     res.json({
         success: true,
