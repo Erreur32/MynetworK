@@ -59,10 +59,12 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
                     )}
 
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label htmlFor="username" className="block text-sm text-gray-400 mb-2">
                             Nom d'utilisateur
                         </label>
                         <input
+                            id="username"
+                            name="username"
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
@@ -73,10 +75,12 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
                     </div>
 
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label htmlFor="password" className="block text-sm text-gray-400 mb-2">
                             Mot de passe
                         </label>
                         <input
+                            id="password"
+                            name="password"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}

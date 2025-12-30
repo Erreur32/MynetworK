@@ -168,8 +168,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
 
           {/* URL Selection */}
           <div className="space-y-3">
-            <label className="text-sm text-gray-400">Adresse de la Freebox</label>
-
             {/* Tabs for URL type */}
             <div className="flex gap-2">
               <button
@@ -197,21 +195,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen }) => {
 
             {/* URL/IP Input */}
             {useLocalIp ? (
-              <input
-                type="text"
-                value={localIp}
-                onChange={(e) => setLocalIp(e.target.value)}
-                placeholder="192.168.1.254"
-                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
-              />
+              <div>
+                <label htmlFor="local-ip" className="block text-sm text-gray-400 mb-2">Adresse IP locale</label>
+                <input
+                  id="local-ip"
+                  name="local-ip"
+                  type="text"
+                  value={localIp}
+                  onChange={(e) => setLocalIp(e.target.value)}
+                  placeholder="192.168.1.254"
+                  className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
+                />
+              </div>
             ) : (
-              <input
-                type="text"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://mafreebox.freebox.fr"
-                className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
-              />
+              <div>
+                <label htmlFor="freebox-url" className="block text-sm text-gray-400 mb-2">Adresse de la Freebox</label>
+                <input
+                  id="freebox-url"
+                  name="freebox-url"
+                  type="text"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://mafreebox.freebox.fr"
+                  className="w-full px-4 py-3 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none"
+                />
+              </div>
             )}
           </div>
 

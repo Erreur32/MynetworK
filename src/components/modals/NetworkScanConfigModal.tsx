@@ -598,6 +598,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                     </div>
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
+                                            id="auto-scan-enabled"
+                                            name="auto-scan-enabled"
                                             type="checkbox"
                                             checked={unifiedConfig.enabled}
                                             onChange={(e) => {
@@ -629,6 +631,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 </div>
                                                 <label className="flex items-center gap-2 cursor-pointer">
                                                     <input
+                                                        id="full-scan-enabled"
+                                                        name="full-scan-enabled"
                                                         type="checkbox"
                                                         checked={unifiedConfig.fullScan?.enabled ?? false}
                                                         onChange={(e) => setUnifiedConfig({
@@ -653,8 +657,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                             {unifiedConfig.fullScan?.enabled && (
                                                 <div className="space-y-3">
                                                     <div>
-                                                        <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
+                                                        <label htmlFor="full-scan-interval" className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
                                                         <select
+                                                            id="full-scan-interval"
+                                                            name="full-scan-interval"
                                                             value={unifiedConfig.fullScan.interval}
                                                             onChange={(e) => setUnifiedConfig({
                                                                 ...unifiedConfig,
@@ -688,6 +694,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 </div>
                                                 <label className="flex items-center gap-2 cursor-pointer">
                                                     <input
+                                                        id="refresh-enabled"
+                                                        name="refresh-enabled"
                                                         type="checkbox"
                                                         checked={unifiedConfig.refresh?.enabled ?? false}
                                                         onChange={(e) => setUnifiedConfig({
@@ -711,8 +719,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                             {unifiedConfig.refresh?.enabled && (
                                                 <div className="space-y-3">
                                                     <div>
-                                                        <label className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
+                                                        <label htmlFor="refresh-interval" className="block text-xs text-gray-400 mb-1.5">Intervalle</label>
                                                         <select
+                                                            id="refresh-interval"
+                                                            name="refresh-interval"
                                                             value={unifiedConfig.refresh.interval}
                                                             onChange={(e) => setUnifiedConfig({
                                                                 ...unifiedConfig,
@@ -731,8 +741,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                         </select>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs text-gray-400 mb-1.5">Type de rafraîchissement</label>
+                                                        <label htmlFor="refresh-scan-type" className="block text-xs text-gray-400 mb-1.5">Type de rafraîchissement</label>
                                                         <select
+                                                            id="refresh-scan-type"
+                                                            name="refresh-scan-type"
                                                             value={unifiedConfig.refresh.scanType || 'quick'}
                                                             onChange={(e) => setUnifiedConfig({
                                                                 ...unifiedConfig,
@@ -768,6 +780,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                 <div className="flex items-center gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input
+                                            id="default-auto-detect"
+                                            name="default-auto-detect"
                                             type="checkbox"
                                             checked={defaultConfig.defaultAutoDetect}
                                             onChange={(e) => setDefaultConfig({ ...defaultConfig, defaultAutoDetect: e.target.checked })}
@@ -780,7 +794,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                 {!defaultConfig.defaultAutoDetect && (
                                     <div>
                                         <div className="flex items-center gap-2 mb-2">
-                                            <label className="block text-sm text-gray-400">Plage IP par défaut</label>
+                                            <label htmlFor="default-range" className="block text-sm text-gray-400">Plage IP par défaut</label>
                                             <button
                                                 onClick={() => setShowHelpModal(true)}
                                                 className="p-1 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
@@ -790,6 +804,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                             </button>
                                         </div>
                                         <input
+                                            id="default-range"
+                                            name="default-range"
                                             type="text"
                                             value={defaultConfig.defaultRange}
                                             onChange={(e) => setDefaultConfig({ ...defaultConfig, defaultRange: e.target.value })}

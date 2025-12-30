@@ -111,10 +111,12 @@ export const CreateVmModal: React.FC<CreateVmModalProps> = ({ isOpen, onClose })
 
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label htmlFor="vm-name" className="block text-sm font-medium text-gray-400 mb-2">
               Nom de la VM
             </label>
             <input
+              id="vm-name"
+              name="vm-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}

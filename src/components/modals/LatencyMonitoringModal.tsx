@@ -109,13 +109,6 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
             // Fetch measurements (last 90 days to show multiple days with all points)
             const measurementsResponse = await api.get<Measurement[]>(`/api/latency-monitoring/measurements/${ip}?days=90`);
             if (measurementsResponse.success && measurementsResponse.result) {
-                console.log('Raw measurements from API:', measurementsResponse.result.slice(0, 10));
-                console.log('Total measurements:', measurementsResponse.result.length);
-                const withLatency = measurementsResponse.result.filter(m => m.latency !== null);
-                console.log('Measurements with latency:', withLatency.length);
-                if (withLatency.length > 0) {
-                    console.log('Sample latencies:', withLatency.slice(0, 10).map(m => m.latency));
-                }
                 setMeasurements(measurementsResponse.result);
             }
 
@@ -151,12 +144,6 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
                 latency: m.latency!,
                 timestamp: m.measuredAt
             }));
-        
-        // Debug: log first few measurements
-        if (validMeasurements.length > 0) {
-            console.log('Chart data sample:', validMeasurements.slice(0, 5));
-            console.log('Latency values:', validMeasurements.map(m => m.latency));
-        }
         
         return validMeasurements;
     }, [measurements]);

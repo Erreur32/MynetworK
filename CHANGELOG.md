@@ -3,7 +3,40 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
-## [0.3.5] - 2025-12-30
+## [0.3.7] - 2025-01-02
+
+### 🔧 Modifié
+
+**Affichage des Disques dans SystemServerWidget**
+- 🔧 Remplacement des chemins système (`/etc/resolv.conf`, `/etc/hostname`, `/etc/hosts`) par des noms génériques ("Disque 1", "Disque 2", etc.)
+- 🔧 Affichage du nom réel du disque si disponible (ex: `/dev/sda1` → `sda1`)
+- 🔧 Amélioration de la lisibilité et de la cohérence de l'affichage
+
+**Nettoyage des Logs Console**
+- 🔧 Suppression des logs de debug dans `LatencyMonitoringModal` (Raw measurements, Total measurements, Sample latencies, Chart data)
+- 🔧 Suppression des logs de debug dans `NetworkScanPage` (onDataChanged, Local state cleared, All data refreshed)
+- 🔧 Conservation uniquement des logs d'erreur essentiels pour le debugging
+
+### ♿ Accessibilité
+
+**Amélioration de l'Accessibilité des Formulaires**
+- ♿ Ajout d'attributs `id` et `name` à tous les champs de formulaire manquants
+- ♿ Association correcte des labels avec `htmlFor` pour tous les champs
+- ♿ Corrections dans les modaux suivants :
+  - `UserLoginModal` : champs username et password
+  - `PluginConfigModal` : tous les champs de configuration (api-mode, api-key, unifi-url, unifi-username, unifi-password, unifi-site)
+  - `NetworkScanConfigModal` : checkboxes et selects (auto-scan-enabled, full-scan-enabled, refresh-enabled, intervals, default-range)
+  - `LoginModal` : champs local-ip et freebox-url
+  - `CreateVmModal` : champ vm-name
+  - `NetworkScanPage` : champ de recherche, select de filtre, select résultats par page, champs d'édition hostname, modal d'ajout IP
+
+**Conformité aux Standards Web**
+- ♿ Tous les champs de formulaire ont maintenant des attributs `id` et `name`
+- ♿ Tous les labels sont correctement associés avec `htmlFor`
+- ♿ Amélioration de l'autocomplétion du navigateur
+- ♿ Meilleure compatibilité avec les lecteurs d'écran
+
+## [0.3.6] - 2025-01-01
 
 ### ⚡ Optimisé
 

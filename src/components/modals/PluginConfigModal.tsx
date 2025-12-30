@@ -255,10 +255,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     {/* API Mode Selection (UniFi only) */}
                     {pluginId === 'unifi' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                            <label htmlFor="api-mode" className="block text-sm font-medium text-gray-300 mb-2">
                                 Mode de connexion
                             </label>
                             <select
+                                id="api-mode"
+                                name="api-mode"
                                 value={formData.apiMode || 'controller'}
                                 onChange={(e) => handleInputChange('apiMode', e.target.value)}
                                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -277,11 +279,13 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     {/* Site Manager API Key */}
                     {pluginId === 'unifi' && formData.apiMode === 'site-manager' && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                            <label htmlFor="api-key" className="block text-sm font-medium text-gray-300 mb-2">
                                 Clé API Site Manager <span className="text-red-500">*</span>
                             </label>
                             <div className="relative">
                                 <input
+                                    id="api-key"
+                                    name="api-key"
                                     type={showPassword ? 'text' : 'password'}
                                     value={formData.apiKey || ''}
                                     onChange={(e) => handleInputChange('apiKey', e.target.value)}
@@ -337,10 +341,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                         <>
                             {/* URL */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <label htmlFor="unifi-url" className="block text-sm font-medium text-gray-300 mb-2">
                                     URL du Contrôleur UniFi <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    id="unifi-url"
+                                    name="unifi-url"
                                     type="url"
                                     value={formData.url}
                                     onChange={(e) => handleInputChange('url', e.target.value)}
@@ -368,10 +374,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
 
                             {/* Username */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <label htmlFor="unifi-username" className="block text-sm font-medium text-gray-300 mb-2">
                                     Nom d'utilisateur <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    id="unifi-username"
+                                    name="unifi-username"
                                     type="text"
                                     value={formData.username}
                                     onChange={(e) => handleInputChange('username', e.target.value)}
@@ -383,11 +391,13 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
 
                             {/* Password */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <label htmlFor="unifi-password" className="block text-sm font-medium text-gray-300 mb-2">
                                     Mot de passe <span className="text-red-500">*</span>
                                 </label>
                                 <div className="relative">
                                     <input
+                                        id="unifi-password"
+                                        name="unifi-password"
                                         type={showPassword ? 'text' : 'password'}
                                         value={formData.password}
                                         onChange={(e) => handleInputChange('password', e.target.value)}
@@ -407,10 +417,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
 
                             {/* Site */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                <label htmlFor="unifi-site" className="block text-sm font-medium text-gray-300 mb-2">
                                     Site UniFi
                                 </label>
                                 <input
+                                    id="unifi-site"
+                                    name="unifi-site"
                                     type="text"
                                     value={formData.site}
                                     onChange={(e) => handleInputChange('site', e.target.value)}

@@ -236,8 +236,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                     typeof h.offline === 'number'
                 );
                 setStatsHistory(validData);
-            } else {
-                console.warn('Stats history response:', response);
             }
         } catch (error) {
             console.error('Failed to fetch stats history:', error);
@@ -1488,6 +1486,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             <div className="relative flex-1 min-w-[420px] max-w-[500px]">
                                 <Search size={18} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 transition-colors" />
                                 <input
+                                    id="search-filter"
+                                    name="search-filter"
                                     type="text"
                                     value={searchFilter}
                                     onChange={(e) => setSearchFilter(e.target.value)}
@@ -1505,6 +1505,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 )}
                             </div>
                             <select
+                                id="status-filter"
+                                name="status-filter"
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as any)}
                                 className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
@@ -1514,8 +1516,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 <option value="offline">Offline</option>
                             </select>
                         <div className="flex items-center gap-2">
-                                <label className="text-sm text-gray-400 whitespace-nowrap">Résultats:</label>
+                                <label htmlFor="results-per-page" className="text-sm text-gray-400 whitespace-nowrap">Résultats:</label>
                                 <select
+                                    id="results-per-page"
+                                    name="results-per-page"
                                     value={resultsPerPage === 'full' ? 'full' : resultsPerPage.toString()}
                                     onChange={(e) => handleResultsPerPageChange(e.target.value)}
                                     className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
@@ -1683,6 +1687,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                             {editingHostname === scan.ip ? (
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <input
+                                                        id={`hostname-edit-${scan.ip}`}
+                                                        name={`hostname-edit-${scan.ip}`}
                                                         type="text"
                                                         value={editedHostname}
                                                         onChange={(e) => setEditedHostname(e.target.value)}
@@ -1828,8 +1834,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         fetchWiresharkVendorStats();
                     }}
                     onDataChanged={async () => {
-                        console.log('[NetworkScanPage] onDataChanged called - clearing all scan data');
-                        
                         // Clear local state IMMEDIATELY (before API calls)
                         setScans([]);
                         setStats(null);
@@ -1837,8 +1841,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         setLastScanSummary(null);
                         setScanProgress(null);
                         setCurrentScanRange('');
-                        
-                        console.log('[NetworkScanPage] Local state cleared, fetching fresh data...');
                         
                         // Reload all data when scans are cleared
                         try {
@@ -1848,7 +1850,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                 fetchStatsHistory(),
                                 fetchWiresharkVendorStats()
                             ]);
-                            console.log('[NetworkScanPage] All data refreshed after clear');
                         } catch (error) {
                             console.error('[NetworkScanPage] Error refreshing data after clear:', error);
                         }
@@ -1943,10 +1944,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                         
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                <label htmlFor="manual-ip" className="block text-sm font-medium text-theme-secondary mb-2">
                                     Adresse IP <span className="text-red-400">*</span>
                                 </label>
                                 <input
+                                    id="manual-ip"
+                                    name="manual-ip"
                                     type="text"
                                     value={manualIp}
                                     onChange={(e) => setManualIp(e.target.value)}
@@ -1957,10 +1960,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                <label htmlFor="manual-mac" className="block text-sm font-medium text-theme-secondary mb-2">
                                     MAC (optionnel)
                                 </label>
                                 <input
+                                    id="manual-mac"
+                                    name="manual-mac"
                                     type="text"
                                     value={manualMac}
                                     onChange={(e) => setManualMac(e.target.value)}
@@ -1971,10 +1976,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-medium text-theme-secondary mb-2">
+                                <label htmlFor="manual-hostname" className="block text-sm font-medium text-theme-secondary mb-2">
                                     Hostname (optionnel)
                                 </label>
                                 <input
+                                    id="manual-hostname"
+                                    name="manual-hostname"
                                     type="text"
                                     value={manualHostname}
                                     onChange={(e) => setManualHostname(e.target.value)}
