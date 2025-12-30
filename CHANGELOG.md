@@ -3,6 +3,48 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.3.9] - 2025-01-02
+
+### 🐛 Corrigé
+
+**Erreur de Compilation - Double Déclaration de Variable**
+- 🐛 Correction de la double déclaration de `routePath` dans `getHostMachineIP()` (ligne 405)
+- 🐛 Déplacement de la déclaration de `routePath` au niveau de la fonction pour éviter les conflits de scope
+- 🐛 Résolution de l'erreur `The symbol "routePath" has already been declared` au démarrage Docker
+
+**Affichage du Port dans les Logs Docker**
+- 🐛 Ajout de la variable d'environnement `DASHBOARD_PORT` dans les fichiers docker-compose
+- 🐛 Le port affiché dans les logs correspond maintenant au port défini dans docker-compose
+- 🐛 Synchronisation du port par défaut entre `docker-compose.yml` et `server/index.ts` (7555)
+- 🐛 Correction de l'affichage du port dans les logs au démarrage
+
+**Fichiers Modifiés**
+- `server/index.ts` : Correction de la double déclaration et synchronisation du port par défaut
+- `docker-compose.yml` : Ajout de `DASHBOARD_PORT` dans la section `environment`
+- `docker-compose.local.yml` : Ajout de `DASHBOARD_PORT` dans la section `environment`
+- `docker-compose.dev.yml` : Variable déjà présente, vérification effectuée
+
+### 🔧 Modifié
+
+**Noms de Conteneurs Docker**
+- 🔧 Ajout de `container_name` explicite dans tous les fichiers docker-compose
+- 🔧 Conteneurs nommés de manière fixe et prévisible :
+  - `mynetwork` pour la production (`docker-compose.yml`)
+  - `mynetwork-local` pour le build local (`docker-compose.local.yml`)
+  - `mynetwork-dev` pour le mode développement (`docker-compose.dev.yml`)
+- 🔧 Plus de noms générés automatiquement comme `mynetwork-mynetwork-1`
+
+**Configuration Docker**
+- 🔧 Ajout de la variable `HOST_IP` optionnelle dans `docker-compose.yml` pour forcer l'IP de la machine hôte
+- 🔧 Documentation améliorée pour la configuration du port et de l'IP dans les logs
+
+**Fichiers Modifiés**
+- `docker-compose.yml` : Ajout de `container_name` et `HOST_IP` optionnel
+- `docker-compose.local.yml` : Ajout de `container_name`
+- `docker-compose.dev.yml` : Ajout de `container_name`
+
+---
+
 ## [0.3.8] - 2025-01-02
 
 ### 🔒 Sécurité

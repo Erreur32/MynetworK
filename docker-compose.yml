@@ -21,12 +21,12 @@
 services:
   mynetwork:
     image: ghcr.io/erreur32/mynetwork:latest
-    # container_name: MynetworK   # Optional (avoid in scalable production)
+    container_name: mynetwork
     restart: unless-stopped
 
     ports:
       # Dashboard port mapping: host port → container port 3000
-      - "${DASHBOARD_PORT:-7505}:3000"
+      - "${DASHBOARD_PORT:-7555}:3000"
 
     environment:
       # 🔐 SECRET OBLIGATOIRE - JWT secret for authentication
@@ -35,9 +35,18 @@ services:
       # Store in .env file: JWT_SECRET=votre_secret_genere
       JWT_SECRET: ${JWT_SECRET}
 
+      # Dashboard port mapping (host port → container port 3000)
+      # This is the port exposed on the host machine
+      # Must match the port in the "ports" section above
+      DASHBOARD_PORT: ${DASHBOARD_PORT:-7555}
+      
+      # Host machine IP address (optional, for better log display)
+      # If not set, the container will try to auto-detect from Docker gateway
+      # Example: HOST_IP=192.168.1.100
+      HOST_IP: ${HOST_IP:-}
+
       # Configuration file path (optional external config file)
       CONFIG_FILE_PATH: ${CONFIG_FILE_PATH:-/app/config/mynetwork.conf}
-      
       # Freebox configuration
       FREEBOX_HOST: ${FREEBOX_HOST:-mafreebox.freebox.fr}
       FREEBOX_TOKEN_FILE: /app/data/freebox_token.json
@@ -57,16 +66,13 @@ services:
       # - IEEE OUI vendor database file (oui.txt)
       # - Application configuration
       - ./data:/app/data
-      
       # Mount host filesystem (read-only) to access real host metrics
       # This allows the app to read hostname, disk usage, and other system info from the host
       - /:/host:ro
-      
       # Mount host /proc and /sys separately for better compatibility
       # These are used to read CPU, memory, network stats, and hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      
       # Mount Docker socket (read-only) to enable Docker version detection and stats
       # Required for system server widget to display Docker information
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -96,7 +102,6 @@ services:
       start_period: 40s
 
 
-
     # Resource limits (optional)
     # deploy:
     #   resources:
@@ -106,7 +111,3 @@ services:
     #     reservations:
     #       cpus: '0.1'
     #       memory: 256M
-
-
-
- 

@@ -323,11 +323,11 @@ function getHostMachineIP(): string | null {
   
   // Second priority: try to read from host network interfaces
   const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
+  const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
   
   try {
     // Method 1: Try to read IP addresses from /host/proc/net/route
     // Parse the route file to find the default gateway interface, then try to get its IP
-    const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
     if (fsSync.existsSync(routePath)) {
       try {
         const routeContent = fsSync.readFileSync(routePath, 'utf8');
@@ -402,7 +402,7 @@ function getHostMachineIP(): string | null {
     // The Docker gateway IP (e.g., 172.17.0.1) is not the host's real IP,
     // but it's better than showing the container IP (172.18.0.2)
     // We can get this from the default route gateway
-    const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
+    // Reuse routePath declared at function level
     if (fsSync.existsSync(routePath)) {
       try {
         const routeContent = fsSync.readFileSync(routePath, 'utf8');

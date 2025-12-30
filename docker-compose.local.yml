@@ -32,12 +32,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    #container_name: mynetwork-local
+    container_name: mynetwork-local
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
       #- NODE_ENV=production
       #- PORT=3000
+      - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
       - FREEBOX_HOST=${FREEBOX_HOST:-mafreebox.freebox.fr}
       - FREEBOX_TOKEN_FILE=/app/data/freebox_token.json
       # HOST_IP: IP address of the host machine on the local network
