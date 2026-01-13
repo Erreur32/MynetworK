@@ -58,7 +58,7 @@ const getLatencyColor = (latency: number | null): string => {
 
 /**
  * Format time for X-axis (adapts based on time range)
- * For multiple days: shows "DD/MM HH:MM" or "DD/MM" if many days
+ * Optimized for horizontal display - shorter formats to avoid overlap
  */
 const formatTimeForAxis = (date: Date, dataRange?: { min: number; max: number }): string => {
     const day = date.getDate();
@@ -70,21 +70,26 @@ const formatTimeForAxis = (date: Date, dataRange?: { min: number; max: number })
     if (dataRange) {
         const daysSpan = (dataRange.max - dataRange.min) / (1000 * 60 * 60 * 24);
         
-        // If more than 7 days, show only date without time
+        // If more than 7 days, show only date (DD/MM)
         if (daysSpan > 7) {
             return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}`;
         }
-        // If more than 2 days, show date and hour
+        // If more than 2 days, show date and hour (DD/MM HHh)
         if (daysSpan > 2) {
+            const hoursStr = hours.toString().padStart(2, '0');
+            return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')} ${hoursStr}h`;
+        }
+        // If more than 1 day, show date and hour (DD/MM HHh)
+        if (daysSpan > 1) {
             const hoursStr = hours.toString().padStart(2, '0');
             return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')} ${hoursStr}h`;
         }
     }
     
-    // Default: show date and full time
+    // Default for < 1 day: show hour and minutes (HH:MM) - shorter format
     const hoursStr = hours.toString().padStart(2, '0');
     const minutesStr = minutes.toString().padStart(2, '0');
-    return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')} ${hoursStr}:${minutesStr}`;
+    return `${hoursStr}:${minutesStr}`;
 };
 
 export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
@@ -96,18 +101,21 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
     const [statistics, setStatistics] = useState<Statistics | null>(null);
     const [loading, setLoading] = useState(true);
     const [hostname, setHostname] = useState<string>('');
+    const [selectedDays, setSelectedDays] = useState<number>(3); // Default 3 days like Lagident
 
     useEffect(() => {
         if (isOpen && ip) {
             fetchData();
         }
-    }, [isOpen, ip]);
+    }, [isOpen, ip, selectedDays]);
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Fetch measurements (last 90 days to show multiple days with all points)
-            const measurementsResponse = await api.get<Measurement[]>(`/api/latency-monitoring/measurements/${ip}?days=90`);
+            // Fetch measurements with selected period
+            // Lagident keeps 3 days by default (~17,280 measurements per target)
+            // We'll fetch the selected period but downsample if needed for performance
+            const measurementsResponse = await api.get<Measurement[]>(`/api/latency-monitoring/measurements/${ip}?days=${selectedDays}`);
             if (measurementsResponse.success && measurementsResponse.result) {
                 setMeasurements(measurementsResponse.result);
             }
@@ -134,7 +142,11 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
         }
     };
 
-    // Prepare data for scatter chart
+    // Downsample data if too many points (like Lagident optimization)
+    // Maximum points for smooth rendering: ~10,000 points
+    const MAX_POINTS = 10000;
+    
+    // Prepare data for scatter chart with downsampling
     const chartData = useMemo(() => {
         const validMeasurements = measurements
             .filter(m => !m.packetLoss && m.latency !== null && m.latency !== undefined)
@@ -144,6 +156,33 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
                 latency: m.latency!,
                 timestamp: m.measuredAt
             }));
+        
+        // If we have too many points, downsample intelligently
+        if (validMeasurements.length > MAX_POINTS) {
+            // Downsampling: keep every Nth point, but ensure we keep min/max in each window
+            const step = Math.ceil(validMeasurements.length / MAX_POINTS);
+            const downsampled: typeof validMeasurements = [];
+            
+            for (let i = 0; i < validMeasurements.length; i += step) {
+                const window = validMeasurements.slice(i, Math.min(i + step, validMeasurements.length));
+                if (window.length === 0) continue;
+                
+                // Keep min, max, and middle point of each window to preserve spikes
+                const sorted = [...window].sort((a, b) => a.latency - b.latency);
+                const min = sorted[0];
+                const max = sorted[sorted.length - 1];
+                const middle = sorted[Math.floor(sorted.length / 2)];
+                
+                // Add points, avoiding duplicates
+                const pointsToAdd = [min, middle, max].filter((p, idx, arr) => 
+                    arr.findIndex(p2 => p2.x === p.x) === idx
+                );
+                downsampled.push(...pointsToAdd);
+            }
+            
+            // Sort by time to maintain chronological order
+            return downsampled.sort((a, b) => a.x - b.x);
+        }
         
         return validMeasurements;
     }, [measurements]);
@@ -223,16 +262,26 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
     }, [dataRange]);
     
     // Calculate optimal tick interval based on data range
+    // With horizontal dates, we need fewer ticks to avoid overlap
     const xAxisTickInterval = useMemo(() => {
         if (!dataRange) return 'preserveStartEnd';
         const daysSpan = (dataRange.max - dataRange.min) / (1000 * 60 * 60 * 24);
         
-        // For many days, show fewer ticks to avoid clutter
-        if (daysSpan > 30) return 2; // Every 2nd tick
-        if (daysSpan > 14) return 1; // Every tick
-        if (daysSpan > 7) return 0; // Every tick
-        return 0; // Show all ticks for short ranges
-    }, [dataRange]);
+        // With horizontal dates, limit ticks to avoid overlap
+        // Show approximately 8-12 ticks maximum
+        const totalPoints = chartData.length;
+        if (totalPoints === 0) return 0;
+        
+        // Calculate interval to show ~10 ticks
+        const desiredTicks = 10;
+        const interval = Math.max(1, Math.floor(totalPoints / desiredTicks));
+        
+        // For very short ranges (< 1 day), show more ticks
+        if (daysSpan < 1) return Math.max(0, Math.floor(interval / 2));
+        
+        // For longer ranges, use calculated interval
+        return interval;
+    }, [dataRange, chartData.length]);
 
     // Custom tooltip
     const CustomTooltip = ({ active, payload }: any) => {
@@ -261,9 +310,27 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
             <div className="bg-[#121212] rounded-xl border border-gray-800 w-full max-w-[98vw] h-[95vh] flex flex-col shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-gray-800">
-                    <div>
-                        <h2 className="text-xl font-semibold text-white">Latency scatter</h2>
-                        <p className="text-sm text-gray-400 mt-1">{displayName}</p>
+                    <div className="flex-1">
+                        <div className="flex items-center gap-4">
+                            <div>
+                                <h2 className="text-xl font-semibold text-white">Latency scatter</h2>
+                                <p className="text-sm text-gray-400 mt-1">{displayName}</p>
+                            </div>
+                            {/* Period selector */}
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm text-gray-400">Période:</label>
+                                <select
+                                    value={selectedDays}
+                                    onChange={(e) => setSelectedDays(Number(e.target.value))}
+                                    className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500"
+                                >
+                                    <option value={1}>1 jour</option>
+                                    <option value={3}>3 jours</option>
+                                    <option value={7}>7 jours</option>
+                                    <option value={30}>30 jours</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
@@ -317,6 +384,12 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
 
                             {/* Scatter Chart */}
                             <div className="bg-[#1a1a1a] rounded-lg p-4 pb-2 border border-gray-800 flex-1 flex flex-col min-h-0">
+                                {/* Info about downsampling if applied */}
+                                {measurements.length > MAX_POINTS && (
+                                    <div className="mb-2 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded px-3 py-2">
+                                        ⚡ Optimisation: {measurements.length.toLocaleString()} points → {chartData.length.toLocaleString()} points affichés (downsampling pour performance)
+                                    </div>
+                                )}
                                 <div className="w-full flex-1 min-h-0 bg-[#0f0f0f] rounded border border-gray-900/50 p-2 relative">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <ScatterChart
@@ -342,9 +415,9 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
                                             tickFormatter={formatXAxis}
                                             stroke="#6b7280"
                                             tick={{ fill: '#6b7280', fontSize: 10 }}
-                                            angle={-45}
-                                            textAnchor="end"
-                                            height={70}
+                                            angle={0}
+                                            textAnchor="middle"
+                                            height={50}
                                             interval={typeof xAxisTickInterval === 'number' ? xAxisTickInterval : undefined}
                                             allowDuplicatedCategory={false}
                                         />
@@ -380,7 +453,7 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
                                                 <Cell 
                                                     key={`cell-${index}`} 
                                                     fill={getLatencyColor(entry.latency)}
-                                                    r={chartData.length > 5000 ? 2 : chartData.length > 2000 ? 3 : 4}
+                                                    r={chartData.length > 5000 ? 1.5 : chartData.length > 2000 ? 2.5 : chartData.length > 1000 ? 3 : 4}
                                                 />
                                             ))}
                                         </Scatter>

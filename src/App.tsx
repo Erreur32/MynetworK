@@ -132,6 +132,16 @@ const App: React.FC = () => {
       window.history.replaceState(null, '', window.location.pathname);
       sessionStorage.setItem('adminMode', 'true');
     }
+    
+    // Check for search parameter 's' in URL and navigate to search page
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('s');
+    if (searchParam) {
+      setCurrentPage('search');
+      // Clean the URL parameter after reading it (optional, or keep it for bookmarking)
+      // We'll keep it in the URL so users can bookmark/share the search
+    }
+    
     checkUserAuth();
     
     // Listen for theme changes to force re-render
@@ -140,12 +150,23 @@ const App: React.FC = () => {
       setCurrentPage(prev => prev);
     };
     
+    // Listen for URL changes (browser back/forward buttons or manual URL changes)
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const searchParam = urlParams.get('s');
+      if (searchParam) {
+        setCurrentPage('search');
+      }
+    };
+    
     window.addEventListener('themechange', handleThemeChange);
     window.addEventListener('themeupdate', handleThemeChange);
+    window.addEventListener('popstate', handlePopState);
     
     return () => {
       window.removeEventListener('themechange', handleThemeChange);
       window.removeEventListener('themeupdate', handleThemeChange);
+      window.removeEventListener('popstate', handlePopState);
     };
     
     // Fetch environment info on mount
@@ -621,7 +642,14 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader />}>
-            <NetworkScanPage onBack={() => setCurrentPage('dashboard')} />
+            <NetworkScanPage 
+              onBack={() => setCurrentPage('dashboard')} 
+              onNavigateToSearch={(ip) => {
+                // URL is already updated in NetworkScanPage, just navigate to search page
+                // The SearchPage will read the 's' parameter from URL
+                setCurrentPage('search');
+              }}
+            />
           </Suspense>
         </main>
       </>

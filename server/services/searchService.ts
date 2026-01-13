@@ -8,6 +8,7 @@
 import { pluginManager } from './pluginManager.js';
 import { logger } from '../utils/logger.js';
 import type { IPlugin } from '../plugins/base/PluginInterface.js';
+import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 
 export interface SearchResult {
     pluginId: string;
@@ -45,6 +46,17 @@ export class SearchService {
 
         const normalizedQuery = caseSensitive ? query.trim() : query.trim().toLowerCase();
         const allResults: SearchResult[] = [];
+
+        // Search in network scans (scan-réseau plugin)
+        // Only include if no plugin filter or if scan-réseau is in the filter
+        if (!pluginIds || pluginIds.length === 0 || pluginIds.includes('scan-reseau')) {
+            try {
+                const scanResults = await this.searchInNetworkScans(normalizedQuery, exactMatch, caseSensitive, types);
+                allResults.push(...scanResults);
+            } catch (error) {
+                logger.error('SearchService', 'Error searching in network scans:', error);
+            }
+        }
 
         // Get all active plugins
         const plugins = pluginManager.getAllPlugins();
@@ -330,6 +342,79 @@ export class SearchService {
             }
         } catch (error) {
             logger.error('SearchService', `Error searching in plugin ${pluginId}:`, error);
+        }
+
+        return results;
+    }
+
+    /**
+     * Search in network scans (scan-réseau plugin)
+     */
+    private async searchInNetworkScans(
+        query: string,
+        exactMatch: boolean,
+        caseSensitive: boolean,
+        typeFilter?: SearchResult['type'][]
+    ): Promise<SearchResult[]> {
+        const results: SearchResult[] = [];
+
+        // Only search for 'device' type if type filter is specified
+        if (typeFilter && typeFilter.length > 0 && !typeFilter.includes('device')) {
+            return results;
+        }
+
+        try {
+            // Use NetworkScanRepository to search
+            // Search in all scans (online and offline) - filtering by active status will be done later if needed
+            const scans = NetworkScanRepository.find({
+                search: query // NetworkScanRepository.find uses LIKE search, so we pass the query as-is
+            });
+
+            // Helper function to check if a value matches the query
+            const matches = (value: string | number | undefined | null): boolean => {
+                if (value === undefined || value === null) return false;
+                const strValue = String(value);
+                const normalizedValue = caseSensitive ? strValue : strValue.toLowerCase();
+                
+                if (exactMatch) {
+                    return normalizedValue === query;
+                } else {
+                    return normalizedValue.includes(query);
+                }
+            };
+
+            for (const scan of scans) {
+                // Check if matches query in IP, MAC, hostname, or vendor
+                if (
+                    matches(scan.ip) ||
+                    matches(scan.mac) ||
+                    matches(scan.hostname) ||
+                    matches(scan.vendor)
+                ) {
+                    results.push({
+                        pluginId: 'scan-reseau',
+                        pluginName: 'Scan Réseau',
+                        type: 'device',
+                        id: scan.ip,
+                        name: scan.hostname || scan.vendor || scan.ip,
+                        ip: scan.ip,
+                        mac: scan.mac,
+                        hostname: scan.hostname,
+                        active: scan.status === 'online',
+                        lastSeen: scan.lastSeen,
+                        additionalData: {
+                            vendor: scan.vendor,
+                            status: scan.status,
+                            pingLatency: scan.pingLatency,
+                            hostnameSource: scan.hostnameSource,
+                            vendorSource: scan.vendorSource,
+                            scanCount: scan.scanCount
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            logger.error('SearchService', 'Error searching in network scans:', error);
         }
 
         return results;

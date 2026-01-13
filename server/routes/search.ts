@@ -224,11 +224,35 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                                       dhcpLease.static_ip || 
                                       (dhcpLease.l3connectivities && Array.isArray(dhcpLease.l3connectivities) && dhcpLease.l3connectivities[0]?.addr) ||
                                       ip;
+                        // Extract MAC from various possible locations
+                        const leaseMac = dhcpLease.mac || dhcpLease.l2ident?.id;
+                        
+                        // Check if this lease is a static reservation by comparing IP or MAC with static leases
+                        // We cannot use includes() because it compares by object reference, not by value
+                        let isStatic = false;
+                        if (dhcpLease.static !== undefined) {
+                            // If the lease already has a static property, use it
+                            isStatic = dhcpLease.static === true;
+                        } else if (systemStats.dhcp.staticLeases && Array.isArray(systemStats.dhcp.staticLeases)) {
+                            // Check if the IP or MAC matches any static lease
+                            isStatic = systemStats.dhcp.staticLeases.some((staticLease: any) => {
+                                // Compare by IP (most reliable)
+                                if (leaseIp && staticLease.ip && staticLease.ip === leaseIp) {
+                                    return true;
+                                }
+                                // Compare by MAC as fallback
+                                if (leaseMac && staticLease.mac && staticLease.mac === leaseMac) {
+                                    return true;
+                                }
+                                return false;
+                            });
+                        }
+                        
                         aggregatedData.freebox.dhcp = {
                             ip: leaseIp,
                             hostname: dhcpLease.hostname || dhcpLease.host || dhcpLease.primary_name,
-                            mac: dhcpLease.mac || dhcpLease.l2ident?.id,
-                            static: dhcpLease.static !== undefined ? dhcpLease.static : (systemStats.dhcp.staticLeases?.includes(dhcpLease) || false),
+                            mac: leaseMac,
+                            static: isStatic,
                             expires: dhcpLease.expires,
                             lease_time: dhcpLease.lease_time || dhcpLease.leaseTime,
                             comment: dhcpLease.comment || dhcpLease.description,

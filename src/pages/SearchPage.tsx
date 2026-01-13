@@ -6,11 +6,12 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2 } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
 import { usePluginStore } from '../stores/pluginStore';
 import { SearchOptionsInfoModal } from '../components/modals/SearchOptionsInfoModal';
+import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 
 interface SearchResult {
     pluginId: string;
@@ -114,8 +115,15 @@ interface SearchPageProps {
 export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const { plugins } = usePluginStore();
     
-    // Get query from sessionStorage
+    // Get query from URL parameter 's' (priority) or sessionStorage (fallback)
     const [searchQuery, setSearchQuery] = useState<string>(() => {
+        // First, try to get from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlQuery = urlParams.get('s');
+        if (urlQuery) {
+            return urlQuery;
+        }
+        // Fallback to sessionStorage
         const query = sessionStorage.getItem('searchQuery') || '';
         if (sessionStorage.getItem('searchQuery')) {
             sessionStorage.removeItem('searchQuery');
@@ -138,6 +146,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [pingResults, setPingResults] = useState<Record<string, { success: boolean; time?: number; error?: string }>>({});
     const [pingingIps, setPingingIps] = useState<Set<string>>(new Set());
     const [showOptionsInfoModal, setShowOptionsInfoModal] = useState(false);
+    
+    // Latency monitoring state
+    const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
+    const [selectedIpForLatencyGraph, setSelectedIpForLatencyGraph] = useState<string | null>(null);
+    const [showLatencyModal, setShowLatencyModal] = useState(false);
 
     // Utility function to get latency color based on value
     const getLatencyColor = (latency: number): string => {
@@ -156,10 +169,28 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         if (latency < 100) return 'bg-orange-500/20 border border-orange-500/50 text-orange-400';
         return 'bg-red-500/20 border border-red-500/50 text-red-400';
     };
+
+    // Utility function to get WiFi signal badge color based on RSSI value (similar to latency)
+    const getSignalBadgeColor = (rssi: number | null | undefined): string => {
+        if (rssi === null || rssi === undefined || isNaN(rssi)) {
+            return 'bg-gray-500/20 border border-gray-500/50 text-gray-400';
+        }
+        if (rssi >= -50) return 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400';
+        if (rssi >= -60) return 'bg-emerald-400/20 border border-emerald-400/50 text-emerald-300';
+        if (rssi >= -70) return 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-400';
+        if (rssi >= -80) return 'bg-orange-500/20 border border-orange-500/50 text-orange-400';
+        return 'bg-red-500/20 border border-red-500/50 text-red-400';
+    };
     
     // Get active plugins
+    // For scan-réseau, connectionStatus is always true if enabled (no external connection needed)
     const activePlugins = useMemo(() => {
-        return plugins.filter(p => p.enabled && p.connectionStatus);
+        return plugins.filter(p => {
+            if (!p.enabled) return false;
+            // Scan-réseau doesn't need external connection, so if enabled, it's "connected"
+            if (p.id === 'scan-reseau') return true;
+            return p.connectionStatus;
+        });
     }, [plugins]);
 
     // Filters - Initialize with all active plugins by default
@@ -217,6 +248,44 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
     };
 
+    // Check if query is an IP range (CIDR notation or range notation)
+    const isIpRange = (query: string): boolean => {
+        const trimmed = query.trim();
+        // CIDR notation: 192.168.1.0/24
+        if (trimmed.includes('/')) {
+            const [network, cidrStr] = trimmed.split('/');
+            const cidr = parseInt(cidrStr, 10);
+            if (isNaN(cidr) || cidr < 0 || cidr > 32) return false;
+            const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipv4Regex.test(network)) return false;
+            const parts = network.split('.').map(Number);
+            return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
+        }
+        // Range notation: 192.168.1.1-254 or 192.168.1.1-192.168.1.254
+        if (trimmed.includes('-')) {
+            const parts = trimmed.split('-');
+            if (parts.length === 2) {
+                const start = parts[0].trim();
+                const end = parts[1].trim();
+                const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                // Check if start is a valid IP
+                if (!ipv4Regex.test(start)) return false;
+                const startParts = start.split('.').map(Number);
+                if (startParts.length !== 4 || startParts.some(p => p < 0 || p > 255)) return false;
+                // Check if end is a valid IP or just a number (last octet)
+                if (ipv4Regex.test(end)) {
+                    const endParts = end.split('.').map(Number);
+                    return endParts.length === 4 && endParts.every(p => p >= 0 && p <= 255);
+                } else {
+                    // Just a number for the last octet
+                    const endNum = parseInt(end, 10);
+                    return !isNaN(endNum) && endNum >= 0 && endNum <= 255;
+                }
+            }
+        }
+        return false;
+    };
+
     // Check if string is a valid IP (IPv4) or domain name
     const isValidIpOrDomain = (target?: string): boolean => {
         if (!target) return false;
@@ -250,9 +319,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         }
 
         try {
-            const response = await api.get<{ success: boolean; result?: { latency: number } }>(`/api/speedtest/ping?target=${encodeURIComponent(target)}&count=3`);
+            // Fast ping: use count=1 for quick UP/DOWN check, but still store latency for display in results table
+            const response = await api.get<{ success: boolean; result?: { latency: number } }>(`/api/speedtest/ping?target=${encodeURIComponent(target)}&count=1`);
             if (response.success && response.result && 'latency' in response.result && typeof response.result.latency === 'number') {
-                // Round to at least 1ms if result is 0ms (for display purposes)
+                // Store latency for display in results table
                 const latency = Math.round(response.result.latency);
                 return { success: true, time: latency > 0 ? latency : 1 };
             } else {
@@ -336,15 +406,135 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         }
     };
 
+    // Parse IP range to array of IPs (client-side implementation)
+    const parseIpRange = (range: string): string[] => {
+        const ips: string[] = [];
+        const trimmed = range.trim();
+        
+        // CIDR notation: 192.168.1.0/24
+        if (trimmed.includes('/')) {
+            const [network, cidrStr] = trimmed.split('/');
+            const cidr = parseInt(cidrStr, 10);
+            if (isNaN(cidr) || cidr < 0 || cidr > 32) return [];
+            
+            const networkParts = network.split('.').map(Number);
+            if (networkParts.length !== 4 || networkParts.some(p => isNaN(p) || p < 0 || p > 255)) return [];
+            
+            // Calculate IP range from CIDR
+            const hostBits = 32 - cidr;
+            const numHosts = Math.pow(2, hostBits);
+            
+            // Limit to reasonable size (max 254 IPs for ping)
+            const maxIps = Math.min(254, numHosts - 2);
+            
+            // Calculate network address as integer
+            const networkAddr = (networkParts[0] << 24) + (networkParts[1] << 16) + (networkParts[2] << 8) + networkParts[3];
+            
+            // Generate IPs (skip .0 and .255)
+            for (let i = 1; i <= maxIps && i < numHosts - 1; i++) {
+                const ipAddr = networkAddr + i;
+                const ip = [
+                    (ipAddr >>> 24) & 0xFF,
+                    (ipAddr >>> 16) & 0xFF,
+                    (ipAddr >>> 8) & 0xFF,
+                    ipAddr & 0xFF
+                ].join('.');
+                ips.push(ip);
+            }
+        }
+        // Range notation: 192.168.1.1-254 or 192.168.1.1-192.168.1.254
+        else if (trimmed.includes('-')) {
+            const parts = trimmed.split('-');
+            if (parts.length === 2) {
+                const start = parts[0].trim();
+                const end = parts[1].trim();
+                const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                
+                if (ipv4Regex.test(start)) {
+                    const startParts = start.split('.').map(Number);
+                    if (startParts.length === 4 && startParts.every(p => p >= 0 && p <= 255)) {
+                        if (ipv4Regex.test(end)) {
+                            // Full IP range: 192.168.1.1-192.168.1.254
+                            const endParts = end.split('.').map(Number);
+                            if (endParts.length === 4 && endParts.every(p => p >= 0 && p <= 255)) {
+                                // Generate IPs between start and end
+                                let current = [...startParts];
+                                const endIp = [...endParts];
+                                
+                                while (current[0] <= endIp[0] && 
+                                       current[1] <= endIp[1] && 
+                                       current[2] <= endIp[2] && 
+                                       current[3] <= endIp[3] && 
+                                       ips.length < 254) {
+                                    ips.push(current.join('.'));
+                                    
+                                    // Increment IP
+                                    current[3]++;
+                                    if (current[3] > 255) {
+                                        current[3] = 0;
+                                        current[2]++;
+                                        if (current[2] > 255) {
+                                            current[2] = 0;
+                                            current[1]++;
+                                            if (current[1] > 255) {
+                                                current[1] = 0;
+                                                current[0]++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Last octet range: 192.168.1.1-254
+                            const endNum = parseInt(end, 10);
+                            if (!isNaN(endNum) && endNum >= 0 && endNum <= 255) {
+                                const startOctet = startParts[3];
+                                const endOctet = Math.min(endNum, 255);
+                                
+                                for (let i = startOctet; i <= endOctet && ips.length < 254; i++) {
+                                    ips.push([startParts[0], startParts[1], startParts[2], i].join('.'));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return ips;
+    };
+
     // Ping the search query directly (from input field)
     const pingSearchQuery = async (query: string) => {
-        if (!query.trim() || !isValidIpOrDomain(query.trim())) return;
+        if (!query.trim()) return;
         
         const target = query.trim();
-        const isLocal = isLocalIPv4(target);
         
-        // Only ping if it's a valid IP/domain
-        if (isValidIpOrDomain(target)) {
+        // Check if it's an IP range (only in extended mode when ping is enabled)
+        if (pingEnabled && !exactMatch && isIpRange(target)) {
+            // Parse and ping a range of IPs
+            const ipsToPing = parseIpRange(target);
+            if (ipsToPing.length > 0) {
+                setPingingIps(new Set(ipsToPing));
+                for (const ip of ipsToPing) {
+                    try {
+                        const result = await pingIp(ip, true);
+                        setPingResults(prev => ({ ...prev, [ip]: result }));
+                    } catch (err) {
+                        setPingResults(prev => ({ ...prev, [ip]: { success: false, error: 'Erreur' } }));
+                    }
+                    // Small delay between pings
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+                setPingingIps(new Set());
+            } else {
+                // If range parsing fails, try as single IP
+                if (isValidIpOrDomain(target)) {
+                    await pingSingleTarget(target);
+                }
+            }
+        } else if (isValidIpOrDomain(target)) {
+            // Single IP or domain ping
             await pingSingleTarget(target);
         }
     };
@@ -500,6 +690,44 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         }
     };
 
+    // Update URL when searchQuery changes (synchronize URL with search state)
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentUrlQuery = urlParams.get('s');
+        
+        if (searchQuery.trim()) {
+            // Update URL if search query is different from current URL parameter
+            if (currentUrlQuery !== searchQuery.trim()) {
+                urlParams.set('s', searchQuery.trim());
+                const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                window.history.replaceState(null, '', newUrl);
+            }
+        } else {
+            // Remove 's' parameter if search query is empty
+            if (currentUrlQuery) {
+                urlParams.delete('s');
+                const newUrl = urlParams.toString() 
+                    ? `${window.location.pathname}?${urlParams.toString()}`
+                    : window.location.pathname;
+                window.history.replaceState(null, '', newUrl);
+            }
+        }
+    }, [searchQuery]);
+
+    // Listen for URL changes (browser back/forward buttons)
+    useEffect(() => {
+        const handlePopState = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlQuery = urlParams.get('s') || '';
+            if (urlQuery !== searchQuery) {
+                setSearchQuery(urlQuery);
+            }
+        };
+        
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [searchQuery]);
+
     // Search on mount if query exists
     useEffect(() => {
         if (searchQuery) {
@@ -513,6 +741,51 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             performSearch(searchQuery);
         }
     }, [selectedPlugins, selectedTypes, exactMatch, caseSensitive, showOnlyActive]);
+
+    // Fetch latency monitoring status for results with IPs and ipDetails
+    useEffect(() => {
+        const fetchMonitoringStatus = async () => {
+            // Get all unique IPs from results
+            const ipsFromResults = results
+                .filter(r => r.ip && isValidIpOrDomain(r.ip))
+                .map(r => r.ip!)
+                .filter((ip, index, self) => self.indexOf(ip) === index); // Remove duplicates
+            
+            // Also include IP from ipDetails if available
+            const allIps = [...ipsFromResults];
+            if (ipDetails?.ip && isValidIpOrDomain(ipDetails.ip) && !allIps.includes(ipDetails.ip)) {
+                allIps.push(ipDetails.ip);
+            }
+            
+            if (allIps.length === 0) {
+                setMonitoringStatus({});
+                return;
+            }
+            
+            try {
+                const response = await api.post<Record<string, boolean>>('/api/latency-monitoring/status/batch', { ips: allIps });
+                if (response.success && response.result) {
+                    setMonitoringStatus(response.result);
+                    // Debug log
+                    console.log('Monitoring status fetched:', response.result);
+                } else {
+                    console.warn('Failed to fetch monitoring status:', response.error);
+                }
+            } catch (error) {
+                console.error('Failed to fetch monitoring status:', error);
+            }
+        };
+        
+        if (results.length > 0 || ipDetails?.ip) {
+            fetchMonitoringStatus();
+        }
+    }, [results, ipDetails?.ip]);
+
+    // Handle opening latency graph modal
+    const handleOpenLatencyGraph = (ip: string) => {
+        setSelectedIpForLatencyGraph(ip);
+        setShowLatencyModal(true);
+    };
 
     // Filtered and sorted results
     const filteredResults = useMemo(() => {
@@ -707,30 +980,40 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             }}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
-                                                    handleSearch();
+                                                    if (pingEnabled) {
+                                                        // If ping is enabled, ping the query instead of searching
+                                                        if (searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
+                                                            pingSearchQuery(searchQuery.trim());
+                                                        }
+                                                    } else {
+                                                        handleSearch();
+                                                    }
                                                 }
                                             }}
                                             placeholder="Rechercher (nom, MAC, IP, port, hostname...)"
                                             className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
                                         />
                                     </div>
-                                    <button
-                                        onClick={handleSearch}
-                                        disabled={isLoading || !searchQuery.trim()}
-                                        className="px-6 py-3 bg-accent-primary text-white rounded-lg hover:bg-accent-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-accent-primary/20"
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <Loader2 size={18} className="animate-spin" />
-                                                Recherche...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Search size={18} />
-                                                Rechercher
-                                            </>
-                                        )}
-                                    </button>
+                                    {/* Hide search button when ping is enabled */}
+                                    {!pingEnabled && (
+                                        <button
+                                            onClick={handleSearch}
+                                            disabled={isLoading || !searchQuery.trim()}
+                                            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-gray-600/20"
+                                        >
+                                            {isLoading ? (
+                                                <>
+                                                    <Loader2 size={18} className="animate-spin" />
+                                                    Recherche...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Search size={18} />
+                                                    Rechercher
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
                                     {/* Ping direct button - for direct IP/domain ping without search results */}
                                     {/* Ping direct button - Only visible when ping switch is enabled */}
                                     {pingEnabled && searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && (
@@ -760,29 +1043,30 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 </div>
                                 {/* Display ping result for search query if it's an IP/domain */}
                                 {searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && pingResults[searchQuery.trim()] && (
-                                    <div className={`p-3 rounded-lg border ${
+                                    <div className={`p-4 rounded-lg border ${
                                         pingResults[searchQuery.trim()].success
                                             ? 'bg-emerald-500/10 border-emerald-500/30'
                                             : 'bg-red-500/10 border-red-500/30'
                                     }`}>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-3">
                                             {pingResults[searchQuery.trim()].success ? (
                                                 <>
-                                                    <CheckCircle size={16} className="text-emerald-400" />
-                                                    <span className="text-sm font-medium">
-                                                        {searchQuery.trim()} répond en{' '}
-                                                        <span className={getLatencyColor(pingResults[searchQuery.trim()].time || 0)}>
-                                                            {pingResults[searchQuery.trim()].time}ms
-                                                        </span>
-                                                    </span>
+                                                    <CheckCircle size={24} className="text-emerald-400" />
+                                                    <div>
+                                                        <div className="text-2xl font-bold text-emerald-400">UP</div>
+                                                        <div className="text-xs text-theme-tertiary mt-0.5">{searchQuery.trim()}</div>
+                                                    </div>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <X size={16} className="text-red-400" />
-                                                    <span className="text-sm text-red-400">
-                                                        {searchQuery.trim()} ne répond pas
-                                                        {pingResults[searchQuery.trim()].error && ` (${pingResults[searchQuery.trim()].error})`}
-                                                    </span>
+                                                    <X size={24} className="text-red-400" />
+                                                    <div className="flex-1">
+                                                        <div className="text-2xl font-bold text-red-400">DOWN</div>
+                                                        <div className="text-xs text-theme-tertiary mt-0.5">{searchQuery.trim()}</div>
+                                                        {pingResults[searchQuery.trim()].error && (
+                                                            <div className="text-xs text-red-400/80 mt-1">{pingResults[searchQuery.trim()].error}</div>
+                                                        )}
+                                                    </div>
                                                 </>
                                             )}
                                         </div>
@@ -808,15 +1092,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         className={`group relative px-4 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 flex items-center gap-2 ${
                                                             isSelected
                                                                 ? isFreebox
-                                                                    ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
+                                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/10'
                                                                     : isUnifi
-                                                                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/10'
+                                                                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
                                                                         : 'bg-accent-primary/20 border-accent-primary text-accent-primary'
                                                                 : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
                                                         }`}
                                                     >
-                                                        {isFreebox && <Server size={16} className={isSelected ? 'text-blue-400' : 'text-theme-tertiary'} />}
-                                                        {isUnifi && <Wifi size={16} className={isSelected ? 'text-purple-400' : 'text-theme-tertiary'} />}
+                                                        {isFreebox && <Server size={16} className={isSelected ? 'text-purple-400' : 'text-theme-tertiary'} />}
+                                                        {isUnifi && <Wifi size={16} className={isSelected ? 'text-blue-400' : 'text-theme-tertiary'} />}
                                                         <span>{plugin.name}</span>
                                                         {isSelected && (
                                                             <span className="ml-1 text-xs opacity-70">
@@ -878,17 +1162,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             
                             <button
                                 onClick={() => {
-                                    if (!pingEnabled) {
-                                        setExactMatch(!exactMatch);
+                                    setExactMatch(!exactMatch);
+                                    // If ping is enabled and we're switching to extended mode, clear ping results
+                                    if (pingEnabled && exactMatch) {
+                                        setPingResults({});
+                                        setPingingIps(new Set());
                                     }
                                 }}
-                                disabled={pingEnabled}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-200 font-medium ${
-                                    pingEnabled
-                                        ? 'opacity-50 cursor-not-allowed bg-theme-secondary border-theme text-theme-tertiary'
-                                        : !exactMatch
-                                            ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
-                                            : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
+                                    !exactMatch
+                                        ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
+                                        : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
                                 }`}
                             >
                                 <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
@@ -932,8 +1216,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     setPingEnabled(enabled);
                                     
                                     if (enabled) {
-                                        // Disable other options when ping is enabled
-                                        setExactMatch(false);
+                                        // Force exact match mode (strict mode) when ping is enabled
+                                        // This ensures only 1 exact IP is pinged by default
+                                        setExactMatch(true);
                                         setCaseSensitive(false);
                                         setShowOnlyActive(false);
                                         
@@ -941,7 +1226,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         // Otherwise, ping the search query directly (from input field)
                                         if (results.length > 0) {
                                             await pingAllResults(filteredResults);
-                                        } else if (searchQuery.trim() && isValidIpOrDomain(searchQuery.trim())) {
+                                        } else if (searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
                                             // Ping the search query directly without doing a search
                                             await pingSearchQuery(searchQuery.trim());
                                         }
@@ -966,6 +1251,31 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <span>Ping</span>
                             </button>
                         </div>
+
+                        {/* Ping help info - Show when ping is enabled */}
+                        {pingEnabled && (
+                            <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                                <div className="flex items-start gap-2">
+                                    <Info size={16} className="text-cyan-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1 text-xs text-theme-secondary">
+                                        <p className="font-medium text-cyan-400 mb-1">Mode Ping activé</p>
+                                        {exactMatch ? (
+                                            <div className="space-y-1">
+                                                 <p className="text-theme-tertiary mt-2">💡 Activez le mode "Étendu" pour pinger des ranges d'IP (ex: 192.168.1.0/24 ou 192.168.1.1-254)</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <p>• Mode <span className="text-cyan-400 font-medium">étendu</span> : Ping de ranges d'IP autorisé</p>
+                                                <p>• Formats supportés :</p>
+                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.0/24 (notation CIDR)</p>
+                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-254 (plage simple)</p>
+                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-192.168.1.254 (plage complète)</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Filters - Type filter */}
                         {availableTypes.length > 0 && (
@@ -995,7 +1305,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         colorClass = 'bg-amber-500/20 border-amber-500/50 text-amber-400';
                                                         break;
                                                     case 'port-forward':
-                                                        colorClass = 'bg-orange-500/20 border-orange-500/50 text-orange-400';
+                                                        colorClass = 'bg-purple-500/20 border-purple-500/50 text-purple-400';
                                                         break;
                                                     default:
                                                         colorClass = 'bg-accent-primary/20 border-accent-primary text-accent-primary';
@@ -1089,8 +1399,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 (!!ipDetails.unifi.client.sw_port && !isWireless);
                                             
                                             if (isWireless) {
+                                                // Get RSSI value for dynamic color
+                                                let rssi = ipDetails.unifi.client.rssi;
+                                                if (rssi === undefined || rssi === null) {
+                                                    const signal = ipDetails.unifi.client.signal;
+                                                    if (signal !== undefined && signal !== null) {
+                                                        if (typeof signal === 'number' && signal < 0) {
+                                                            rssi = signal;
+                                                        } else if (typeof signal === 'number' && signal <= 100 && signal > 0) {
+                                                            rssi = -30 - ((100 - signal) * 0.7);
+                                                        }
+                                                    }
+                                                }
+                                                if (rssi === undefined || rssi === null) {
+                                                    rssi = ipDetails.unifi.client.signal_strength;
+                                                }
+                                                
                                                 return (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/20 border border-orange-500/50 text-orange-400">
+                                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${getSignalBadgeColor(rssi)}`}>
                                                         <Radio size={14} />
                                                         WiFi
                                                     </span>
@@ -1135,13 +1461,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                     : 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
                                             }`}>
                                                 <Home size={14} />
-                                                {ipDetails.freebox.dhcp.static ? 'RÉSERVATION' : 'DHCP'}
+                                                {ipDetails.freebox.dhcp.static ? 'RÉSERVATION DHCP' : 'DHCP AUTOMATIQUE'}
                                             </span>
                                         )}
                                         
                                         {/* Port Forwarding Badge */}
                                         {ipDetails.freebox?.portForwarding && Array.isArray(ipDetails.freebox.portForwarding) && ipDetails.freebox.portForwarding.length > 0 && (
-                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/20 border border-orange-500/50 text-orange-400">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 border border-purple-500/50 text-purple-400">
                                                 <Router size={14} />
                                                 PORT ({ipDetails.freebox.portForwarding.length})
                                             </span>
@@ -1150,7 +1476,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 </div>
                                 
                                 {/* Ping Section */}
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    {/* Latency scatter badge - show if monitoring is enabled */}
+                                    {ipDetails.ip && monitoringStatus[ipDetails.ip] === true && (
+                                        <button
+                                            onClick={() => handleOpenLatencyGraph(ipDetails.ip)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                                            title="Voir le graphique de latence scatter"
+                                        >
+                                            <BarChart2 size={16} />
+                                            Latency scatter
+                                        </button>
+                                    )}
                                     {pingEnabled && ipDetails.ip && (
                                         <button
                                             onClick={() => pingSingleTarget(ipDetails.ip)}
@@ -1175,187 +1512,95 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </button>
                                     )}
                                     {pingResults[ipDetails.ip] && (
-                                        <div className={`px-4 py-2 rounded-lg ${
+                                        <div className={`px-6 py-3 rounded-lg ${
                                             pingResults[ipDetails.ip].success
-                                                ? getLatencyBgColor(pingResults[ipDetails.ip].time || 0)
+                                                ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
                                                 : 'bg-red-500/20 border border-red-500/50 text-red-400'
                                         }`}>
                                             {pingResults[ipDetails.ip].success ? (
-                                                <span className="font-medium">{pingResults[ipDetails.ip].time}ms</span>
+                                                <span className="text-xl font-bold">UP</span>
                                             ) : (
-                                                <span>Échec</span>
+                                                <div>
+                                                    <span className="text-xl font-bold block">DOWN</span>
+                                                    {pingResults[ipDetails.ip].error && (
+                                                        <span className="text-xs opacity-80 mt-1 block">{pingResults[ipDetails.ip].error}</span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Modern Multi-Column Grid Display */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* SECTION 1: INFORMATIONS PRINCIPALES - En haut, priorité */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                                 {/* IP Card */}
                                 <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                    <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">IP</div>
-                                    <div className="text-theme-primary font-mono font-medium text-lg mb-2">{ipDetails.ip}</div>
-                                    {(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac) && (
-                                        <div className="text-theme-tertiary font-mono text-sm">
-                                            {formatMac(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac)}
-                                        </div>
-                                    )}
+                                    <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                        <Network size={14} className="text-cyan-400" />
+                                        IP
+                                    </div>
+                                    <div className="text-theme-primary font-mono font-medium text-lg">{ipDetails.ip}</div>
                                 </div>
 
-                                {/* Switch Card (for wired clients) */}
-                                {ipDetails.unifi?.client?.is_wired && (
+                                {/* MAC Card */}
+                                {(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac) && (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
                                         <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
-                                            <Cable size={12} />
-                                            Switch
+                                            <Link2 size={14} className="text-blue-400" />
+                                            MAC
                                         </div>
-                                        {ipDetails.unifi.switch ? (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-theme-primary">{ipDetails.unifi.switch.name}</span>
-                                                {ipDetails.unifi.switch.model && (
-                                                    <span className="text-xs text-theme-tertiary">{ipDetails.unifi.switch.model}</span>
-                                                )}
-                                                {ipDetails.unifi.switch.ip && (
-                                                    <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.switch.ip}</span>
-                                                )}
-                                            </div>
-                                        ) : ipDetails.unifi.client.sw_name ? (
-                                            <div className="text-theme-primary font-medium">{ipDetails.unifi.client.sw_name}</div>
-                                        ) : ipDetails.unifi.client.sw_mac ? (
-                                            <div className="text-theme-tertiary font-mono text-sm">{formatMac(ipDetails.unifi.client.sw_mac)}</div>
-                                        ) : (
-                                            <div className="text-theme-tertiary">--</div>
-                                        )}
+                                        <div className="text-theme-primary font-mono font-medium text-lg">
+                                            {formatMac(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac)}
+                                        </div>
                                     </div>
                                 )}
 
                                 {/* Vitesse Card */}
-                                {ipDetails.unifi?.client && (ipDetails.unifi.client.tx_rate || ipDetails.unifi.client.rx_rate || ipDetails.unifi.client.tx_bytes || ipDetails.unifi.client.rx_bytes) && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2">Vitesse</div>
-                                        {(() => {
-                                            const formatSpeed = (bytes: number) => {
-                                                if (!bytes || bytes === 0) return '--';
-                                                if (bytes >= 1000000000) return `${(bytes / 1000000000).toFixed(1)} Gbps`;
-                                                if (bytes >= 1000000) return `${(bytes / 1000000).toFixed(1)} Mbps`;
-                                                if (bytes >= 1000) return `${(bytes / 1000).toFixed(1)} Kbps`;
-                                                return `${bytes} bps`;
-                                            };
-                                            const tx = ipDetails.unifi.client.tx_rate || 0;
-                                            const rx = ipDetails.unifi.client.rx_rate || 0;
-                                            if (tx > 0 || rx > 0) {
-                                                return (
-                                                    <div className="flex flex-col gap-1.5">
-                                                        {tx > 0 && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-emerald-400 font-medium">↑</span>
-                                                                <span className="text-theme-primary">{formatSpeed(tx)}</span>
-                                                            </div>
-                                                        )}
-                                                        {rx > 0 && (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-blue-400 font-medium">↓</span>
-                                                                <span className="text-theme-primary">{formatSpeed(rx)}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            }
-                                            return <span className="text-theme-tertiary">--</span>;
-                                        })()}
-                                    </div>
-                                )}
-
-                                {/* AP Card (for wireless clients) */}
-                                {ipDetails.unifi?.client?.is_wireless && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
-                                            <Radio size={12} />
-                                            AP
-                                        </div>
-                                        {ipDetails.unifi.ap ? (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="font-medium text-theme-primary">{ipDetails.unifi.ap.name}</span>
-                                                {ipDetails.unifi.ap.model && (
-                                                    <span className="text-xs text-theme-tertiary">{ipDetails.unifi.ap.model}</span>
-                                                )}
-                                                {ipDetails.unifi.ap.ip && (
-                                                    <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.ap.ip}</span>
-                                                )}
-                                            </div>
-                                        ) : ipDetails.unifi.client.ap_name ? (
-                                            <div className="flex flex-col gap-1">
-                                                <span className="text-theme-primary font-medium">{ipDetails.unifi.client.ap_name}</span>
-                                                {ipDetails.unifi.client.ap_mac && (
-                                                    <span className="text-xs text-theme-tertiary font-mono">{formatMac(ipDetails.unifi.client.ap_mac)}</span>
-                                                )}
-                                            </div>
-                                        ) : ipDetails.unifi.client.ap_mac ? (
-                                            <div className="text-theme-tertiary font-mono text-sm">{formatMac(ipDetails.unifi.client.ap_mac)}</div>
-                                        ) : (
-                                            <div className="text-theme-tertiary">--</div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* SSID Card */}
-                                {ipDetails.unifi?.client && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
-                                            <Wifi size={12} />
-                                            SSID / Ports
-                                        </div>
-                                        {ipDetails.unifi.client.is_wireless ? (
-                                            <div className="flex flex-col gap-2">
-                                                {(() => {
-                                                    const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
-                                                    return ssid ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-pink-500/20 border border-pink-500/50 text-pink-400 w-fit">
-                                                            <Wifi size={14} />
-                                                            {ssid}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-theme-tertiary">--</span>
-                                                    );
-                                                })()}
-                                                {ipDetails.unifi.ap?.ssids && Array.isArray(ipDetails.unifi.ap.ssids) && ipDetails.unifi.ap.ssids.length > 0 && (
-                                                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                                                        <span className="text-xs text-theme-tertiary">SSIDs disponibles:</span>
-                                                        {ipDetails.unifi.ap.ssids.map((ssid: any, idx: number) => (
-                                                            <span key={idx} className="text-xs px-2 py-0.5 bg-pink-500/10 border border-pink-500/30 text-pink-300 rounded">
-                                                                {ssid.name || ssid.ssid || ssid}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : ipDetails.unifi.client.is_wired ? (
-                                            ipDetails.unifi.client.sw_port ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-400 w-fit">
-                                                        <Cable size={14} />
-                                                        Port {ipDetails.unifi.client.sw_port}
-                                                    </span>
-                                                    {ipDetails.unifi.switch ? (
-                                                        <span className="text-xs text-theme-tertiary mt-1">sur {ipDetails.unifi.switch.name}</span>
-                                                    ) : ipDetails.unifi.client.sw_name ? (
-                                                        <span className="text-xs text-theme-tertiary mt-1">sur {ipDetails.unifi.client.sw_name}</span>
-                                                    ) : null}
+                                {ipDetails.unifi?.client && (ipDetails.unifi.client.tx_rate || ipDetails.unifi.client.rx_rate) && (() => {
+                                    const formatSpeed = (bytes: number) => {
+                                        if (!bytes || bytes === 0) return '--';
+                                        if (bytes >= 1000000000) return `${(bytes / 1000000000).toFixed(1)} Gbps`;
+                                        if (bytes >= 1000000) return `${(bytes / 1000000).toFixed(1)} Mbps`;
+                                        if (bytes >= 1000) return `${(bytes / 1000).toFixed(1)} Kbps`;
+                                        return `${bytes} bps`;
+                                    };
+                                    const tx = ipDetails.unifi.client.tx_rate || 0;
+                                    const rx = ipDetails.unifi.client.rx_rate || 0;
+                                    if (tx > 0 || rx > 0) {
+                                        return (
+                                            <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
+                                                <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                                    <Activity size={14} className="text-emerald-400" />
+                                                    Vitesse
                                                 </div>
-                                            ) : (
-                                                <span className="text-theme-tertiary">--</span>
-                                            )
-                                        ) : (
-                                            <span className="text-theme-tertiary">--</span>
-                                        )}
-                                    </div>
-                                )}
+                                                <div className="flex flex-col gap-1.5">
+                                                    {tx > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-emerald-400 font-medium">↑</span>
+                                                            <span className="text-theme-primary font-medium">{formatSpeed(tx)}</span>
+                                                        </div>
+                                                    )}
+                                                    {rx > 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-blue-400 font-medium">↓</span>
+                                                            <span className="text-theme-primary font-medium">{formatSpeed(rx)}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
 
-                                {/* Signal Card */}
+                                {/* Signal Card (WiFi only) */}
                                 {ipDetails.unifi?.client && ipDetails.unifi.client.is_wireless && (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2">Signal</div>
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                            <Signal size={14} className="text-purple-400" />
+                                            Signal
+                                        </div>
                                         {(() => {
                                             let rssi = ipDetails.unifi.client.rssi;
                                             let signal = ipDetails.unifi.client.signal;
@@ -1428,54 +1673,185 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                 )}
 
-                                {/* Vendor Card */}
-                                {ipDetails.scanner?.vendor !== undefined && 
-                                 ipDetails.scanner?.vendor !== null && 
-                                 ipDetails.scanner?.vendor !== '' && 
-                                 ipDetails.scanner?.vendor !== '0' &&
-                                 ipDetails.scanner?.vendor?.trim() !== '' &&
-                                 ipDetails.scanner?.vendor?.toLowerCase() !== 'unknown' && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">Vendor</div>
-                                        <div className="text-theme-primary font-medium">{ipDetails.scanner.vendor}</div>
-                                    </div>
-                                )}
-
-                                {/* Latency Card */}
-                                {ipDetails.scanner?.pingLatency !== undefined && 
+                                {/* Latency Card - Show scanner latency or ping status */}
+                                {(ipDetails.scanner?.pingLatency !== undefined && 
                                  ipDetails.scanner?.pingLatency !== null &&
                                  typeof ipDetails.scanner.pingLatency === 'number' &&
-                                 ipDetails.scanner.pingLatency >= 0 && (
+                                 ipDetails.scanner.pingLatency >= 0) || pingResults[ipDetails.ip] ? (
                                     <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">Latence</div>
-                                        <div className={`text-lg font-medium ${getLatencyColor(ipDetails.scanner.pingLatency)}`}>
-                                            {ipDetails.scanner.pingLatency}ms
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                            <Clock size={14} className="text-yellow-400" />
+                                            {pingResults[ipDetails.ip] ? 'Ping' : 'Latence'}
                                         </div>
+                                        {pingResults[ipDetails.ip] ? (
+                                            // Fast ping: show latency with color
+                                            <div className={`text-lg font-medium ${getLatencyColor(
+                                                pingResults[ipDetails.ip].time || 0
+                                            )}`}>
+                                                {pingResults[ipDetails.ip].success 
+                                                    ? (pingResults[ipDetails.ip].time !== undefined 
+                                                        ? `${pingResults[ipDetails.ip].time}ms`
+                                                        : 'UP')
+                                                    : 'DOWN'
+                                                }
+                                            </div>
+                                        ) : (
+                                            // Scanner latency: show actual latency
+                                            <div className={`text-lg font-medium ${getLatencyColor(
+                                                ipDetails.scanner?.pingLatency || 0
+                                            )}`}>
+                                                {ipDetails.scanner?.pingLatency || '--'}ms
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-
-                                {/* Last Seen Card */}
-                                {(ipDetails.scanner?.lastSeen || ipDetails.unifi?.client?.last_seen) && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-1">Dernière vue</div>
-                                        <div className="text-theme-secondary text-sm">
-                                            {formatDate(ipDetails.scanner?.lastSeen?.toString() || 
-                                                      (ipDetails.unifi?.client?.last_seen ? new Date(ipDetails.unifi.client.last_seen * 1000).toISOString() : undefined))}
-                                        </div>
-                                    </div>
-                                )}
+                                ) : null}
 
                             </div>
 
-                            {/* DHCP and Port Forwarding at the bottom */}
-                            <div className="mt-6 space-y-4">
-                                {/* DHCP Card - Full width */}
-                                {ipDetails.freebox?.dhcp && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-5 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-4 flex items-center gap-1.5">
-                                            <Home size={14} />
-                                            Configuration DHCP Freebox
+                            {/* SECTION 2: BLOC CONNEXION UNIFI */}
+                            {ipDetails.unifi?.client && (
+                                <div className="bg-blue-500/10 rounded-lg border border-blue-500/50 p-6 hover:bg-blue-500/15 transition-colors mb-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Wifi size={18} className="text-blue-400" />
+                                        <h3 className="text-lg font-semibold text-blue-400 uppercase">Connexion Unifi</h3>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {/* Type de connexion */}
+                                        <div className="flex flex-col gap-1">
+                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
+                                                {ipDetails.unifi.client.is_wireless ? <Radio size={12} /> : <Cable size={12} />}
+                                                Type
+                                            </div>
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium w-fit ${
+                                                ipDetails.unifi.client.is_wireless
+                                                    ? (() => {
+                                                        // Get RSSI value for dynamic color
+                                                        let rssi = ipDetails.unifi.client.rssi;
+                                                        if (rssi === undefined || rssi === null) {
+                                                            const signal = ipDetails.unifi.client.signal;
+                                                            if (signal !== undefined && signal !== null) {
+                                                                if (typeof signal === 'number' && signal < 0) {
+                                                                    rssi = signal;
+                                                                } else if (typeof signal === 'number' && signal <= 100 && signal > 0) {
+                                                                    rssi = -30 - ((100 - signal) * 0.7);
+                                                                }
+                                                            }
+                                                        }
+                                                        if (rssi === undefined || rssi === null) {
+                                                            rssi = ipDetails.unifi.client.signal_strength;
+                                                        }
+                                                        return getSignalBadgeColor(rssi);
+                                                    })()
+                                                    : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
+                                            }`}>
+                                                {ipDetails.unifi.client.is_wireless ? (
+                                                    <>
+                                                        <Radio size={14} />
+                                                        WiFi
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Cable size={14} />
+                                                        Filaire
+                                                    </>
+                                                )}
+                                            </span>
                                         </div>
+
+                                        {/* Équipement connecté */}
+                                        <div className="flex flex-col gap-1">
+                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
+                                                <Server size={12} />
+                                                Équipement
+                                            </div>
+                                            {ipDetails.unifi.client.is_wireless && ipDetails.unifi.ap ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.ap.name}</span>
+                                                    {ipDetails.unifi.ap.model && (
+                                                        <span className="text-xs text-theme-tertiary">{ipDetails.unifi.ap.model}</span>
+                                                    )}
+                                                    {ipDetails.unifi.ap.ip && (
+                                                        <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.ap.ip}</span>
+                                                    )}
+                                                </div>
+                                            ) : ipDetails.unifi.client.is_wireless && ipDetails.unifi.client.ap_name ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.client.ap_name}</span>
+                                                    {ipDetails.unifi.client.ap_mac && (
+                                                        <span className="text-xs text-theme-tertiary font-mono">{formatMac(ipDetails.unifi.client.ap_mac)}</span>
+                                                    )}
+                                                </div>
+                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.switch ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.switch.name}</span>
+                                                    {ipDetails.unifi.switch.model && (
+                                                        <span className="text-xs text-theme-tertiary">{ipDetails.unifi.switch.model}</span>
+                                                    )}
+                                                    {ipDetails.unifi.switch.ip && (
+                                                        <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.switch.ip}</span>
+                                                    )}
+                                                </div>
+                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.client.sw_name ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.client.sw_name}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-theme-tertiary text-sm">--</span>
+                                            )}
+                                        </div>
+
+                                        {/* SSID / Port */}
+                                        <div className="flex flex-col gap-1">
+                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
+                                                <Wifi size={12} />
+                                                {ipDetails.unifi.client.is_wireless ? 'SSID' : 'Port'}
+                                            </div>
+                                            {ipDetails.unifi.client.is_wireless ? (
+                                                (() => {
+                                                    const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
+                                                    return ssid ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300 w-fit">
+                                                            <Wifi size={14} />
+                                                            {ssid}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-theme-tertiary text-sm">--</span>
+                                                    );
+                                                })()
+                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.client.sw_port ? (
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300 w-fit">
+                                                    <Cable size={14} />
+                                                    Port {ipDetails.unifi.client.sw_port}
+                                                </span>
+                                            ) : (
+                                                <span className="text-theme-tertiary text-sm">--</span>
+                                            )}
+                                        </div>
+
+                                        {/* Dernière vue */}
+                                        {ipDetails.unifi.client.last_seen && (
+                                            <div className="flex flex-col gap-1">
+                                                <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
+                                                    <Clock size={12} />
+                                                    Dernière vue
+                                                </div>
+                                                <span className="text-sm text-theme-secondary">
+                                                    {formatDate(new Date(ipDetails.unifi.client.last_seen * 1000).toISOString())}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SECTION 3: BLOC FREEBOX */}
+                            {ipDetails.freebox?.dhcp && (
+                                <div className="bg-purple-500/10 rounded-lg border border-purple-500/50 p-6 hover:bg-purple-500/15 transition-colors mb-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Home size={18} className="text-purple-400" />
+                                        <h3 className="text-lg font-semibold text-purple-400 uppercase">Configuration DHCP Freebox</h3>
+                                    </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <div className="flex items-center gap-2">
                                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
@@ -1528,16 +1904,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                )}
+                                </div>
+                            )}
 
-                                {/* Port Forwarding - Individual Cards */}
-                                {ipDetails.freebox?.portForwarding && Array.isArray(ipDetails.freebox.portForwarding) && ipDetails.freebox.portForwarding.length > 0 && (
-                                    <div>
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-3 flex items-center gap-2">
-                                            <Router size={14} />
-                                            Redirections de Port ({ipDetails.freebox.portForwarding.length})
-                                        </div>
+                            {/* Port Forwarding - Individual Cards */}
+                            {ipDetails.freebox?.portForwarding && Array.isArray(ipDetails.freebox.portForwarding) && ipDetails.freebox.portForwarding.length > 0 && (
+                                <div className="bg-purple-500/10 rounded-lg border border-purple-500/50 p-6 hover:bg-purple-500/15 transition-colors mb-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Router size={18} className="text-purple-400" />
+                                        <h3 className="text-lg font-semibold text-purple-400 uppercase">Redirections de Port ({ipDetails.freebox.portForwarding.length})</h3>
+                                    </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                             {ipDetails.freebox.portForwarding.map((rule: any, idx: number) => {
                                                 const protocol = (rule.ip_proto || rule.protocol || 'TCP').toUpperCase();
@@ -1551,7 +1927,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         key={rule.id || idx} 
                                                         className={`bg-theme-secondary/30 rounded-lg border p-4 hover:bg-theme-secondary/40 transition-all ${
                                                             isEnabled
-                                                                ? 'border-orange-500/50 shadow-lg shadow-orange-500/10'
+                                                                ? 'border-purple-500/50 shadow-lg shadow-purple-500/10'
                                                                 : 'border-gray-500/30 opacity-60'
                                                         }`}
                                                     >
@@ -1587,7 +1963,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                                         {rule.wan_port_start}{wanPortEnd}
                                                                     </div>
                                                                 </div>
-                                                                <ArrowUpDown size={18} className="text-orange-400 flex-shrink-0" />
+                                                                <ArrowUpDown size={18} className="text-purple-400 flex-shrink-0" />
                                                                 <div className="flex-1 bg-green-500/10 border border-green-500/30 rounded px-3 py-2">
                                                                     <div className="text-xs text-theme-tertiary uppercase mb-0.5">LAN</div>
                                                                     <div className="text-sm font-mono font-semibold text-green-400">
@@ -1618,9 +1994,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 );
                                             })}
                                         </div>
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </Card>
                 ) : (
@@ -1716,7 +2091,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                             : result.type === 'dhcp'
                                                             ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
                                                             : result.type === 'port-forward'
-                                                            ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                                                            ? 'bg-purple-500/20 border-purple-500/50 text-purple-400'
                                                             : 'bg-theme-secondary border-theme text-theme-secondary'
                                                     }`}>
                                                         {getTypeLabel(result.type)}
@@ -1736,10 +2111,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <span className="font-mono text-theme-secondary">
                                                             {result.ip || '--'}
                                                         </span>
+                                                        {/* Latency scatter badge - show if monitoring is enabled */}
+                                                        {result.ip && monitoringStatus[result.ip] === true && (
+                                                            <button
+                                                                onClick={() => handleOpenLatencyGraph(result.ip!)}
+                                                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                                                                title="Voir le graphique de latence scatter"
+                                                            >
+                                                                <BarChart2 size={12} />
+                                                                Latency scatter
+                                                            </button>
+                                                        )}
                                                         {/* Manual ping button - visible when ping is enabled */}
                                                         {pingEnabled && result.ip && isValidIpOrDomain(result.ip) && (
                                                             <button
@@ -1762,7 +2148,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                     </div>
                                                     {/* Ping result display - Show animation while pinging, result when done */}
                                                     {pingEnabled && result.ip && isLocalIPv4(result.ip) && (
-                                                        <div className="flex items-center gap-1">
+                                                        <div className="flex items-center gap-2">
                                                             {pingingIps.has(result.ip) ? (
                                                                 <span className="text-xs text-theme-tertiary flex items-center gap-1">
                                                                     <Loader2 size={10} className="animate-spin" />
@@ -1771,12 +2157,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                             ) : pingResults[result.ip] ? (
                                                                 pingResults[result.ip].success ? (
                                                                     <span className={`text-xs font-medium ${getLatencyColor(pingResults[result.ip].time || 0)}`}>
-                                                                        {pingResults[result.ip].time}ms
+                                                                        {pingResults[result.ip].time !== undefined 
+                                                                            ? `${pingResults[result.ip].time}ms`
+                                                                            : 'UP'}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-xs text-red-400" title={pingResults[result.ip].error}>
-                                                                        Échec
-                                                                    </span>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-medium text-red-400">DOWN</span>
+                                                                        {pingResults[result.ip].error && (
+                                                                            <span className="text-xs text-red-400/80" title={pingResults[result.ip].error}>
+                                                                                {pingResults[result.ip].error}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 )
                                                             ) : null}
                                                         </div>
@@ -1856,6 +2249,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 isOpen={showOptionsInfoModal}
                 onClose={() => setShowOptionsInfoModal(false)}
             />
+            
+            {/* Latency Monitoring Modal */}
+            {showLatencyModal && selectedIpForLatencyGraph && (
+                <LatencyMonitoringModal
+                    isOpen={showLatencyModal}
+                    onClose={() => {
+                        setShowLatencyModal(false);
+                        setSelectedIpForLatencyGraph(null);
+                    }}
+                    ip={selectedIpForLatencyGraph}
+                />
+            )}
         </div>
     );
 };

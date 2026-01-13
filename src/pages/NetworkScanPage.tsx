@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2 } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -18,6 +18,7 @@ import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringMo
 
 interface NetworkScanPageProps {
     onBack: () => void;
+    onNavigateToSearch?: (ip: string) => void;
 }
 
 interface NetworkScan {
@@ -84,7 +85,7 @@ const formatDuration = (durationMs: number): string => {
     return `${(durationMs / 1000).toFixed(1)}s`;
 };
 
-export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
+export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { plugins, fetchPlugins } = usePluginStore();
     const [scans, setScans] = useState<NetworkScan[]>([]);
     const [stats, setStats] = useState<ScanStats | null>(null);
@@ -772,8 +773,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
         if (source === 'scanner') return null;
         
         const badges: Record<string, { label: string; color: string; bgColor: string }> = {
-            freebox: { label: 'Freebox', color: 'text-blue-300', bgColor: 'bg-blue-500/20' },
-            unifi: { label: 'UniFi', color: 'text-purple-300', bgColor: 'bg-purple-500/20' },
+            freebox: { label: 'Freebox', color: 'text-purple-300', bgColor: 'bg-purple-500/20' },
+            unifi: { label: 'UniFi', color: 'text-blue-300', bgColor: 'bg-blue-500/20' },
             api: { label: 'API', color: 'text-yellow-300', bgColor: 'bg-yellow-500/20' },
             system: { label: 'Système', color: 'text-gray-300', bgColor: 'bg-gray-500/20' },
             manual: { label: 'Manuel', color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
@@ -1682,7 +1683,31 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack }) => {
                                     >
                                         <td className={`py-3 px-4 text-sm font-mono break-words ${
                                             scan.status === 'offline' ? 'text-gray-500' : ''
-                                        }`} style={scan.status !== 'offline' ? { color: 'rgb(152, 181, 238)' } : {}} title={scan.ip}>{scan.ip}</td>
+                                        }`}>
+                                            {onNavigateToSearch ? (
+                                                <button
+                                                    onClick={() => {
+                                                        // Update URL with search parameter 's' instead of using sessionStorage
+                                                        const urlParams = new URLSearchParams(window.location.search);
+                                                        urlParams.set('s', scan.ip);
+                                                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                                                        window.history.pushState(null, '', newUrl);
+                                                        // Navigate to search page (App.tsx will detect the 's' parameter)
+                                                        onNavigateToSearch(scan.ip);
+                                                    }}
+                                                    className="text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5"
+                                                    style={scan.status !== 'offline' ? { color: 'rgb(152, 181, 238)' } : {}}
+                                                    title={`Rechercher ${scan.ip} dans la page de recherche`}
+                                                >
+                                                    <span>{scan.ip}</span>
+                                                    <Link2 size={9} className="opacity-50 relative top-[-2px]" />
+                                                </button>
+                                            ) : (
+                                                <span style={scan.status !== 'offline' ? { color: 'rgb(152, 181, 238)' } : {}} title={scan.ip}>
+                                                    {scan.ip}
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="py-3 px-4 text-sm text-gray-300">
                                             {editingHostname === scan.ip ? (
                                                 <div className="flex items-center gap-2 flex-wrap">

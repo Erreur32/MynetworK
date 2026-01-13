@@ -3,6 +3,69 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.0] - 2026-01-13
+
+### ✨ Ajouté
+
+**Recherche - Support des Paramètres d'URL**
+- ✅ Support du paramètre `?s=IP` dans l'URL pour rechercher directement une IP
+- ✅ Navigation automatique vers la page de recherche si le paramètre `s` est présent dans l'URL
+- ✅ Synchronisation bidirectionnelle entre l'URL et l'état de recherche
+- ✅ Support des boutons précédent/suivant du navigateur pour la navigation
+- ✅ Liens depuis la page scan réseau vers la recherche avec paramètre d'URL (au lieu de sessionStorage)
+- ✅ URLs partageables : `192.168.1.150:5173/?s=192.168.1.41` ouvre directement la recherche
+
+**Ping - Mode Strict et Étendu**
+- ✅ Mode strict par défaut : ping d'une seule IP exacte quand le ping est activé
+- ✅ Mode étendu activable : permet de pinger des ranges d'IP (CIDR et plages)
+- ✅ Support des formats de range : `192.168.1.0/24`, `192.168.1.1-254`, `192.168.1.1-192.168.1.254`
+- ✅ Parsing côté client des ranges IP avec génération automatique de la liste d'IPs
+- ✅ Fast ping : utilisation de `count=1` pour vérification rapide UP/DOWN
+
+**Ping - Interface Utilisateur**
+- ✅ Affichage "UP" ou "DOWN" en gros sous la barre de recherche
+- ✅ Affichage de la latence en millisecondes dans le tableau de résultats
+- ✅ Affichage de la latence dans la carte Latence des détails IP
+- ✅ Détails d'erreur affichés uniquement si le ping est DOWN
+- ✅ Masquage automatique du bouton "Rechercher" quand le ping est activé
+- ✅ Touche Enter pour valider les pings au lieu de lancer une recherche quand ping est actif
+- ✅ Aide contextuelle affichée quand le ping est activé avec explications du mode strict/étendu
+
+**Ping - Documentation**
+- ✅ Mise à jour du modal d'aide avec explications du mode strict et étendu
+- ✅ Exemples de formats de ranges supportés dans la documentation
+- ✅ Explications des différences entre mode strict (1 IP) et mode étendu (ranges)
+
+### 🔧 Modifié
+
+**Recherche - Navigation**
+- 🔧 Lecture du paramètre `s` depuis l'URL en priorité (au lieu de sessionStorage)
+- 🔧 Mise à jour automatique de l'URL lors des recherches
+- 🔧 NetworkScanPage utilise maintenant l'URL au lieu de sessionStorage pour les liens vers la recherche
+
+**Ping - Comportement**
+- 🔧 Activation du ping force le mode strict (exactMatch=true) par défaut
+- 🔧 Le mode étendu peut être activé même quand le ping est actif (pour permettre les ranges)
+- 🔧 Ping rapide avec count=1 mais latence toujours stockée pour affichage dans les résultats
+
+**Interface Utilisateur - Ping**
+- 🔧 Bouton "Rechercher" masqué conditionnellement quand pingEnabled est true
+- 🔧 Comportement de la touche Enter adaptatif selon l'état du ping
+- 🔧 Affichage contextuel de l'aide ping avec informations selon le mode actif
+
+### 🐛 Corrigé
+
+**Ping - Affichage**
+- ✅ Correction de l'affichage "undefinedms" : vérification de l'existence de la latence avant affichage
+- ✅ Affichage de "UP" si la latence n'est pas disponible mais que le ping est réussi
+- ✅ Gestion correcte des cas où time est undefined dans les résultats de ping
+
+---
+
+## [0.] - 2026-01-13
+
+---
+
 ## [0.3.9] - 2025-01-02
 
 ### 🐛 Corrigé

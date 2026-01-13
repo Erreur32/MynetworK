@@ -117,34 +117,45 @@ export const SearchOptionsInfoModal: React.FC<SearchOptionsInfoModalProps> = ({ 
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-300 ml-1">
-                                    Teste la connectivité réseau des adresses IP locales trouvées dans les résultats de recherche.
+                                    Teste la connectivité réseau des adresses IP locales. Par défaut en mode strict (1 IP exacte).
                                 </p>
                                 <div className="ml-1 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-                                    <p className="text-xs text-gray-400 mb-2 font-medium">Fonctionnement :</p>
-                                    <div className="space-y-2 text-xs text-gray-300">
-                                        <div>
-                                            <p className="text-cyan-400 font-medium mb-1">✓ IP autorisées (locales uniquement) :</p>
-                                            <p className="ml-2 text-gray-400">• 192.168.x.x (réseaux privés)</p>
-                                            <p className="ml-2 text-gray-400">• 10.x.x.x (réseaux privés)</p>
-                                            <p className="ml-2 text-gray-400">• 172.16-31.x.x (réseaux privés)</p>
-                                            <p className="ml-2 text-gray-400">• 127.x.x.x (localhost)</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-red-400 font-medium mb-1">✗ IP non autorisées :</p>
-                                            <p className="ml-2 text-gray-400">• IP publiques (ex: 8.8.8.8, 1.1.1.1)</p>
-                                            <p className="ml-2 text-gray-400">• IP externes/internet</p>
-                                            <p className="ml-2 text-gray-400">• IPv6 (non supporté)</p>
-                                        </div>
-                                        <div className="pt-2 border-t border-gray-800">
-                                            <p className="text-cyan-400 font-medium mb-1">Comment ça marche :</p>
-                                            <p className="ml-2">• Ping automatique de <span className="text-cyan-400 font-mono">toutes</span> les IP locales trouvées dans les résultats</p>
-                                            <p className="ml-2">• 3 pings par IP pour calculer la latence moyenne</p>
-                                            <p className="ml-2">• Ping séquentiel (une IP après l'autre) avec délai de 200ms</p>
-                                            <p className="ml-2">• Affichage du résultat :</p>
-                                            <p className="ml-6 text-emerald-400">✓ Répond (ex: 5ms, 12ms)</p>
-                                            <p className="ml-6 text-red-400">✗ Ne répond pas</p>
-                                        </div>
-                                        <p className="text-gray-500 mt-2 pt-2 border-t border-gray-800">⚠️ Note : Désactive automatiquement les autres options de recherche pendant le ping.</p>
+                                    <p className="text-xs text-gray-400 mb-2 font-medium">Mode strict (par défaut) :</p>
+                                    <div className="space-y-1 text-xs text-gray-300 mb-3">
+                                        <p>• Ping d'une <span className="text-cyan-400 font-medium">seule IP exacte</span></p>
+                                         
+                                        <p>• Le mode "Étendu" est automatiquement désactivé lors de l'activation du ping</p>
+                                    </div>
+                                    
+                                    <p className="text-xs text-gray-400 mb-2 font-medium">Mode étendu (optionnel) :</p>
+                                    <div className="space-y-1 text-xs text-gray-300 mb-3">
+                                        <p>• Activez le bouton "Étendu" pour permettre le ping de <span className="text-cyan-400 font-medium">ranges d'IP</span></p>
+                                        <p>• Formats supportés :</p>
+                                        <p className="ml-4 text-cyan-400 font-mono">• 192.168.1.0/24</p>
+                                        <p className="ml-4 text-cyan-400 font-mono">• 192.168.1.1-254</p>
+                                        <p className="ml-4 text-cyan-400 font-mono">• 192.168.1.1-192.168.1.254</p>
+                                    </div>
+                                    
+                                    <div className="pt-2 border-t border-gray-800">
+                                        <p className="text-cyan-400 font-medium mb-1">✓ IP autorisées (locales uniquement) :</p>
+                                        <p className="ml-2 text-gray-400">• 192.168.x.x (réseaux privés)</p>
+                                        <p className="ml-2 text-gray-400">• 10.x.x.x (réseaux privés)</p>
+                                        <p className="ml-2 text-gray-400">• 172.16-31.x.x (réseaux privés)</p>
+                                        <p className="ml-2 text-gray-400">• 127.x.x.x (localhost)</p>
+                                    </div>
+                                    <div className="pt-2">
+                                        <p className="text-red-400 font-medium mb-1">✗ IP non autorisées :</p>
+                                        <p className="ml-2 text-gray-400">• IP publiques (ex: 8.8.8.8, 1.1.1.1)</p>
+                                        <p className="ml-2 text-gray-400">• IP externes/internet</p>
+                                        <p className="ml-2 text-gray-400">• IPv6 (non supporté)</p>
+                                    </div>
+                                    <div className="pt-2 border-t border-gray-800">
+                                        <p className="text-cyan-400 font-medium mb-1">Comment ça marche :</p>
+                                        <p className="ml-2">• 3 pings par IP pour calculer la latence moyenne</p>
+                                        <p className="ml-2">• Ping séquentiel (une IP après l'autre) avec délai de 200ms</p>
+                                        <p className="ml-2">• Affichage du résultat :</p>
+                                        <p className="ml-6 text-emerald-400">✓ Répond (ex: 5ms, 12ms)</p>
+                                        <p className="ml-6 text-red-400">✗ Ne répond pas</p>
                                     </div>
                                 </div>
                             </div>
