@@ -363,5 +363,55 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
     });
 }), autoLog('plugin.test', 'plugin', (req) => req.params.id));
 
+// GET /api/plugins/:id/token - Get plugin token/API key (for display in settings)
+router.get('/:id/token', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const pluginId = req.params.id;
+    const plugin = pluginManager.getPlugin(pluginId);
+    
+    if (!plugin) {
+        throw createError('Plugin not found', 404, 'PLUGIN_NOT_FOUND');
+    }
+
+    // Get plugin config from database
+    const dbConfig = PluginConfigRepository.findByPluginId(pluginId);
+    const settings = dbConfig?.settings || {};
+
+    if (pluginId === 'unifi') {
+        // For UniFi, check if using Site Manager API (apiKey) or Controller API (username/password)
+        const apiMode = (settings?.apiMode as 'controller' | 'site-manager') || 'controller';
+        const apiKey = settings?.apiKey as string | undefined;
+        
+        // Also try to get from plugin's apiService if available
+        let apiKeyFromService: string | null = null;
+        try {
+            const unifiPlugin = plugin as any;
+            if (unifiPlugin?.apiService?.getApiKey) {
+                apiKeyFromService = unifiPlugin.apiService.getApiKey();
+            }
+        } catch {
+            // Ignore errors
+        }
+
+        res.json({
+            success: true,
+            result: {
+                apiMode,
+                apiKey: apiKeyFromService || apiKey || null,
+                hasApiKey: !!(apiKeyFromService || apiKey),
+                isConfigured: dbConfig !== null
+            }
+        });
+    } else {
+        // For other plugins, return null (no token support yet)
+        res.json({
+            success: true,
+            result: {
+                apiKey: null,
+                isConfigured: dbConfig !== null
+            }
+        });
+    }
+}), autoLog('plugin.getToken', 'plugin', (req) => req.params.id));
+
 export default router;
 

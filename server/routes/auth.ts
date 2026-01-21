@@ -165,4 +165,17 @@ router.post('/reset', asyncHandler(async (_req, res) => {
   });
 }));
 
+// GET /api/auth/token - Get Freebox app token (for display in settings)
+router.get('/token', asyncHandler(async (_req, res) => {
+  const appToken = freeboxApi.getAppToken();
+  
+  res.json({
+    success: true,
+    result: {
+      appToken: appToken || null,
+      isRegistered: freeboxApi.isRegistered()
+    }
+  });
+}));
+
 export default router;

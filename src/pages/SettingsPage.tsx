@@ -71,7 +71,7 @@ interface SettingsPageProps {
   onLogout?: () => void;
 }
 
-type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system';
+type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system' | 'backup';
 type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
 
 // Toggle component
@@ -2961,7 +2961,61 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const { reboot } = useSystemStore();
 
   // Get permissions and freebox URL from auth store
-  const { permissions, freeboxUrl } = useAuthStore();
+  const { permissions, freeboxUrl, isRegistered } = useAuthStore();
+  
+  // State for Freebox token
+  const [freeboxToken, setFreeboxToken] = useState<string | null>(null);
+  const [loadingToken, setLoadingToken] = useState(false);
+  const [showFreeboxToken, setShowFreeboxToken] = useState(false);
+  
+  // State for UniFi token
+  const [unifiToken, setUnifiToken] = useState<string | null>(null);
+  const [unifiApiMode, setUnifiApiMode] = useState<'controller' | 'site-manager' | null>(null);
+  const [loadingUnifiToken, setLoadingUnifiToken] = useState(false);
+  
+  // Get plugins to check if UniFi is configured
+  const { plugins } = usePluginStore();
+  const unifiPlugin = plugins.find(p => p.id === 'unifi');
+  
+  // Fetch Freebox token on mount (always fetch, even if not registered, to show status)
+  useEffect(() => {
+    if (mode === 'freebox') {
+      setLoadingToken(true);
+      api.get<{ success: boolean; result?: { appToken: string | null; isRegistered: boolean } }>('/api/auth/token')
+        .then((response) => {
+          if (response.success && response.result && 'appToken' in response.result) {
+            setFreeboxToken(response.result.appToken || null);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch Freebox token:', error);
+        })
+        .finally(() => {
+          setLoadingToken(false);
+        });
+    }
+  }, [mode]);
+  
+  // Fetch UniFi token on mount if plugin is configured
+  useEffect(() => {
+    if (unifiPlugin?.configured && mode === 'freebox') {
+      setLoadingUnifiToken(true);
+      api.get<{ success: boolean; result?: { apiKey: string | null; apiMode?: 'controller' | 'site-manager'; hasApiKey: boolean } }>('/api/plugins/unifi/token')
+        .then((response) => {
+          if (response.success && response.result) {
+            const result = response.result as unknown as { apiKey: string | null; apiMode?: 'controller' | 'site-manager'; hasApiKey: boolean };
+            setUnifiToken(result.apiKey || null);
+            setUnifiApiMode(result.apiMode || null);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch UniFi token:', error);
+        })
+        .finally(() => {
+          setLoadingUnifiToken(false);
+        });
+    }
+  }, [unifiPlugin?.configured, mode]);
 
   // Helper to check if a permission is granted (defaults to false if not present)
   const hasPermission = (permission: keyof typeof permissions): boolean => {
@@ -3033,6 +3087,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   // WiFi planning
   const [wifiPlanning, setWifiPlanning] = useState<{
     enabled: boolean;
+  } | null>(null);
+
+  // WiFi MAC filter
+  const [wifiMacFilter, setWifiMacFilter] = useState<{
+    enabled?: boolean;
+    mode?: 'whitelist' | 'blacklist';
+    macs?: string[];
   } | null>(null);
 
   // Parental control profiles
@@ -3113,6 +3174,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           if (response.success && response.result) {
             setWifiPlanning(response.result);
           }
+          break;
+        }
+        case 'backup': {
+          // No data to fetch on mount, data will be loaded on demand when exporting
           break;
         }
         case 'security': {
@@ -3322,6 +3387,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     }
   };
 
+  const saveWifiMacFilter = async () => {
+    if (!wifiMacFilter) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await api.put<typeof wifiMacFilter>(API_ROUTES.WIFI_MAC_FILTER, wifiMacFilter);
+      if (response.success) {
+        setSuccessMessage('Filtrage MAC enregistré avec succès');
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        setError(response.error?.message || 'Erreur lors de l\'enregistrement');
+      }
+    } catch (error) {
+      console.error('Save WiFi MAC filter error:', error);
+      setError('Erreur lors de l\'enregistrement du filtrage MAC');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const saveWifiPlanning = async () => {
     if (!wifiPlanning) return;
     setIsLoading(true);
@@ -3334,6 +3421,160 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
     } catch {
       setError('Erreur lors de la sauvegarde');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Backup functions
+  const downloadJsonFile = (data: unknown, filename: string) => {
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPortForwarding = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get<{ result?: Array<typeof portForwardingRules[0]> }>(`${API_ROUTES.SETTINGS_NAT}/redirections`);
+      if (response.success && response.result) {
+        const rules = Array.isArray(response.result) ? response.result : [];
+        const exportData = {
+          exportDate: new Date().toISOString(),
+          type: 'port_forwarding',
+          description: 'Liste complète des redirections de port WAN (Pare-feu)',
+          rules: rules.map(rule => ({
+            id: rule.id,
+            enabled: rule.enabled,
+            comment: rule.comment || '',
+            lan_port: rule.lan_port,
+            wan_port_start: rule.wan_port_start,
+            wan_port_end: rule.wan_port_end || rule.wan_port_start,
+            lan_ip: rule.lan_ip,
+            ip_proto: rule.ip_proto
+          }))
+        };
+        downloadJsonFile(exportData, `freebox_port_forwarding_${new Date().toISOString().split('T')[0]}.json`);
+        setSuccessMessage('Export des redirections de port réussi');
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        setError('Impossible de récupérer les redirections de port');
+      }
+    } catch (error) {
+      console.error('Export port forwarding error:', error);
+      setError('Erreur lors de l\'export des redirections de port');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exportDhcpStaticLeases = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get<{ result?: Array<typeof staticLeases[0]> }>(API_ROUTES.DHCP_STATIC_LEASES);
+      if (response.success && response.result) {
+        const leases = Array.isArray(response.result) ? response.result : [];
+        const exportData = {
+          exportDate: new Date().toISOString(),
+          type: 'dhcp_static_leases',
+          description: 'Liste complète des baux DHCP statiques',
+          leases: leases.map(lease => ({
+            id: lease.id,
+            mac: lease.mac,
+            ip: lease.ip,
+            comment: lease.comment || '',
+            hostname: lease.hostname || ''
+          }))
+        };
+        downloadJsonFile(exportData, `freebox_dhcp_static_leases_${new Date().toISOString().split('T')[0]}.json`);
+        setSuccessMessage('Export des baux DHCP statiques réussi');
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        setError('Impossible de récupérer les baux DHCP statiques');
+      }
+    } catch (error) {
+      console.error('Export DHCP static leases error:', error);
+      setError('Erreur lors de l\'export des baux DHCP statiques');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exportWifiNetworks = async () => {
+    try {
+      setIsLoading(true);
+      // Get WiFi full config (includes APs, BSS, config, etc.)
+      const fullResponse = await api.get<{ result?: any }>(API_ROUTES.WIFI_FULL);
+      const configResponse = await api.get<{ result?: any }>(API_ROUTES.WIFI_CONFIG);
+      const bssResponse = await api.get<{ result?: Array<any> }>(API_ROUTES.WIFI_BSS);
+      
+      const wifiData: any = {
+        exportDate: new Date().toISOString(),
+        type: 'wifi_networks',
+        description: 'Liste complète des réseaux WiFi avec leurs options'
+      };
+
+      if (fullResponse.success && fullResponse.result) {
+        wifiData.fullConfig = fullResponse.result;
+      }
+      if (configResponse.success && configResponse.result) {
+        wifiData.config = configResponse.result;
+      }
+      if (bssResponse.success && bssResponse.result) {
+        const bssArray = Array.isArray(bssResponse.result) ? bssResponse.result : [];
+        wifiData.bss = bssArray;
+        // Format BSS data for better readability
+        wifiData.networks = bssArray.map((bss: any) => ({
+          id: bss.id,
+          name: bss.name || '',
+          ssid: bss.ssid || '',
+          enabled: bss.enabled !== false,
+          security: bss.security || 'none',
+          key: bss.key ? '***' : undefined, // Don't export actual keys for security
+          hasKey: !!bss.key,
+          encryption: bss.encryption || 'none',
+          hide_ssid: bss.hide_ssid || false,
+          guest: bss.guest || false,
+          ap_id: bss.ap_id,
+          bssid: bss.bssid
+        }));
+      }
+
+      downloadJsonFile(wifiData, `freebox_wifi_networks_${new Date().toISOString().split('T')[0]}.json`);
+      setSuccessMessage('Export des réseaux WiFi réussi');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error('Export WiFi networks error:', error);
+      setError('Erreur lors de l\'export des réseaux WiFi');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exportAllBackups = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Export all three types
+      await exportPortForwarding();
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between downloads
+      await exportDhcpStaticLeases();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await exportWifiNetworks();
+      
+      setSuccessMessage('Tous les exports ont été téléchargés');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (error) {
+      console.error('Export all backups error:', error);
+      setError('Erreur lors de l\'export complet');
     } finally {
       setIsLoading(false);
     }
@@ -3359,7 +3600,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'dhcp', label: 'DHCP', icon: Network, color: 'emerald' },
     { id: 'storage', label: 'Stockage', icon: HardDrive, color: 'amber' },
     { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
-    { id: 'system', label: 'Système', icon: Server, color: 'purple' }
+    { id: 'system', label: 'Système', icon: Server, color: 'purple' },
+    { id: 'backup', label: 'Backup', icon: Download, color: 'orange' }
   ];
 
   // Update time every minute
@@ -3576,6 +3818,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                   active: 'bg-purple-500/20 border-purple-500/50 text-purple-400',
                   inactive: 'border-gray-700 text-gray-400 hover:border-purple-500/50 hover:text-purple-400',
                   icon: 'text-purple-400'
+                },
+                orange: {
+                  active: 'bg-orange-500/20 border-orange-500/50 text-orange-400',
+                  inactive: 'border-gray-700 text-gray-400 hover:border-orange-500/50 hover:text-orange-400',
+                  icon: 'text-orange-400'
                 }
               };
               const colors = colorClasses[tab.color] || colorClasses.blue;
@@ -3790,8 +4037,120 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         )}
 
         {/* Network settings */}
-        {!isLoading && activeTab === 'network' && connectionConfig && (
+        {!isLoading && activeTab === 'network' && (
           <div className="space-y-6">
+            {/* Freebox Information Section - Always show in freebox mode */}
+            {mode === 'freebox' && (
+              <Section title="Informations Freebox" icon={Info} iconColor="cyan">
+              <SettingRow
+                label="Token d'application"
+                description="Token d'authentification créé pour l'application Freebox"
+              >
+                <div className="flex items-center gap-2">
+                  {loadingToken ? (
+                    <Loader2 size={16} className="animate-spin text-gray-400" />
+                  ) : freeboxToken ? (
+                    <div className="flex items-center gap-2">
+                      <code className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-cyan-400 text-sm font-mono break-all min-w-[200px]">
+                        {showFreeboxToken ? freeboxToken : '••••••••••••••••••••••••••••••••'}
+                      </code>
+                      <button
+                        onClick={() => setShowFreeboxToken(!showFreeboxToken)}
+                        className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
+                        title={showFreeboxToken ? "Masquer le token" : "Afficher le token"}
+                      >
+                        {showFreeboxToken ? (
+                          <EyeOff size={16} className="text-gray-400 hover:text-gray-200" />
+                        ) : (
+                          <Eye size={16} className="text-gray-400 hover:text-gray-200" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(freeboxToken);
+                          setSuccessMessage('Token copié dans le presse-papiers');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }}
+                        className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
+                        title="Copier le token"
+                      >
+                        <Share2 size={16} className="text-gray-400 hover:text-gray-200" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500">Non enregistré</span>
+                  )}
+                </div>
+              </SettingRow>
+              {freeboxUrl && (
+                <SettingRow
+                  label="URL Freebox"
+                  description="Adresse de la Freebox"
+                >
+                  <code className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-300 text-sm font-mono">
+                    {freeboxUrl}
+                  </code>
+                </SettingRow>
+              )}
+              </Section>
+            )}
+            
+            {/* UniFi Information Section - Only show if UniFi plugin is configured */}
+            {mode === 'freebox' && unifiPlugin?.configured && (
+              <Section title="Informations UniFi" icon={Network} iconColor="purple">
+                <SettingRow
+                  label="Mode API"
+                  description="Mode d'authentification utilisé pour UniFi"
+                >
+                  <div className="flex items-center gap-2">
+                    {loadingUnifiToken ? (
+                      <Loader2 size={16} className="animate-spin text-gray-400" />
+                    ) : unifiApiMode ? (
+                      <span className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-purple-400 text-sm font-medium uppercase">
+                        {unifiApiMode === 'site-manager' ? 'Site Manager' : 'Controller'}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-500">Non configuré</span>
+                    )}
+                  </div>
+                </SettingRow>
+                {unifiApiMode === 'site-manager' && (
+                  <SettingRow
+                    label="Clé API (Site Manager)"
+                    description="Clé API utilisée pour l'authentification Site Manager"
+                  >
+                    <div className="flex items-center gap-2">
+                      {loadingUnifiToken ? (
+                        <Loader2 size={16} className="animate-spin text-gray-400" />
+                      ) : unifiToken ? (
+                        <div className="flex items-center gap-2">
+                          <code className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-purple-400 text-sm font-mono break-all">
+                            {unifiToken}
+                          </code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(unifiToken);
+                              setSuccessMessage('Clé API copiée dans le presse-papiers');
+                              setTimeout(() => setSuccessMessage(null), 3000);
+                            }}
+                            className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
+                            title="Copier la clé API"
+                          >
+                            <Share2 size={16} className="text-gray-400 hover:text-gray-200" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">Aucune clé API configurée</span>
+                      )}
+                    </div>
+                  </SettingRow>
+                )}
+              </Section>
+            )}
+            
+            {/* Connection Config Section - Only show if connectionConfig is loaded */}
+            {connectionConfig && (
+              <>
             <Section title="Accès distant" icon={Globe} permissionError={!hasPermission('settings') ? getPermissionErrorMessage('settings') : null} freeboxSettingsUrl={!hasPermission('settings') ? getFreeboxSettingsUrl(freeboxUrl) : null}>
               <SettingRow
                 label="Accès distant"
@@ -3847,12 +4206,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <button
               onClick={saveConnectionConfig}
-              disabled={!hasPermission('settings')}
-              className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors ${!hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!hasPermission('settings') || !connectionConfig}
+              className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors ${!hasPermission('settings') || !connectionConfig ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Save size={16} />
               Enregistrer
             </button>
+              </>
+            )}
           </div>
         )}
 
@@ -3876,23 +4237,131 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             </Section>
 
             <Section title="Filtrage MAC" icon={Shield} permissionError={!hasPermission('settings') ? getPermissionErrorMessage('settings') : null} freeboxSettingsUrl={!hasPermission('settings') ? getFreeboxSettingsUrl(freeboxUrl) : null}>
-              <div className="py-4 text-sm text-gray-500">
-                <p>Le filtrage MAC permet de restreindre l'accès au WiFi à des appareils spécifiques.</p>
-                <p className="mt-2">Mode liste blanche : seuls les appareils autorisés peuvent se connecter.</p>
-                <p>Mode liste noire : les appareils listés sont bloqués.</p>
-              </div>
+              <SettingRow
+                label="Filtrage MAC activé"
+                description="Active le filtrage par adresse MAC pour contrôler l'accès WiFi"
+              >
+                <Toggle
+                  enabled={wifiMacFilter?.enabled || false}
+                  onChange={(v) => setWifiMacFilter({ ...wifiMacFilter, enabled: v })}
+                />
+              </SettingRow>
+              {wifiMacFilter?.enabled && (
+                <>
+                  <SettingRow
+                    label="Mode de filtrage"
+                    description="Liste blanche : seuls les appareils autorisés peuvent se connecter. Liste noire : les appareils listés sont bloqués."
+                  >
+                    <select
+                      value={wifiMacFilter?.mode || 'whitelist'}
+                      onChange={(e) => setWifiMacFilter({ ...wifiMacFilter, mode: e.target.value as 'whitelist' | 'blacklist' })}
+                      className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none"
+                    >
+                      <option value="whitelist">Liste blanche</option>
+                      <option value="blacklist">Liste noire</option>
+                    </select>
+                  </SettingRow>
+                  {wifiMacFilter?.macs && wifiMacFilter.macs.length > 0 && (
+                    <SettingRow
+                      label={`Adresses MAC (${wifiMacFilter.macs.length})`}
+                      description={`${wifiMacFilter.mode === 'whitelist' ? 'Appareils autorisés' : 'Appareils bloqués'}`}
+                    >
+                      <div className="space-y-2">
+                        {wifiMacFilter.macs.map((mac, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <code className="px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-300 text-sm font-mono flex-1">
+                              {mac}
+                            </code>
+                            <button
+                              onClick={() => {
+                                const newMacs = wifiMacFilter.macs?.filter((_, i) => i !== index) || [];
+                                setWifiMacFilter({ ...wifiMacFilter, macs: newMacs });
+                              }}
+                              className="p-1.5 hover:bg-red-700/20 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={16} className="text-red-400 hover:text-red-300" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </SettingRow>
+                  )}
+                  <SettingRow
+                    label="Ajouter une adresse MAC"
+                    description="Format : XX:XX:XX:XX:XX:XX ou XX-XX-XX-XX-XX-XX"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="00:11:22:33:44:55"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const input = e.currentTarget;
+                            const mac = input.value.trim();
+                            if (mac && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(mac)) {
+                              const currentMacs = wifiMacFilter?.macs || [];
+                              if (!currentMacs.includes(mac.toUpperCase())) {
+                                setWifiMacFilter({ ...wifiMacFilter, macs: [...currentMacs, mac.toUpperCase()] });
+                              }
+                              input.value = '';
+                            }
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        onClick={(e) => {
+                          const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                          const mac = input.value.trim();
+                          if (mac && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(mac)) {
+                            const currentMacs = wifiMacFilter?.macs || [];
+                            if (!currentMacs.includes(mac.toUpperCase())) {
+                              setWifiMacFilter({ ...wifiMacFilter, macs: [...currentMacs, mac.toUpperCase()] });
+                            }
+                            input.value = '';
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <Plus size={16} />
+                        Ajouter
+                      </button>
+                    </div>
+                  </SettingRow>
+                </>
+              )}
+              {!wifiMacFilter?.enabled && (
+                <div className="py-4 text-sm text-gray-500">
+                  <p>Le filtrage MAC permet de restreindre l'accès au WiFi à des appareils spécifiques.</p>
+                  <p className="mt-2">Mode liste blanche : seuls les appareils autorisés peuvent se connecter.</p>
+                  <p>Mode liste noire : les appareils listés sont bloqués.</p>
+                </div>
+              )}
             </Section>
 
-            {wifiPlanning && (
-              <button
-                onClick={saveWifiPlanning}
-                disabled={!hasPermission('settings')}
-                className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors ${!hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Save size={16} />
-                Enregistrer
-              </button>
-            )}
+            <div className="flex gap-2">
+              {wifiPlanning && (
+                <button
+                  onClick={saveWifiPlanning}
+                  disabled={!hasPermission('settings')}
+                  className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors ${!hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Save size={16} />
+                  Enregistrer planification
+                </button>
+              )}
+              {wifiMacFilter && (
+                <button
+                  onClick={saveWifiMacFilter}
+                  disabled={!hasPermission('settings')}
+                  className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors ${!hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Save size={16} />
+                  Enregistrer filtrage MAC
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -4403,6 +4872,106 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <p className="text-gray-500 text-center max-w-md">
               Impossible de charger les paramètres de l'écran LCD.
             </p>
+          </div>
+        )}
+
+        {/* Backup settings */}
+        {!isLoading && activeTab === 'backup' && (
+          <div className="space-y-6">
+            <Section title="Export des configurations Freebox" icon={Download} iconColor="orange">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-400">
+                  Téléchargez les configurations de votre Freebox au format JSON pour sauvegarder ou restaurer vos paramètres.
+                </p>
+                
+                <div className="space-y-4">
+                  {/* Port Forwarding Export */}
+                  <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="text-white font-medium mb-1">Redirections de port WAN</h4>
+                        <p className="text-sm text-gray-400">
+                          Exporte la liste complète des redirections de port (Pare-feu) configurées sur votre Freebox.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={exportPortForwarding}
+                      disabled={isLoading || !hasPermission('settings')}
+                      className={`flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors ${
+                        isLoading || !hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Download size={16} />
+                      <span>Télécharger en JSON</span>
+                    </button>
+                  </div>
+
+                  {/* DHCP Static Leases Export */}
+                  <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="text-white font-medium mb-1">Baux DHCP statiques</h4>
+                        <p className="text-sm text-gray-400">
+                          Exporte la liste complète des adresses IP statiques configurées dans le serveur DHCP.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={exportDhcpStaticLeases}
+                      disabled={isLoading || !hasPermission('settings')}
+                      className={`flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors ${
+                        isLoading || !hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Download size={16} />
+                      <span>Télécharger en JSON</span>
+                    </button>
+                  </div>
+
+                  {/* WiFi Networks Export */}
+                  <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-700">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className="text-white font-medium mb-1">Réseaux WiFi</h4>
+                        <p className="text-sm text-gray-400">
+                          Exporte la liste complète des réseaux WiFi avec leurs options (SSID, sécurité, etc.).
+                          <br />
+                          <span className="text-xs text-gray-500">Note : Les mots de passe WiFi ne sont pas inclus pour des raisons de sécurité.</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={exportWifiNetworks}
+                      disabled={isLoading || !hasPermission('settings')}
+                      className={`flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg transition-colors ${
+                        isLoading || !hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Download size={16} />
+                      <span>Télécharger en JSON</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Export All Button */}
+                <div className="pt-4 border-t border-gray-700">
+                  <button
+                    onClick={exportAllBackups}
+                    disabled={isLoading || !hasPermission('settings')}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white rounded-lg transition-all font-medium ${
+                      isLoading || !hasPermission('settings') ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Download size={18} />
+                    <span>Télécharger tous les exports</span>
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Télécharge les trois fichiers JSON en une seule action
+                  </p>
+                </div>
+              </div>
+            </Section>
           </div>
         )}
           </>

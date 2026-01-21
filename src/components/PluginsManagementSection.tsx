@@ -15,7 +15,7 @@ import { NetworkScanConfigModal } from './modals/NetworkScanConfigModal';
 import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
-    const { plugins, pluginStats, isLoading, fetchPlugins, updatePluginConfig, testPluginConnection } = usePluginStore();
+    const { plugins, pluginStats, isLoading, fetchPlugins, fetchAllStats, updatePluginConfig, testPluginConnection } = usePluginStore();
     // Get Freebox plugin once for reuse
     const freeboxPlugin = plugins.find(p => p.id === 'freebox');
     const { checkAuth: checkFreeboxAuth, isRegistered: isFreeboxRegistered, isLoggedIn: isFreeboxLoggedIn, permissions, freeboxUrl } = useAuthStore();
@@ -24,11 +24,33 @@ export const PluginsManagementSection: React.FC = () => {
     const [selectedPluginId, setSelectedPluginId] = useState<string>('');
     const [freeboxLoginModalOpen, setFreeboxLoginModalOpen] = useState(false);
     const [networkScanConfigModalOpen, setNetworkScanConfigModalOpen] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Load plugins once on mount (with cache check)
+    // Load plugins and stats once on mount (with cache check)
     useEffect(() => {
         fetchPlugins();
+        fetchAllStats(); // Also fetch stats to get API versions
     }, []); // Empty deps - load once only
+    
+    // Refresh plugins and stats periodically to update connection status (silent refresh)
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            setIsRefreshing(true);
+            try {
+                // Silent refresh - don't show global loading state
+                await Promise.all([
+                    fetchPlugins(true), // Force refresh
+                    fetchAllStats() // Refresh stats to get updated API versions
+                ]);
+            } catch (error) {
+                console.error('Silent refresh error:', error);
+            } finally {
+                setIsRefreshing(false);
+            }
+        }, 30000); // Refresh every 30 seconds (less frequent)
+        
+        return () => clearInterval(interval);
+    }, [fetchPlugins, fetchAllStats]);
 
     // Check Freebox auth status when Freebox plugin is enabled (only when plugin enabled state changes)
     useEffect(() => {
@@ -76,8 +98,9 @@ export const PluginsManagementSection: React.FC = () => {
         if (result) {
             setLastTestSuccess(result.connected);
             setLastTestMessage(result.message);
-            // Force refresh plugins to update connection status after test
+            // Force refresh plugins and stats to update connection status after test
             await (fetchPlugins as (force?: boolean) => Promise<void>)(true); // Force refresh to get updated connection status
+            await fetchAllStats(); // Also refresh stats to get updated API versions
         } else {
             setLastTestSuccess(false);
             setLastTestMessage('Test de connexion impossible (voir logs backend)');
@@ -95,9 +118,11 @@ export const PluginsManagementSection: React.FC = () => {
         setSelectedPluginId('');
         // Force refresh plugins after config change to get updated settings
         (fetchPlugins as (force?: boolean) => Promise<void>)(true); // Force refresh
+        fetchAllStats(); // Also refresh stats
     };
 
-    if (isLoading) {
+    // Only show full loading on initial load, not on silent refresh
+    if (isLoading && plugins.length === 0) {
         return (
             <div className="flex items-center justify-center py-16">
                 <RefreshCw size={32} className="text-gray-400 animate-spin" />
@@ -112,6 +137,12 @@ export const PluginsManagementSection: React.FC = () => {
     return (
         <>
             <Section title="Gestion des plugins" icon={Settings} iconColor="emerald">
+                {/* Discreet refresh indicator */}
+                {isRefreshing && (
+                    <div className="absolute top-4 right-4 z-10">
+                        <RefreshCw size={14} className="text-gray-500 animate-spin" title="Actualisation en cours..." />
+                    </div>
+                )}
                 {/* Freebox Permission Warning */}
                 {showFreeboxPermissionWarning && (
                     <div className="mb-4 p-4 bg-orange-500/10 border-2 border-orange-500/30 rounded-lg">
@@ -226,49 +257,78 @@ export const PluginsManagementSection: React.FC = () => {
                             {/* Plugin-specific info */}
                             {plugin.connectionStatus && (
                                 <div className="mb-2.5 flex flex-wrap gap-1.5">
-                                    {plugin.id === 'freebox' && (
-                                        <>
-                                            {plugin.firmware && (
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
-                                                    <span className="text-blue-300/70">Box:</span>
-                                                    <span className="font-mono">{plugin.firmware}</span>
-                                                </div>
-                                            )}
-                                            {plugin.playerFirmware && (
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
-                                                    <span className="text-purple-300/70">Player:</span>
-                                                    <span className="font-mono">{plugin.playerFirmware}</span>
-                                                </div>
-                                            )}
-                                            {plugin.apiVersion && (
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
-                                                    <span className="text-cyan-300/70">API:</span>
-                                                    <span className="font-mono">{plugin.apiVersion}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                    {plugin.id === 'unifi' && (
-                                        <>
-                                            {plugin.controllerFirmware && (
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
-                                                    <span className="text-blue-300/70">Firmware:</span>
-                                                    <span className="font-mono">{plugin.controllerFirmware}</span>
-                                                </div>
-                                            )}
-                                            {plugin.apiMode && (
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
-                                                    <span className="text-purple-300/70">Mode:</span>
-                                                    <span className="font-mono uppercase">{plugin.apiMode}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
+                                    {plugin.id === 'freebox' && (() => {
+                                        // Get all Freebox versions from pluginStats.system (where they're actually stored)
+                                        const stats = pluginStats?.[plugin.id]?.system as any;
+                                        const firmware = stats?.firmware || stats?.firmware_version || stats?.version || plugin.firmware;
+                                        const playerFirmware = stats?.playerFirmware || stats?.player_firmware || stats?.player_firmware_version || stats?.player_version || plugin.playerFirmware;
+                                        const apiVersion = stats?.apiVersion || plugin.apiVersion;
+                                        
+                                        return (
+                                            <>
+                                                {firmware && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
+                                                        <span className="text-blue-300/70">Box:</span>
+                                                        <span className="font-mono">{firmware}</span>
+                                                    </div>
+                                                )}
+                                                {playerFirmware && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
+                                                        <span className="text-purple-300/70">Player:</span>
+                                                        <span className="font-mono">{playerFirmware}</span>
+                                                    </div>
+                                                )}
+                                                {apiVersion && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
+                                                        <span className="text-cyan-300/70">API:</span>
+                                                        <span className="font-mono">{apiVersion}</span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                    {plugin.id === 'unifi' && (() => {
+                                        // Get UniFi versions from pluginStats.system (where they're actually stored)
+                                        const stats = pluginStats?.[plugin.id]?.system as any;
+                                        const controllerFirmware = stats?.controllerFirmware || stats?.version || plugin.controllerFirmware;
+                                        const apiVersion = stats?.apiVersion || plugin.apiVersion;
+                                        const apiMode = stats?.apiMode || plugin.apiMode;
+                                        
+                                        return (
+                                            <>
+                                                {controllerFirmware && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
+                                                        <span className="text-blue-300/70">Firmware:</span>
+                                                        <span className="font-mono">{controllerFirmware}</span>
+                                                    </div>
+                                                )}
+                                                {apiVersion && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
+                                                        <span className="text-cyan-300/70">API:</span>
+                                                        <span className="font-mono">{apiVersion}</span>
+                                                    </div>
+                                                )}
+                                                {apiMode && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
+                                                        <span className="text-purple-300/70">Mode:</span>
+                                                        <span className="font-mono uppercase">{apiMode}</span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                     {plugin.id === 'scan-reseau' && (() => {
                                         const stats = pluginStats?.['scan-reseau']?.system as any;
                                         if (!stats) return null;
+                                        const scannerVersion = stats?.version || stats?.scannerVersion;
                                         return (
                                             <>
+                                                {scannerVersion && (
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
+                                                        <span className="text-cyan-300/70">Version:</span>
+                                                        <span className="font-mono">{scannerVersion}</span>
+                                                    </div>
+                                                )}
                                                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-500/20 border border-gray-500/30 rounded text-gray-300 text-[10px] font-medium">
                                                     <span className="text-gray-400">Total:</span>
                                                     <span className="font-mono font-semibold">{stats.totalIps || 0}</span>

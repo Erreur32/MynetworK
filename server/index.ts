@@ -269,7 +269,21 @@ app.get('/api/health', (_req, res) => {
 // IMPORTANT: Must be BEFORE error handler for SPA fallback to work
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '..', 'dist');
-  app.use(express.static(distPath));
+  // Add cache control headers to prevent caching issues
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      // Disable cache for HTML files
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+      // Cache JS/CSS files with version parameter (handled by Vite build)
+      else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
 
   // SPA fallback - serve index.html for all non-API routes
   // Express 5 requires named wildcards, use middleware instead for compatibility

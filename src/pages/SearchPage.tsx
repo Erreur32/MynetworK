@@ -529,7 +529,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 setPingingIps(new Set());
             } else {
                 // If range parsing fails, try as single IP
-                if (isValidIpOrDomain(target)) {
+        if (isValidIpOrDomain(target)) {
                     await pingSingleTarget(target);
                 }
             }
@@ -986,7 +986,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                             pingSearchQuery(searchQuery.trim());
                                                         }
                                                     } else {
-                                                        handleSearch();
+                                                    handleSearch();
                                                     }
                                                 }
                                             }}
@@ -996,23 +996,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                     {/* Hide search button when ping is enabled */}
                                     {!pingEnabled && (
-                                        <button
-                                            onClick={handleSearch}
-                                            disabled={isLoading || !searchQuery.trim()}
-                                            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-gray-600/20"
-                                        >
-                                            {isLoading ? (
-                                                <>
-                                                    <Loader2 size={18} className="animate-spin" />
-                                                    Recherche...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Search size={18} />
-                                                    Rechercher
-                                                </>
-                                            )}
-                                        </button>
+                                    <button
+                                        onClick={handleSearch}
+                                        disabled={isLoading || !searchQuery.trim()}
+                                        className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-gray-600/20"
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 size={18} className="animate-spin" />
+                                                Recherche...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Search size={18} />
+                                                Rechercher
+                                            </>
+                                        )}
+                                    </button>
                                     )}
                                     {/* Ping direct button - for direct IP/domain ping without search results */}
                                     {/* Ping direct button - Only visible when ping switch is enabled */}
@@ -1162,7 +1162,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             
                             <button
                                 onClick={() => {
-                                    setExactMatch(!exactMatch);
+                                        setExactMatch(!exactMatch);
                                     // If ping is enabled and we're switching to extended mode, clear ping results
                                     if (pingEnabled && exactMatch) {
                                         setPingResults({});
@@ -1171,8 +1171,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 }}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-200 font-medium ${
                                     !exactMatch
-                                        ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
-                                        : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
+                                            ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
+                                            : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
                                 }`}
                             >
                                 <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
@@ -1685,16 +1685,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </div>
                                         {pingResults[ipDetails.ip] ? (
                                             // Fast ping: show latency with color
-                                            <div className={`text-lg font-medium ${getLatencyColor(
+                                        <div className={`text-lg font-medium ${getLatencyColor(
                                                 pingResults[ipDetails.ip].time || 0
-                                            )}`}>
+                                        )}`}>
                                                 {pingResults[ipDetails.ip].success 
                                                     ? (pingResults[ipDetails.ip].time !== undefined 
                                                         ? `${pingResults[ipDetails.ip].time}ms`
                                                         : 'UP')
                                                     : 'DOWN'
                                                 }
-                                            </div>
+                                        </div>
                                         ) : (
                                             // Scanner latency: show actual latency
                                             <div className={`text-lg font-medium ${getLatencyColor(
@@ -2167,7 +2167,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                                         {pingResults[result.ip].error && (
                                                                             <span className="text-xs text-red-400/80" title={pingResults[result.ip].error}>
                                                                                 {pingResults[result.ip].error}
-                                                                            </span>
+                                                                    </span>
                                                                         )}
                                                                     </div>
                                                                 )

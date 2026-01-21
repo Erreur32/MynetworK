@@ -151,6 +151,15 @@ class FreeboxApiService {
         this.loadToken();
     }
 
+    // Get app token (for display purposes only - read-only access)
+    getAppToken(): string | null {
+        // If token is not loaded in memory, try to load it from file
+        if (!this.appToken) {
+            this.loadToken();
+        }
+        return this.appToken;
+    }
+
     // Save app_token to file
     private saveToken(appToken: string) {
         const tokenPath = this.getTokenPath();
@@ -733,6 +742,10 @@ class FreeboxApiService {
 
     async getWifiMacFilter(): Promise<FreeboxApiResponse> {
         return this.requestWithLock('GET', API_ENDPOINTS.WIFI_MAC_FILTER);
+    }
+
+    async setWifiMacFilter(data: unknown): Promise<FreeboxApiResponse> {
+        return this.requestWithLock('PUT', API_ENDPOINTS.WIFI_MAC_FILTER, data);
     }
 
     async getWifiPlanning(): Promise<FreeboxApiResponse> {

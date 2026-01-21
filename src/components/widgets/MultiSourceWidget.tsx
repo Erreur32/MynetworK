@@ -227,14 +227,14 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                 <div className="flex flex-col gap-1.5 text-[11px] text-gray-400 mb-1 p-2 bg-gray-900/30 rounded border border-gray-800/50">
                                                     {plugin.id === 'freebox' && (
                                                         <>
-                                                            {apiVersion && (
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-gray-500">Version API&nbsp;:</span>
-                                                                    <span className="text-cyan-400 font-mono font-medium text-xs">
-                                                                        {apiVersion}
-                                                                    </span>
-                                                                </div>
-                                                            )}
+                                                    {(apiVersion || systemStats?.apiVersion) && (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-gray-500">Version API&nbsp;:</span>
+                                                            <span className="text-cyan-400 font-mono font-medium text-xs">
+                                                                {systemStats?.apiVersion || apiVersion}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                             {firmware && (
                                                                 <div className="flex items-center justify-between">
                                                                     <span className="text-gray-500">Firmware Box&nbsp;:</span>

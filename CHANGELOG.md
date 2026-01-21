@@ -3,6 +3,37 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.1] - 2026-01-21
+
+### ✨ Ajouté
+
+**Freebox - Filtrage MAC WiFi**
+- ✅ Ajout de la section "Filtrage MAC" dans les paramètres WiFi Freebox
+- ✅ Toggle pour activer/désactiver le filtrage MAC
+- ✅ Sélecteur de mode : Liste blanche ou Liste noire
+- ✅ Gestion de la liste des adresses MAC avec ajout/suppression
+- ✅ Validation du format MAC (XX:XX:XX:XX:XX:XX ou XX-XX-XX-XX-XX-XX)
+- ✅ Ajout d'adresses MAC via champ de saisie (bouton ou touche Enter)
+- ✅ Route API PUT `/api/wifi/mac-filter` pour sauvegarder la configuration
+- ✅ Méthode `setWifiMacFilter()` dans le service Freebox API
+
+**Scripts - Mise à jour de Version Automatique**
+- ✅ Affichage de la version actuelle par défaut si aucun argument n'est fourni
+- ✅ Détection automatique des modifications Git avec `git status`
+- ✅ Préparation automatique du commit si des modifications sont détectées
+- ✅ Ajout automatique des fichiers au staging area pour le commit
+- ✅ Gestion des versions invalides (comme `--help`) avec valeur par défaut
+
+### 🔧 Modifié
+
+**Scripts - update-version.sh**
+- 🔧 Amélioration de la logique de détection des modifications Git
+- 🔧 Préparation automatique du commit avec confirmation utilisateur
+- 🔧 Affichage amélioré du statut Git et des fichiers modifiés
+- 🔧 Gestion des cas où la version existe déjà dans le CHANGELOG
+
+---
+
 ## [0.4.0] - 2026-01-13
 
 ### ✨ Ajouté

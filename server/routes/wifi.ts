@@ -144,6 +144,12 @@ router.get('/mac-filter', asyncHandler(async (_req, res) => {
   res.json(result);
 }));
 
+// PUT /api/wifi/mac-filter - Update MAC filtering rules
+router.put('/mac-filter', asyncHandler(async (req, res) => {
+  const result = await freeboxApi.setWifiMacFilter(req.body);
+  res.json(result);
+}));
+
 // GET /api/wifi/planning - Get WiFi scheduling/planning
 router.get('/planning', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiPlanning();

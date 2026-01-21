@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Script pour mettre à jour la version dans tous les fichiers du projet
-# Usage: ./scripts/update-version.sh 0.0.4
+# Usage: ./scripts/update-version.sh [version]
+# Si aucune version n'est fournie, affiche la version actuelle et vérifie git status
 
 set -e
 
@@ -15,19 +16,65 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Vérifier qu'un argument version est fourni
+# Récupérer la version actuelle
+OLD_VERSION=$(grep -oP '"version":\s*"\K[^"]+' package.json 2>/dev/null || echo "")
+
+# Si aucun argument n'est fourni, afficher la version actuelle et vérifier git status
 if [ -z "$1" ]; then
-    echo -e "${RED}❌ Erreur: Veuillez fournir une version (ex: 0.0.4)${NC}"
-    echo -e "${YELLOW}Usage: $0 <version>${NC}"
-    exit 1
+    echo -e "${CYAN}${BOLD}📦 Version actuelle du projet${NC}"
+    echo ""
+    if [ -n "$OLD_VERSION" ]; then
+        echo -e "  ${BOLD}Version: ${GREEN}$OLD_VERSION${NC}"
+    else
+        echo -e "  ${YELLOW}⚠️  Impossible de trouver la version dans package.json${NC}"
+    fi
+    echo ""
+    
+    # Vérifier si git est disponible et si c'est un dépôt git
+    if command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
+        echo -e "${CYAN}${BOLD}🔍 Vérification de l'état Git...${NC}"
+        echo ""
+        
+        # Vérifier s'il y a des modifications
+        if [ -n "$(git status --porcelain)" ]; then
+            echo -e "${YELLOW}⚠️  Des modifications ont été détectées:${NC}"
+            echo ""
+            git status --short
+            echo ""
+            echo -e "${CYAN}${BOLD}💡 Préparation automatique du commit pour la version 0.4.1${NC}"
+            echo ""
+            read -p "$(echo -e ${GREEN}Voulez-vous continuer? [O/n]: ${NC})" -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                NEW_VERSION="0.4.1"
+                echo -e "${GREEN}✅ Préparation du commit pour la version ${CYAN}$NEW_VERSION${NC}"
+            else
+                echo -e "${YELLOW}❌ Opération annulée${NC}"
+                exit 0
+            fi
+        else
+            echo -e "${GREEN}✅ Aucune modification détectée${NC}"
+            echo ""
+            echo -e "${YELLOW}Usage: $0 <version>${NC}"
+            echo -e "${YELLOW}Exemple: $0 0.4.1${NC}"
+            exit 0
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Ce n'est pas un dépôt Git ou git n'est pas disponible${NC}"
+        echo ""
+        echo -e "${YELLOW}Usage: $0 <version>${NC}"
+        echo -e "${YELLOW}Exemple: $0 0.4.1${NC}"
+        exit 0
+    fi
+else
+    NEW_VERSION="$1"
 fi
 
-NEW_VERSION="$1"
-OLD_VERSION=$(grep -oP '"version":\s*"\K[^"]+' package.json)
-
-if [ -z "$OLD_VERSION" ]; then
-    echo -e "${RED}❌ Erreur: Impossible de trouver la version actuelle dans package.json${NC}"
-    exit 1
+# Si OLD_VERSION est vide ou invalide, utiliser "0.0.0" comme valeur par défaut
+if [ -z "$OLD_VERSION" ] || [ "$OLD_VERSION" = "--help" ]; then
+    echo -e "${YELLOW}⚠️  Version actuelle invalide ou introuvable dans package.json${NC}"
+    echo -e "${YELLOW}   Utilisation de '0.0.0' comme version de départ${NC}"
+    OLD_VERSION="0.0.0"
 fi
 
 echo -e "${CYAN}${BOLD}🔄 Mise à jour de la version de ${YELLOW}$OLD_VERSION${CYAN} vers ${GREEN}$NEW_VERSION${NC}..."
@@ -78,39 +125,47 @@ echo -e "${BLUE}  📝 Mise à jour de CHANGELOG.md...${NC}"
 # Obtenir la date actuelle au format YYYY-MM-DD
 CURRENT_DATE=$(date +%Y-%m-%d)
 
-# Créer un fichier temporaire avec la nouvelle entrée (sans template vide)
-TEMP_CHANGELOG=$(mktemp)
-cat > "$TEMP_CHANGELOG" << EOF
+# Vérifier si la version existe déjà dans le CHANGELOG
+if grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md 2>/dev/null; then
+    echo -e "${YELLOW}  ⚠️  La version $NEW_VERSION existe déjà dans CHANGELOG.md${NC}"
+    echo -e "${YELLOW}  ℹ️  Mise à jour de la date uniquement...${NC}"
+    # Mettre à jour la date si nécessaire
+    sed -i "s/^## \[$NEW_VERSION\] - .*/## [$NEW_VERSION] - $CURRENT_DATE/" CHANGELOG.md
+else
+    # Créer un fichier temporaire avec la nouvelle entrée (sans template vide)
+    TEMP_CHANGELOG=$(mktemp)
+    cat > "$TEMP_CHANGELOG" << EOF
 ## [$NEW_VERSION] - $CURRENT_DATE
 
 ---
 
 EOF
 
-# Créer un fichier temporaire pour le nouveau CHANGELOG
-TEMP_OUTPUT=$(mktemp)
+    # Créer un fichier temporaire pour le nouveau CHANGELOG
+    TEMP_OUTPUT=$(mktemp)
 
-# Trouver la ligne où insérer (première ligne commençant par "## [")
-FIRST_VERSION_LINE=$(grep -n "^## \[" CHANGELOG.md | head -n 1 | cut -d: -f1)
+    # Trouver la ligne où insérer (première ligne commençant par "## [")
+    FIRST_VERSION_LINE=$(grep -n "^## \[" CHANGELOG.md | head -n 1 | cut -d: -f1)
 
-if [ -n "$FIRST_VERSION_LINE" ]; then
-  # Insérer la nouvelle entrée avant la première ligne de version
-  # Lire les lignes avant, insérer le nouveau contenu, puis le reste
-  head -n $((FIRST_VERSION_LINE - 1)) CHANGELOG.md > "$TEMP_OUTPUT"
-  cat "$TEMP_CHANGELOG" >> "$TEMP_OUTPUT"
-  tail -n +$FIRST_VERSION_LINE CHANGELOG.md >> "$TEMP_OUTPUT"
-else
-  # Si aucune ligne "## [" trouvée, ajouter à la fin
-  cat CHANGELOG.md > "$TEMP_OUTPUT"
-  echo "" >> "$TEMP_OUTPUT"
-  cat "$TEMP_CHANGELOG" >> "$TEMP_OUTPUT"
+    if [ -n "$FIRST_VERSION_LINE" ]; then
+      # Insérer la nouvelle entrée avant la première ligne de version
+      # Lire les lignes avant, insérer le nouveau contenu, puis le reste
+      head -n $((FIRST_VERSION_LINE - 1)) CHANGELOG.md > "$TEMP_OUTPUT"
+      cat "$TEMP_CHANGELOG" >> "$TEMP_OUTPUT"
+      tail -n +$FIRST_VERSION_LINE CHANGELOG.md >> "$TEMP_OUTPUT"
+    else
+      # Si aucune ligne "## [" trouvée, ajouter à la fin
+      cat CHANGELOG.md > "$TEMP_OUTPUT"
+      echo "" >> "$TEMP_OUTPUT"
+      cat "$TEMP_CHANGELOG" >> "$TEMP_OUTPUT"
+    fi
+
+    # Remplacer le fichier original
+    mv "$TEMP_OUTPUT" CHANGELOG.md
+
+    # Nettoyer les fichiers temporaires
+    rm -f "$TEMP_CHANGELOG"
 fi
-
-# Remplacer le fichier original
-mv "$TEMP_OUTPUT" CHANGELOG.md
-
-# Nettoyer les fichiers temporaires
-rm -f "$TEMP_CHANGELOG"
 
 # Créer le message de commit basé sur le format de commit-message.txt
 COMMIT_MESSAGE_FILE="commit-message.txt"
@@ -189,14 +244,39 @@ echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"
 echo ""
 echo -e "${YELLOW}📝 Message de commit créé dans: ${MAGENTA}$COMMIT_MESSAGE_FILE${NC}"
 echo ""
- 
-echo -e "${GREEN}${BOLD}🚀 Commandes Git à exécuter:${NC}"
-echo ""
-echo -e "${CYAN}${BOLD}Option 1 - Avec fichier de message:${NC}"
-echo -e "${CYAN}git add -A && git commit -F $COMMIT_MESSAGE_FILE && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
-echo ""
-echo -e "${CYAN}${BOLD}Option 2 - Avec message inline:${NC}"
-COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Mise à jour")
-echo -e "${CYAN}git add -A && git commit -m \"$COMMIT_MESSAGE_INLINE\" && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
-echo ""
- 
+
+# Si le script a été lancé sans argument et a détecté des modifications, proposer de préparer le commit
+if [ -z "$1" ] && command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
+    echo -e "${GREEN}${BOLD}🚀 Préparation du commit automatique...${NC}"
+    echo ""
+    
+    # Ajouter tous les fichiers modifiés
+    echo -e "${BLUE}📦 Ajout des fichiers modifiés...${NC}"
+    git add -A
+    
+    # Afficher le statut
+    echo ""
+    echo -e "${CYAN}${BOLD}📊 Statut Git:${NC}"
+    git status --short
+    echo ""
+    
+    echo -e "${GREEN}✅ Fichiers ajoutés au staging area${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Pour finaliser le commit, exécutez:${NC}"
+    echo -e "${CYAN}git commit -F $COMMIT_MESSAGE_FILE${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Pour créer le tag et pousser:${NC}"
+    echo -e "${CYAN}git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\"${NC}"
+    echo -e "${CYAN}git push origin main && git push origin v$NEW_VERSION${NC}"
+    echo ""
+else
+    echo -e "${GREEN}${BOLD}🚀 Commandes Git à exécuter:${NC}"
+    echo ""
+    echo -e "${CYAN}${BOLD}Option 1 - Avec fichier de message:${NC}"
+    echo -e "${CYAN}git add -A && git commit -F $COMMIT_MESSAGE_FILE && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
+    echo ""
+    echo -e "${CYAN}${BOLD}Option 2 - Avec message inline:${NC}"
+    COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Mise à jour")
+    echo -e "${CYAN}git add -A && git commit -m \"$COMMIT_MESSAGE_INLINE\" && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
+    echo ""
+fi
