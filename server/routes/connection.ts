@@ -81,4 +81,48 @@ router.put('/config', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// ===== DynDNS =====
+
+// GET /api/connection/ddns/:provider - Get DynDNS config
+router.get('/ddns/:provider', asyncHandler(async (req, res) => {
+  const { provider } = req.params;
+  if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
+    return res.status(400).json({
+      success: false,
+      error_code: 'invalid_provider',
+      msg: 'Invalid provider. Must be one of: ovh, dyndns, noip'
+    });
+  }
+  const result = await freeboxApi.getDdnsConfig(provider as 'ovh' | 'dyndns' | 'noip');
+  res.json(result);
+}));
+
+// PUT /api/connection/ddns/:provider - Update DynDNS config
+router.put('/ddns/:provider', asyncHandler(async (req, res) => {
+  const { provider } = req.params;
+  if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
+    return res.status(400).json({
+      success: false,
+      error_code: 'invalid_provider',
+      msg: 'Invalid provider. Must be one of: ovh, dyndns, noip'
+    });
+  }
+  const result = await freeboxApi.updateDdnsConfig(provider as 'ovh' | 'dyndns' | 'noip', req.body);
+  res.json(result);
+}));
+
+// GET /api/connection/ddns/:provider/status - Get DynDNS status
+router.get('/ddns/:provider/status', asyncHandler(async (req, res) => {
+  const { provider } = req.params;
+  if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
+    return res.status(400).json({
+      success: false,
+      error_code: 'invalid_provider',
+      msg: 'Invalid provider. Must be one of: ovh, dyndns, noip'
+    });
+  }
+  const result = await freeboxApi.getDdnsStatus(provider as 'ovh' | 'dyndns' | 'noip');
+  res.json(result);
+}));
+
 export default router;

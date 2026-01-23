@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network } from 'lucide-react';
+import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2 } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
 import { NetworkEventsWidget } from '../components/widgets/NetworkEventsWidget';
@@ -16,11 +16,12 @@ import { POLLING_INTERVALS, formatSpeed } from '../utils/constants';
 
 interface UniFiPageProps {
     onBack: () => void;
+    onNavigateToSearch?: (ip: string) => void;
 }
 
 type TabType = 'overview' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
 
-export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
+export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -138,6 +139,34 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
         setTimeout(() => setIsRefreshing(false), 1000);
     };
 
+    // Helper function to render clickable IP addresses
+    const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
+        if (!ip || ip === '-' || ip === 'N/A') {
+            return <span className={className}>{ip || '-'}</span>;
+        }
+
+        if (onNavigateToSearch) {
+            return (
+                <button
+                    onClick={() => {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        urlParams.set('s', ip);
+                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                        window.history.pushState(null, '', newUrl);
+                        onNavigateToSearch(ip);
+                    }}
+                    className={`text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${className}`}
+                    title={`Rechercher ${ip} dans la page de recherche`}
+                >
+                    <span>{ip}</span>
+                    <Link2 size={size} className="opacity-50 relative top-[-2px]" />
+                </button>
+            );
+        }
+
+        return <span className={className}>{ip}</span>;
+    };
+
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
         { id: 'clients', label: 'Clients', icon: Users },
@@ -226,7 +255,23 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 UniFi
                             </h1>
                             <p className="text-sm text-gray-500 mt-1">
-                                {unifiPlugin.settings?.url as string || 'Non configuré'}
+                                {(() => {
+                                    const url = (unifiPlugin.settings?.url as string) || null;
+                                    if (url) {
+                                        return (
+                                            <a
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                                                title={`Ouvrir ${url} dans un nouvel onglet`}
+                                            >
+                                                {url}
+                                            </a>
+                                        );
+                                    }
+                                    return 'Non configuré';
+                                })()}
                             </p>
                         </div>
                     </div>
@@ -423,9 +468,23 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                             <div className="mt-3 border-t border-gray-800 pt-2 space-y-1">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">URL:</span>
-                                                    <span className="text-white font-mono">
-                                                        {(unifiPlugin.settings?.url as string) || 'N/A'}
-                                                    </span>
+                                                    {(() => {
+                                                        const url = (unifiPlugin.settings?.url as string) || null;
+                                                        if (url) {
+                                                            return (
+                                                                <a
+                                                                    href={url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-white font-mono hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                                                                    title={`Ouvrir ${url} dans un nouvel onglet`}
+                                                                >
+                                                                    {url}
+                                                                </a>
+                                                            );
+                                                        }
+                                                        return <span className="text-white font-mono">N/A</span>;
+                                                    })()}
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">IP:</span>
@@ -905,7 +964,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                         {device.ip && (
                                                                         <div className="flex items-center justify-between">
                                                                             <span className="text-gray-500">IP</span>
-                                                                            <span className="text-gray-300 font-mono text-[10px]">{device.ip}</span>
+                                                                            {renderClickableIp(device.ip, 'text-gray-300 font-mono text-[10px]', 8)}
                                                                     </div>
                                                         )}
                                                                     {uptime !== undefined && (
@@ -1095,7 +1154,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                 {device.ip && (
                                                                         <div className="flex items-center justify-between">
                                                                             <span className="text-gray-500">IP</span>
-                                                                            <span className="text-gray-300 font-mono text-[10px]">{device.ip}</span>
+                                                                            {renderClickableIp(device.ip, 'text-gray-300 font-mono text-[10px]', 8)}
                                                                     </div>
                                                                 )}
                                                                     {uptime !== undefined && (
@@ -1297,7 +1356,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                         {device.ip && (
                                                                     <div>
                                                                         <span className="text-gray-500">IP:&nbsp;</span>
-                                                                        <span className="text-gray-300">{device.ip}</span>
+                                                                        {renderClickableIp(device.ip, 'text-gray-300', 8)}
                                                                     </div>
                                                         )}
                                                                 <div>
@@ -1601,7 +1660,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     <span className="text-cyan-400 font-semibold">{row.switchName}</span>
                                                                 </td>
                                                                 <td className="px-4 py-3">
-                                                                    <span className="text-blue-400 font-mono">{row.switchIp}</span>
+                                                                    {renderClickableIp(row.switchIp, 'text-blue-400 font-mono', 9)}
                                                                 </td>
                                                                 <td className="px-4 py-3">
                                                                     {row.speed !== null ? (
@@ -1658,10 +1717,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                 hideController={true}
                                 cardClassName="bg-unifi-card border border-gray-800 rounded-xl"
                                 showDeviceTables={true}
+                                onNavigateToSearch={onNavigateToSearch}
                             />
                             <NetworkEventsWidget 
                                 twoColumns={true}
                                 cardClassName="bg-unifi-card border border-gray-800 rounded-xl"
+                                onNavigateToSearch={onNavigateToSearch}
                             />
                         </div>
                     )}
@@ -2021,7 +2082,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                         if (!rawName) {
                                                                             const ip = (c.ip || '').toString();
                                                                             const mac = (c.mac || '').toString();
-                                                                            if (ip) return ip;
+                                                                            if (ip) return renderClickableIp(ip, 'text-gray-300', 9);
                                                                             if (mac) return mac;
                                                                             return '-';
                                                                         }
@@ -2030,7 +2091,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                     })()}
                                                                 </td>
                                                                 <td className="px-3 py-1.5 text-left text-sky-300 font-mono text-[12px]">
-                                                                    {c.ip || '-'}
+                                                                    {renderClickableIp(c.ip, 'text-sky-300 font-mono text-[12px]', 9)}
                                                                 </td>
                                                                 <td className="px-3 py-1.5 text-left font-mono text-[11px]">
                                                                     {c.mac || '-'}
@@ -2363,10 +2424,18 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack }) => {
                                                                             className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                                                         >
                                                                             <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
-                                                                                {(c.name || c.hostname || c.ip || c.mac || '-').toString()}
+                                                                                {(() => {
+                                                                                    const name = (c.name || c.hostname || '').toString().trim();
+                                                                                    if (name) return name;
+                                                                                    const ip = (c.ip || '').toString();
+                                                                                    const mac = (c.mac || '').toString();
+                                                                                    if (ip) return renderClickableIp(ip, 'text-gray-200', 8);
+                                                                                    if (mac) return mac;
+                                                                                    return '-';
+                                                                                })()}
                                                                             </td>
                                                                             <td className="px-2 py-1 text-left text-xs font-mono text-sky-300">
-                                                                                {c.ip || '-'}
+                                                                                {renderClickableIp(c.ip, 'text-sky-300 font-mono text-xs', 8)}
                                                                             </td>
                                                                             <td className="px-2 py-1 text-left text-xs text-gray-400">
                                                                                 {getApNameForClient(c) || '-'}

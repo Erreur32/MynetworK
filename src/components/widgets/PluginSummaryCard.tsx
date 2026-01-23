@@ -13,7 +13,7 @@ import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
-import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, ArrowDown, ArrowUp } from 'lucide-react';
+import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, ArrowDown, ArrowUp, Link2 } from 'lucide-react';
 import type { SystemSensor, SystemFan } from '../../types/api';
 
 interface PluginSummaryCardProps {
@@ -22,6 +22,7 @@ interface PluginSummaryCardProps {
     hideController?: boolean;
     cardClassName?: string;
     showDeviceTables?: boolean; // Show APs and Switches tables (for Analyse tab)
+    onNavigateToSearch?: (ip: string) => void; // Function to navigate to search page with IP
 }
 
 // Helper functions for Freebox stats (copied from Header.tsx)
@@ -76,7 +77,7 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
     return Math.round(avg);
 };
 
-export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false }) => {
+export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false, onNavigateToSearch }) => {
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { networks: wifiStoreNetworks } = useWifiStore();
@@ -90,6 +91,34 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
     const isActive = plugin.enabled && plugin.connectionStatus;
     const hasStats = stats && (stats.network || stats.devices || stats.system);
+
+    // Helper function to render clickable IP addresses
+    const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
+        if (!ip || ip === '-' || ip === 'n/a' || ip === 'N/A') {
+            return <span className={className}>{ip || 'n/a'}</span>;
+        }
+
+        if (onNavigateToSearch) {
+            return (
+                <button
+                    onClick={() => {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        urlParams.set('s', ip);
+                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                        window.history.pushState(null, '', newUrl);
+                        onNavigateToSearch(ip);
+                    }}
+                    className={`text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${className}`}
+                    title={`Rechercher ${ip} dans la page de recherche`}
+                >
+                    <span>{ip}</span>
+                    <Link2 size={size} className="opacity-50 relative top-[-2px]" />
+                </button>
+            );
+        }
+
+        return <span className={className}>{ip}</span>;
+    };
 
     // Helpers for UniFi plugin: derive APs, switches and clients summary
     interface UnifiApRow {
@@ -734,7 +763,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 className="text-[10px] text-gray-500"
                                                                 title={`Adresse IP du point d'accès`}
                                                             >
-                                                                {ap.ip}
+                                                                {renderClickableIp(ap.ip, 'text-gray-500 text-[10px]', 8)}
                                                             </span>
                                                         )}
                                                     </div>
@@ -926,7 +955,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 {row.name}
                                                             </td>
                                                                     <td className="px-2 py-2 text-gray-400 whitespace-nowrap align-middle">
-                                                                {row.ip || 'n/a'}
+                                                                {renderClickableIp(row.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                             </td>
                                                                     <td className="px-2 py-2 align-middle">
                                                                         <div className="flex flex-wrap lg:flex-nowrap gap-1 items-center">
@@ -1002,7 +1031,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 {row.name}
                                                             </td>
                                                                     <td className="px-2 py-2 text-gray-400 whitespace-nowrap align-middle">
-                                                                {row.ip || 'n/a'}
+                                                                {renderClickableIp(row.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                             </td>
                                                                     <td className="px-2 py-2 text-right text-emerald-300 align-middle">
                                                                 {row.totalPorts > 0 ? row.activePorts : '-'}

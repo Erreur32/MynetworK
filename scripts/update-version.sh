@@ -41,12 +41,28 @@ if [ -z "$1" ]; then
             echo ""
             git status --short
             echo ""
-            echo -e "${CYAN}${BOLD}💡 Préparation automatique du commit pour la version 0.4.1${NC}"
+            
+            # Calculer la prochaine version (incrémenter le patch)
+            if [ -n "$OLD_VERSION" ]; then
+                # Extraire les parties de la version (major.minor.patch)
+                IFS='.' read -r -a VERSION_PARTS <<< "$OLD_VERSION"
+                MAJOR="${VERSION_PARTS[0]:-0}"
+                MINOR="${VERSION_PARTS[1]:-0}"
+                PATCH="${VERSION_PARTS[2]:-0}"
+                
+                # Incrémenter le patch
+                PATCH=$((PATCH + 1))
+                NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            else
+                # Si la version n'est pas trouvée, utiliser 0.0.1
+                NEW_VERSION="0.0.1"
+            fi
+            
+            echo -e "${CYAN}${BOLD}💡 Préparation automatique du commit pour la version ${GREEN}$NEW_VERSION${NC}"
             echo ""
             read -p "$(echo -e ${GREEN}Voulez-vous continuer? [O/n]: ${NC})" -n 1 -r
             echo ""
             if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                NEW_VERSION="0.4.1"
                 echo -e "${GREEN}✅ Préparation du commit pour la version ${CYAN}$NEW_VERSION${NC}"
             else
                 echo -e "${YELLOW}❌ Opération annulée${NC}"

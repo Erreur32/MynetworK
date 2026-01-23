@@ -38,6 +38,9 @@ router.get('/', asyncHandler(async (_req, res) => {
     system.box_model_name = version.box_model_name || version.box_model || null;
     system.device_name = version.device_name || null;
     system.api_version = version.api_version || null;
+    system.api_domain = version.api_domain || null;
+    system.https_available = version.https_available || null;
+    system.https_port = version.https_port || null;
 
     // Use API normalizer for automatic compatibility
     // This handles both API v8+ format (sensors/fans arrays) and legacy format (flat fields)

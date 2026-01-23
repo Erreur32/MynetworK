@@ -52,9 +52,8 @@ config/*.conf
 !config/*.example
 !config/*.example.conf
 
-# Claude Code
-.claude
-.reboot_schedule.json
+MyNetwork_old_good
+
 
 # Local comparison / archives that must never be committed
 # Private development folder (contains tokens, internal docs, secrets)

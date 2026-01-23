@@ -685,6 +685,20 @@ class FreeboxApiService {
         return this.requestWithLock('PUT', API_ENDPOINTS.CONNECTION_IPV6, data);
     }
 
+    // ==================== DynDNS ====================
+
+    async getDdnsConfig(provider: 'ovh' | 'dyndns' | 'noip'): Promise<FreeboxApiResponse> {
+        return this.requestWithLock('GET', `${API_ENDPOINTS.CONNECTION_DDNS}${provider}/`);
+    }
+
+    async updateDdnsConfig(provider: 'ovh' | 'dyndns' | 'noip', data: unknown): Promise<FreeboxApiResponse> {
+        return this.requestWithLock('PUT', `${API_ENDPOINTS.CONNECTION_DDNS}${provider}/`, data);
+    }
+
+    async getDdnsStatus(provider: 'ovh' | 'dyndns' | 'noip'): Promise<FreeboxApiResponse> {
+        return this.requestWithLock('GET', `${API_ENDPOINTS.CONNECTION_DDNS}${provider}/status/`);
+    }
+
     async getFtthInfo(): Promise<FreeboxApiResponse> {
         return this.requestWithLock('GET', API_ENDPOINTS.CONNECTION_FTTH);
     }

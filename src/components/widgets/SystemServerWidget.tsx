@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
-import { Cpu, HardDrive, MemoryStick, Server, CheckCircle, XCircle, Activity, Loader2, Database, Sparkles } from 'lucide-react';
+import { Cpu, MemoryStick, CheckCircle, XCircle, Activity, Loader2, Database } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
@@ -110,14 +110,6 @@ export const SystemServerWidget: React.FC = () => {
             const response = await api.get<SystemInfo>('/api/system/server');
             if (response.success && response.result) {
                 setSystemInfo(response.result);
-                // Debug: Log Docker stats to console (only in verbose mode)
-                if (response.result.docker && import.meta.env.DEV && import.meta.env.VITE_DEBUG === 'true') {
-                    console.log('[SystemServerWidget] Docker detected:', {
-                        docker: response.result.docker,
-                        dockerVersion: response.result.dockerVersion,
-                        dockerStats: response.result.dockerStats
-                    });
-                }
             } else {
                 setError('Failed to fetch system info');
             }
@@ -258,162 +250,6 @@ export const SystemServerWidget: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Disks - Show all disks if available, otherwise show single disk */}
-                {systemInfo.disks && systemInfo.disks.length > 0 ? (
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm text-gray-400">
-                            <HardDrive size={16} />
-                            <span>Disques ({systemInfo.disks.length})</span>
-                        </div>
-                        {systemInfo.disks.map((disk, index) => {
-                            // Helper function to get display name for disk
-                            // If mount point is a system file path (/etc/resolv.conf, /etc/hostname, /etc/hosts), use "Disque N"
-                            // Otherwise, use the mount point name or try to extract device name
-                            const getDiskDisplayName = (mount: string, index: number): string => {
-                                // List of system file paths to hide
-                                const systemPaths = ['/etc/resolv.conf', '/etc/hostname', '/etc/hosts'];
-                                
-                                // If mount is a system file path, return "Disque N"
-                                if (systemPaths.includes(mount)) {
-                                    return `Disque ${index + 1}`;
-                                }
-                                
-                                // Try to extract device name from mount point (e.g., /dev/sda1 -> sda1)
-                                // Or use the mount point itself if it's a valid path
-                                if (mount.startsWith('/dev/')) {
-                                    return mount.replace('/dev/', '');
-                                }
-                                
-                                // If mount point looks like a file path (starts with /), try to get the last part
-                                if (mount.startsWith('/')) {
-                                    // For mount points like /mnt/disk1, use the last part
-                                    const parts = mount.split('/').filter(p => p);
-                                    if (parts.length > 0) {
-                                        return parts[parts.length - 1];
-                                    }
-                                }
-                                
-                                // Fallback: use mount point as-is if it's not a system path
-                                return mount || `Disque ${index + 1}`;
-                            };
-                            
-                            const diskDisplayName = getDiskDisplayName(disk.mount, index);
-                            
-                            return (
-                            <div key={index} className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-400 font-mono text-xs">
-                                        {diskDisplayName}
-                                    </span>
-                                    <span className="text-white text-xs">
-                                        {formatBytes(disk.used)} / {formatBytes(disk.total)}
-                                    </span>
-                                </div>
-                                <div className="w-full bg-[#1a1a1a] rounded-full h-2">
-                                    <div
-                                        className="bg-fuchsia-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${Math.min(disk.percentage ?? 0, 100)}%` }}
-                                    />
-                                </div>
-                                <div className="flex justify-between text-xs text-gray-500">
-                                    <span>Libre: {formatBytes(disk.free)}</span>
-                                    <span>{(disk.percentage ?? 0).toFixed(1)}%</span>
-                                </div>
-                            </div>
-                            );
-                        })}
-                    </div>
-                ) : systemInfo.disk.total > 0 && (
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2 text-gray-400">
-                                <HardDrive size={16} /> Disque
-                            </span>
-                            <span className="text-white">
-                                {formatBytes(systemInfo.disk.used)} / {formatBytes(systemInfo.disk.total)}
-                            </span>
-                        </div>
-                        <div className="w-full bg-[#1a1a1a] rounded-full h-2">
-                            <div
-                                className="bg-fuchsia-500 h-2 rounded-full transition-all"
-                                style={{ width: `${Math.min(systemInfo.disk.percentage ?? 0, 100)}%` }}
-                            />
-                        </div>
-                        <div className="flex justify-between text-xs text-gray-500">
-                            <span>Libre: {formatBytes(systemInfo.disk.free)}</span>
-                            <span>{(systemInfo.disk.percentage ?? 0).toFixed(1)}%</span>
-                        </div>
-                    </div>
-                )}
-
-                {/* Docker Status */}
-                {(systemInfo.docker || systemInfo.dockerStats) && (
-                    <div className="space-y-2 bg-[#05151a] px-3 py-2 rounded border border-cyan-900/60">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2 text-cyan-400">
-                                <Server size={14} />
-                                <span className="font-semibold text-sm">Docker</span>
-                            </div>
-                            {systemInfo.dockerVersion && (
-                                <div className="text-xs text-cyan-300">
-                                    v{systemInfo.dockerVersion.replace('Docker version ', '')}
-                                </div>
-                            )}
-                        </div>
-                        
-                        {systemInfo.dockerStats ? (
-                            <div className="space-y-2">
-                                <div className="grid grid-cols-4 gap-2 text-xs">
-                                    {/* Containers */}
-                                    <div className="space-y-1">
-                                        <div className="text-gray-400 text-[10px]">Containers</div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex items-center gap-1">
-                                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                <span className="text-gray-300">{systemInfo.dockerStats.containers.running}</span>
-                                            </div>
-                                            <span className="text-gray-500">/</span>
-                                            <span className="text-gray-400">{systemInfo.dockerStats.containers.total}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Images */}
-                                    <div className="space-y-1">
-                                        <div className="text-gray-400 text-[10px]">Images</div>
-                                        <div className="text-gray-300">{systemInfo.dockerStats.images}</div>
-                                    </div>
-                                    
-                                    {/* Volumes */}
-                                    <div className="space-y-1">
-                                        <div className="text-gray-400 text-[10px]">Volumes</div>
-                                        <div className="text-gray-300">{systemInfo.dockerStats.volumes}</div>
-                                    </div>
-                                    
-                                    {/* Networks */}
-                                    <div className="space-y-1">
-                                        <div className="text-gray-400 text-[10px]">Networks</div>
-                                        <div className="text-gray-300">{systemInfo.dockerStats.networks}</div>
-                                    </div>
-                                </div>
-                                
-                                {/* Disk Usage */}
-                                {systemInfo.dockerStats.diskUsage && systemInfo.dockerStats.diskUsage.total > 0 && (
-                                    <div className="space-y-1 pt-1 border-t border-cyan-900/40">
-                                        <div className="text-gray-400 text-[10px]">Disk Usage</div>
-                                        <div className="text-gray-300">{formatBytes(systemInfo.dockerStats.diskUsage.total)}</div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-xs text-gray-500 text-center py-2">
-                                Stats Docker non disponibles
-                                <div className="text-[10px] text-gray-600 mt-1">
-                                    Vérifiez que le socket Docker est monté
-                            </div>
-                        </div>
-                        )}
-                    </div>
-                )}
 
                 {/* Database Stats */}
                 {dbStats && (
@@ -465,15 +301,6 @@ export const SystemServerWidget: React.FC = () => {
                         <div className="flex justify-between">
                             <span className="text-gray-500">Node.js</span>
                             <span className="text-gray-300">{systemInfo.nodeVersion}</span>
-                        </div>
-                    )}
-                    {/* Show Docker version if available */}
-                    {(systemInfo.dockerVersion || systemInfo.dockerStats?.version) && (
-                        <div className="flex justify-between">
-                            <span className="text-gray-500">Docker</span>
-                            <span className="text-gray-300">
-                                {(systemInfo.dockerVersion || systemInfo.dockerStats?.version || '').replace('Docker version ', '')}
-                            </span>
                         </div>
                     )}
                 </div>

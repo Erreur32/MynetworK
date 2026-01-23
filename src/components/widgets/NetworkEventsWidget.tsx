@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Wifi, AlertCircle } from 'lucide-react';
+import { Activity, Wifi, AlertCircle, Link2 } from 'lucide-react';
 import { Card } from './Card';
 import { usePluginStore } from '../../stores/pluginStore';
 import { formatSpeed } from '../../utils/constants';
@@ -55,9 +55,10 @@ function getSsidColorClass(ssid?: string): string {
 interface NetworkEventsWidgetProps {
     twoColumns?: boolean; // If true, display tables in two columns (for Analyse tab), otherwise single column (for dashboard)
     cardClassName?: string;
+    onNavigateToSearch?: (ip: string) => void; // Function to navigate to search page with IP
 }
 
-export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoColumns = false, cardClassName }) => {
+export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoColumns = false, cardClassName, onNavigateToSearch }) => {
     const { pluginStats } = usePluginStore();
     const unifiStats: any = pluginStats['unifi'];
 
@@ -127,6 +128,34 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
 
     const hasAnyData = topUpload.length > 0 || topDownload.length > 0 || worstSignal.length > 0 || topConnectionTime.length > 0;
 
+    // Helper function to render clickable IP addresses
+    const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
+        if (!ip || ip === '-' || ip === 'n/a' || ip === 'N/A') {
+            return <span className={className}>{ip || '-'}</span>;
+        }
+
+        if (onNavigateToSearch) {
+            return (
+                <button
+                    onClick={() => {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        urlParams.set('s', ip);
+                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                        window.history.pushState(null, '', newUrl);
+                        onNavigateToSearch(ip);
+                    }}
+                    className={`text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${className}`}
+                    title={`Rechercher ${ip} dans la page de recherche`}
+                >
+                    <span>{ip}</span>
+                    <Link2 size={size} className="opacity-50 relative top-[-2px]" />
+                </button>
+            );
+        }
+
+        return <span className={className}>{ip}</span>;
+    };
+
     const formatRate = (kbps: number) => formatSpeed(kbps * 1024);
 
     // Helper to format connection time (seconds to human readable)
@@ -188,7 +217,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
                                                 <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
-                                                    {c.ip || '-'}
+                                                    {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
                                                 <td className="px-2 py-1 truncate">
                                                     {c.ssid ? (
@@ -229,7 +258,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
                                                 <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
-                                                    {c.ip || '-'}
+                                                    {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
                                                 <td className="px-2 py-1 truncate">
                                                     {c.ssid ? (
@@ -274,7 +303,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
                                                 <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
-                                                    {c.ip || '-'}
+                                                    {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
                                                 <td className="px-2 py-1 truncate">
                                                     {c.ssid ? (
@@ -327,7 +356,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
                                                 <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
-                                                    {c.ip || '-'}
+                                                    {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
                                                 <td className="px-2 py-1 truncate">
                                                     {c.ssid ? (

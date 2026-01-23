@@ -10,7 +10,8 @@ import {
   UptimeGrid,
   SpeedtestWidget,
   HistoryLog,
-  MultiSourceWidget
+  MultiSourceWidget,
+  NetworkSummaryWidget
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
@@ -617,7 +618,14 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader />}>
-      <UniFiPage onBack={() => setCurrentPage('dashboard')} />
+      <UniFiPage 
+        onBack={() => setCurrentPage('dashboard')} 
+        onNavigateToSearch={(ip) => {
+          // URL is already updated in UniFiPage, just navigate to search page
+          // The SearchPage will read the 's' parameter from URL
+          setCurrentPage('search');
+        }}
+      />
           </Suspense>
         </main>
       </>
@@ -723,8 +731,13 @@ const App: React.FC = () => {
 
           {/* Column 1 - Multi-Sources + État de la Freebox */}
           <div className="flex flex-col gap-6">
-            {/* Multi-Source Widget - Always visible */}
-            <MultiSourceWidget />
+            {/* Multi-Source Widget - Hidden in Freebox page */}
+            {/* <MultiSourceWidget /> */}
+
+            {/* Network Summary Widget */}
+            {isFreeboxLoggedIn && (
+              <NetworkSummaryWidget />
+            )}
 
             {/* Freebox Status (only if Freebox is connected) */}
             {isFreeboxLoggedIn && (
@@ -964,15 +977,12 @@ const App: React.FC = () => {
                   </button>
                 </div>
               }
-              className="flex-grow"
+              className={filteredDownloads.length === 0 && downloads.length === 0 ? '' : 'flex-grow'}
             >
               {!hasDisk ? (
-                <div className="text-center py-8">
-                  <HardDrive size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun disque détecté</p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Connectez un disque dur pour télécharger des fichiers
-                  </p>
+                <div className="text-center py-4">
+                  <HardDrive size={24} className="mx-auto text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-xs">Aucun disque détecté</p>
                 </div>
               ) : filteredDownloads.length > 0 ? (
                 <FilePanel
@@ -984,20 +994,14 @@ const App: React.FC = () => {
                   }}
                 />
               ) : downloads.length > 0 ? (
-                <div className="text-center py-8">
-                  <Download size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun téléchargement correspondant</p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Modifiez les filtres pour voir plus de résultats
-                  </p>
+                <div className="text-center py-4">
+                  <Download size={24} className="mx-auto text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-xs">Aucun téléchargement correspondant</p>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <Download size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun téléchargement</p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Ajoutez un fichier pour commencer
-                  </p>
+                <div className="text-center py-4">
+                  <Download size={24} className="mx-auto text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-xs">Aucun téléchargement</p>
                 </div>
               )}
             </Card>
@@ -1039,27 +1043,21 @@ const App: React.FC = () => {
                   </button>
                 </div>
               }
-              className="h-full"
+              className={filteredHistoryLogs.length === 0 && historyLogs.length === 0 ? '' : 'h-full'}
             >
               {historyLoading ? (
                 <div className="text-center text-gray-500 py-4">Chargement...</div>
               ) : filteredHistoryLogs.length > 0 ? (
                 <HistoryLog logs={filteredHistoryLogs} />
               ) : historyLogs.length > 0 ? (
-                <div className="text-center py-8">
-                  <History size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun événement correspondant</p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Modifiez les filtres pour voir plus de résultats
-                  </p>
+                <div className="text-center py-4">
+                  <History size={24} className="mx-auto text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-xs">Aucun événement correspondant</p>
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <History size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun événement récent</p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Les logs de connexion et appels apparaîtront ici
-                  </p>
+                <div className="text-center py-4">
+                  <History size={24} className="mx-auto text-gray-600 mb-2" />
+                  <p className="text-gray-500 text-xs">Aucun événement récent</p>
                 </div>
               )}
             </Card>

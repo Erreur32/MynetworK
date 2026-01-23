@@ -151,6 +151,7 @@ export const API_ENDPOINTS = {
   CONNECTION_LOGS: '/connection/logs/',
   CONNECTION_XDSL: '/connection/xdsl/',
   CONNECTION_FTTH: '/connection/ftth/',
+  CONNECTION_DDNS: '/connection/ddns/',
 
   // RRD (monitoring data)
   RRD: '/rrd/',
