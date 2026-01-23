@@ -5,6 +5,52 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 ## [0.4.2] - 2026-01-23
 
+### ✨ Ajouté
+
+**Freebox - Backup Complet de Configuration**
+- ✅ Nouvelle section "Backup complet Freebox" dans l'onglet Backup
+- ✅ Export complet de toutes les configurations Freebox dans un seul fichier JSON
+- ✅ Import de backup avec restauration automatique des configurations
+- ✅ Interface avec boutons Export/Import côte à côte
+- ✅ Contenu du backup inclut :
+  - Redirections de port WAN (Pare-feu)
+  - Baux DHCP statiques
+  - Configuration WiFi complète (full, config, BSS)
+  - Configuration LAN (mode réseau, IP, hostnames)
+  - Configuration de connexion (ping, WOL, adblock, accès distant)
+  - Configurations DynDNS (OVH, DynDNS, No-IP)
+- ✅ Avertissement de sécurité avant import
+- ✅ Validation du format de backup avant import
+- ✅ Affichage des résultats d'import (succès/erreurs)
+
+**Dashboard - Widget Récapitulatif Réseau**
+- ✅ Ajout du widget "Récapitulatif Réseau" sur le dashboard principal
+- ✅ Placement au-dessus du widget "Système Serveur" dans la colonne de gauche
+- ✅ Affichage conditionnel uniquement si le plugin Freebox est actif et connecté
+- ✅ Affichage des informations réseau essentielles directement sur le dashboard
+
+
+
+### 🔧 Modifié
+
+**Freebox - Réorganisation de l'Onglet Réseau**
+- 🔧 Séparation des catégories en blocs distincts pour une meilleure organisation
+- 🔧 Section "Options réseau" simplifiée avec uniquement :
+  - Réponse au ping
+  - Wake on LAN
+  - Blocage de publicités
+- 🔧 Nouvelles sections séparées créées :
+  - **Mode réseau** : Choix du mode (Server/Bridge) et adresse IP du Freebox Server
+  - **Nom d'hôte** : Nom du Freebox Server, Nom DNS, Nom mDNS, Nom NetBIOS
+  - **Nom de domaine** : Affichage du domaine personnalisé et certificat TLS
+  - **DNS Dynamique** : Configuration complète DynDNS avec fournisseurs multiples
+- 🔧 Section "Accès distant" déplacée en dernière position dans l'onglet Réseau
+- 🔧 Amélioration de la lisibilité et de la navigation dans les paramètres réseau
+
+**Freebox - Informations Freebox**
+- 🔧 Section "Informations Freebox" (token) déplacée de l'onglet Réseau vers l'onglet Sécurité
+- 🔧 Placement en première position dans l'onglet Sécurité pour un accès rapide
+
 ---
 
 ## [0.4.1] - 2026-01-21
