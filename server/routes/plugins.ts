@@ -284,43 +284,163 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
     const testSettings = req.body.settings;
     let connectionStatus = false;
     let errorMessage: string | null = null;
+    
+    // Store original config for restoration (needed in finally block)
+    let currentConfig: PluginConfig | null = null;
+    let needsRestore = false;
 
     try {
         if (testSettings && Object.keys(testSettings).length > 0) {
             // Temporarily configure plugin with test settings
             const dbConfig = PluginConfigRepository.findByPluginId(pluginId);
-            const currentConfig: PluginConfig | null = dbConfig ? {
+            currentConfig = dbConfig ? {
                 id: dbConfig.pluginId,
                 enabled: dbConfig.enabled,
                 settings: dbConfig.settings
             } : null;
             
-            const testConfig: PluginConfig = {
-                id: pluginId,
-                enabled: currentConfig?.enabled || false,
-                settings: { ...(currentConfig?.settings || {}), ...testSettings }
+            // Merge test settings with current config
+            const mergedTestSettings = { ...(currentConfig?.settings || {}), ...testSettings };
+            
+            // CRITICAL: Compare test settings with current config to avoid unnecessary reinitialization
+            // If settings are identical, test with current config without stopping/restarting the plugin
+            const currentSettings = currentConfig?.settings || {};
+            
+            // Helper function to normalize values for comparison
+            const normalizeValue = (value: any): any => {
+                if (value === null || value === undefined) return '';
+                if (typeof value === 'string') return value.trim();
+                return value;
             };
             
-            // Reinitialize plugin with test config
-            await plugin.stop();
-            await plugin.initialize(testConfig);
+            // Check if test settings are identical to current settings
+            // Only compare the keys that are in testSettings (don't require all keys to match)
+            const settingsAreIdentical = Object.keys(testSettings).every(key => {
+                const testValue = normalizeValue(testSettings[key]);
+                const currentValue = normalizeValue(currentSettings[key]);
+                const isEqual = testValue === currentValue;
+                if (!isEqual) {
+                    logger.debug('PluginTest', `Setting ${key} differs: test="${testValue}" vs current="${currentValue}"`);
+                }
+                return isEqual;
+            }) && Object.keys(testSettings).length > 0; // At least one setting provided
             
-            // Test connection
-            connectionStatus = await plugin.testConnection();
+            logger.debug('PluginTest', `Settings comparison for ${pluginId}: identical=${settingsAreIdentical}, enabled=${currentConfig?.enabled}, pluginEnabled=${plugin.isEnabled()}`);
             
-            // Restore original config
-            if (currentConfig) {
-                await plugin.stop();
-                await plugin.initialize(currentConfig);
-                if (currentConfig.enabled) {
-                    await plugin.start();
+            if (settingsAreIdentical && currentConfig) {
+                // Settings are identical to current config - check if plugin is already enabled and working
+                // If plugin is enabled, check actual connection status without testing (to avoid breaking active connection)
+                // If plugin is disabled, do a proper test
+                if (currentConfig.enabled && plugin.isEnabled()) {
+                    // Plugin is already enabled with these exact settings - check actual connection status
+                    // without doing a full test (which would risk breaking active connection with 429 errors)
+                    logger.debug('PluginTest', `Test settings identical to current config for ${pluginId}, plugin is enabled - checking connection status without full test`);
+                    
+                    // Check actual connection status for UniFi plugin
+                    if (pluginId === 'unifi') {
+                        try {
+                            const unifiPlugin = plugin as any;
+                            if (unifiPlugin && unifiPlugin.apiService) {
+                                // Check if actually logged in
+                                const isLoggedIn = unifiPlugin.apiService.isLoggedIn();
+                                if (isLoggedIn) {
+                                    // Plugin is connected - return success
+                                    connectionStatus = true;
+                                } else {
+                                    // Plugin is enabled but not connected - do a test to verify connection works
+                                    logger.debug('PluginTest', `Plugin enabled but not connected, doing test to verify connection`);
+                                    const testResult = await pluginManager.testPluginConnection(pluginId);
+                                    connectionStatus = testResult.success;
+                                    if (!testResult.success && testResult.error) {
+                                        errorMessage = testResult.error;
+                                    } else if (testResult.success) {
+                                        // Test succeeded - ensure plugin is started and connected
+                                        // The test should have established the connection, but verify
+                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                        const isLoggedInAfterTest = unifiPlugin.apiService.isLoggedIn();
+                                        if (!isLoggedInAfterTest) {
+                                            // Test succeeded but plugin not logged in - try to start
+                                            logger.debug('PluginTest', `Test succeeded but plugin not logged in, attempting to start`);
+                                            try {
+                                                await plugin.start();
+                                                await new Promise(resolve => setTimeout(resolve, 1000));
+                                                // Verify connection after start
+                                                const isLoggedInAfterStart = unifiPlugin.apiService.isLoggedIn();
+                                                if (!isLoggedInAfterStart) {
+                                                    logger.warn('PluginTest', `Plugin started but still not logged in after test`);
+                                                }
+                                            } catch (startError) {
+                                                logger.error('PluginTest', `Failed to start plugin after successful test:`, startError);
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Can't check status - do a test
+                                const testResult = await pluginManager.testPluginConnection(pluginId);
+                                connectionStatus = testResult.success;
+                                if (!testResult.success && testResult.error) {
+                                    errorMessage = testResult.error;
+                                }
+                            }
+                        } catch (error) {
+                            // Error checking status - do a test
+                            logger.debug('PluginTest', `Error checking connection status, doing test:`, error);
+                            const testResult = await pluginManager.testPluginConnection(pluginId);
+                            connectionStatus = testResult.success;
+                            if (!testResult.success && testResult.error) {
+                                errorMessage = testResult.error;
+                            }
+                        }
+                    } else {
+                        // For other plugins, assume working if enabled
+                        connectionStatus = true;
+                    }
+                    // No restoration needed - plugin was never modified
+                } else {
+                    // Plugin is disabled or not enabled - safe to test
+                    logger.debug('PluginTest', `Test settings identical to current config for ${pluginId}, plugin disabled - testing without reinitialization`);
+                    const testResult = await pluginManager.testPluginConnection(pluginId);
+                    connectionStatus = testResult.success;
+                    if (!testResult.success && testResult.error) {
+                        errorMessage = testResult.error;
+                    }
+                    // No restoration needed - plugin was never modified
                 }
             } else {
-                // If no original config, just stop the plugin
+                // Settings are different - need to temporarily reconfigure plugin
+                const testConfig: PluginConfig = {
+                    id: pluginId,
+                    enabled: currentConfig?.enabled || false,
+                    settings: mergedTestSettings
+                };
+                
+                // Mark that we need to restore the config (even if error occurs)
+                needsRestore = true;
+                
+                // Reinitialize plugin with test config
                 await plugin.stop();
+                await plugin.initialize(testConfig);
+                
+                // Test connection
+                connectionStatus = await plugin.testConnection();
+                
+                // Restore original config (only if test succeeded, otherwise restore in finally)
+                if (currentConfig) {
+                    await plugin.stop();
+                    await plugin.initialize(currentConfig);
+                    if (currentConfig.enabled) {
+                        await plugin.start();
+                    }
+                    needsRestore = false; // Successfully restored
+                } else {
+                    // If no original config, just stop the plugin
+                    await plugin.stop();
+                    needsRestore = false; // Nothing to restore
+                }
             }
         } else {
-            // Use current plugin configuration
+            // Use current plugin configuration (no restoration needed)
             const testResult = await pluginManager.testPluginConnection(pluginId);
             connectionStatus = testResult.success;
             if (!testResult.success && testResult.error) {
@@ -331,6 +451,36 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
         errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[PluginTest] Error testing ${pluginId}:`, error);
         connectionStatus = false;
+        // Error occurred - will restore in finally block if needed
+    } finally {
+        // CRITICAL: Always restore original config if we modified it and restoration didn't happen
+        // This ensures the plugin is never left in a broken state after a test
+        if (needsRestore && currentConfig) {
+            try {
+                await plugin.stop();
+                await plugin.initialize(currentConfig);
+                if (currentConfig.enabled) {
+                    await plugin.start();
+                }
+                logger.debug('PluginTest', `Restored original config for ${pluginId} after test error`);
+            } catch (restoreError) {
+                // Log but don't throw - we've already set the error message
+                logger.error('PluginTest', `Failed to restore original config for ${pluginId} after test:`, restoreError);
+                // Try to at least stop the plugin to prevent it from running with test config
+                try {
+                    await plugin.stop();
+                } catch (stopError) {
+                    logger.error('PluginTest', `Failed to stop plugin ${pluginId} during restore:`, stopError);
+                }
+            }
+        } else if (needsRestore && !currentConfig) {
+            // No original config but we modified the plugin - just stop it
+            try {
+                await plugin.stop();
+            } catch (stopError) {
+                logger.error('PluginTest', `Failed to stop plugin ${pluginId} after test:`, stopError);
+            }
+        }
     }
 
     // Build a more informative message

@@ -33,7 +33,13 @@ export const PluginsManagementSection: React.FC = () => {
     }, []); // Empty deps - load once only
     
     // Refresh plugins and stats periodically to update connection status (silent refresh)
+    // DISABLED when config modal is open to prevent form reset during editing
     useEffect(() => {
+        // Don't refresh if modal is open
+        if (configModalOpen) {
+            return;
+        }
+        
         const interval = setInterval(async () => {
             setIsRefreshing(true);
             try {
@@ -50,7 +56,7 @@ export const PluginsManagementSection: React.FC = () => {
         }, 30000); // Refresh every 30 seconds (less frequent)
         
         return () => clearInterval(interval);
-    }, [fetchPlugins, fetchAllStats]);
+    }, [fetchPlugins, fetchAllStats, configModalOpen]);
 
     // Check Freebox auth status when Freebox plugin is enabled (only when plugin enabled state changes)
     useEffect(() => {

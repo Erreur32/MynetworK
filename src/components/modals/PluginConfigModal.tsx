@@ -147,8 +147,13 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                 });
             }
 
-            // Refresh plugins to update connection status
-            await fetchPlugins();
+            // Refresh plugins to update connection status (but don't wait for it to avoid blocking)
+            // Use a small delay to ensure backend has finished restoring the plugin state
+            setTimeout(() => {
+                fetchPlugins().catch(err => {
+                    console.error('[PluginConfigModal] Failed to refresh plugins after test:', err);
+                });
+            }, 500);
         } catch (error) {
             setTestResult({
                 success: false,

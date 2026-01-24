@@ -3,6 +3,49 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.3] - 2026-01-24
+
+### ✨ Ajouté
+
+**Plugin UniFi - Gestion des Erreurs 429 (Rate Limiting)**
+- ✅ Système de retry avec backoff exponentiel pour les erreurs 429 (Too Many Requests)
+- ✅ Respect automatique du header Retry-After si présent dans la réponse
+- ✅ Délai d'attente progressif : 1 min, 2 min, 4 min (max 15 min)
+- ✅ Maximum de 3 tentatives avec gestion intelligente des erreurs
+- ✅ Réinitialisation automatique des compteurs après succès
+- ✅ Évite les tentatives trop fréquentes qui déclenchent des erreurs 429
+
+### 🔧 Modifié
+
+**Plugin UniFi - Amélioration du Bouton "Tester"**
+- 🔧 Restauration garantie de la configuration originale même en cas d'erreur
+- 🔧 Évite la réinitialisation inutile si les paramètres de test sont identiques à la config actuelle
+- 🔧 Vérification du statut réel de connexion avant de retourner un succès
+- 🔧 Démarrage automatique du plugin après un test réussi si nécessaire
+- 🔧 Le plugin ne peut plus être laissé dans un état cassé après un test
+- 🔧 Logs de débogage pour tracer les problèmes de restauration
+
+**Plugin UniFi - Cohérence du Statut de Connexion**
+- 🔧 Le message "Test de connexion réussi" n'apparaît que si le plugin est réellement connecté
+- 🔧 Le statut dans l'interface reflète toujours l'état réel de connexion
+- 🔧 Le plugin ne passe plus en orange "Non connecté" après un test réussi
+- 🔧 Vérification de la session active avant de relancer un login inutile
+
+**WebSocket - Détection Automatique du Port Backend**
+- 🔧 Détection automatique du port backend en mode dev (3668 pour Docker, 3003 pour npm)
+- 🔧 Support de la variable d'environnement VITE_SERVER_PORT pour forcer le port
+- 🔧 Messages d'erreur améliorés pour aider au débogage
+- 🔧 Évite les erreurs de connexion WebSocket en mode développement
+
+### 🐛 Corrigé
+
+**Plugin UniFi - Test de Connexion**
+- 🐛 Correction du problème où le test cassait le plugin après une configuration réussie
+- 🐛 Correction de l'incohérence entre le message de succès et le statut réel du plugin
+- 🐛 Le plugin reste fonctionnel même après plusieurs tests consécutifs
+
+---
+
 ## [0.4.2] - 2026-01-23
 
 ### ✨ Ajouté

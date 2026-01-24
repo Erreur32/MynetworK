@@ -13,7 +13,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.4.2');
+        super('unifi', 'UniFi Controller', '0.4.3');
         this.apiService = new UniFiApiService();
     }
 
@@ -33,16 +33,27 @@ export class UniFiPlugin extends BasePlugin {
                 logger.debug('UniFiPlugin', 'Site Manager API key set');
             }
         } else {
-            // Controller API mode (local)
+            // Controller API mode (local) - but check for auto-detection of Site Manager
             const url = settings?.url as string;
             const username = settings?.username as string;
             const password = settings?.password as string;
             const site = (settings?.site as string) || 'default';
+            const apiKey = settings?.apiKey as string;
 
-            // Only set connection if all required settings are provided and not empty
-            if (url && url.trim() && username && username.trim() && password && password.trim()) {
-                this.apiService.setConnection(url.trim(), username.trim(), password, site.trim() || 'default');
-                logger.debug('UniFiPlugin', `Controller connection details set: URL=${url.trim()}, Site=${site.trim() || 'default'}`);
+            // Auto-detect Site Manager (cloud) if API key is provided
+            // This allows using Site Manager even if apiMode is set to 'controller'
+            if (apiKey && apiKey.trim()) {
+                logger.debug('UniFiPlugin', 'API key detected - auto-switching to Site Manager (cloud) mode');
+                this.apiService.setSiteManagerConnection(apiKey.trim());
+            } else if (url && url.trim() && username && username.trim() && password && password.trim()) {
+                // Check if URL is Site Manager (unifi.ui.com)
+                if (url.includes('unifi.ui.com')) {
+                    logger.warn('UniFiPlugin', 'Site Manager URL detected but no API key provided. For Site Manager (cloud), you must provide an API key. Get it from https://unifi.ui.com/api');
+                } else {
+                    // Local controller (UniFiOS or Classic) - will be auto-detected during login
+                    this.apiService.setConnection(url.trim(), username.trim(), password, site.trim() || 'default');
+                    logger.debug('UniFiPlugin', `Controller connection details set: URL=${url.trim()}, Site=${site.trim() || 'default'} (will auto-detect UniFiOS vs Classic)`);
+                }
             } else {
                 logger.debug('UniFiPlugin', 'Controller connection details not set - missing or empty required fields');
             }
@@ -261,6 +272,8 @@ export class UniFiPlugin extends BasePlugin {
 
             // Get API mode from settings
             const apiMode = (this.config?.settings?.apiMode as 'controller' | 'site-manager') || 'controller';
+            // Get deployment type from API service
+            const deploymentType = this.apiService.getDeploymentType();
 
             // Normalize system stats
             const systemStats: any = {
@@ -278,8 +291,10 @@ export class UniFiPlugin extends BasePlugin {
                 unsupportedDeviceCount: typeof sysinfo.unsupported_device_count === 'number'
                     ? sysinfo.unsupported_device_count
                     : 0,
-                // API mode (controller vs site-manager)
+                // API mode (controller vs site-manager vs unifios)
                 apiMode: apiMode,
+                // Deployment type (unifios, controller, cloud, unknown)
+                deploymentType: deploymentType,
                 // Basic memory information if present
                 memory: sysinfo.mem ? {
                     total: sysinfo.mem.total,
