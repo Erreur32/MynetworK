@@ -38,21 +38,46 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
     // Initialize form with plugin settings
     useEffect(() => {
         if (plugin && plugin.settings) {
-            setFormData({
-                apiMode: (plugin.settings.apiMode as string) || 'controller',
+            const apiMode = (plugin.settings.apiMode as string) || 'controller';
+            const formDataToSet: Record<string, string> = {
+                apiMode,
                 url: (plugin.settings.url as string) || '',
                 username: (plugin.settings.username as string) || '',
                 password: (plugin.settings.password as string) || '',
                 site: (plugin.settings.site as string) || 'default',
-                apiKey: (plugin.settings.apiKey as string) || ''
-            });
+                apiKey: ''
+            };
+            
+            // Only load API key if in site-manager mode
+            // This prevents showing API key when switching to controller mode
+            if (apiMode === 'site-manager') {
+                formDataToSet.apiKey = (plugin.settings.apiKey as string) || '';
+            }
+            
+            setFormData(formDataToSet);
         }
     }, [plugin]);
 
     if (!isOpen || !plugin) return null;
 
     const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData(prev => {
+            const newData = { ...prev, [field]: value };
+            
+            // When switching API mode, handle field cleanup
+            if (field === 'apiMode') {
+                if (value === 'controller') {
+                    // Switching to controller mode: clear API key but keep other fields
+                    newData.apiKey = '';
+                } else if (value === 'site-manager') {
+                    // Switching to site-manager mode: clear controller-specific fields but keep API key if it exists
+                    // Don't clear URL/username/password/site - user might want to keep them for reference
+                    // Only clear them if they want a clean slate, but we'll keep them for now
+                }
+            }
+            
+            return newData;
+        });
         setTestResult(null);
     };
 
@@ -180,8 +205,40 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         }
 
         try {
+            // Clean up form data based on API mode before saving
+            // Only keep relevant fields for the selected mode
+            const apiMode = formData.apiMode || 'controller';
+            const cleanedFormData: Record<string, string> = {
+                apiMode
+            };
+            
+            if (apiMode === 'site-manager') {
+                // Site Manager mode: only keep API key
+                if (formData.apiKey && formData.apiKey.trim()) {
+                    cleanedFormData.apiKey = formData.apiKey.trim();
+                }
+                // Don't save controller-specific fields in site-manager mode
+            } else {
+                // Controller mode: only keep controller fields (URL, username, password, site)
+                if (formData.url && formData.url.trim()) {
+                    cleanedFormData.url = formData.url.trim();
+                }
+                if (formData.username && formData.username.trim()) {
+                    cleanedFormData.username = formData.username.trim();
+                }
+                if (formData.password) {
+                    cleanedFormData.password = formData.password;
+                }
+                if (formData.site && formData.site.trim()) {
+                    cleanedFormData.site = formData.site.trim();
+                } else {
+                    cleanedFormData.site = 'default';
+                }
+                // Don't save API key in controller mode
+            }
+            
             const success = await updatePluginConfig(pluginId, {
-                settings: formData
+                settings: cleanedFormData
             });
 
             if (success) {
