@@ -165,7 +165,8 @@ export class UniFiApiService {
     setSiteManagerConnection(apiKey: string): void {
         this.apiMode = 'site-manager';
         this.deploymentType = 'cloud';
-        this.apiKey = apiKey;
+        // Trim API key to avoid issues with whitespace
+        this.apiKey = apiKey ? apiKey.trim() : '';
         this.url = ''; // Site Manager API does NOT use URL/username/password
         this.username = '';
         this.password = '';
@@ -173,7 +174,11 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null;
         this.lastLoginAt = null;
-        logger.debug('UniFi', 'Site Manager (cloud) connection configured with API key');
+        if (!this.apiKey) {
+            logger.warn('UniFi', 'Site Manager API key is empty after trimming');
+        } else {
+            logger.debug('UniFi', 'Site Manager (cloud) connection configured with API key');
+        }
     }
 
     /**
@@ -280,7 +285,7 @@ export class UniFiApiService {
      * Make request to Site Manager API
      */
     private async siteManagerRequest<T>(endpoint: string): Promise<T> {
-        if (!this.apiKey) {
+        if (!this.apiKey || !this.apiKey.trim()) {
             throw new Error('API key not set');
         }
 
@@ -289,7 +294,7 @@ export class UniFiApiService {
         const agent = getInsecureAgent();
         const fetchOptions: RequestInit = {
             headers: {
-                'X-API-Key': this.apiKey, // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
+                'X-API-Key': this.apiKey.trim(), // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -301,11 +306,34 @@ export class UniFiApiService {
         const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, fetchOptions);
 
         if (!response.ok) {
-            if (response.status === 429) {
+            // Try to get error details from response body
+            let errorDetails = '';
+            try {
+                const errorBody = await response.text();
+                if (errorBody) {
+                    try {
+                        const errorJson = JSON.parse(errorBody);
+                        errorDetails = errorJson.message || errorJson.error || errorJson.msg || '';
+                    } catch {
+                        errorDetails = errorBody.substring(0, 200);
+                    }
+                }
+            } catch {
+                // Ignore errors when reading response body
+            }
+            
+            if (response.status === 401) {
+                // Unauthorized - API key is invalid or expired
+                this.isAuthenticated = false; // Reset authentication state
+                const details = errorDetails ? ` - ${errorDetails}` : '';
+                throw new Error(`Site Manager API authentication failed (401 Unauthorized): Invalid or expired API key${details}. Please verify your API key at https://unifi.ui.com/api and update it in the plugin configuration.`);
+            } else if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After');
                 throw new Error(`Rate limit exceeded. Retry after ${retryAfter} seconds`);
+            } else {
+                const details = errorDetails ? ` - ${errorDetails}` : '';
+                throw new Error(`Site Manager API error: ${response.status} ${response.statusText}${details}`);
             }
-            throw new Error(`Site Manager API error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
