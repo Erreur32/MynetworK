@@ -142,9 +142,13 @@ export class UniFiApiService {
      * Login via token/API key is fully functional - no username/password needed.
      */
     setSiteManagerConnection(apiKey: string): void {
+        if (!apiKey || !apiKey.trim()) {
+            logger.error('UniFi', 'setSiteManagerConnection called with empty or invalid API key');
+            throw new Error('API key cannot be empty');
+        }
         this.apiMode = 'site-manager';
         this.deploymentType = 'cloud';
-        this.apiKey = apiKey;
+        this.apiKey = apiKey.trim(); // Ensure trimmed
         this.url = ''; // Site Manager API does NOT use URL/username/password
         this.username = '';
         this.password = '';
@@ -152,7 +156,9 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null;
         this.lastLoginAt = null;
-        logger.debug('UniFi', 'Site Manager (cloud) connection configured with API key');
+        // Log API key status (first 8 chars only for security)
+        const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
+        logger.debug('UniFi', `Site Manager (cloud) connection configured with API key: ${apiKeyPreview} (length: ${this.apiKey.length})`);
     }
 
     /**
@@ -169,11 +175,15 @@ export class UniFiApiService {
             try {
                 if (this.apiMode === 'site-manager') {
                     // Site Manager API uses API key, no login needed
-                    if (!this.apiKey) {
-                        throw new Error('UniFi Site Manager API key not set');
+                    if (!this.apiKey || !this.apiKey.trim()) {
+                        logger.error('UniFi', `Site Manager API key not set. apiKey type: ${typeof this.apiKey}, length: ${this.apiKey?.length || 0}`);
+                        throw new Error('UniFi Site Manager API key not set or empty');
                     }
+                    // For Site Manager, we mark as authenticated immediately
+                    // The actual authentication will be verified on the first API call
                     this.isAuthenticated = true;
-                    logger.success('UniFi', 'Site Manager API authenticated');
+                    const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
+                    logger.debug('UniFi', `Site Manager API authenticated (API key: ${apiKeyPreview}, length: ${this.apiKey.length})`);
                     return true;
                 } else {
                     if (!this.url || !this.username || !this.password) {
@@ -249,7 +259,12 @@ export class UniFiApiService {
      */
     isLoggedIn(): boolean {
         if (this.apiMode === 'site-manager') {
-            return this.isAuthenticated && this.apiKey !== '';
+            const hasApiKey = this.apiKey && this.apiKey.trim().length > 0;
+            const isAuth = this.isAuthenticated && hasApiKey;
+            if (!isAuth && this.apiMode === 'site-manager') {
+                logger.debug('UniFi', `Site Manager not logged in: isAuthenticated=${this.isAuthenticated}, hasApiKey=${hasApiKey}, apiKeyLength=${this.apiKey?.length || 0}`);
+            }
+            return isAuth;
         }
         // For controller mode, we only rely on our in-memory session state
         return this.isAuthenticated && !!this.sessionCookie;
@@ -259,16 +274,21 @@ export class UniFiApiService {
      * Make request to Site Manager API
      */
     private async siteManagerRequest<T>(endpoint: string): Promise<T> {
-        if (!this.apiKey) {
+        if (!this.apiKey || !this.apiKey.trim()) {
+            logger.error('UniFi', 'Site Manager API key is not set or empty');
             throw new Error('API key not set');
         }
+
+        // Log API key status (first 8 chars only for security)
+        const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
+        logger.debug('UniFi', `Site Manager API request to ${endpoint} with API key: ${apiKeyPreview} (length: ${this.apiKey.length})`);
 
         // Use insecure agent for UniFi self-signed certificates (only for local controller, not Site Manager)
         // Site Manager API uses valid certificates, but we use the same agent for consistency
         const agent = getInsecureAgent();
         const fetchOptions: RequestInit = {
             headers: {
-                'X-API-Key': this.apiKey, // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
+                'X-API-Key': this.apiKey.trim(), // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -280,7 +300,26 @@ export class UniFiApiService {
         const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, fetchOptions);
 
         if (!response.ok) {
-            if (response.status === 429) {
+            if (response.status === 401) {
+                // Try to get more details from response
+                let errorDetails = '';
+                try {
+                    const errorBody = await response.text();
+                    if (errorBody) {
+                        try {
+                            const errorJson = JSON.parse(errorBody);
+                            errorDetails = errorJson.msg || errorJson.message || errorJson.error || '';
+                        } catch {
+                            errorDetails = errorBody.substring(0, 200);
+                        }
+                    }
+                } catch {
+                    // Ignore errors when reading response body
+                }
+                const details = errorDetails ? ` - ${errorDetails}` : '';
+                logger.error('UniFi', `Site Manager API authentication failed (401). API key preview: ${apiKeyPreview}, length: ${this.apiKey.length}${details}`);
+                throw new Error(`Site Manager API authentication failed (401 Unauthorized): Invalid or expired API key${details}. Verify your API key is correct and has not expired. Get a new key from https://unifi.ui.com/api`);
+            } else if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After');
                 throw new Error(`Rate limit exceeded. Retry after ${retryAfter} seconds`);
             }

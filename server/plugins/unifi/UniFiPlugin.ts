@@ -28,9 +28,13 @@ export class UniFiPlugin extends BasePlugin {
         if (apiMode === 'site-manager') {
             // Site Manager API mode
             const apiKey = settings?.apiKey as string;
-            if (apiKey) {
-                this.apiService.setSiteManagerConnection(apiKey);
-                logger.debug('UniFiPlugin', 'Site Manager API key set');
+            if (apiKey && apiKey.trim()) {
+                // Log API key status (first 8 chars only for security)
+                const apiKeyPreview = apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***';
+                logger.debug('UniFiPlugin', `Site Manager API key set: ${apiKeyPreview} (length: ${apiKey.length})`);
+                this.apiService.setSiteManagerConnection(apiKey.trim());
+            } else {
+                logger.warn('UniFiPlugin', `Site Manager mode selected but API key is missing or empty. Type: ${typeof apiKey}, Value: ${apiKey ? 'present but empty/whitespace' : 'missing/null/undefined'}`);
             }
         } else {
             // Controller API mode (local) - but check for auto-detection of Site Manager
@@ -119,9 +123,23 @@ export class UniFiPlugin extends BasePlugin {
             }
         } else if (apiMode === 'site-manager') {
             const apiKey = settings?.apiKey as string;
-            if (!apiKey) {
-                console.log('[UniFiPlugin] Site Manager API key not configured, skipping login');
+            if (!apiKey || !apiKey.trim()) {
+                const apiKeyType = typeof apiKey;
+                const apiKeyLength = apiKey ? apiKey.length : 0;
+                logger.warn('UniFiPlugin', `Site Manager API key not configured or empty during start(). Type: ${apiKeyType}, Length: ${apiKeyLength}, Value: ${apiKey ? 'present but empty/whitespace' : 'missing/null/undefined'}`);
+                // Log all settings keys for debugging
+                logger.debug('UniFiPlugin', `Available settings keys: ${Object.keys(settings || {}).join(', ')}`);
                 return;
+            }
+            
+            // Verify API key is set in apiService before attempting login
+            const apiKeyPreview = apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***';
+            logger.debug('UniFiPlugin', `Attempting Site Manager login with API key: ${apiKeyPreview} (length: ${apiKey.length})`);
+            
+            // Ensure API key is set in apiService (in case initialize() didn't set it)
+            if (!this.apiService || (this.apiService as any).apiMode !== 'site-manager') {
+                logger.debug('UniFiPlugin', 'API service not configured for Site Manager, configuring now...');
+                this.apiService.setSiteManagerConnection(apiKey.trim());
             }
             
             try {
@@ -130,7 +148,7 @@ export class UniFiPlugin extends BasePlugin {
                     throw new Error('Failed to authenticate with UniFi Site Manager API');
                 }
             } catch (error) {
-                console.error('[UniFiPlugin] Site Manager login failed:', error);
+                logger.error('UniFiPlugin', 'Site Manager login failed:', error);
                 throw error;
             }
         }
@@ -186,10 +204,15 @@ export class UniFiPlugin extends BasePlugin {
                 }
             } else {
                 const apiKey = settings?.apiKey as string;
-                if (!apiKey) {
-                    logger.error('UniFiPlugin', 'Missing Site Manager API key');
-                    throw new Error('UniFi Site Manager API key not configured');
+                if (!apiKey || !apiKey.trim()) {
+                    const apiKeyType = typeof apiKey;
+                    const apiKeyLength = apiKey ? apiKey.length : 0;
+                    logger.error('UniFiPlugin', `Missing Site Manager API key. Type: ${apiKeyType}, Length: ${apiKeyLength}, Value: ${apiKey ? 'present but empty/whitespace' : 'missing/null/undefined'}`);
+                    throw new Error('UniFi Site Manager API key not configured or empty');
                 }
+                // Log API key status (first 8 chars only for security)
+                const apiKeyPreview = apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***';
+                logger.debug('UniFiPlugin', `Reconnecting with Site Manager API key: ${apiKeyPreview} (length: ${apiKey.length})`);
                 try {
                     await this.start();
                 } catch (error) {

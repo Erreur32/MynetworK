@@ -67,11 +67,27 @@ export class PluginConfigRepository {
         
         if (!row) return null;
         
+        let settings: Record<string, unknown>;
+        try {
+            settings = JSON.parse(row.settings);
+        } catch (parseError) {
+            console.error(`[PluginConfig] Failed to parse settings JSON for plugin ${pluginId}:`, parseError);
+            settings = {};
+        }
+        
+        // Debug logging for UniFi plugin
+        if (pluginId === 'unifi' && settings) {
+            const apiKey = settings.apiKey as string;
+            const apiMode = settings.apiMode as string;
+            console.log(`[PluginConfig] Loaded UniFi config - apiMode: ${apiMode}, apiKey type: ${typeof apiKey}, apiKey length: ${apiKey?.length || 0}, apiKey preview: ${apiKey ? (apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***') : 'N/A'}`);
+            console.log(`[PluginConfig] Raw settings keys: ${Object.keys(settings).join(', ')}`);
+        }
+        
         return {
             id: row.id,
             pluginId: row.plugin_id,
             enabled: row.enabled === 1,
-            settings: JSON.parse(row.settings),
+            settings: settings,
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at)
         };

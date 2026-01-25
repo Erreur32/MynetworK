@@ -80,6 +80,14 @@ export class PluginManager {
             settings: dbConfig.settings
         };
 
+        // Debug logging for UniFi plugin config
+        if (pluginId === 'unifi' && config.settings) {
+            const apiMode = (config.settings.apiMode as string) || 'controller';
+            const apiKey = config.settings.apiKey as string;
+            logger.debug('PluginManager', `Initializing UniFi plugin - apiMode: ${apiMode}, apiKey present: ${!!apiKey}, apiKey length: ${apiKey?.length || 0}, apiKey preview: ${apiKey ? (apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***') : 'N/A'}`);
+            logger.debug('PluginManager', `UniFi settings keys: ${Object.keys(config.settings).join(', ')}`);
+        }
+
         await plugin.initialize(config);
 
         // Start plugin if enabled

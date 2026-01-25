@@ -212,7 +212,8 @@ router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: A
                 // For password and apiKey, allow empty string to clear them, but don't overwrite with undefined
                 if (key === 'password' || key === 'apiKey') {
                     if (value !== '') {
-                        mergedSettings[key] = value;
+                        // Trim API key to avoid whitespace issues
+                        mergedSettings[key] = typeof value === 'string' ? value.trim() : value;
                     } else {
                         // Empty string means clear the password
                         delete mergedSettings[key];
@@ -230,9 +231,24 @@ router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: A
         settings: mergedSettings
     };
     
-    // Debug log to verify password is being saved
-    if (pluginId === 'unifi' && settings?.password) {
-        console.log(`[PluginConfig] Saving UniFi config with password: ${settings.password ? '***' : 'missing'}`);
+    // Debug log to verify password and API key are being saved
+    if (pluginId === 'unifi') {
+        if (settings?.password) {
+            logger.debug('PluginConfig', `Saving UniFi config with password: ${settings.password ? '***' : 'missing'}`);
+        }
+        if (settings?.apiKey) {
+            const apiKeyPreview = typeof settings.apiKey === 'string' && settings.apiKey.length > 8 
+                ? `${settings.apiKey.substring(0, 8)}...` 
+                : '***';
+            logger.debug('PluginConfig', `Saving UniFi config with API key: ${apiKeyPreview} (length: ${typeof settings.apiKey === 'string' ? settings.apiKey.length : 'N/A'})`);
+        }
+        // Log final merged settings for debugging
+        if (mergedSettings.apiKey) {
+            const finalApiKeyPreview = typeof mergedSettings.apiKey === 'string' && mergedSettings.apiKey.length > 8 
+                ? `${mergedSettings.apiKey.substring(0, 8)}...` 
+                : '***';
+            logger.debug('PluginConfig', `Final merged UniFi settings - apiMode: ${mergedSettings.apiMode}, apiKey: ${finalApiKeyPreview} (length: ${typeof mergedSettings.apiKey === 'string' ? mergedSettings.apiKey.length : 'N/A'})`);
+        }
     }
 
     // Update plugin configuration
