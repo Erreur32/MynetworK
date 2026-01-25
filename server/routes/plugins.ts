@@ -316,7 +316,26 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
             } : null;
             
             // Merge test settings with current config
-            const mergedTestSettings = { ...(currentConfig?.settings || {}), ...testSettings };
+            let mergedTestSettings = { ...(currentConfig?.settings || {}), ...testSettings };
+            
+            // CRITICAL: Clean up merged settings based on apiMode to prevent incorrect auto-detection
+            // For UniFi plugin, if testing in controller mode, remove apiKey to prevent auto-switching to Site Manager
+            // If testing in site-manager mode, remove controller-specific fields
+            if (pluginId === 'unifi') {
+                const testApiMode = (testSettings.apiMode as string) || (mergedTestSettings.apiMode as string) || 'controller';
+                if (testApiMode === 'controller') {
+                    // Remove apiKey when testing in controller mode to prevent auto-detection to Site Manager
+                    delete mergedTestSettings.apiKey;
+                    logger.debug('PluginTest', 'UniFi test in controller mode - removed apiKey from test settings to prevent auto-detection');
+                } else if (testApiMode === 'site-manager') {
+                    // Remove controller-specific fields when testing in site-manager mode
+                    delete mergedTestSettings.url;
+                    delete mergedTestSettings.username;
+                    delete mergedTestSettings.password;
+                    delete mergedTestSettings.site;
+                    logger.debug('PluginTest', 'UniFi test in site-manager mode - removed controller fields from test settings');
+                }
+            }
             
             // CRITICAL: Compare test settings with current config to avoid unnecessary reinitialization
             // If settings are identical, test with current config without stopping/restarting the plugin
