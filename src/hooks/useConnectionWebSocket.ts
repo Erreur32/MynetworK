@@ -113,7 +113,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     let wsUrl: string;
     
     // In dev mode, check if we're accessing via IP (Docker dev) or localhost (npm dev)
-    // If accessing via IP (not localhost), connect directly to backend port to avoid Vite proxy issues
+    // If accessing via IP (not localhost), connect directly to backend port 3668 to avoid Vite proxy issues
     if (import.meta.env.DEV) {
       const host = window.location.hostname;
       const port = window.location.port;
@@ -122,12 +122,9 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       const isRemoteAccess = host !== 'localhost' && host !== '127.0.0.1';
       
       if (isRemoteAccess) {
-        // Remote access (IP): try to connect directly to backend port
-        // Try multiple ports in order: SERVER_PORT (3668 for Docker dev), then default dev port (3003)
-        // Use Vite env var if available, otherwise try common ports
-        const backendPort = import.meta.env.VITE_SERVER_PORT || 
-                           (port === '3666' ? '3668' : '3003'); // If frontend is on 3666 (Docker), backend is 3668, else 3003
-        wsUrl = `${protocol}//${host}:${backendPort}/ws/connection`;
+        // Remote access (IP): connect directly to backend port (3668) to bypass Vite proxy
+        // Vite proxy doesn't handle WebSocket upgrades correctly for remote IPs
+        wsUrl = `${protocol}//${host}:3668/ws/connection`;
       } else {
         // Localhost: use proxy via current host (Vite handles WebSocket upgrade correctly for localhost)
         wsUrl = `${protocol}//${window.location.host}/ws/connection`;
@@ -303,15 +300,6 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       
       // Incrémenter le compteur d'échecs
       reconnectAttemptsRef.current += 1;
-      
-      // En dev, donner un message d'aide plus utile
-      if (import.meta.env.DEV && reconnectAttemptsRef.current === 1) {
-        const host = window.location.hostname;
-        const isRemoteAccess = host !== 'localhost' && host !== '127.0.0.1';
-        if (isRemoteAccess) {
-          console.warn('[WS Client] WebSocket connection failed. If using npm dev, the backend might be on port 3003 instead of 3668. Set VITE_SERVER_PORT=3003 in your .env file.');
-        }
-      }
       
       // Si on a dépassé le max, désactiver définitivement
       if (reconnectAttemptsRef.current >= maxReconnectAttempts) {

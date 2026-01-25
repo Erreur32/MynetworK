@@ -3,6 +3,76 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.4] - 2026-01-25
+
+### ✨ Ajouté
+
+**Plugin UniFi - Affichage du Type de Déploiement**
+- ✅ Badge "Type:" affiché sur la carte du plugin UniFi quand connecté
+- ✅ Détection et affichage automatique du type de déploiement :
+  - "Site Manager (Cloud)" pour l'API cloud
+  - "UniFiOS Gateway" pour les gateways UniFiOS (UDM Pro, UCG, etc.)
+  - "Network Controller" pour les contrôleurs classiques
+- ✅ Affichage conditionnel uniquement quand le plugin est connecté
+- ✅ Couleurs distinctes selon le type de déploiement (indigo, purple, blue)
+
+**Plugin UniFi - Détection Automatique Améliorée**
+- ✅ Détection automatique UniFiOS vs Classic Controller lors du login
+- ✅ Réutilisation intelligente du cookie de session pour éviter les doubles login
+- ✅ Support complet de la documentation officielle UniFi API
+- ✅ Détection automatique du mode Site Manager (cloud) si API key fournie
+
+### 🔧 Modifié
+
+**Plugin UniFi - Gestion des Erreurs Améliorée**
+- 🔧 Messages d'erreur détaillés pour les erreurs réseau (ECONNREFUSED, timeout, SSL)
+- 🔧 Détection spécifique de l'erreur 429 (Too Many Requests) avec indication de retry
+- 🔧 Messages d'erreur en français avec suggestions contextuelles
+- 🔧 Parsing amélioré des réponses d'erreur pour éviter "[object Object]"
+- 🔧 Nettoyage automatique des messages d'erreur dupliqués
+- 🔧 Messages d'erreur spécifiques selon le type de déploiement (UniFiOS vs Controller)
+
+**Plugin UniFi - Modal de Configuration**
+- 🔧 Désactivation du refresh automatique pendant l'édition du modal
+- 🔧 Protection du formulaire contre la réinitialisation pendant l'édition
+- 🔧 Boutons "Tester" et "Sauvegarder" mutuellement exclusifs (pas d'actions simultanées)
+- 🔧 Tooltips explicatifs sur les boutons pour guider l'utilisateur
+- 🔧 Le test ne fait plus de refresh qui casse le formulaire
+- 🔧 La sauvegarde teste avec la configuration sauvegardée (pas le formulaire)
+
+**Plugin UniFi - Protection Contre les Tests Inutiles**
+- 🔧 Vérification du statut de connexion avant de faire un test
+- 🔧 Si le plugin est déjà connecté avec les mêmes settings, retourne le statut sans test
+- 🔧 Évite les tests qui déclenchent des erreurs 429 ou cassent la connexion active
+- 🔧 Messages d'erreur clairs si le plugin est activé mais non connecté
+- 🔧 Protection contre les tests répétés qui cassent le plugin
+
+**WebSocket - Support des Accès Distants**
+- 🔧 Détection automatique des accès via IP (pas localhost) en mode dev
+- 🔧 Connexion directe au backend (port 3668) pour les accès distants, contournant le proxy Vite
+- 🔧 Correction de l'erreur "Invalid frame header" pour les accès via IP
+- 🔧 Gestion améliorée des erreurs WebSocket avec messages informatifs
+
+### 🐛 Corrigé
+
+**Plugin UniFi - Bouton de Test**
+- 🐛 Correction du problème où le bouton "Tester" cassait le plugin après configuration
+- 🐛 Le plugin ne se casse plus lors de tests répétés avec la même configuration
+- 🐛 Le test ne réinitialise plus le formulaire pendant l'édition
+- 🐛 Correction de l'affichage "[object Object]" dans les messages d'erreur
+- 🐛 Correction des messages d'erreur dupliqués ("Verify URL... Verify URL...")
+
+**Plugin UniFi - Détection de Déploiement**
+- 🐛 Correction de la détection UniFiOS qui ne réutilisait pas le cookie de session
+- 🐛 Amélioration de la gestion des erreurs réseau pendant la détection
+- 🐛 Messages d'erreur plus clairs pour les problèmes de connexion (port 443 vs 8443)
+
+**WebSocket - Connexions en Boucle**
+- 🐛 Correction de l'erreur "Invalid frame header" qui causait des reconnexions infinies
+- 🐛 Détection correcte du mode d'accès (Docker dev vs npm dev) pour le WebSocket
+
+---
+
 ## [0.4.3] - 2026-01-24
 
 ### ✨ Ajouté

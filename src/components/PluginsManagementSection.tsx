@@ -294,14 +294,47 @@ export const PluginsManagementSection: React.FC = () => {
                                         );
                                     })()}
                                     {plugin.id === 'unifi' && (() => {
-                                        // Get UniFi versions from pluginStats.system (where they're actually stored)
+                                        // Get UniFi deployment type and versions from pluginStats.system
                                         const stats = pluginStats?.[plugin.id]?.system as any;
-                                        const controllerFirmware = stats?.controllerFirmware || stats?.version || plugin.controllerFirmware;
+                                        const deploymentType = stats?.deploymentType;
+                                        const apiMode = plugin.settings?.apiMode as string || stats?.apiMode;
+                                        const controllerFirmware = stats?.version || plugin.controllerFirmware;
                                         const apiVersion = stats?.apiVersion || plugin.apiVersion;
-                                        const apiMode = stats?.apiMode || plugin.apiMode;
+                                        
+                                        // Determine deployment display text
+                                        let deploymentLabel = '';
+                                        let deploymentColor = 'purple';
+                                        
+                                        if (apiMode === 'site-manager') {
+                                            deploymentLabel = 'Site Manager (Cloud)';
+                                            deploymentColor = 'indigo';
+                                        } else if (deploymentType === 'unifios') {
+                                            deploymentLabel = 'UniFiOS Gateway';
+                                            deploymentColor = 'purple';
+                                        } else if (deploymentType === 'controller') {
+                                            deploymentLabel = 'Network Controller';
+                                            deploymentColor = 'blue';
+                                        } else if (deploymentType === 'cloud') {
+                                            deploymentLabel = 'Cloud';
+                                            deploymentColor = 'indigo';
+                                        }
                                         
                                         return (
                                             <>
+                                                {deploymentLabel && (
+                                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 ${
+                                                        deploymentColor === 'indigo' ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400' :
+                                                        deploymentColor === 'purple' ? 'bg-purple-500/20 border-purple-500/30 text-purple-400' :
+                                                        'bg-blue-500/20 border-blue-500/30 text-blue-400'
+                                                    } border rounded text-[10px] font-medium`}>
+                                                        <span className={
+                                                            deploymentColor === 'indigo' ? 'text-indigo-300/70' :
+                                                            deploymentColor === 'purple' ? 'text-purple-300/70' :
+                                                            'text-blue-300/70'
+                                                        }>Type:</span>
+                                                        <span>{deploymentLabel}</span>
+                                                    </div>
+                                                )}
                                                 {controllerFirmware && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
                                                         <span className="text-blue-300/70">Firmware:</span>
@@ -312,12 +345,6 @@ export const PluginsManagementSection: React.FC = () => {
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
                                                         <span className="text-cyan-300/70">API:</span>
                                                         <span className="font-mono">{apiVersion}</span>
-                                                    </div>
-                                                )}
-                                                {apiMode && (
-                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
-                                                        <span className="text-purple-300/70">Mode:</span>
-                                                        <span className="font-mono uppercase">{apiMode}</span>
                                                     </div>
                                                 )}
                                             </>

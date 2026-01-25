@@ -38,46 +38,21 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
     // Initialize form with plugin settings
     useEffect(() => {
         if (plugin && plugin.settings) {
-            const apiMode = (plugin.settings.apiMode as string) || 'controller';
-            const formDataToSet: Record<string, string> = {
-                apiMode,
+            setFormData({
+                apiMode: (plugin.settings.apiMode as string) || 'controller',
                 url: (plugin.settings.url as string) || '',
                 username: (plugin.settings.username as string) || '',
                 password: (plugin.settings.password as string) || '',
                 site: (plugin.settings.site as string) || 'default',
-                apiKey: ''
-            };
-            
-            // Only load API key if in site-manager mode
-            // This prevents showing API key when switching to controller mode
-            if (apiMode === 'site-manager') {
-                formDataToSet.apiKey = (plugin.settings.apiKey as string) || '';
-            }
-            
-            setFormData(formDataToSet);
+                apiKey: (plugin.settings.apiKey as string) || ''
+            });
         }
     }, [plugin]);
 
     if (!isOpen || !plugin) return null;
 
     const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => {
-            const newData = { ...prev, [field]: value };
-            
-            // When switching API mode, handle field cleanup
-            if (field === 'apiMode') {
-                if (value === 'controller') {
-                    // Switching to controller mode: clear API key but keep other fields
-                    newData.apiKey = '';
-                } else if (value === 'site-manager') {
-                    // Switching to site-manager mode: clear controller-specific fields but keep API key if it exists
-                    // Don't clear URL/username/password/site - user might want to keep them for reference
-                    // Only clear them if they want a clean slate, but we'll keep them for now
-                }
-            }
-            
-            return newData;
-        });
+        setFormData(prev => ({ ...prev, [field]: value }));
         setTestResult(null);
     };
 
@@ -125,6 +100,11 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
     };
 
     const handleTest = async () => {
+        // Prevent test if save is in progress
+        if (isSaving) {
+            return;
+        }
+        
         setIsTesting(true);
         setTestResult(null);
 
@@ -157,6 +137,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
 
             // Test connection with the provided settings (without saving first)
             // This allows testing before saving invalid credentials
+            // IMPORTANT: Don't refresh plugins here - it would reset the form and break the plugin state
             const result = await testPluginConnection(pluginId, configToTest);
             if (result) {
                 setTestResult({
@@ -171,14 +152,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     message: 'Test de connexion impossible (voir logs backend)'
                 });
             }
-
-            // Refresh plugins to update connection status (but don't wait for it to avoid blocking)
-            // Use a small delay to ensure backend has finished restoring the plugin state
-            setTimeout(() => {
-                fetchPlugins().catch(err => {
-                    console.error('[PluginConfigModal] Failed to refresh plugins after test:', err);
-                });
-            }, 500);
+            // DO NOT refresh plugins here - it causes form reset and breaks plugin state
         } catch (error) {
             setTestResult({
                 success: false,
@@ -190,6 +164,11 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
     };
 
     const handleSave = async () => {
+        // Prevent save if test is in progress
+        if (isTesting) {
+            return;
+        }
+        
         setIsSaving(true);
         setTestResult(null);
 
@@ -205,46 +184,25 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         }
 
         try {
-            // Clean up form data based on API mode before saving
-            // Only keep relevant fields for the selected mode
-            const apiMode = formData.apiMode || 'controller';
-            const cleanedFormData: Record<string, string> = {
-                apiMode
-            };
-            
-            if (apiMode === 'site-manager') {
-                // Site Manager mode: only keep API key
-                if (formData.apiKey && formData.apiKey.trim()) {
-                    cleanedFormData.apiKey = formData.apiKey.trim();
-                }
-                // Don't save controller-specific fields in site-manager mode
-            } else {
-                // Controller mode: only keep controller fields (URL, username, password, site)
-                if (formData.url && formData.url.trim()) {
-                    cleanedFormData.url = formData.url.trim();
-                }
-                if (formData.username && formData.username.trim()) {
-                    cleanedFormData.username = formData.username.trim();
-                }
-                if (formData.password) {
-                    cleanedFormData.password = formData.password;
-                }
-                if (formData.site && formData.site.trim()) {
-                    cleanedFormData.site = formData.site.trim();
-                } else {
-                    cleanedFormData.site = 'default';
-                }
-                // Don't save API key in controller mode
-            }
-            
+            // Save the configuration
             const success = await updatePluginConfig(pluginId, {
-                settings: cleanedFormData
+                settings: formData
             });
 
             if (success) {
+                // Refresh plugins to get updated config
                 await fetchPlugins();
-                // Test connection after save
-                await testPluginConnection(pluginId);
+                
+                // Test connection with the SAVED config (not the form data, as it's now saved)
+                // This ensures we test with what was actually saved
+                try {
+                    await testPluginConnection(pluginId);
+                } catch (testError) {
+                    // Log but don't fail the save - config is saved, test just failed
+                    console.warn('Test after save failed:', testError);
+                }
+                
+                // Final refresh to update connection status
                 await fetchPlugins();
                 onClose();
             } else {
@@ -554,6 +512,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             disabled={isTesting || isSaving}
                             variant="secondary"
                             className="flex-1"
+                            title={isSaving ? 'Veuillez attendre la fin de la sauvegarde' : 'Tester la connexion sans sauvegarder'}
                         >
                             {isTesting ? (
                                 <>
@@ -571,6 +530,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             type="submit"
                             disabled={isSaving || isTesting}
                             className="flex-1"
+                            title={isTesting ? 'Veuillez attendre la fin du test' : 'Sauvegarder la configuration et tester la connexion'}
                         >
                             {isSaving ? (
                                 <>

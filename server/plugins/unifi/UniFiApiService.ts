@@ -19,24 +19,17 @@ let insecureAgent: any = null;
 const getInsecureAgent = (): any => {
     if (!insecureAgent) {
         try {
-            // Try to use undici (built-in in Node.js 18+)
-            // Use dynamic import for ESM compatibility
-            const undiciModule = require('undici');
-            if (undiciModule && undiciModule.Agent) {
-                insecureAgent = new undiciModule.Agent({
-                    connect: {
-                        rejectUnauthorized: false
-                    }
-                });
-                logger.debug('UniFi', 'Using undici Agent for HTTPS connections (self-signed certificates allowed)');
-            } else {
-                throw new Error('undici.Agent not available');
-            }
-        } catch (error: any) {
-            // Fallback: if undici is not available, use the global env var
-            // This is normal in some environments (older Node.js, certain Docker images, etc.)
-            // The fallback works fine, just less secure (affects all HTTPS connections globally)
-            logger.debug('UniFi', 'undici not available, using NODE_TLS_REJECT_UNAUTHORIZED fallback (this is normal in some environments)');
+            // Dynamic import of undici (built-in in Node.js 18+)
+            const { Agent } = require('undici');
+            insecureAgent = new Agent({
+                connect: {
+                    rejectUnauthorized: false
+                }
+            });
+        } catch (error) {
+            // Fallback: if undici is not available, we'll use the global env var
+            // This should not happen in Node.js 18+, but provides a fallback
+            logger.warn('UniFi', 'undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
             process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
             insecureAgent = {}; // Dummy object to avoid null checks
         }
@@ -105,20 +98,6 @@ export class UniFiApiService {
     private readonly sessionTtlMs: number = 15 * 60 * 1000; // 15 minutes
 
     /**
-     * Rate limiting management for 429 errors (Too Many Requests)
-     * 
-     * When the UniFi controller returns 429, we need to:
-     * - Wait before retrying (respect Retry-After header if present)
-     * - Use exponential backoff for consecutive 429 errors
-     * - Track the last 429 error timestamp to avoid immediate retries
-     */
-    private last429ErrorAt: number | null = null;
-    private consecutive429Count: number = 0;
-    private readonly maxRetries: number = 3;
-    private readonly baseBackoffMs: number = 60 * 1000; // 1 minute base delay
-    private readonly maxBackoffMs: number = 15 * 60 * 1000; // 15 minutes max delay
-
-    /**
      * Set UniFi controller connection details (local Controller API)
      * 
      * Note: For Site Manager (cloud), use setSiteManagerConnection() instead
@@ -165,8 +144,7 @@ export class UniFiApiService {
     setSiteManagerConnection(apiKey: string): void {
         this.apiMode = 'site-manager';
         this.deploymentType = 'cloud';
-        // Trim API key to avoid issues with whitespace
-        this.apiKey = apiKey ? apiKey.trim() : '';
+        this.apiKey = apiKey;
         this.url = ''; // Site Manager API does NOT use URL/username/password
         this.username = '';
         this.password = '';
@@ -174,11 +152,7 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null;
         this.lastLoginAt = null;
-        if (!this.apiKey) {
-            logger.warn('UniFi', 'Site Manager API key is empty after trimming');
-        } else {
-            logger.debug('UniFi', 'Site Manager (cloud) connection configured with API key');
-        }
+        logger.debug('UniFi', 'Site Manager (cloud) connection configured with API key');
     }
 
     /**
@@ -285,7 +259,7 @@ export class UniFiApiService {
      * Make request to Site Manager API
      */
     private async siteManagerRequest<T>(endpoint: string): Promise<T> {
-        if (!this.apiKey || !this.apiKey.trim()) {
+        if (!this.apiKey) {
             throw new Error('API key not set');
         }
 
@@ -294,7 +268,7 @@ export class UniFiApiService {
         const agent = getInsecureAgent();
         const fetchOptions: RequestInit = {
             headers: {
-                'X-API-Key': this.apiKey.trim(), // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
+                'X-API-Key': this.apiKey, // Official UniFi Site Manager API uses 'X-API-Key' (case-sensitive)
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -306,34 +280,11 @@ export class UniFiApiService {
         const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, fetchOptions);
 
         if (!response.ok) {
-            // Try to get error details from response body
-            let errorDetails = '';
-            try {
-                const errorBody = await response.text();
-                if (errorBody) {
-                    try {
-                        const errorJson = JSON.parse(errorBody);
-                        errorDetails = errorJson.message || errorJson.error || errorJson.msg || '';
-                    } catch {
-                        errorDetails = errorBody.substring(0, 200);
-                    }
-                }
-            } catch {
-                // Ignore errors when reading response body
-            }
-            
-            if (response.status === 401) {
-                // Unauthorized - API key is invalid or expired
-                this.isAuthenticated = false; // Reset authentication state
-                const details = errorDetails ? ` - ${errorDetails}` : '';
-                throw new Error(`Site Manager API authentication failed (401 Unauthorized): Invalid or expired API key${details}. Please verify your API key at https://unifi.ui.com/api and update it in the plugin configuration.`);
-            } else if (response.status === 429) {
+            if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After');
                 throw new Error(`Rate limit exceeded. Retry after ${retryAfter} seconds`);
-            } else {
-                const details = errorDetails ? ` - ${errorDetails}` : '';
-                throw new Error(`Site Manager API error: ${response.status} ${response.statusText}${details}`);
             }
+            throw new Error(`Site Manager API error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -416,83 +367,6 @@ export class UniFiApiService {
     }
 
     /**
-     * Wait if we recently received a 429 error to avoid hitting rate limits
-     * 
-     * This method checks if we've received a 429 error recently and calculates
-     * the appropriate wait time based on exponential backoff.
-     * 
-     * @returns Promise that resolves after waiting (if needed), or immediately if no wait is needed
-     */
-    private async waitForRateLimit(): Promise<void> {
-        if (!this.last429ErrorAt) {
-            // No previous 429 error, proceed immediately
-            return;
-        }
-
-        const timeSinceLast429 = Date.now() - this.last429ErrorAt;
-        const backoffMs = Math.min(
-            this.baseBackoffMs * Math.pow(2, this.consecutive429Count),
-            this.maxBackoffMs
-        );
-
-        if (timeSinceLast429 < backoffMs) {
-            const waitTime = backoffMs - timeSinceLast429;
-            logger.warn('UniFi', `Rate limit active. Waiting ${Math.ceil(waitTime / 1000)} seconds before retrying login (attempt ${this.consecutive429Count + 1}/${this.maxRetries})`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-
-        // Reset if enough time has passed
-        if (timeSinceLast429 > this.maxBackoffMs) {
-            this.consecutive429Count = 0;
-            this.last429ErrorAt = null;
-        }
-    }
-
-    /**
-     * Handle 429 rate limit error with retry logic
-     * 
-     * @param retryAfter Optional Retry-After header value from the response
-     * @param attempt Current attempt number (1-based)
-     * @returns Promise that resolves after waiting, or throws if max retries exceeded
-     */
-    private async handle429Error(retryAfter: string | null, attempt: number): Promise<void> {
-        this.last429ErrorAt = Date.now();
-        this.consecutive429Count++;
-
-        if (attempt >= this.maxRetries) {
-            // Reset counters after max retries
-            this.consecutive429Count = 0;
-            this.last429ErrorAt = null;
-            throw new Error(`UniFi login failed (429 Too Many Requests): Maximum retry attempts (${this.maxRetries}) exceeded. Please wait at least ${Math.ceil(this.maxBackoffMs / 60000)} minutes before trying again.`);
-        }
-
-        // Calculate wait time: use Retry-After header if available, otherwise use exponential backoff
-        let waitTimeMs: number;
-        if (retryAfter) {
-            const retryAfterSeconds = parseInt(retryAfter, 10);
-            if (!isNaN(retryAfterSeconds) && retryAfterSeconds > 0) {
-                waitTimeMs = retryAfterSeconds * 1000;
-            } else {
-                // Invalid Retry-After, use exponential backoff
-                waitTimeMs = Math.min(
-                    this.baseBackoffMs * Math.pow(2, this.consecutive429Count - 1),
-                    this.maxBackoffMs
-                );
-            }
-        } else {
-            // No Retry-After header, use exponential backoff
-            waitTimeMs = Math.min(
-                this.baseBackoffMs * Math.pow(2, this.consecutive429Count - 1),
-                this.maxBackoffMs
-            );
-        }
-
-        const waitTimeSeconds = Math.ceil(waitTimeMs / 1000);
-        logger.warn('UniFi', `Rate limit exceeded (429). Waiting ${waitTimeSeconds} seconds before retry ${attempt + 1}/${this.maxRetries}...`);
-        await new Promise(resolve => setTimeout(resolve, waitTimeMs));
-    }
-
-    /**
      * Perform a raw login to the UniFi controller using HTTP + JSON body,
      * mimicking the working curl sequence provided by the user.
      * 
@@ -501,7 +375,6 @@ export class UniFiApiService {
      * - Sends POST /api/auth/login (UniFiOS) or POST /api/login (Classic) with { username, password }
      * - Extracts the Set-Cookie header
      * - Stores the cookie and login timestamp for reuse
-     * - Handles 429 rate limit errors with exponential backoff retry
      */
     private async rawControllerLogin(): Promise<void> {
         if (!this.url || !this.username || !this.password) {
@@ -537,9 +410,6 @@ export class UniFiApiService {
             throw new Error('Username and password cannot be empty');
         }
 
-        // Wait if we recently received a 429 error
-        await this.waitForRateLimit();
-
         // Prepare login payload
         const loginPayload = {
             username: this.username.trim(),
@@ -548,213 +418,144 @@ export class UniFiApiService {
 
         logger.debug('UniFi', `Attempting login to: ${baseUrl} (username: ${this.username.trim()})`);
 
-        // Retry logic for 429 errors
-        let attempt = 1;
-        while (attempt <= this.maxRetries) {
-            // Use insecure agent for UniFi self-signed certificates
-            const agent = getInsecureAgent();
-            const fetchOptions: RequestInit = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(loginPayload)
-            };
-            // Only add dispatcher if agent is available (undici)
-            if (agent && agent.constructor && agent.constructor.name === 'Agent') {
-                (fetchOptions as any).dispatcher = agent;
-            }
+        // Use insecure agent for UniFi self-signed certificates
+        const agent = getInsecureAgent();
+        const fetchOptions: RequestInit = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(loginPayload)
+        };
+        // Only add dispatcher if agent is available (undici)
+        if (agent && agent.constructor && agent.constructor.name === 'Agent') {
+            (fetchOptions as any).dispatcher = agent;
+        }
+        
+        let response: Response;
+        try {
+            response = await fetch(loginUrl, fetchOptions);
+        } catch (fetchError: any) {
+            // Fetch failed - this is a network/connection error, not an HTTP error
+            const errorMessage = fetchError.message || String(fetchError);
+            const cause = fetchError.cause;
+            const errorCode = cause?.code || '';
+            const errorAddress = cause?.address || '';
+            const errorPort = cause?.port || '';
             
-            let response: Response;
-            try {
-                response = await fetch(loginUrl, fetchOptions);
-            } catch (fetchError: any) {
-                // Fetch failed - this is a network/connection error, not an HTTP error
-                const errorMessage = fetchError.message || String(fetchError);
-                const cause = fetchError.cause;
-                const errorCode = cause?.code || '';
-                const errorAddress = cause?.address || '';
-                const errorPort = cause?.port || '';
-                
-                logger.error('UniFi', `Fetch failed for login URL ${loginUrl}:`, fetchError);
-                
-                // Provide more helpful error messages based on common issues
-                if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
-                    const portHint = errorPort === 443 
-                        ? ' Le port 443 est utilisé par défaut. Les contrôleurs UniFi utilisent généralement le port 8443. Vérifiez que l\'URL inclut le bon port (ex: https://192.168.32.206:8443).'
-                        : errorPort 
-                            ? ` Le port ${errorPort} est inaccessible.`
-                            : '';
-                    throw new Error(`Impossible de se connecter au contrôleur UniFi à ${baseUrl}${portHint} Vérifiez que l'URL est correcte, que le contrôleur est accessible, et que le port est correct (généralement 8443 pour HTTPS). Erreur: ${errorMessage}`);
-                } else if (errorCode === 'ENOTFOUND' || errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
-                    throw new Error(`Impossible de résoudre le nom d'hôte pour ${baseUrl}. Vérifiez que l'URL est correcte et que le contrôleur est accessible. Erreur: ${errorMessage}`);
-                } else if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS')) {
-                    throw new Error(`Erreur de certificat SSL/TLS lors de la connexion à ${baseUrl}. Le contrôleur peut utiliser un certificat auto-signé. Erreur: ${errorMessage}`);
-                } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
-                    throw new Error(`Délai d'attente de connexion au contrôleur UniFi à ${baseUrl}. Vérifiez que le contrôleur est en cours d'exécution et accessible. Erreur: ${errorMessage}`);
-                } else {
-                    throw new Error(`Erreur réseau lors de la connexion au contrôleur UniFi à ${baseUrl}: ${errorMessage}. Vérifiez l'URL, la connectivité réseau, et que le contrôleur est en cours d'exécution.`);
-                }
+            logger.error('UniFi', `Fetch failed for login URL ${loginUrl}:`, fetchError);
+            
+            // Provide more helpful error messages based on common issues
+            if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
+                const portHint = errorPort === 443 
+                    ? ' Le port 443 est utilisé par défaut. Les contrôleurs UniFi utilisent généralement le port 8443. Vérifiez que l\'URL inclut le bon port (ex: https://192.168.32.206:8443).'
+                    : errorPort 
+                        ? ` Le port ${errorPort} est inaccessible.`
+                        : '';
+                throw new Error(`Impossible de se connecter au contrôleur UniFi à ${baseUrl}${portHint} Vérifiez que l'URL est correcte, que le contrôleur est accessible, et que le port est correct (généralement 8443 pour HTTPS). Erreur: ${errorMessage}`);
+            } else if (errorCode === 'ENOTFOUND' || errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
+                throw new Error(`Impossible de résoudre le nom d'hôte pour ${baseUrl}. Vérifiez que l'URL est correcte et que le contrôleur est accessible. Erreur: ${errorMessage}`);
+            } else if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS')) {
+                throw new Error(`Erreur de certificat SSL/TLS lors de la connexion à ${baseUrl}. Le contrôleur peut utiliser un certificat auto-signé. Erreur: ${errorMessage}`);
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+                throw new Error(`Délai d'attente de connexion au contrôleur UniFi à ${baseUrl}. Vérifiez que le contrôleur est en cours d'exécution et accessible. Erreur: ${errorMessage}`);
+            } else {
+                throw new Error(`Erreur réseau lors de la connexion au contrôleur UniFi à ${baseUrl}: ${errorMessage}. Vérifiez l'URL, la connectivité réseau, et que le contrôleur est en cours d'exécution.`);
             }
-
-            if (!response.ok) {
-                // Try to get more details from the response body
-                let errorDetails = '';
-                try {
-                    const errorBody = await response.text();
-                    if (errorBody) {
-                        try {
-                            const errorJson = JSON.parse(errorBody);
-                            // Handle different error response formats
-                            if (typeof errorJson === 'string') {
-                                errorDetails = errorJson;
-                            } else if (typeof errorJson === 'object' && errorJson !== null) {
-                                // Try common error message fields first
-                                errorDetails = errorJson.msg || errorJson.message || errorJson.error || errorJson.reason || errorJson.description || '';
-                                
-                                // If still empty, try to extract meaningful info from the object
-                                if (!errorDetails) {
-                                    // Try to find any string value in the object
-                                    const findStringValue = (obj: any, depth = 0): string => {
-                                        if (depth > 2) return ''; // Limit recursion
-                                        if (typeof obj === 'string' && obj.length > 0) return obj;
-                                        if (typeof obj === 'object' && obj !== null) {
-                                            for (const key in obj) {
-                                                if (obj.hasOwnProperty(key)) {
-                                                    const value = obj[key];
-                                                    if (typeof value === 'string' && value.length > 0) {
-                                                        return value;
-                                                    }
-                                                    if (typeof value === 'object') {
-                                                        const nested = findStringValue(value, depth + 1);
-                                                        if (nested) return nested;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        return '';
-                                    };
-                                    errorDetails = findStringValue(errorJson);
-                                    
-                                    // Last resort: stringify the object (but limit length)
-                                    if (!errorDetails && Object.keys(errorJson).length > 0) {
-                                        try {
-                                            errorDetails = JSON.stringify(errorJson).substring(0, 200);
-                                        } catch {
-                                            // If stringify fails, skip details
-                                            errorDetails = '';
-                                        }
-                                    }
-                                }
-                            } else {
-                                errorDetails = String(errorJson);
-                            }
-                        } catch {
-                            // If JSON parsing fails, use the raw text (but clean it)
-                            errorDetails = errorBody.replace(/\[object Object\]/g, '').trim().substring(0, 200);
-                        }
-                    }
-                } catch {
-                    // Ignore errors when reading response body
-                }
-
-                const statusText = response.statusText || 'Unknown error';
-                // Clean up any remaining [object Object] strings and format details
-                let cleanDetails = errorDetails
-                    .replace(/\[object Object\]/g, '')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                // Remove leading/trailing dashes and spaces that might be left after cleaning
-                cleanDetails = cleanDetails.replace(/^[\s-]+|[\s-]+$/g, '');
-                const details = cleanDetails ? ` - ${cleanDetails}` : '';
-                
-                if (response.status === 400) {
-                    const deploymentHint = this.deploymentType === 'unifios' 
-                        ? ' For UniFiOS Gateway, ensure you are using a local admin account (not a cloud account with MFA).'
-                        : ' For Classic Controller, verify the URL format and credentials.';
-                    const cleanMessage = `UniFi login failed (400 Bad Request): Invalid credentials or malformed request${details}.${deploymentHint}`.replace(/\[object Object\]/g, '').trim();
-                    throw new Error(cleanMessage);
-                } else if (response.status === 401) {
-                    const deploymentHint = this.deploymentType === 'unifios'
-                        ? ' For UniFiOS Gateway, ensure you are using a local admin account. Cloud accounts with MFA are not supported.'
-                        : ' Verify username and password are correct.';
-                    // Clean the final error message to remove any remaining [object Object]
-                    const cleanMessage = `UniFi login failed (401 Unauthorized): Invalid username or password${details}.${deploymentHint}`.replace(/\[object Object\]/g, '').trim();
-                    throw new Error(cleanMessage);
-                } else if (response.status === 403) {
-                    const cleanMessage = `UniFi login failed (403 Forbidden): Access denied${details}. Verify the account has admin permissions and is not blocked.`.replace(/\[object Object\]/g, '').trim();
-                    throw new Error(cleanMessage);
-                } else if (response.status === 429) {
-                    // Rate limiting - too many login attempts
-                    // Handle with retry logic instead of throwing immediately
-                    const retryAfter = response.headers.get('Retry-After') || response.headers.get('retry-after');
-                    
-                    if (attempt < this.maxRetries) {
-                        // Wait and retry
-                        await this.handle429Error(retryAfter, attempt);
-                        attempt++;
-                        continue; // Retry the request
-                    } else {
-                        // Max retries exceeded, throw error
-                        this.consecutive429Count = 0;
-                        this.last429ErrorAt = null;
-                        const retryHint = retryAfter ? ` Wait ${retryAfter} seconds before retrying.` : ' Wait a few minutes before retrying.';
-                        const cleanMessage = `UniFi login failed (429 Too Many Requests): Maximum retry attempts (${this.maxRetries}) exceeded. You've reached the login attempt limit.${retryHint}${details}`.replace(/\[object Object\]/g, '').trim();
-                        throw new Error(cleanMessage);
-                    }
-                } else if (response.status === 404) {
-                    const deploymentHint = this.deploymentType === 'unifios'
-                        ? ' The /api/auth/login endpoint was not found. Verify you are connecting to a UniFiOS Gateway (UDM Pro, UCG, etc.) and the URL is correct.'
-                        : ' The /api/login endpoint was not found. Verify the URL is correct and points to a UniFi Controller.';
-                    const cleanMessage = `UniFi login failed (404 Not Found): Endpoint not found${details}. ${deploymentHint}`.replace(/\[object Object\]/g, '').trim();
-                    throw new Error(cleanMessage);
-                } else {
-                    const cleanMessage = `UniFi login failed: ${response.status} ${statusText}${details}. Check the controller/gateway is accessible and the URL is correct.`.replace(/\[object Object\]/g, '').trim();
-                    throw new Error(cleanMessage);
-                }
-            }
-
-            // Success - reset rate limit counters and extract session cookie
-            this.consecutive429Count = 0;
-            this.last429ErrorAt = null;
-
-            // UniFi returns session information in the Set-Cookie header.
-            // We need to transform it into a proper Cookie header value:
-            //   "name=value; Path=/; HttpOnly, other=value2; Path=/; HttpOnly"
-            // becomes:
-            //   "name=value; other=value2"
-            const setCookie = response.headers.get('set-cookie');
-            if (!setCookie) {
-                throw new Error('UniFi login did not return any Set-Cookie header');
-            }
-
-            // Split potential multiple cookies, keep only the "name=value" part of each
-            const rawCookies = setCookie.split(',').map((c) => c.trim()).filter((c) => c.length > 0);
-            const cookiePairs: string[] = [];
-
-            for (const raw of rawCookies) {
-                const firstPart = raw.split(';')[0].trim();
-                if (firstPart.includes('=')) {
-                    cookiePairs.push(firstPart);
-                }
-            }
-
-            if (cookiePairs.length === 0) {
-                throw new Error('UniFi login returned Set-Cookie header without usable cookies');
-            }
-
-            // This value will be sent as the Cookie header on subsequent requests
-            this.sessionCookie = cookiePairs.join('; ');
-            this.lastLoginAt = Date.now();
-            this.isAuthenticated = true;
-
-            // Session stored successfully (logged at verbose level if needed)
-            return; // Success - exit the method
         }
 
-        // If we exit the loop without success, something went wrong
-        throw new Error('UniFi login failed: Maximum retry attempts exceeded');
+        if (!response.ok) {
+            // Try to get more details from the response body
+            let errorDetails = '';
+            try {
+                const errorBody = await response.text();
+                if (errorBody) {
+                    try {
+                        const errorJson = JSON.parse(errorBody);
+                        // Handle different error response formats
+                        if (typeof errorJson === 'string') {
+                            errorDetails = errorJson;
+                        } else if (typeof errorJson === 'object' && errorJson !== null) {
+                            // Try common error message fields
+                            errorDetails = errorJson.msg || errorJson.message || errorJson.error || errorJson.reason || '';
+                            // If still empty, try to stringify the object (but limit length)
+                            if (!errorDetails && Object.keys(errorJson).length > 0) {
+                                errorDetails = JSON.stringify(errorJson).substring(0, 200);
+                            }
+                        } else {
+                            errorDetails = String(errorJson);
+                        }
+                    } catch {
+                        // If JSON parsing fails, use the raw text
+                        errorDetails = errorBody.substring(0, 200); // Limit length
+                    }
+                }
+            } catch {
+                // Ignore errors when reading response body
+            }
+
+            const statusText = response.statusText || 'Unknown error';
+            const details = errorDetails ? ` - ${errorDetails}` : '';
+            
+            if (response.status === 400) {
+                const deploymentHint = this.deploymentType === 'unifios' 
+                    ? ' For UniFiOS Gateway, ensure you are using a local admin account (not a cloud account with MFA).'
+                    : ' For Classic Controller, verify the URL format and credentials.';
+                throw new Error(`UniFi login failed (400 Bad Request): Invalid credentials or malformed request${details}.${deploymentHint}`);
+            } else if (response.status === 401) {
+                const deploymentHint = this.deploymentType === 'unifios'
+                    ? ' For UniFiOS Gateway, ensure you are using a local admin account. Cloud accounts with MFA are not supported.'
+                    : ' Verify username and password are correct.';
+                throw new Error(`UniFi login failed (401 Unauthorized): Invalid username or password${details}.${deploymentHint}`);
+            } else if (response.status === 403) {
+                throw new Error(`UniFi login failed (403 Forbidden): Access denied${details}. Verify the account has admin permissions and is not blocked.`);
+            } else if (response.status === 429) {
+                // Rate limiting - too many login attempts
+                const retryAfter = response.headers.get('Retry-After') || response.headers.get('retry-after');
+                const retryHint = retryAfter ? ` Wait ${retryAfter} seconds before retrying.` : ' Wait a few minutes before retrying.';
+                throw new Error(`UniFi login failed (429 Too Many Requests): You've reached the login attempt limit.${retryHint}${details}`);
+            } else if (response.status === 404) {
+                const deploymentHint = this.deploymentType === 'unifios'
+                    ? ' The /api/auth/login endpoint was not found. Verify you are connecting to a UniFiOS Gateway (UDM Pro, UCG, etc.) and the URL is correct.'
+                    : ' The /api/login endpoint was not found. Verify the URL is correct and points to a UniFi Controller.';
+                throw new Error(`UniFi login failed (404 Not Found): Endpoint not found${details}. ${deploymentHint}`);
+            } else {
+                throw new Error(`UniFi login failed: ${response.status} ${statusText}${details}. Check the controller/gateway is accessible and the URL is correct.`);
+            }
+        }
+
+        // UniFi returns session information in the Set-Cookie header.
+        // We need to transform it into a proper Cookie header value:
+        //   "name=value; Path=/; HttpOnly, other=value2; Path=/; HttpOnly"
+        // becomes:
+        //   "name=value; other=value2"
+        const setCookie = response.headers.get('set-cookie');
+        if (!setCookie) {
+            throw new Error('UniFi login did not return any Set-Cookie header');
+        }
+
+        // Split potential multiple cookies, keep only the "name=value" part of each
+        const rawCookies = setCookie.split(',').map((c) => c.trim()).filter((c) => c.length > 0);
+        const cookiePairs: string[] = [];
+
+        for (const raw of rawCookies) {
+            const firstPart = raw.split(';')[0].trim();
+            if (firstPart.includes('=')) {
+                cookiePairs.push(firstPart);
+            }
+        }
+
+        if (cookiePairs.length === 0) {
+            throw new Error('UniFi login returned Set-Cookie header without usable cookies');
+        }
+
+        // This value will be sent as the Cookie header on subsequent requests
+        this.sessionCookie = cookiePairs.join('; ');
+        this.lastLoginAt = Date.now();
+        this.isAuthenticated = true;
+
+        // Session stored successfully (logged at verbose level if needed)
     }
 
     /**
@@ -1309,33 +1110,13 @@ export class UniFiApiService {
                     throw new Error(errorMsg);
                 }
 
-                // Try to login (only if not already logged in to avoid unnecessary login attempts)
-                // This prevents 429 errors when testing an already connected plugin
+                // Try to login
                 try {
-                    // Check if already logged in with valid session
-                    if (this.isLoggedIn() && this.sessionCookie && this.lastLoginAt) {
-                        const now = Date.now();
-                        const sessionAge = now - this.lastLoginAt;
-                        // If session is still valid (less than 10 minutes old), skip login
-                        if (sessionAge < 10 * 60 * 1000) {
-                            logger.debug('UniFi', 'Already logged in with valid session, skipping login for test');
-                        } else {
-                            // Session expired, need to login
-                            const loggedIn = await this.login();
-                            if (!loggedIn) {
-                                const errorMsg = 'Login failed. Verify URL, username, and password';
-                                logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
-                                throw new Error(errorMsg);
-                            }
-                        }
-                    } else {
-                        // Not logged in, need to login
-                        const loggedIn = await this.login();
-                        if (!loggedIn) {
-                            const errorMsg = 'Login failed. Verify URL, username, and password';
-                            logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
-                            throw new Error(errorMsg);
-                        }
+                    const loggedIn = await this.login();
+                    if (!loggedIn) {
+                        const errorMsg = 'Login failed. Verify URL, username, and password';
+                        logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
+                        throw new Error(errorMsg);
                     }
                 } catch (loginError: any) {
                     // Re-throw the exact error message (it already contains helpful details)

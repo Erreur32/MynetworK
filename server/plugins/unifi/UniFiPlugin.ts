@@ -13,7 +13,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.4.3');
+        super('unifi', 'UniFi Controller', '0.4.4');
         this.apiService = new UniFiApiService();
     }
 
@@ -200,38 +200,13 @@ export class UniFiPlugin extends BasePlugin {
         }
 
         try {
-            // Use Promise.allSettled to handle errors individually and avoid complete failure
-            // This allows partial data retrieval even if some API calls fail (e.g., 401 errors)
-            const results = await Promise.allSettled([
+            const [devices, clients, stats, sysinfo, wlans] = await Promise.all([
                 this.apiService.getDevices(),
                 this.apiService.getClients(),
                 this.apiService.getNetworkStats(),
                 this.apiService.getSystemInfo(),
-                this.apiService.getWlans()
+                this.apiService.getWlans().catch(() => []) // Get WLANs, but don't fail if unavailable
             ]);
-            
-            // Extract results, using empty defaults for failed requests
-            const devices = results[0].status === 'fulfilled' ? results[0].value : [];
-            const clients = results[1].status === 'fulfilled' ? results[1].value : [];
-            const stats = results[2].status === 'fulfilled' ? results[2].value : { wan: {} };
-            const sysinfo = results[3].status === 'fulfilled' ? results[3].value : {};
-            const wlans = results[4].status === 'fulfilled' ? results[4].value : [];
-            
-            // Log errors for failed requests (but don't throw - allow partial data)
-            results.forEach((result, index) => {
-                if (result.status === 'rejected') {
-                    const methodNames = ['getDevices', 'getClients', 'getNetworkStats', 'getSystemInfo', 'getWlans'];
-                    const error = result.reason;
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    
-                    // If it's a 401 error, it's an authentication issue that affects all requests
-                    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-                        logger.error('UniFiPlugin', `Authentication failed for ${methodNames[index]}: ${errorMessage}`);
-                    } else {
-                        logger.warn('UniFiPlugin', `Failed to get ${methodNames[index]}: ${errorMessage}`);
-                    }
-                }
-            });
 
             // Log summary only if debug is enabled
             logger.debug('UniFiPlugin', `Retrieved ${devices.length} devices, ${clients.length} clients`);

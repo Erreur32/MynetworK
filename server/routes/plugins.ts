@@ -344,57 +344,44 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
                                 // Check if actually logged in
                                 const isLoggedIn = unifiPlugin.apiService.isLoggedIn();
                                 if (isLoggedIn) {
-                                    // Plugin is connected - return success
+                                    // Plugin is already connected with these exact settings - return success immediately
+                                    // DO NOT do a test - it would risk breaking the active connection (429 errors, etc.)
+                                    logger.debug('PluginTest', `Plugin ${pluginId} is already connected with identical settings - returning success without test`);
                                     connectionStatus = true;
                                 } else {
-                                    // Plugin is enabled but not connected - do a test to verify connection works
-                                    logger.debug('PluginTest', `Plugin enabled but not connected, doing test to verify connection`);
-                                    const testResult = await pluginManager.testPluginConnection(pluginId);
-                                    connectionStatus = testResult.success;
-                                    if (!testResult.success && testResult.error) {
-                                        errorMessage = testResult.error;
-                                    } else if (testResult.success) {
-                                        // Test succeeded - ensure plugin is started and connected
-                                        // The test should have established the connection, but verify
-                                        await new Promise(resolve => setTimeout(resolve, 500));
-                                        const isLoggedInAfterTest = unifiPlugin.apiService.isLoggedIn();
-                                        if (!isLoggedInAfterTest) {
-                                            // Test succeeded but plugin not logged in - try to start
-                                            logger.debug('PluginTest', `Test succeeded but plugin not logged in, attempting to start`);
-                                            try {
-                                                await plugin.start();
-                                                await new Promise(resolve => setTimeout(resolve, 1000));
-                                                // Verify connection after start
-                                                const isLoggedInAfterStart = unifiPlugin.apiService.isLoggedIn();
-                                                if (!isLoggedInAfterStart) {
-                                                    logger.warn('PluginTest', `Plugin started but still not logged in after test`);
-                                                }
-                                            } catch (startError) {
-                                                logger.error('PluginTest', `Failed to start plugin after successful test:`, startError);
-                                            }
-                                        }
-                                    }
+                                    // Plugin is enabled but not connected - this is a problem, but don't test
+                                    // Testing would risk breaking things. Just report the status.
+                                    logger.debug('PluginTest', `Plugin ${pluginId} is enabled but not connected - reporting status without test to avoid breaking connection`);
+                                    connectionStatus = false;
+                                    errorMessage = 'Plugin is enabled but not connected. Try restarting the plugin or check the configuration.';
                                 }
                             } else {
-                                // Can't check status - do a test
-                                const testResult = await pluginManager.testPluginConnection(pluginId);
-                                connectionStatus = testResult.success;
-                                if (!testResult.success && testResult.error) {
-                                    errorMessage = testResult.error;
-                                }
+                                // Can't check status - assume not connected but don't test to avoid breaking things
+                                logger.debug('PluginTest', `Cannot check connection status for ${pluginId} - reporting not connected without test`);
+                                connectionStatus = false;
+                                errorMessage = 'Cannot verify connection status. Plugin may need to be restarted.';
                             }
                         } catch (error) {
-                            // Error checking status - do a test
-                            logger.debug('PluginTest', `Error checking connection status, doing test:`, error);
-                            const testResult = await pluginManager.testPluginConnection(pluginId);
-                            connectionStatus = testResult.success;
-                            if (!testResult.success && testResult.error) {
-                                errorMessage = testResult.error;
-                            }
+                            // Error checking status - don't test, just report error
+                            logger.debug('PluginTest', `Error checking connection status for ${pluginId}:`, error);
+                            connectionStatus = false;
+                            errorMessage = error instanceof Error ? error.message : 'Error checking connection status';
                         }
                     } else {
-                        // For other plugins, assume working if enabled
-                        connectionStatus = true;
+                        // For other plugins, check connection status if available, otherwise assume working if enabled
+                        try {
+                            // Try to check actual connection status without doing a full test
+                            if (pluginId === 'freebox') {
+                                const { freeboxApi } = await import('../services/freeboxApi.js');
+                                connectionStatus = freeboxApi.isLoggedIn();
+                            } else {
+                                // For other plugins, assume working if enabled
+                                connectionStatus = true;
+                            }
+                        } catch {
+                            // If check fails, assume working if enabled (don't test to avoid breaking)
+                            connectionStatus = true;
+                        }
                     }
                     // No restoration needed - plugin was never modified
                 } else {
@@ -440,11 +427,59 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
                 }
             }
         } else {
-            // Use current plugin configuration (no restoration needed)
-            const testResult = await pluginManager.testPluginConnection(pluginId);
-            connectionStatus = testResult.success;
-            if (!testResult.success && testResult.error) {
-                errorMessage = testResult.error;
+            // No test settings provided - test with current plugin configuration
+            // BUT: If plugin is already enabled and connected, just check status without full test
+            if (plugin.isEnabled()) {
+                if (pluginId === 'unifi') {
+                    try {
+                        const unifiPlugin = plugin as any;
+                        if (unifiPlugin && unifiPlugin.apiService) {
+                            const isLoggedIn = unifiPlugin.apiService.isLoggedIn();
+                            if (isLoggedIn) {
+                                // Already connected - return success without testing
+                                logger.debug('PluginTest', `Plugin ${pluginId} is already connected - returning success without test`);
+                                connectionStatus = true;
+                            } else {
+                                // Enabled but not connected - do a test to try to connect
+                                logger.debug('PluginTest', `Plugin ${pluginId} is enabled but not connected - doing test to establish connection`);
+                                const testResult = await pluginManager.testPluginConnection(pluginId);
+                                connectionStatus = testResult.success;
+                                if (!testResult.success && testResult.error) {
+                                    errorMessage = testResult.error;
+                                }
+                            }
+                        } else {
+                            // Can't check - do a test
+                            const testResult = await pluginManager.testPluginConnection(pluginId);
+                            connectionStatus = testResult.success;
+                            if (!testResult.success && testResult.error) {
+                                errorMessage = testResult.error;
+                            }
+                        }
+                    } catch (error) {
+                        // Error checking - do a test
+                        logger.debug('PluginTest', `Error checking connection status, doing test:`, error);
+                        const testResult = await pluginManager.testPluginConnection(pluginId);
+                        connectionStatus = testResult.success;
+                        if (!testResult.success && testResult.error) {
+                            errorMessage = testResult.error;
+                        }
+                    }
+                } else {
+                    // For other plugins, do a test
+                    const testResult = await pluginManager.testPluginConnection(pluginId);
+                    connectionStatus = testResult.success;
+                    if (!testResult.success && testResult.error) {
+                        errorMessage = testResult.error;
+                    }
+                }
+            } else {
+                // Plugin is disabled - safe to test
+                const testResult = await pluginManager.testPluginConnection(pluginId);
+                connectionStatus = testResult.success;
+                if (!testResult.success && testResult.error) {
+                    errorMessage = testResult.error;
+                }
             }
         }
     } catch (error) {
