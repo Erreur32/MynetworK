@@ -6,12 +6,57 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2 } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2, History, FolderInput, Terminal, Mail, Lock, Share2, Database, Monitor } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
 import { usePluginStore } from '../stores/pluginStore';
 import { SearchOptionsInfoModal } from '../components/modals/SearchOptionsInfoModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
+import { SearchHistoryModal, type SearchHistoryEntry } from '../components/modals/SearchHistoryModal';
+
+/** Ports connus : numéro → nom du service (comme sur la page Scan) */
+const WELL_KNOWN_PORTS: Record<number, string> = {
+    20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
+    143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 1433: 'SQL Server', 3306: 'MySQL',
+    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin'
+};
+
+const PORT_ICONS: Record<number, LucideIcon> = {
+    20: FolderInput, 21: FolderInput, 22: Terminal, 23: Terminal, 25: Mail, 53: Globe, 80: Globe,
+    110: Mail, 143: Mail, 443: Lock, 445: Share2, 993: Mail, 995: Mail, 1433: Database, 3306: Database,
+    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server
+};
+function getPortIcon(port: number): LucideIcon {
+    return PORT_ICONS[port] ?? Server;
+}
+
+const PORT_CATEGORIES: Record<string, number[]> = {
+    'Web': [80, 443, 8080, 8443, 9000],
+    'Bases de données': [3306, 5432, 6379, 1433],
+    'Mail': [25, 110, 143, 993, 995],
+    'Système': [20, 21, 22, 23, 53, 445],
+    'Accès distant': [3389, 5900],
+    'Docker': [2375, 2376] // Docker daemon (à prévoir pour détection)
+};
+function getPortCategory(port: number): string {
+    for (const [cat, ports] of Object.entries(PORT_CATEGORIES)) {
+        if (ports.includes(port)) return cat;
+    }
+    return 'Autres';
+}
+
+/** Couleur par catégorie : Système = orange, Docker = indigo, reste = cyan */
+function getPortCategoryColor(cat: string): { label: string; badge: string; icon: string } {
+    switch (cat) {
+        case 'Système':
+            return { label: 'text-amber-400', badge: 'bg-amber-500/30 border-amber-500/50 text-amber-300', icon: 'text-amber-400/90' };
+        case 'Docker':
+            return { label: 'text-indigo-400', badge: 'bg-indigo-500/30 border-indigo-500/50 text-indigo-300', icon: 'text-indigo-400/90' };
+        default:
+            return { label: 'text-cyan-400', badge: 'bg-cyan-500/30 border-cyan-500/50 text-cyan-300', icon: 'text-cyan-400/90' };
+    }
+}
 
 interface SearchResult {
     pluginId: string;
@@ -155,6 +200,75 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
     const [selectedIpForLatencyGraph, setSelectedIpForLatencyGraph] = useState<string | null>(null);
     const [showLatencyModal, setShowLatencyModal] = useState(false);
+
+    // Search history (localStorage)
+    const SEARCH_HISTORY_KEY = 'searchHistory';
+    const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>(() => {
+        try {
+            const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    });
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+    // Most used search terms (localStorage), top 5 as badges
+    const SEARCH_TERM_COUNTS_KEY = 'searchTermCounts';
+    const [searchTermCounts, setSearchTermCounts] = useState<Record<string, number>>(() => {
+        try {
+            const raw = localStorage.getItem(SEARCH_TERM_COUNTS_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch {
+            return {};
+        }
+    });
+    const topSearchTerms = useMemo(() => {
+        const entries = Object.entries(searchTermCounts) as [string, number][];
+        const withCount = entries.filter(([, count]) => count > 0);
+        withCount.sort((a, b) => b[1] - a[1]);
+        return withCount.slice(0, 5).map(([term]) => term);
+    }, [searchTermCounts]);
+
+    const addToSearchHistory = (query: string, opts: { exactMatch: boolean; caseSensitive: boolean; showOnlyActive: boolean }) => {
+        const trimmed = query.trim();
+        const entry: SearchHistoryEntry = {
+            query: trimmed,
+            timestamp: Date.now(),
+            exactMatch: opts.exactMatch,
+            caseSensitive: opts.caseSensitive,
+            showOnlyActive: opts.showOnlyActive
+        };
+        // Ne jamais mettre en double : même recherche = une seule entrée (on remplace / met à jour en tête)
+        setSearchHistory(prev => {
+            const filtered = prev.filter(e => !(e.query === entry.query && e.exactMatch === entry.exactMatch && e.caseSensitive === entry.caseSensitive && e.showOnlyActive === entry.showOnlyActive));
+            const next = [entry, ...filtered].slice(0, 100);
+            try {
+                localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+            } catch { /* ignore */ }
+            return next;
+        });
+        // Comptage des termes les plus recherchés (pour les badges)
+        if (trimmed) {
+            setSearchTermCounts(prev => {
+                const next = { ...prev, [trimmed]: (prev[trimmed] ?? 0) + 1 };
+                try {
+                    localStorage.setItem(SEARCH_TERM_COUNTS_KEY, JSON.stringify(next));
+                } catch { /* ignore */ }
+                return next;
+            });
+        }
+    };
+
+    const removeFromSearchHistory = (index: number) => {
+        setSearchHistory(prev => {
+            const next = prev.filter((_, i) => i !== index);
+            try {
+                localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+            } catch { /* ignore */ }
+            return next;
+        });
+    };
 
     // Utility function to get latency color based on value
     const getLatencyColor = (latency: number): string => {
@@ -543,8 +657,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         }
     };
 
-    // Perform search
-    const performSearch = async (query: string) => {
+    // Perform search (overrides allow applying options from history without waiting for state update)
+    const performSearch = async (query: string, overrides?: { exactMatch?: boolean; caseSensitive?: boolean; showOnlyActive?: boolean }) => {
         if (!query.trim()) {
             setResults([]);
             setHasSearched(false);
@@ -552,6 +666,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             setIsExactIpSearch(false);
             return;
         }
+
+        const useExact = overrides?.exactMatch ?? exactMatch;
+        const useCase = overrides?.caseSensitive ?? caseSensitive;
+        const useActive = overrides?.showOnlyActive ?? showOnlyActive;
 
         setIsLoading(true);
         setError(null);
@@ -564,7 +682,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
         try {
             // If it's an exact IP search, get aggregated details
-            if (isIp && exactMatch) {
+            if (isIp && useExact) {
                 setIsExactIpSearch(true);
                 try {
                     const ipDetailsResponse = await api.get<IpDetailsResponse>(`/api/search/ip-details/${trimmedQuery}`);
@@ -600,10 +718,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
                             types: selectedTypes.length > 0 ? selectedTypes : undefined,
                             exactMatch: true,
-                            caseSensitive
+                            caseSensitive: useCase
                         });
                         if (regularResponse.success && regularResponse.result?.results) {
                             setResults(regularResponse.result.results);
+                            addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
                         }
                     } else {
                         // Fallback to regular search if IP details fail
@@ -612,11 +731,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             query: trimmedQuery,
                             pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
                             types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                            exactMatch,
-                            caseSensitive
+                            exactMatch: useExact,
+                            caseSensitive: useCase
                         });
                         if (response.success && response.result?.results) {
                             setResults(response.result.results);
+                            addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
                         } else {
                             const errorMsg = response.error?.message || 'Erreur lors de la recherche';
                             setError(errorMsg);
@@ -631,11 +751,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         query: trimmedQuery,
                         pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
                         types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                        exactMatch,
-                        caseSensitive
+                        exactMatch: useExact,
+                        caseSensitive: useCase
                     });
                     if (response.success && response.result?.results) {
                         setResults(response.result.results);
+                        addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
                     } else {
                         const errorMsg = response.error?.message || 'Erreur lors de la recherche';
                         setError(errorMsg);
@@ -648,13 +769,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     query: trimmedQuery,
                 pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
                 types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                exactMatch,
-                caseSensitive
+                exactMatch: useExact,
+                caseSensitive: useCase
             });
 
             if (response.success && response.result?.results) {
                 // Display results immediately
                 setResults(response.result.results);
+                addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
                 
                 // If ping automatic is enabled, ping all local IPs in results (non-blocking)
                 // This runs in the background, results are already displayed
@@ -959,7 +1081,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 {/* Header */}
                 <div className="mb-6">
                     <p className="text-sm text-theme-secondary">
-                        Recherche dans les plugins actifs (Freebox, UniFi)
+                        
                     </p>
                 </div>
 
@@ -967,36 +1089,41 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Left column: Search bar */}
                     <div>
-                        <Card title="Rechercher">
+                        <Card title="">
                             <div className="space-y-4">
                                 <div className="flex gap-3">
-                                    <div className="flex-1 relative">
-                                        <Search size={24} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-accent-primary opacity-80" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => {
-                                                setSearchQuery(e.target.value);
-                                                // Reset hasSearched when user types to prevent showing "no results" message
-                                                if (hasSearched) {
-                                                    setHasSearched(false);
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    if (pingEnabled) {
-                                                        // If ping is enabled, ping the query instead of searching
-                                                        if (searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
-                                                            pingSearchQuery(searchQuery.trim());
-                                                        }
-                                                    } else {
+                                    <div className="flex-1">
+                                        <div className="relative">
+                                            <Search size={24} className="absolute left-4 top-1/2 -translate-y-1/2 text-accent-primary opacity-80 pointer-events-none" />
+                                            <input
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={(e) => {
+                                                    setSearchQuery(e.target.value);
+                                                    // Reset hasSearched when user types to prevent showing "no results" message
+                                                    if (hasSearched) {
+                                                        setHasSearched(false);
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        if (pingEnabled) {
+                                                            // If ping is enabled, ping the query instead of searching
+                                                            if (searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
+                                                                pingSearchQuery(searchQuery.trim());
+                                                            }
+                                                        } else {
                                                     handleSearch();
                                                     }
                                                 }
                                             }}
-                                            placeholder="Rechercher (nom, MAC, IP, port, hostname...)"
-                                            className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
-                                        />
+                                                placeholder={exactMatch ? "Strict : 1 IP ou 1 MAC uniquement — activer Étendu pour plus d'infos" : "Rechercher (mode étendu : correspondance partielle, plus d'infos)"}
+                                                className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-theme-tertiary mt-1.5 ml-1">
+                                            {exactMatch ? "Strict : 1 IP ou 1 MAC seulement. Activer Étendu pour plus d'infos." : "Étendu : correspondance partielle, plus d'infos."}
+                                        </p>
                                     </div>
                                     {/* Hide search button when ping is enabled */}
                                     {!pingEnabled && (
@@ -1045,6 +1172,25 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </button>
                                     )}
                                 </div>
+                                {/* Termes les plus recherchés (top 5) */}
+                                {topSearchTerms.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-xs text-theme-tertiary">Recherches fréquentes :</span>
+                                        {topSearchTerms.map((term) => (
+                                            <button
+                                                key={term}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSearchQuery(term);
+                                                    handleSearch();
+                                                }}
+                                                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-theme-secondary border border-theme text-theme-primary hover:bg-theme-tertiary hover:border-theme-hover transition-colors"
+                                            >
+                                                {term}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 {/* Display ping result for search query if it's an IP/domain */}
                                 {searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && pingResults[searchQuery.trim()] && (
                                     <div className={`p-4 rounded-lg border ${
@@ -1077,46 +1223,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                 )}
 
-                                {/* Plugin filter - Under search bar */}
-                                {activePlugins.length > 0 && (
-                                    <div>
-                                        <label className="text-sm font-medium text-theme-secondary mb-3 block">
-                                            Plugins
-                                        </label>
-                                        <div className="flex flex-wrap gap-3">
-                                            {activePlugins.map(plugin => {
-                                                const isFreebox = plugin.id === 'freebox';
-                                                const isUnifi = plugin.id === 'unifi';
-                                                const isSelected = selectedPlugins.includes(plugin.id);
-                                                
-                                                return (
-                                                    <button
-                                                        key={plugin.id}
-                                                        onClick={() => togglePlugin(plugin.id)}
-                                                        className={`group relative px-4 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 flex items-center gap-2 ${
-                                                            isSelected
-                                                                ? isFreebox
-                                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 shadow-lg shadow-purple-500/10'
-                                                                    : isUnifi
-                                                                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10'
-                                                                        : 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                                                                : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
-                                                        }`}
-                                                    >
-                                                        {isFreebox && <Server size={16} className={isSelected ? 'text-purple-400' : 'text-theme-tertiary'} />}
-                                                        {isUnifi && <Wifi size={16} className={isSelected ? 'text-blue-400' : 'text-theme-tertiary'} />}
-                                                        <span>{plugin.name}</span>
-                                                        {isSelected && (
-                                                            <span className="ml-1 text-xs opacity-70">
-                                                                ({results.filter(r => r.pluginId === plugin.id).length})
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </Card>
                     </div>
@@ -1126,13 +1232,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         <Card 
                             title="Filtres"
                             actions={
-                                <button
-                                    onClick={() => setShowOptionsInfoModal(true)}
-                                    className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary"
-                                    title="Aide sur les options de recherche"
-                                >
-                                    <Info size={18} />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => setShowHistoryModal(true)}
+                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary flex items-center gap-1.5"
+                                        title="Historique des recherches"
+                                    >
+                                        <History size={18} />
+                                        <span className="text-sm">Historique</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setShowOptionsInfoModal(true)}
+                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary"
+                                        title="Aide sur les options de recherche"
+                                    >
+                                        <Info size={18} />
+                                    </button>
+                                </div>
                             }
                         >
                     <div className="space-y-4">
@@ -1188,6 +1304,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 </div>
                                 <span>Étendu</span>
                             </button>
+                            {exactMatch && false && (
+                                <span className="text-[10px] text-theme-tertiary ml-0.5" title="Mode strict : recherche exacte avec IP, nom, MAC, port, hostname. La fiche détaillée (ports, UniFi) s’affiche uniquement pour une recherche par IP.">
+                                    (strict : IP, nom, MAC…)
+                                </span>
+                            )}
                             
                             <button
                                 onClick={() => {
@@ -1399,11 +1520,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         {ipDetails.unifi?.client && (() => {
                                             const isWireless = ipDetails.unifi.client.is_wireless || 
                                                 (!!ipDetails.unifi.client.ssid || !!ipDetails.unifi.client.ap_mac || !!ipDetails.unifi.client.ap_name);
-                                            const isWired = ipDetails.unifi.client.is_wired || 
-                                                (!!ipDetails.unifi.client.sw_port && !isWireless);
                                             
                                             if (isWireless) {
-                                                // Get RSSI value for dynamic color
+                                                // RSSI valide uniquement → badge WiFi coloré ; sinon on affiche Filaire (pas de badge WiFi grisé)
                                                 let rssi = ipDetails.unifi.client.rssi;
                                                 if (rssi === undefined || rssi === null) {
                                                     const signal = ipDetails.unifi.client.signal;
@@ -1418,22 +1537,23 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 if (rssi === undefined || rssi === null) {
                                                     rssi = ipDetails.unifi.client.signal_strength;
                                                 }
-                                                
-                                                return (
-                                                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${getSignalBadgeColor(rssi)}`}>
-                                                        <Radio size={14} />
-                                                        WiFi
-                                                    </span>
-                                                );
-                                            } else if (isWired) {
-                                                return (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-500/20 border border-gray-500/50 text-gray-400">
-                                                        <Cable size={14} />
-                                                        Filaire
-                                                    </span>
-                                                );
+                                                const hasValidRssi = rssi != null && !isNaN(rssi);
+                                                if (hasValidRssi) {
+                                                    return (
+                                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${getSignalBadgeColor(rssi)}`}>
+                                                            <Radio size={14} />
+                                                            WiFi
+                                                        </span>
+                                                    );
+                                                }
                                             }
-                                            return null;
+                                            // Pas WiFi avec signal valide, ou filaire → afficher Filaire (badge bleu), jamais le badge WiFi grisé
+                                            return (
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 border border-blue-500/50 text-blue-400">
+                                                    <Cable size={14} />
+                                                    Filaire
+                                                </span>
+                                            );
                                         })()}
                                         
                                         {/* Status Badge */}
@@ -1710,27 +1830,57 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </div>
                                 ) : null}
 
-                                {/* Ports ouverts (machine) - from scan réseau port scan (nmap) */}
+                                {/* Ports ouverts (machine) - cadre pleine largeur, boutons qui ne se coupent pas */}
                                 {ipDetails.scanner && (
-                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
-                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-5 hover:bg-theme-secondary/40 transition-colors lg:col-span-5 min-w-0 overflow-visible">
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-3 flex items-center gap-1.5">
                                             <Activity size={14} className="text-amber-400" />
                                             Ports ouverts (machine)
                                         </div>
                                         {Array.isArray(ipDetails.scanner.additionalInfo?.openPorts) && ipDetails.scanner.additionalInfo.openPorts.length > 0 ? (
-                                            <>
-                                                <div className="text-lg font-medium font-mono text-theme-primary">
-                                                    {ipDetails.scanner.additionalInfo.openPorts
-                                                        .map((p: { port: number }) => p.port)
-                                                        .sort((a: number, b: number) => a - b)
-                                                        .join(', ')}
-                                                </div>
-                                                {ipDetails.scanner.additionalInfo?.lastPortScan && (
-                                                    <div className="text-xs text-theme-tertiary mt-1">
-                                                        Scan: {new Date(ipDetails.scanner.additionalInfo.lastPortScan).toLocaleString('fr-FR')}
-                                                    </div>
-                                                )}
-                                            </>
+                                            (() => {
+                                                const openPorts = ipDetails.scanner.additionalInfo.openPorts as { port: number; protocol?: string }[];
+                                                const sorted = [...openPorts].sort((a, b) => a.port - b.port);
+                                                const byCategory = sorted.reduce<Record<string, { port: number; protocol?: string }[]>>((acc, p) => {
+                                                    const cat = getPortCategory(p.port);
+                                                    if (!acc[cat]) acc[cat] = [];
+                                                    acc[cat].push(p);
+                                                    return acc;
+                                                }, {});
+                                                const categoryOrder = ['Web', 'Bases de données', 'Mail', 'Système', 'Accès distant', 'Docker', 'Autres'];
+                                                const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
+                                                return (
+                                                    <>
+                                                        <div className="space-y-4">
+                                                            {orderedCategories.map((cat) => {
+                                                                const colors = getPortCategoryColor(cat);
+                                                                return (
+                                                                    <div key={cat} className="min-w-0">
+                                                                        <div className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${colors.label}`}>{cat}</div>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {byCategory[cat].map((p) => {
+                                                                                const Icon = getPortIcon(p.port);
+                                                                                return (
+                                                                                    <div key={p.port} className={`flex items-center gap-2 py-2.5 px-4 rounded-lg border min-w-[7rem] shrink-0 ${colors.badge}`}>
+                                                                                        <Icon size={18} className={`${colors.icon} flex-shrink-0`} />
+                                                                                        <span className="font-mono text-sm font-medium">{p.port}</span>
+                                                                                        <span className="text-xs opacity-90 whitespace-nowrap">{WELL_KNOWN_PORTS[p.port] ?? '—'}</span>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        {ipDetails.scanner.additionalInfo?.lastPortScan && (
+                                                            <div className="text-xs text-theme-tertiary mt-3 pt-3 border-t border-theme/50">
+                                                                Scan : {new Date(ipDetails.scanner.additionalInfo.lastPortScan).toLocaleString('fr-FR')}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()
                                         ) : ipDetails.scanner.additionalInfo?.lastPortScan ? (
                                             <div className="text-theme-tertiary">Aucun port ouvert</div>
                                         ) : (
@@ -1741,25 +1891,26 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
                             </div>
 
-                            {/* SECTION 2: BLOC CONNEXION UNIFI */}
+                            {/* SECTION 2: SCHÉMA CONNEXION UNIFI - trait vers port numéroté */}
                             {ipDetails.unifi?.client && (
                                 <div className="bg-blue-500/10 rounded-lg border border-blue-500/50 p-6 hover:bg-blue-500/15 transition-colors mb-6">
                                     <div className="flex items-center gap-2 mb-4">
                                         <Wifi size={18} className="text-blue-400" />
                                         <h3 className="text-lg font-semibold text-blue-400 uppercase">Connexion Unifi</h3>
                                     </div>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        {/* Type de connexion */}
-                                        <div className="flex flex-col gap-1">
-                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
-                                                {ipDetails.unifi.client.is_wireless ? <Radio size={12} /> : <Cable size={12} />}
-                                                Type
+
+                                    {/* Schéma : [ Appareil ] ——trait——> [ Équipement | Port N ] */}
+                                    <div className="flex flex-col md:flex-row items-stretch gap-0 md:gap-4">
+                                        {/* Bloc gauche : appareil (IP / nom, type) */}
+                                        <div className="flex flex-col justify-center rounded-lg bg-blue-500/20 border border-blue-500/50 p-4 min-w-[180px]">
+                                            <div className="text-[10px] font-semibold text-blue-300 uppercase tracking-wider mb-1">Appareil</div>
+                                            <div className="font-medium text-theme-primary text-sm truncate" title={ipDetails.ip}>
+                                                {ipDetails.unifi?.client?.name || ipDetails.unifi?.client?.hostname || ipDetails.ip}
                                             </div>
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium w-fit ${
+                                            <div className="text-xs text-theme-tertiary font-mono mt-0.5">{ipDetails.ip}</div>
+                                            <span className={`inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-md text-xs font-medium w-fit ${
                                                 ipDetails.unifi.client.is_wireless
                                                     ? (() => {
-                                                        // Get RSSI value for dynamic color
                                                         let rssi = ipDetails.unifi.client.rssi;
                                                         if (rssi === undefined || rssi === null) {
                                                             const signal = ipDetails.unifi.client.signal;
@@ -1776,104 +1927,118 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         }
                                                         return getSignalBadgeColor(rssi);
                                                     })()
-                                                    : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
+                                                    : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
                                             }`}>
                                                 {ipDetails.unifi.client.is_wireless ? (
-                                                    <>
-                                                        <Radio size={14} />
-                                                        WiFi
-                                                    </>
+                                                    <><Radio size={12} /> WiFi</>
                                                 ) : (
-                                                    <>
-                                                        <Cable size={14} />
-                                                        Filaire
-                                                    </>
+                                                    <><Cable size={12} /> Filaire</>
                                                 )}
                                             </span>
                                         </div>
 
-                                        {/* Équipement connecté */}
-                                        <div className="flex flex-col gap-1">
-                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
-                                                <Server size={12} />
-                                                Équipement
-                                            </div>
-                                            {ipDetails.unifi.client.is_wireless && ipDetails.unifi.ap ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.ap.name}</span>
-                                                    {ipDetails.unifi.ap.model && (
-                                                        <span className="text-xs text-theme-tertiary">{ipDetails.unifi.ap.model}</span>
-                                                    )}
-                                                    {ipDetails.unifi.ap.ip && (
-                                                        <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.ap.ip}</span>
-                                                    )}
+                                        {/* Trait de connexion : WiFi = ondes, Filaire = câble horizontal avec petits ovales */}
+                                        {ipDetails.unifi.client.is_wireless ? (
+                                            <>
+                                                <div className="hidden md:flex flex-row justify-center items-center shrink-0 py-4 gap-1">
+                                                    <span className="w-4 h-1.5 bg-blue-400/50 rounded-full" aria-hidden />
+                                                    <span className="w-3 h-1.5 bg-blue-400/40 rounded-full" aria-hidden />
+                                                    <Wifi size={22} className="text-blue-400/90 mx-0.5" />
+                                                    <span className="w-3 h-1.5 bg-blue-400/40 rounded-full" aria-hidden />
+                                                    <span className="w-4 h-1.5 bg-blue-400/50 rounded-full" aria-hidden />
                                                 </div>
-                                            ) : ipDetails.unifi.client.is_wireless && ipDetails.unifi.client.ap_name ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.client.ap_name}</span>
-                                                    {ipDetails.unifi.client.ap_mac && (
-                                                        <span className="text-xs text-theme-tertiary font-mono">{formatMac(ipDetails.unifi.client.ap_mac)}</span>
-                                                    )}
+                                                <div className="flex md:hidden flex-row justify-center items-center py-2 gap-1">
+                                                    <span className="w-3 h-1 bg-blue-400/50 rounded-full" />
+                                                    <Wifi size={18} className="text-blue-400/90" />
+                                                    <span className="w-3 h-1 bg-blue-400/50 rounded-full" />
                                                 </div>
-                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.switch ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.switch.name}</span>
-                                                    {ipDetails.unifi.switch.model && (
-                                                        <span className="text-xs text-theme-tertiary">{ipDetails.unifi.switch.model}</span>
-                                                    )}
-                                                    {ipDetails.unifi.switch.ip && (
-                                                        <span className="text-xs text-theme-tertiary font-mono">{ipDetails.unifi.switch.ip}</span>
-                                                    )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="hidden md:flex flex-row justify-center items-center shrink-0 py-4 gap-0.5">
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
+                                                    <Cable size={18} className="text-blue-400/80 mx-0.5" />
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
+                                                    <span className="w-2 h-1 bg-blue-400/60 rounded-full" aria-hidden />
                                                 </div>
-                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.client.sw_name ? (
-                                                <div className="flex flex-col gap-0.5">
-                                                    <span className="font-medium text-theme-primary text-sm">{ipDetails.unifi.client.sw_name}</span>
+                                                <div className="flex md:hidden flex-row justify-center items-center py-2 gap-0.5">
+                                                    <span className="w-1.5 h-1 bg-blue-400/60 rounded-full" />
+                                                    <span className="w-1.5 h-1 bg-blue-400/60 rounded-full" />
+                                                    <Cable size={16} className="text-blue-400/80" />
+                                                    <span className="w-1.5 h-1 bg-blue-400/60 rounded-full" />
+                                                    <span className="w-1.5 h-1 bg-blue-400/60 rounded-full" />
                                                 </div>
-                                            ) : (
-                                                <span className="text-theme-tertiary text-sm">--</span>
-                                            )}
-                                        </div>
-
-                                        {/* SSID / Port */}
-                                        <div className="flex flex-col gap-1">
-                                            <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
-                                                <Wifi size={12} />
-                                                {ipDetails.unifi.client.is_wireless ? 'SSID' : 'Port'}
-                                            </div>
-                                            {ipDetails.unifi.client.is_wireless ? (
-                                                (() => {
-                                                    const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
-                                                    return ssid ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300 w-fit">
-                                                            <Wifi size={14} />
-                                                            {ssid}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-theme-tertiary text-sm">--</span>
-                                                    );
-                                                })()
-                                            ) : ipDetails.unifi.client.is_wired && ipDetails.unifi.client.sw_port ? (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300 w-fit">
-                                                    <Cable size={14} />
-                                                    Port {ipDetails.unifi.client.sw_port}
-                                                </span>
-                                            ) : (
-                                                <span className="text-theme-tertiary text-sm">--</span>
-                                            )}
-                                        </div>
-
-                                        {/* Dernière vue */}
-                                        {ipDetails.unifi.client.last_seen && (
-                                            <div className="flex flex-col gap-1">
-                                                <div className="text-xs font-semibold text-blue-300 uppercase mb-1 flex items-center gap-1.5">
-                                                    <Clock size={12} />
-                                                    Dernière vue
-                                                </div>
-                                                <span className="text-sm text-theme-secondary">
-                                                    {formatDate(new Date(ipDetails.unifi.client.last_seen * 1000).toISOString())}
-                                                </span>
-                                            </div>
+                                            </>
                                         )}
+
+                                        {/* Bloc droit : équipement + ports (port actif mis en avant) */}
+                                        <div className="flex-1 rounded-lg bg-blue-500/10 border border-blue-500/40 p-4 min-w-0">
+                                            <div className="text-[10px] font-semibold text-blue-300 uppercase tracking-wider mb-2">Équipement connecté</div>
+                                            {(() => {
+                                                const eqName = ipDetails.unifi.client.is_wireless && ipDetails.unifi.ap
+                                                    ? ipDetails.unifi.ap.name
+                                                    : ipDetails.unifi.client.is_wireless && ipDetails.unifi.client.ap_name
+                                                    ? ipDetails.unifi.client.ap_name
+                                                    : ipDetails.unifi.client.is_wired && ipDetails.unifi.switch
+                                                    ? ipDetails.unifi.switch.name
+                                                    : ipDetails.unifi.client.is_wired && ipDetails.unifi.client.sw_name
+                                                    ? ipDetails.unifi.client.sw_name
+                                                    : '--';
+                                                const eqDetail = ipDetails.unifi.switch?.ip || ipDetails.unifi.switch?.model || ipDetails.unifi.ap?.ip || ipDetails.unifi.ap?.model;
+                                                const swPort = ipDetails.unifi.client.is_wired ? ipDetails.unifi.client.sw_port : null;
+                                                const portNum = swPort != null ? Number(swPort) : null;
+                                                const maxPorts = 8;
+                                                return (
+                                                    <>
+                                                        <div className="font-medium text-theme-primary text-sm truncate">{eqName}</div>
+                                                        {eqDetail && <div className="text-xs text-theme-tertiary font-mono">{eqDetail}</div>}
+                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                            <span className="text-[10px] text-blue-300/80 uppercase mr-1">Port</span>
+                                                            {portNum != null ? (
+                                                                <>
+                                                                    {Array.from({ length: maxPorts }, (_, i) => i + 1).map((p) => (
+                                                                        <div
+                                                                            key={p}
+                                                                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-mono font-semibold border-2 transition-colors ${
+                                                                                p === portNum
+                                                                                    ? 'bg-blue-500/30 border-blue-400 text-blue-200 shadow-md shadow-blue-500/20'
+                                                                                    : 'bg-theme-secondary/50 border-theme/40 text-theme-tertiary'
+                                                                            }`}
+                                                                            title={p === portNum ? `Connecté (port ${p})` : `Port ${p}`}
+                                                                        >
+                                                                            {p}
+                                                                        </div>
+                                                                    ))}
+                                                                    <span className="text-xs text-blue-400 ml-1">← connecté</span>
+                                                                </>
+                                                            ) : ipDetails.unifi.client.is_wireless ? (
+                                                                (() => {
+                                                                    const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
+                                                                    return ssid ? (
+                                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300">
+                                                                            <Wifi size={14} /> {ssid}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-theme-tertiary text-sm">--</span>
+                                                                    );
+                                                                })()
+                                                            ) : (
+                                                                <span className="text-theme-tertiary text-sm">--</span>
+                                                            )}
+                                                        </div>
+                                                        {ipDetails.unifi.client.last_seen && (
+                                                            <div className="text-xs text-theme-tertiary mt-2 flex items-center gap-1">
+                                                                <Clock size={12} />
+                                                                Dernière vue : {formatDate(new Date(ipDetails.unifi.client.last_seen * 1000).toISOString())}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -2098,7 +2263,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     {paginatedResults.map((result, index) => {
                                         const isFreebox = result.pluginId === 'freebox';
                                         const isUnifi = result.pluginId === 'unifi';
-                                        
+                                        // Recherche étendue : inverser les couleurs (exacte = Freebox violet, UniFi bleu ; étendue = inverse)
+                                        const swap = !exactMatch;
+                                        const freeboxColor = swap ? 'text-purple-400' : 'text-blue-400';
+                                        const unifiColor = swap ? 'text-blue-400' : 'text-purple-400';
                                         return (
                                             <tr
                                                 key={`${result.pluginId}-${result.id}-${index}`}
@@ -2106,10 +2274,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             >
                                                 <td className="py-3 px-4">
                                                     <div className="flex items-center gap-2">
-                                                        {isFreebox && <Server size={16} className="text-blue-400" />}
-                                                        {isUnifi && <Wifi size={16} className="text-purple-400" />}
+                                                        {isFreebox && <Server size={16} className={freeboxColor} />}
+                                                        {isUnifi && <Wifi size={16} className={unifiColor} />}
                                                         <span className={`font-medium ${
-                                                            isFreebox ? 'text-blue-400' : isUnifi ? 'text-purple-400' : 'text-theme-primary'
+                                                            isFreebox ? freeboxColor : isUnifi ? unifiColor : 'text-theme-primary'
                                                         }`}>
                                                             {result.pluginName}
                                                         </span>
@@ -2281,6 +2449,26 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             <SearchOptionsInfoModal
                 isOpen={showOptionsInfoModal}
                 onClose={() => setShowOptionsInfoModal(false)}
+            />
+
+            {/* Search History Modal */}
+            <SearchHistoryModal
+                isOpen={showHistoryModal}
+                onClose={() => setShowHistoryModal(false)}
+                history={searchHistory}
+                onSelect={(entry) => {
+                    setSearchQuery(entry.query);
+                    setExactMatch(entry.exactMatch);
+                    setCaseSensitive(entry.caseSensitive);
+                    setShowOnlyActive(entry.showOnlyActive);
+                    setShowHistoryModal(false);
+                    performSearch(entry.query, {
+                        exactMatch: entry.exactMatch,
+                        caseSensitive: entry.caseSensitive,
+                        showOnlyActive: entry.showOnlyActive
+                    });
+                }}
+                onDelete={removeFromSearchHistory}
             />
             
             {/* Latency Monitoring Modal */}

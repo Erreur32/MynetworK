@@ -404,12 +404,11 @@ export class NetworkScanService {
                         this.currentScanProgress.updated = updated;
                     }
                 } else {
-                    // IP is offline - update existing entry if it exists
+                    // IP is offline - update existing entry if it exists (do not update lastSeen: keep the time when it was last seen online)
                     const existing = NetworkScanRepository.findByIp(ip);
                     if (existing && existing.status === 'online') {
                         const updatedScan = NetworkScanRepository.update(ip, {
-                            status: 'offline',
-                            lastSeen: new Date()
+                            status: 'offline'
                         });
                         if (updatedScan) {
                             // Record in history table
@@ -694,9 +693,12 @@ export class NetworkScanService {
                     const existing = NetworkScanRepository.findByIp(ip);
                     const updateData: Partial<NetworkScan> = {
                         status: 'online',
-                        pingLatency: latency,
-                        lastSeen: new Date()
+                        pingLatency: latency
                     };
+                    // Only refresh lastSeen when device (re)appears (was offline/unknown), not when already online
+                    if (!existing || existing.status !== 'online') {
+                        updateData.lastSeen = new Date();
+                    }
                     
                     // If full scan, update MAC, vendor, and hostname
                     if (scanType === 'full') {
@@ -857,10 +859,9 @@ export class NetworkScanService {
                         this.currentScanProgress.updated = online + offline;
                     }
                 } else {
-                    // IP is offline
+                    // IP is offline (do not update lastSeen: keep the time when it was last seen online)
                     const updatedScan = NetworkScanRepository.update(ip, {
-                        status: 'offline',
-                        lastSeen: new Date()
+                        status: 'offline'
                     });
                     if (updatedScan) {
                         // Record in history table

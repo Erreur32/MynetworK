@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -15,6 +15,65 @@ import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
+
+/** Ports connus : numéro → nom du service (pour les tooltips) */
+const WELL_KNOWN_PORTS: Record<number, string> = {
+    20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
+    143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 1433: 'SQL Server', 3306: 'MySQL',
+    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin'
+};
+
+/** Icônes Lucide par port (services connus) */
+const PORT_ICONS: Record<number, LucideIcon> = {
+    20: FolderInput, 21: FolderInput, 22: Terminal, 23: Terminal, 25: Mail, 53: Globe, 80: Globe,
+    110: Mail, 143: Mail, 443: Lock, 445: Share2, 993: Mail, 995: Mail, 1433: Database, 3306: Database,
+    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server
+};
+function getPortIcon(port: number): LucideIcon {
+    return PORT_ICONS[port] ?? Server;
+}
+
+/** Catégories de ports pour regroupement dans le tooltip */
+const PORT_CATEGORIES: Record<string, number[]> = {
+    'Web': [80, 443, 8080, 8443, 9000],
+    'Bases de données': [3306, 5432, 6379, 1433],
+    'Mail': [25, 110, 143, 993, 995],
+    'Système': [20, 21, 22, 23, 53, 445],
+    'Accès distant': [3389, 5900],
+    'Docker': [2375, 2376] // Docker daemon (non-TLS / TLS), à prévoir pour détection
+};
+const getPortCategory = (port: number): string => {
+    for (const [cat, ports] of Object.entries(PORT_CATEGORIES)) {
+        if (ports.includes(port)) return cat;
+    }
+    return 'Autres';
+};
+
+/** Couleur par catégorie : Système = orange, Docker = indigo, reste = cyan */
+function getPortCategoryColor(cat: string): { label: string; cell: string; icon: string } {
+    switch (cat) {
+        case 'Système':
+            return { label: 'text-amber-400', cell: 'bg-amber-500/20 border-amber-500/40 text-amber-300', icon: 'text-amber-400/90' };
+        case 'Docker':
+            return { label: 'text-indigo-400', cell: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300', icon: 'text-indigo-400/90' };
+        default:
+            return { label: 'text-cyan-400', cell: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300', icon: 'text-cyan-400/90' };
+    }
+}
+
+/** Calcule left/top du tooltip pour rester dans la fenêtre (avec marge 16px) */
+function getTooltipPosition(rect: { left: number; top: number; bottom: number; right: number }, tooltipWidth: number, tooltipHeight: number): { left: number; top: number } {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 300;
+    const margin = 16;
+    let left = rect.left;
+    if (left + tooltipWidth > vw - margin) left = vw - tooltipWidth - margin;
+    if (left < margin) left = margin;
+    let top = rect.bottom + 6;
+    if (top + tooltipHeight > vh - margin) top = rect.top - tooltipHeight - 8;
+    if (top < margin) top = margin;
+    return { left, top };
+}
 
 interface NetworkScanPageProps {
     onBack: () => void;
@@ -112,6 +171,32 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     
     // Port scan (nmap) progress - active when scan ports runs in background after full scan
     const [portScanProgress, setPortScanProgress] = useState<{ active: boolean; current: number; total: number; currentIp?: string } | null>(null);
+
+    // Hover tooltips (MAC + Ports) - anchor rect pour positionner dans la fenêtre
+    const [macTooltip, setMacTooltip] = useState<{ mac: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [portsTooltip, setPortsTooltip] = useState<{ ip: string; openPorts: { port: number; protocol?: string }[]; lastPortScan?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const TOOLTIP_MAC_W = 320;
+    const TOOLTIP_MAC_H = 100;
+    const TOOLTIP_PORTS_W = 420;
+    const TOOLTIP_PORTS_H = 320;
+    const tooltipHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hideAllTooltips = useCallback(() => {
+        setMacTooltip(null);
+        setPortsTooltip(null);
+    }, []);
+    const scheduleTooltipHide = useCallback((ms = 80) => {
+        if (tooltipHideTimeoutRef.current) clearTimeout(tooltipHideTimeoutRef.current);
+        tooltipHideTimeoutRef.current = setTimeout(() => {
+            hideAllTooltips();
+            tooltipHideTimeoutRef.current = null;
+        }, ms);
+    }, [hideAllTooltips]);
+    const cancelTooltipHide = useCallback(() => {
+        if (tooltipHideTimeoutRef.current) {
+            clearTimeout(tooltipHideTimeoutRef.current);
+            tooltipHideTimeoutRef.current = null;
+        }
+    }, []);
 
     // Latency monitoring state
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
@@ -270,8 +355,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
     const fetchHistory = useCallback(async () => {
         try {
+            // Avg1h, Max, Monitoring are client-side only (latencyStats/monitoringStatus).
+            // Send a server-supported sortBy so the API returns data; client will re-sort in filteredScans.
+            const serverSortBy = (sortBy === 'avg1h' || sortBy === 'max' || sortBy === 'monitoring')
+                ? 'last_seen'
+                : sortBy;
             const params: any = {
-                sortBy: sortBy,
+                sortBy: serverSortBy,
                 sortOrder: sortOrder
             };
             // Only add limit if not 'full'
@@ -968,7 +1058,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const vendorValue = scan.vendor?.trim();
                 const vendorMatch = vendorValue && vendorValue !== '--' ? vendorValue.toLowerCase().includes(searchLower) : false;
                 
-                return ipMatch || macMatch || hostnameMatch || vendorMatch;
+                // Handle ports (openPorts from scan de ports)
+                const openPorts = (scan.additionalInfo as { openPorts?: { port: number }[] })?.openPorts;
+                const portsMatch = Array.isArray(openPorts) && openPorts.some((p) => String(p.port).includes(searchLower));
+                
+                return ipMatch || macMatch || hostnameMatch || vendorMatch || portsMatch;
         }
         return true;
     });
@@ -1517,7 +1611,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 type="text"
                                 value={searchFilter}
                                 onChange={(e) => setSearchFilter(e.target.value)}
-                                    placeholder="Rechercher par IP, MAC, hostname ou vendor..."
+                                    placeholder="Rechercher par IP, MAC, hostname, vendor ou ports..."
                                     className="w-full pl-12 pr-4 py-2.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-base text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 hover:border-gray-600"
                             />
                                 {searchFilter && (
@@ -1561,7 +1655,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 <div className="overflow-x-auto">
                     <table className="w-full table-auto">
                         <colgroup>
-                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[140px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[120px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
+                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[72px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[140px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[52px]" /><col className="min-w-[64px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-gray-800">
@@ -1598,14 +1692,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" onClick={() => {
                                     if (sortBy === 'mac') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('mac'); setSortOrder('asc'); }
                                 }}>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-0.5">
                                         <span>MAC</span>
                                         {sortBy === 'mac' && (
-                                            sortOrder === 'asc' ? <ArrowDown size={14} className="text-blue-400" /> : <ArrowUp size={14} className="text-blue-400" />
+                                            sortOrder === 'asc' ? <ArrowDown size={12} className="text-blue-400" /> : <ArrowUp size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
@@ -1668,25 +1762,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title="Monitoring latence" onClick={() => {
                                     if (sortBy === 'monitoring') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('monitoring'); setSortOrder('asc'); }
                                 }}>
-                                    <div className="flex items-center gap-2">
-                                        <span>Monitoring</span>
+                                    <div className="flex items-center gap-0.5">
+                                        <span>Monit.</span>
                                         {sortBy === 'monitoring' && (
-                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                            sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title="Dernière vue" onClick={() => {
                                     if (sortBy === 'last_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('last_seen'); setSortOrder('asc'); }
                                 }}>
-                                    <div className="flex items-center gap-2">
-                                        <span>Dernière vue</span>
+                                    <div className="flex items-center gap-0.5">
+                                        <span>Dern. vue</span>
                                         {sortBy === 'last_seen' && (
-                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                            sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
@@ -1813,7 +1907,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 })()}
                                             </div>
                                         </td>
-                                        <td className="py-3 px-4 text-sm font-mono text-gray-400 break-all whitespace-normal" title={scan.mac || '--'}>{scan.mac || '--'}</td>
+                                        <td
+                                            className="py-3 px-2 text-sm font-mono text-gray-400 whitespace-nowrap cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setPortsTooltip(null);
+                                                const mac = scan.mac?.trim() || '--';
+                                                if (mac === '--') return;
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setMacTooltip({ mac, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
+                                            {(() => {
+                                                const mac = scan.mac?.trim() || '--';
+                                                if (mac === '--' || mac.length <= 8) return mac;
+                                                return mac.slice(0, 8) + '…';
+                                            })()}
+                                        </td>
                                         <td className="py-3 px-4">
                                             <div className="flex items-center gap-2">
                                                 {scan.status === 'online' ? (
@@ -1831,7 +1942,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 {formatLatency(scan.pingLatency)}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4 text-sm text-gray-400 font-mono" title={(scan.additionalInfo as { lastPortScan?: string })?.lastPortScan ? `Scan: ${new Date((scan.additionalInfo as { lastPortScan?: string }).lastPortScan!).toLocaleString('fr-FR')}` : undefined}>
+                                        <td
+                                            className="py-3 px-4 text-sm text-gray-400 font-mono cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                const addInfo = scan.additionalInfo as { openPorts?: { port: number; protocol?: string }[]; lastPortScan?: string } | undefined;
+                                                const openPorts = addInfo?.openPorts;
+                                                const lastPortScan = addInfo?.lastPortScan;
+                                                const hasPorts = Array.isArray(openPorts) && openPorts.length > 0;
+                                                if (!hasPorts && !lastPortScan) return;
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setPortsTooltip({
+                                                    ip: scan.ip,
+                                                    openPorts: (openPorts ?? []).map((p) => ({ port: p.port, protocol: (p as { protocol?: string }).protocol })),
+                                                    lastPortScan,
+                                                    rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right }
+                                                });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             {(() => {
                                                 const addInfo = scan.additionalInfo as { openPorts?: { port: number }[]; lastPortScan?: string } | undefined;
                                                 const openPorts = addInfo?.openPorts;
@@ -1867,31 +1997,31 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${latencyStats[scan.ip].max!.toFixed(3)}ms` : '--'}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4">
-                                            <div className="flex items-center gap-2">
+                                        <td className="py-3 px-2 whitespace-nowrap">
+                                            <div className="flex items-center gap-0.5">
                                                 <button
                                                     onClick={() => handleToggleMonitoring(scan.ip, !monitoringStatus[scan.ip])}
-                                                    className="p-1 hover:bg-blue-500/10 rounded transition-colors"
+                                                    className="p-0.5 hover:bg-blue-500/10 rounded transition-colors"
                                                     title={monitoringStatus[scan.ip] ? 'Désactiver le monitoring' : 'Activer le monitoring'}
                                                 >
                                                     {monitoringStatus[scan.ip] ? (
-                                                        <ToggleRight size={18} className="text-blue-400" />
+                                                        <ToggleRight size={16} className="text-blue-400" />
                                                     ) : (
-                                                        <ToggleLeft size={18} className="text-gray-500" />
+                                                        <ToggleLeft size={16} className="text-gray-500" />
                                                     )}
                                                 </button>
                                                 {monitoringStatus[scan.ip] && (
                                                     <button
                                                         onClick={() => handleOpenLatencyGraph(scan.ip)}
-                                                        className="p-1 hover:bg-green-500/10 text-green-400 rounded transition-colors"
+                                                        className="p-0.5 hover:bg-green-500/10 text-green-400 rounded transition-colors"
                                                         title="Voir le graphique de latence"
                                                     >
-                                                        <BarChart2 size={16} />
+                                                        <BarChart2 size={14} />
                                                     </button>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="py-3 px-4 text-sm text-gray-400 break-words whitespace-normal" title={formatRelativeTime(scan.lastSeen)}>
+                                        <td className="py-3 px-2 text-sm text-gray-400 whitespace-nowrap" title={formatRelativeTime(scan.lastSeen)}>
                                             {formatRelativeTime(scan.lastSeen)}
                                         </td>
                                         <td className="py-3 pr-2 pl-0 text-right w-1 whitespace-nowrap">
@@ -1910,6 +2040,77 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     </table>
                 </div>
             </Card>
+
+            {/* Hover tooltip MAC - positionné dans la fenêtre */}
+            {macTooltip && (() => {
+                const pos = getTooltipPosition(macTooltip.rect, TOOLTIP_MAC_W, TOOLTIP_MAC_H);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(340px,calc(100vw-32px))]"
+                        style={{ left: pos.left, top: pos.top }}
+                    onMouseEnter={cancelTooltipHide}
+                    onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Adresse MAC</div>
+                        <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Ports - positionné dans la fenêtre, ports par catégorie / colonnes */}
+            {portsTooltip && (() => {
+                const pos = getTooltipPosition(portsTooltip.rect, TOOLTIP_PORTS_W, TOOLTIP_PORTS_H);
+                const sorted = [...portsTooltip.openPorts].sort((a, b) => a.port - b.port);
+                const byCategory = sorted.reduce<Record<string, { port: number; protocol?: string }[]>>((acc, p) => {
+                    const cat = getPortCategory(p.port);
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(p);
+                    return acc;
+                }, {});
+                const categoryOrder = ['Web', 'Bases de données', 'Mail', 'Système', 'Accès distant', 'Docker', 'Autres'];
+                const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(420px,calc(100vw-32px))]"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{portsTooltip.ip}</div>
+                        {sorted.length > 0 ? (
+                            <div className="space-y-3">
+                                {orderedCategories.map((cat) => {
+                                    const colors = getPortCategoryColor(cat);
+                                    return (
+                                        <div key={cat}>
+                                            <div className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${colors.label}`}>{cat}</div>
+                                            <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                                                {byCategory[cat].map((p) => {
+                                                    const Icon = getPortIcon(p.port);
+                                                    return (
+                                                        <div key={p.port} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg border ${colors.cell}`}>
+                                                            <Icon size={14} className={`${colors.icon} flex-shrink-0`} />
+                                                            <span className="font-mono text-sm">{p.port}</span>
+                                                            <span className="text-xs opacity-90 truncate" title={WELL_KNOWN_PORTS[p.port] ?? 'Service'}>{WELL_KNOWN_PORTS[p.port] ?? '—'}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-gray-500 py-1">Aucun port ouvert</div>
+                        )}
+                        {portsTooltip.lastPortScan && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/80 text-xs text-gray-500">
+                                Scan : {new Date(portsTooltip.lastPortScan).toLocaleString('fr-FR')}
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Config Modal */}
             {configModalOpen && (

@@ -3,6 +3,48 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.7] - 2026-02-01
+
+### ✨ Ajouté
+
+**Page Recherche**
+- ✅ Bouton **Historique** dans la section Filtres : ouvre un modal avec l’historique des recherches (requête, options exact/étendu, case, actif)
+- ✅ Persistance de l’historique dans localStorage (sans doublon), sélection d’une entrée pour relancer la recherche avec les mêmes options
+- ✅ Badges **Recherches fréquentes** : affichage des 5 termes les plus recherchés sous la barre de recherche (cliquables)
+- ✅ **Schéma de connexion UniFi** : bloc [ Appareil ] —trait—> [ Équipement | Port N ] avec trait WiFi (ondes) ou Filaire (câble + petits ovales), ports numérotés 1–8 avec le port connecté mis en avant
+- ✅ Couleurs par catégorie de ports : **Système** (orange/ambre), **Docker** (indigo, ports 2375/2376), reste (cyan) — page Recherche et tooltip Scan Réseau
+- ✅ Catégorie **Docker** dans les ports (préparation détection)
+
+### 🔧 Modifié
+
+**Page Recherche**
+- 🔧 Suppression du bloc de sélection des plugins sous la barre de recherche (recherche sur tous les plugins actifs)
+- 🔧 Infos mode strict/étendu déplacées dans le champ de recherche : placeholder et ligne d’aide sous l’input (« Strict : 1 IP ou 1 MAC uniquement — activer Étendu pour plus d’infos »)
+- 🔧 **Badge Filaire** coloré (bleu) à la place du badge WiFi grisé quand pas de WiFi ou pas de RSSI valide ; plus de badge WiFi gris
+- 🔧 Inversion des couleurs UniFi/Freebox en mode recherche étendue (tableau des résultats)
+- 🔧 Panneau Ports ouverts en pleine largeur, boutons en flex-wrap pour ne plus être coupés
+- 🔧 Ports détail : affichage plein page par catégorie (sans tooltip), comme le scan
+- 🔧 Loupe de la barre de recherche recentrée (wrapper pour centrage par rapport au champ uniquement)
+
+**Scripts version**
+- 🔧 `bump-version.js` : mise à jour des plugins serveur (Freebox, UniFi, Scan Réseau) en plus de package.json, version.ts, main.tsx, README, Header
+- 🔧 Plugins serveur synchronisés à la version 0.4.7
+
+### 🐛 Corrigé
+
+- 🐛 Badge connexion : si pas WiFi ou RSSI invalide, affichage « Filaire » (bleu) au lieu du badge WiFi grisé
+
+---
+
+## [0.4.6] - 2026-02-01
+
+### 🔧 Modifié
+
+- 🔧 Mise à jour de version (package.json, src/constants/version.ts, plugins serveur) pour invalidation du cache navigateur
+- 🔧 Synchronisation des versions dans tous les fichiers du projet
+
+---
+
 ## [0.4.5] - 2026-01-31
 
 ### ✨ Ajouté

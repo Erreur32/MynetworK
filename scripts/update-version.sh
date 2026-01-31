@@ -16,8 +16,16 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Récupérer la version actuelle
-OLD_VERSION=$(grep -oP '"version":\s*"\K[^"]+' package.json 2>/dev/null || echo "")
+# Récupérer la version actuelle (portable: node > grep -oP > sed)
+if command -v node &> /dev/null && [ -f "package.json" ]; then
+    OLD_VERSION=$(node -p "try { require('./package.json').version } catch(e) { '' }" 2>/dev/null || echo "")
+fi
+if [ -z "$OLD_VERSION" ] && [ -f "package.json" ]; then
+    OLD_VERSION=$(grep -oP '"version":\s*"\K[^"]+' package.json 2>/dev/null || echo "")
+fi
+if [ -z "$OLD_VERSION" ] && [ -f "package.json" ]; then
+    OLD_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json 2>/dev/null | head -n 1)
+fi
 
 # Si aucun argument n'est fourni, afficher la version actuelle et vérifier git status
 if [ -z "$1" ]; then

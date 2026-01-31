@@ -55,6 +55,24 @@ const newVersion = incrementVersion(currentVersion, versionType);
 packageJson.version = newVersion;
 writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
 
+// Update src/constants/version.ts
+const versionTsPath = join(rootDir, 'src/constants/version.ts');
+let versionTsContent = readFileSync(versionTsPath, 'utf-8');
+versionTsContent = versionTsContent.replace(
+  /export const APP_VERSION = '\d+\.\d+\.\d+';/,
+  `export const APP_VERSION = '${newVersion}';`
+);
+writeFileSync(versionTsPath, versionTsContent);
+
+// Update src/main.tsx (logs console)
+const mainTsxPath = join(rootDir, 'src/main.tsx');
+let mainTsxContent = readFileSync(mainTsxPath, 'utf-8');
+mainTsxContent = mainTsxContent.replace(
+  /const APP_VERSION = '\d+\.\d+\.\d+';/,
+  `const APP_VERSION = '${newVersion}';`
+);
+writeFileSync(mainTsxPath, mainTsxContent);
+
 // Update README.md
 const readmePath = join(rootDir, 'README.md');
 let readmeContent = readFileSync(readmePath, 'utf-8');
@@ -64,7 +82,7 @@ readmeContent = readmeContent.replace(
 );
 writeFileSync(readmePath, readmeContent);
 
-// Update Header.tsx
+// Update Header.tsx (si version en dur présente)
 const headerPath = join(rootDir, 'src/components/layout/Header.tsx');
 let headerContent = readFileSync(headerPath, 'utf-8');
 headerContent = headerContent.replace(
@@ -73,9 +91,26 @@ headerContent = headerContent.replace(
 );
 writeFileSync(headerPath, headerContent);
 
+// Update server plugins (Freebox, UniFi, Scan Réseau) : super('id', 'Name', 'X.Y.Z')
+const pluginPaths = [
+  'server/plugins/freebox/FreeboxPlugin.ts',
+  'server/plugins/unifi/UniFiPlugin.ts',
+  'server/plugins/scan-reseau/ScanReseauPlugin.ts'
+];
+const versionInPluginRegex = /(super\([^)]*',\s*')\d+\.\d+\.\d+('\))/;
+for (const relPath of pluginPaths) {
+  const pluginPath = join(rootDir, relPath);
+  let pluginContent = readFileSync(pluginPath, 'utf-8');
+  pluginContent = pluginContent.replace(versionInPluginRegex, `$1${newVersion}$2`);
+  writeFileSync(pluginPath, pluginContent);
+}
+
 console.log(`✅ Version incrémentée: ${currentVersion} -> ${newVersion}`);
 console.log(`✅ package.json mis à jour`);
+console.log(`✅ src/constants/version.ts mis à jour`);
+console.log(`✅ src/main.tsx mis à jour`);
 console.log(`✅ README.md mis à jour`);
 console.log(`✅ Header.tsx mis à jour`);
+console.log(`✅ Plugins serveur (Freebox, UniFi, Scan Réseau) mis à jour`);
 console.log(`📝 N'oubliez pas de mettre à jour CHANGELOG.md avec les changements !`);
 

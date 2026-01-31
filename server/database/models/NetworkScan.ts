@@ -38,7 +38,7 @@ export interface CreateNetworkScanInput {
 export interface NetworkScanFilters {
     status?: 'online' | 'offline' | 'unknown';
     ip?: string; // Partial IP match (e.g., "192.168.1")
-    search?: string; // Search in IP, MAC, or hostname
+    search?: string; // Search in IP, MAC, hostname, vendor, or ports (openPorts)
     startDate?: Date;
     endDate?: Date;
     limit?: number;
@@ -62,8 +62,8 @@ export class NetworkScanRepository {
         const existing = this.findByIp(input.ip);
         
         if (existing) {
-            // Update existing entry
-            return this.update(input.ip, {
+            // Update existing entry. Only refresh lastSeen when device (re)appears (was offline/unknown), not when already online.
+            const updatePayload: Parameters<typeof this.update>[1] = {
                 mac: input.mac,
                 hostname: input.hostname,
                 vendor: input.vendor,
@@ -72,9 +72,12 @@ export class NetworkScanRepository {
                 status: input.status,
                 pingLatency: input.pingLatency,
                 additionalInfo: input.additionalInfo,
-                lastSeen: new Date(),
                 scanCount: existing.scanCount + 1
-            })!;
+            };
+            if (existing.status !== 'online') {
+                updatePayload.lastSeen = new Date();
+            }
+            return this.update(input.ip, updatePayload)!;
         } else {
             // Create new entry
             return this.create(input);
@@ -152,11 +155,13 @@ export class NetworkScanRepository {
         }
         
         if (filters.search !== undefined) {
-            // Search in IP, MAC, hostname, and vendor fields
-            // Use COALESCE to handle NULL values (treat them as empty strings for LIKE comparison)
-            conditions.push('(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
+            // Search in IP, MAC, hostname, vendor, and ports (additionalInfo.openPorts)
             const searchPattern = `%${filters.search}%`;
-            values.push(searchPattern, searchPattern, searchPattern, searchPattern);
+            conditions.push(
+                '(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ? ' +
+                'OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(additional_info, \'$.openPorts\'), \'[]\')) WHERE CAST(json_extract(value, \'$.port\') AS TEXT) LIKE ?))'
+            );
+            values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
         }
         
         if (filters.startDate !== undefined) {
@@ -292,11 +297,13 @@ export class NetworkScanRepository {
         }
         
         if (filters.search !== undefined) {
-            // Search in IP, MAC, hostname, and vendor fields
-            // Use COALESCE to handle NULL values (treat them as empty strings for LIKE comparison)
-            conditions.push('(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
+            // Search in IP, MAC, hostname, vendor, and ports (additionalInfo.openPorts)
             const searchPattern = `%${filters.search}%`;
-            values.push(searchPattern, searchPattern, searchPattern, searchPattern);
+            conditions.push(
+                '(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ? ' +
+                'OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(additional_info, \'$.openPorts\'), \'[]\')) WHERE CAST(json_extract(value, \'$.port\') AS TEXT) LIKE ?))'
+            );
+            values.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
         }
         
         if (filters.startDate !== undefined) {

@@ -330,7 +330,7 @@ router.post('/refresh', requireAuth, autoLog('network-scan', 'refresh'), asyncHa
  * Query params:
  * - status?: 'online' | 'offline' | 'unknown'
  * - ip?: string (partial match, e.g., "192.168.1")
- * - search?: string (search in IP, MAC, hostname)
+ * - search?: string (search in IP, MAC, hostname, vendor, or ports)
  * - limit?: number (default: 100)
  * - offset?: number (default: 0)
  * - sortBy?: 'ip' | 'last_seen' | 'first_seen' | 'status' | 'ping_latency' (default: 'last_seen')

@@ -74,6 +74,9 @@ export const SearchOptionsInfoModal: React.FC<SearchOptionsInfoModalProps> = ({ 
                                 <p className="text-sm text-gray-300 ml-1">
                                     La recherche doit correspondre exactement au terme recherché (pas de recherche partielle).
                                 </p>
+                                <p className="text-xs text-cyan-400/90 ml-1 mt-1">
+                                    Fonctionne avec <span className="font-medium">IP</span>, <span className="font-medium">nom</span>, <span className="font-medium">MAC</span>, <span className="font-medium">port</span>, <span className="font-medium">hostname</span>. La fiche détaillée (ports, schéma UniFi) s’affiche uniquement pour une recherche par <span className="font-medium">IP exacte</span>.
+                                </p>
                                 <div className="ml-1 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
                                     <p className="text-xs text-gray-400 mb-2 font-medium">Exemple :</p>
                                     <div className="space-y-1 text-xs text-gray-300">
