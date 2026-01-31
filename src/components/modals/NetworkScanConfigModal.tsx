@@ -26,7 +26,7 @@ interface UnifiedAutoScanConfig {
     fullScan?: {
         enabled: boolean;
         interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
-        // scanType retiré - scan complet toujours en mode 'full'
+        portScanEnabled?: boolean; // run nmap on online hosts after full scan (background)
     };
     refresh?: {
         enabled: boolean;
@@ -70,7 +70,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     // New unified config
     const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
         enabled: false,
-        fullScan: { enabled: false, interval: 1440 }, // scanType retiré - toujours 'full'
+        fullScan: { enabled: false, interval: 1440, portScanEnabled: false },
         refresh: { enabled: false, interval: 10, scanType: 'quick' }
     });
     
@@ -276,8 +276,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                         ...unifiedResponse.result,
                         fullScan: unifiedResponse.result.fullScan ? {
                             enabled: unifiedResponse.result.fullScan.enabled,
-                            interval: unifiedResponse.result.fullScan.interval
-                            // scanType retiré explicitement
+                            interval: unifiedResponse.result.fullScan.interval,
+                            portScanEnabled: unifiedResponse.result.fullScan.portScanEnabled === true
                         } : undefined
                     };
                     setUnifiedConfig(cleanedConfig);
@@ -365,12 +365,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 enabled: unifiedConfig.enabled,
                 fullScan: unifiedConfig.fullScan ? {
                     enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
-                    interval: unifiedConfig.fullScan.interval || 1440
-                    // scanType retiré - scan complet toujours en mode 'full'
+                    interval: unifiedConfig.fullScan.interval || 1440,
+                    portScanEnabled: unifiedConfig.fullScan.portScanEnabled === true
                 } : {
                     enabled: false,
-                    interval: 1440
-                    // scanType retiré - scan complet toujours en mode 'full'
+                    interval: 1440,
+                    portScanEnabled: false
                 },
                 refresh: unifiedConfig.refresh ? {
                     enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
@@ -440,12 +440,12 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     enabled: unifiedConfig.enabled,
                     fullScan: unifiedConfig.fullScan ? {
                         enabled: unifiedConfig.enabled ? (unifiedConfig.fullScan.enabled || false) : false,
-                        interval: unifiedConfig.fullScan.interval || 1440
-                        // scanType retiré - scan complet toujours en mode 'full'
+                        interval: unifiedConfig.fullScan.interval || 1440,
+                        portScanEnabled: unifiedConfig.fullScan.portScanEnabled === true
                     } : {
                         enabled: false,
-                        interval: 1440
-                        // scanType retiré - scan complet toujours en mode 'full'
+                        interval: 1440,
+                        portScanEnabled: false
                     },
                     refresh: unifiedConfig.refresh ? {
                         enabled: unifiedConfig.enabled ? (unifiedConfig.refresh.enabled || false) : false,
@@ -608,8 +608,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 setUnifiedConfig({ 
                                                     ...unifiedConfig, 
                                                     enabled: newEnabled,
-                                                    fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440 }, // scanType retiré - toujours 'full'
-                                                    refresh: unifiedConfig.refresh || { enabled: false, interval: 10 }
+                                                      fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440, portScanEnabled: false },
+                                                      refresh: unifiedConfig.refresh || { enabled: false, interval: 10 }
                                                 });
                                             }}
                                             className="w-5 h-5 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500 focus:ring-2"
@@ -680,7 +680,26 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                             <option value="1440">24 heures (1 fois par jour)</option>
                                                         </select>
                                                     </div>
-                                                    {/* Type de scan retiré - scan complet toujours en mode 'full' */}
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            id="full-scan-port-scan"
+                                                            name="full-scan-port-scan"
+                                                            type="checkbox"
+                                                            checked={unifiedConfig.fullScan?.portScanEnabled ?? false}
+                                                            onChange={(e) => setUnifiedConfig({
+                                                                ...unifiedConfig,
+                                                                fullScan: {
+                                                                    ...unifiedConfig.fullScan!,
+                                                                    portScanEnabled: e.target.checked
+                                                                }
+                                                            })}
+                                                            className="w-4 h-4"
+                                                        />
+                                                        <span className="text-xs text-gray-400">Scanner les ports ouverts après chaque scan complet</span>
+                                                    </label>
+                                                    <p className="text-xs text-gray-500">
+                                                        Lance un scan nmap en arrière-plan sur chaque IP en ligne (ports TCP). Résultats affichés dans la colonne &quot;Ports ouverts&quot;.
+                                                    </p>
                                                 </div>
                                             )}
                                         </div>

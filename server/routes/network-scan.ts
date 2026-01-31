@@ -29,6 +29,7 @@ import {
 } from '../services/databasePurgeService.js';
 import { PluginPriorityConfigService } from '../services/pluginPriorityConfig.js';
 import { WiresharkVendorService } from '../services/wiresharkVendorService.js';
+import { portScanService } from '../services/portScanService.js';
 
 const router = Router();
 
@@ -128,6 +129,22 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
                     result: result
                 }));
                 logger.info('NetworkScan', `Scan completed successfully: ${result.scanned} scanned, ${result.found} found, ${result.updated} updated`);
+                // If port scan option is ON, run nmap on online hosts in background (full scan only)
+                if (scanType === 'full') {
+                    const unifiedStr = AppConfigRepository.get('network_scan_unified_auto');
+                    if (unifiedStr) {
+                        try {
+                            const unified: UnifiedAutoScanConfig = JSON.parse(unifiedStr);
+                            if (unified.fullScan?.portScanEnabled === true) {
+                                portScanService.runPortScanForOnlineHosts().catch((err: any) => {
+                                    logger.error('NetworkScan', 'Background port scan failed:', err?.message || err);
+                                });
+                            }
+                        } catch (_e) {
+                            // ignore parse error
+                        }
+                    }
+                }
             })
             .catch((error: any) => {
                 logger.error('NetworkScan', 'Background scan failed:', error);
@@ -229,6 +246,18 @@ router.get('/progress', requireAuth, asyncHandler(async (req: AuthenticatedReque
     return res.json({
         success: true,
         result: null
+    });
+}));
+
+/**
+ * GET /api/network-scan/port-scan-progress
+ * Get port scan (nmap) progress when running in background after full scan
+ */
+router.get('/port-scan-progress', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    const progress = portScanService.getPortScanProgress();
+    res.json({
+        success: true,
+        result: progress
     });
 }));
 
@@ -888,7 +917,8 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         const lastRefresh = lastManual?.type === 'refresh' ? lastManual : (lastAuto?.type === 'refresh' ? lastAuto : null);
         
         // Ensure fullScan and refresh objects exist with defaults
-        const fullScanConfig = unifiedConfig.fullScan || { enabled: false, interval: 1440, scanType: 'full' };
+        const fullScanConfig = unifiedConfig.fullScan || { enabled: false, interval: 1440, scanType: 'full' as const, portScanEnabled: false };
+        const fullScanWithPortScan = { ...fullScanConfig, portScanEnabled: unifiedConfig.fullScan?.portScanEnabled === true };
         const refreshConfig = unifiedConfig.refresh || { enabled: false, interval: 10 };
         
         // Calculate enabled status: true if master switch is enabled AND at least one sub-config is enabled
@@ -902,7 +932,7 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         const result = {
             enabled: isEnabled,
                 fullScan: {
-                config: fullScanConfig,
+                config: fullScanWithPortScan,
                     scheduler: scanStatus,
                     lastExecution: lastFullScan ? {
                         timestamp: lastFullScan.timestamp,
@@ -1599,8 +1629,8 @@ router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-con
             enabled,
             fullScan: fullScan ? {
                 enabled: fullScan.enabled || false,
-                interval: fullScan.interval || 1440
-                // scanType retiré - scan complet toujours en mode 'full'
+                interval: fullScan.interval || 1440,
+                portScanEnabled: fullScan.portScanEnabled === true
             } : undefined,
             refresh: refresh ? {
                 enabled: refresh.enabled || false,

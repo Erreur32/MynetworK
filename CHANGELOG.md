@@ -3,6 +3,41 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.4.5] - 2026-01-31
+
+### ✨ Ajouté
+
+**Scan Réseau - Scan de ports (nmap)**
+- ✅ Option "Scanner les ports ouverts après chaque scan complet" dans la config du scan auto (section Scan complet)
+- ✅ Exécution en arrière-plan après chaque **Full scan** lorsque l’option est activée (Quick scan non concerné)
+- ✅ Scan nmap (TCP, plage 1-10000) sur les IP **online** issues du scan, résultats stockés dans `additionalInfo` (openPorts, lastPortScan)
+- ✅ Colonne **"Ports ouverts"** dans le tableau Scan Réseau : liste des ports (ex. 22, 80, 443), ou "En cours...", "En attente", "Aucun", "Non scanné"
+- ✅ Indicateur dans l’en-tête de la colonne : icône de progression + compteur (current/total) quand le scan de ports est actif
+- ✅ API **GET /api/network-scan/port-scan-progress** pour la progression du scan de ports
+- ✅ Polling de la progression côté frontend (pendant et après le full scan) pour mettre à jour l’affichage en temps réel
+- ✅ Dockerfile : ajout de **nmap** dans l’image runtime pour le scan de ports
+
+**Page Search - Ports machine**
+- ✅ Carte **"Ports ouverts (machine)"** dans la fiche détail d’une IP (recherche par IP exacte)
+- ✅ Affichage de la liste des ports ouverts (scanner/nmap), date du dernier scan, ou "Aucun port ouvert" / "Non scanné"
+
+### 🔧 Modifié
+
+**Scan Réseau - Configuration unifiée**
+- 🔧 Config unifiée étendue : `fullScan.portScanEnabled` (booléen) pour activer/désactiver le scan de ports après full scan
+- 🔧 Route **POST /api/network-scan/unified-config** et **GET /api/network-scan/auto-status** : prise en charge de `portScanEnabled`
+
+**Plugin UniFi - Priorité Controller / Site Manager**
+- 🔧 Auto-détection : priorité au mode **Controller** si URL/username/password sont présents ; passage en Site Manager uniquement si URL unifi.ui.com + API key valide, ou si seule une API key est fournie
+- 🔧 Nettoyage des paramètres de test (route test) : en mode controller, suppression de `apiKey` des settings de test pour éviter un basculement incorrect vers Site Manager (correction Docker vs npm dev)
+
+### 🐛 Corrigé
+
+**Plugin UniFi - Validation en Docker**
+- 🐛 Correction du cas où le plugin fonctionnait en `npm run dev` mais échouait en Docker avec "Site Manager API error: 401" : la config Controller n’est plus écrasée par une API key résiduelle lors du test ou de l’initialisation
+
+---
+
 ## [0.4.4] - 2026-01-25
 
 ### ✨ Ajouté

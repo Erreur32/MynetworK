@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2 } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2 } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -110,6 +110,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [manualHostname, setManualHostname] = useState('');
     const [isAddingIp, setIsAddingIp] = useState(false);
     
+    // Port scan (nmap) progress - active when scan ports runs in background after full scan
+    const [portScanProgress, setPortScanProgress] = useState<{ active: boolean; current: number; total: number; currentIp?: string } | null>(null);
+
     // Latency monitoring state
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
     const [latencyStats, setLatencyStats] = useState<Record<string, { avg1h: number | null; max: number | null }>>({});
@@ -254,6 +257,17 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     }, []);
 
+    const fetchPortScanProgress = useCallback(async () => {
+        try {
+            const res = await api.get<{ active: boolean; current: number; total: number; currentIp?: string }>('/api/network-scan/port-scan-progress');
+            if (res.success && res.result) {
+                setPortScanProgress(res.result);
+            }
+        } catch {
+            // ignore
+        }
+    }, []);
+
     const fetchHistory = useCallback(async () => {
         try {
             const params: any = {
@@ -276,10 +290,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 // If API call fails, clear the list anyway
                 setScans([]);
             }
+            // Update port scan progress so we show active state if nmap is running
+            await fetchPortScanProgress();
         } catch (error) {
             console.error('Failed to fetch history:', error);
         }
-    }, [resultsPerPage, sortBy, sortOrder, statusFilter, debouncedSearchFilter]);
+    }, [resultsPerPage, sortBy, sortOrder, statusFilter, debouncedSearchFilter, fetchPortScanProgress]);
 
     const fetchDefaultConfig = useCallback(async () => {
         try {
@@ -486,6 +502,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         interval: POLLING_INTERVALS.system
     });
 
+    // Poll port-scan progress when it is active (nmap running in background after full scan)
+    useEffect(() => {
+        if (!portScanProgress?.active) return;
+        const t = setInterval(fetchPortScanProgress, 2000);
+        return () => clearInterval(t);
+    }, [portScanProgress?.active, fetchPortScanProgress]);
+
     const handleResultsPerPageChange = (value: string) => {
         if (value === 'full') {
             setResultsPerPage('full');
@@ -514,6 +537,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         const interval = setInterval(async () => {
             fetchHistory();
             fetchStats();
+            fetchPortScanProgress();
             
             // Fetch scan progress or final results
             try {
@@ -548,9 +572,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         clearInterval(interval);
                         setScanPollingInterval(null);
                         
-                        // Final refresh after scan completes
+                        // Final refresh after scan completes; then check if port scan started (nmap in background)
                         await fetchStats();
                         await fetchHistory();
+                        await fetchPortScanProgress();
                     } else if (result && result.status === 'in_progress') {
                         // Scan still in progress, update progress
                         setScanProgress({
@@ -1536,7 +1561,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 <div className="overflow-x-auto">
                     <table className="w-full table-auto">
                         <colgroup>
-                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[120px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
+                            <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[140px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[140px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[120px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
                         </colgroup>
                         <thead>
                             <tr className="border-b border-gray-800">
@@ -1606,6 +1631,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
+                                <th className="text-left py-3 px-4 text-sm text-gray-400">
+                                    <div className="flex items-center gap-2">
+                                        {portScanProgress?.active ? (
+                                            <>
+                                                <Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" title="Scan des ports en cours" />
+                                                <span>Ports ouverts</span>
+                                                <span className="text-amber-400/90 text-xs font-normal" title={`${portScanProgress.current}/${portScanProgress.total} IP(s)`}>
+                                                    ({portScanProgress.current}/{portScanProgress.total})
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span>Ports ouverts</span>
+                                        )}
+                                    </div>
+                                </th>
                                 <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
                                     if (sortBy === 'avg1h') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('avg1h'); setSortOrder('asc'); }
@@ -1656,7 +1696,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         <tbody>
                             {filteredScans.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} className="text-center py-8 text-gray-500">
+                                    <td colSpan={12} className="text-center py-8 text-gray-500">
                                         {isScanning || isRefreshing ? (
                                             <div className="flex items-center justify-center gap-2">
                                                 <RefreshCw size={16} className="animate-spin text-blue-400" />
@@ -1790,6 +1830,32 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`} title={formatLatency(scan.pingLatency)}>
                                                 {formatLatency(scan.pingLatency)}
                                             </span>
+                                        </td>
+                                        <td className="py-3 px-4 text-sm text-gray-400 font-mono" title={(scan.additionalInfo as { lastPortScan?: string })?.lastPortScan ? `Scan: ${new Date((scan.additionalInfo as { lastPortScan?: string }).lastPortScan!).toLocaleString('fr-FR')}` : undefined}>
+                                            {(() => {
+                                                const addInfo = scan.additionalInfo as { openPorts?: { port: number }[]; lastPortScan?: string } | undefined;
+                                                const openPorts = addInfo?.openPorts;
+                                                const lastPortScan = addInfo?.lastPortScan;
+                                                const hasPorts = Array.isArray(openPorts) && openPorts.length > 0;
+                                                if (portScanProgress?.active) {
+                                                    if (portScanProgress.currentIp === scan.ip) {
+                                                        return <span className="text-amber-400">En cours...</span>;
+                                                    }
+                                                    if (scan.status === 'online' && !lastPortScan) {
+                                                        return <span className="text-gray-500">En attente</span>;
+                                                    }
+                                                }
+                                                if (hasPorts) {
+                                                    return (openPorts as { port: number }[])
+                                                        .map((p) => p.port)
+                                                        .sort((a, b) => a - b)
+                                                        .join(', ');
+                                                }
+                                                if (lastPortScan) {
+                                                    return <span className="text-gray-500">Aucun</span>;
+                                                }
+                                                return <span className="text-gray-500">Non scanné</span>;
+                                            })()}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-sm font-medium ${latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? getLatencyColor(latencyStats[scan.ip].avg1h!) : 'text-gray-500'}`}>

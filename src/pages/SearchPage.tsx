@@ -103,6 +103,10 @@ interface IpDetailsResponse {
         status?: string;
         pingLatency?: number;
         lastSeen?: string;
+        additionalInfo?: {
+            openPorts?: { port: number; protocol?: string }[];
+            lastPortScan?: string;
+        };
     };
 }
 
@@ -1705,6 +1709,35 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         )}
                                     </div>
                                 ) : null}
+
+                                {/* Ports ouverts (machine) - from scan réseau port scan (nmap) */}
+                                {ipDetails.scanner && (
+                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                            <Activity size={14} className="text-amber-400" />
+                                            Ports ouverts (machine)
+                                        </div>
+                                        {Array.isArray(ipDetails.scanner.additionalInfo?.openPorts) && ipDetails.scanner.additionalInfo.openPorts.length > 0 ? (
+                                            <>
+                                                <div className="text-lg font-medium font-mono text-theme-primary">
+                                                    {ipDetails.scanner.additionalInfo.openPorts
+                                                        .map((p: { port: number }) => p.port)
+                                                        .sort((a: number, b: number) => a - b)
+                                                        .join(', ')}
+                                                </div>
+                                                {ipDetails.scanner.additionalInfo?.lastPortScan && (
+                                                    <div className="text-xs text-theme-tertiary mt-1">
+                                                        Scan: {new Date(ipDetails.scanner.additionalInfo.lastPortScan).toLocaleString('fr-FR')}
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : ipDetails.scanner.additionalInfo?.lastPortScan ? (
+                                            <div className="text-theme-tertiary">Aucun port ouvert</div>
+                                        ) : (
+                                            <div className="text-theme-tertiary">Non scanné</div>
+                                        )}
+                                    </div>
+                                )}
 
                             </div>
 

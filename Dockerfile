@@ -40,7 +40,8 @@ WORKDIR /app
 # Note: getent n'est pas disponible dans Alpine (musl libc), on utilise la lecture directe de /etc/hosts
 # Note: libpcap/libpcap-dev retirés car arp-scan est optionnel (fallback après ip neigh)
 #       Si arp-scan est vraiment nécessaire, il faudra le compiler dans le stage build
-RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common curl
+# nmap: pour le scan de ports (option "Scanner les ports après chaque scan complet")
+RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common curl nmap
 
 # Créer le répertoire data avec les bonnes permissions
 RUN mkdir -p /app/data && chown -R node:node /app

@@ -30,6 +30,7 @@ interface UnifiedAutoScanConfig {
     fullScan?: {
         enabled: boolean;
         interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
+        portScanEnabled?: boolean; // run nmap on online hosts after full scan (background)
         // scanType retiré - scan complet toujours en mode 'full'
     };
     refresh?: {
@@ -270,6 +271,24 @@ class NetworkScanSchedulerService {
                 }));
                 
                 logger.info('NetworkScanScheduler', 'Scheduled scan completed successfully');
+
+                // If port scan option is ON, run nmap on online hosts in background (full scan only)
+                if (scanType === 'full') {
+                    const unifiedStr = AppConfigRepository.get('network_scan_unified_auto');
+                    if (unifiedStr) {
+                        try {
+                            const unified: UnifiedAutoScanConfig = JSON.parse(unifiedStr);
+                            if (unified.fullScan?.portScanEnabled === true) {
+                                const { portScanService } = await import('./portScanService.js');
+                                portScanService.runPortScanForOnlineHosts().catch((err: any) => {
+                                    logger.error('NetworkScanScheduler', 'Background port scan failed:', err?.message || err);
+                                });
+                            }
+                        } catch (_e) {
+                            // ignore parse error
+                        }
+                    }
+                }
             } catch (error: any) {
                 logger.error('NetworkScanScheduler', 'Scheduled scan failed:', error.message || error);
                 logger.error('NetworkScanScheduler', 'Scan error details:', error);
