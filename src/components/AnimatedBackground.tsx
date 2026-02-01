@@ -601,7 +601,7 @@ const ParticleWavesCanvas: React.FC<{
 
     // Projection 3D WebGL - simulation Canvas 2D
     // Caméra à z=100, regarde vers -z (z négatif = loin)
-    const project3D = (x: number, y: number, z: number, w: number, h: number): { x: number; y: number; w: number } => {
+    const project3D = (x: number, y: number, z: number, w: number, h: number): { x: number; y: number; w: number } | null => {
       const fov = 60;
       const cameraZ = 100;
       const aspect = w / h;
@@ -611,9 +611,9 @@ const ParticleWavesCanvas: React.FC<{
       // zView = distance de la caméra (z=100) au point
       const zView = cameraZ - z;
       
-      // Éviter les valeurs invalides
+      // Éviter les valeurs invalides - retourner null pour filtrer ces particules
       if (zView <= 1) {
-        return { x: w / 2, y: h / 2, w: 1 };
+        return null;
       }
       
       // Projection perspective (FOV 60 degrés)
@@ -662,6 +662,11 @@ const ParticleWavesCanvas: React.FC<{
         const y3d = p.y3d + waveY;
         const proj = project3D(p.x3d, y3d, p.z3d, w, h);
         
+        // Filtrer les particules trop proches de la caméra (proj === null)
+        if (!proj) {
+          return null;
+        }
+        
         return {
           x: proj.x,
           y: proj.y,
@@ -669,7 +674,7 @@ const ParticleWavesCanvas: React.FC<{
           color: p.color,
           z3d: p.z3d,
         };
-      });
+      }).filter((p): p is { x: number; y: number; w: number; color: [number, number, number, number]; z3d: number } => p !== null);
 
       // Trier par profondeur (z) pour dessiner les plus lointaines en premier
       projected.sort((a, b) => b.z3d - a.z3d);

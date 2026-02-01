@@ -3,6 +3,33 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.1] - 2026-01-23
+
+### ✨ Ajouté
+
+**Page de Recherche - Historique**
+- ✅ Bouton "Effacer tout" dans le modal d'historique de recherche pour supprimer tout l'historique d'un clic
+- ✅ Bouton visible uniquement si l'historique n'est pas vide
+
+### 🔧 Modifié
+
+**Page de Recherche - Interface**
+- 🔧 Suppression du div vide au-dessus du champ de recherche
+- 🔧 Ajustement de la hauteur des cadres recherche et filtres pour qu'ils soient égaux (utilisation de `items-stretch` et `flex-1`)
+- 🔧 Amélioration du composant `Card` : le header n'est plus affiché si le titre est vide, éliminant l'espacement inutile
+
+**Page Scanner - Colonne Status**
+- 🔧 Renommage de la colonne "Ports" en "Status"
+- 🔧 Affichage uniquement de l'icône (suppression du texte "Online"/"Offline")
+- 🔧 Réduction de la largeur de la colonne (w-16, padding réduit)
+- 🔧 Ajout de tooltips informatifs sur les icônes : "Online - Appareil en ligne", "Offline - Appareil hors ligne", "Unknown - Statut inconnu"
+- 🔧 Centrage de l'icône dans la cellule
+
+**Animations - Particle Waves**
+- 🔧 Correction du bug des points fixes au centre de l'écran : les particules trop proches de la caméra sont maintenant filtrées au lieu d'être projetées au centre
+
+---
+
 ## [0.5.0] - 2026-02-01
 
 ### ✨ Ajouté

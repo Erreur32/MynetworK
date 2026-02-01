@@ -310,6 +310,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         });
     };
 
+    const clearAllSearchHistory = () => {
+        setSearchHistory([]);
+        try {
+            localStorage.removeItem(SEARCH_HISTORY_KEY);
+        } catch { /* ignore */ }
+    };
+
     // Utility function to get latency color based on value
     const getLatencyColor = (latency: number): string => {
         if (latency < 10) return 'text-emerald-400';
@@ -1069,16 +1076,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     };
 
     return (
-        <div className="min-h-screen bg-theme-primary">
+        <div className="min-h-screen bg-theme-primary_">
             <div className="max-w-[1920px] mx-auto pt-0 px-4 pb-4 md:px-6 md:pb-6 space-y-6">
-                {/* Header */}
-
-
                 {/* Two columns layout: Search bar and Options/Filters */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
                     {/* Left column: Search bar */}
-                    <div>
-                        <Card title="" className="!p-3 sm:!p-4">
+                    <div className="flex">
+                        <Card title="" className="!p-3 sm:!p-4 flex-1">
                             <div className="space-y-3">
                                 <div className="flex gap-2">
                                     <div className="flex-1">
@@ -1154,25 +1158,35 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </button>
                                     )}
                                 </div>
-                                {/* Termes les plus recherchés (top 5) */}
-                                {topSearchTerms.length > 0 && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-xs text-theme-tertiary">Recherches fréquentes :</span>
-                                        {topSearchTerms.map((term) => (
-                                            <button
-                                                key={term}
-                                                type="button"
-                                                onClick={() => {
-                                                    setSearchQuery(term);
-                                                    performSearch(term);
-                                                }}
-                                                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-theme-secondary border border-theme text-theme-primary hover:bg-theme-tertiary hover:border-theme-hover transition-colors"
-                                            >
-                                                {term}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                                {/* Termes les plus recherchés (top 5) et Historique */}
+                                <div className="flex flex-wrap items-center gap-2 justify-between">
+                                    {topSearchTerms.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-xs text-theme-tertiary">Recherches fréquentes :</span>
+                                            {topSearchTerms.map((term) => (
+                                                <button
+                                                    key={term}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSearchQuery(term);
+                                                        performSearch(term);
+                                                    }}
+                                                    className="px-2.5 py-1 rounded-lg text-xs font-medium bg-theme-secondary border border-theme text-theme-primary hover:bg-theme-tertiary hover:border-theme-hover transition-colors"
+                                                >
+                                                    {term}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={() => setShowHistoryModal(true)}
+                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-amber-400/90 hover:text-amber-400 flex items-center gap-1.5"
+                                        title="Historique des recherches"
+                                    >
+                                        <History size={18} />
+                                        <span className="text-sm">Historique</span>
+                                    </button>
+                                </div>
                                 {/* Display ping result for search query if it's an IP/domain */}
                                 {searchQuery.trim() && isValidIpOrDomain(searchQuery.trim()) && pingResults[searchQuery.trim()] && (
                                     <div className={`p-4 rounded-lg border ${
@@ -1210,28 +1224,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     </div>
 
                     {/* Right column: Search options and filters */}
-                    <div>
+                    <div className="flex">
                         <Card 
                             title="Filtres"
-                            className="!p-3 sm:!p-4"
+                            className="!p-3 sm:!p-4 flex-1"
                             actions={
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setShowHistoryModal(true)}
-                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-amber-400/90 hover:text-amber-400 flex items-center gap-1.5"
-                                        title="Historique des recherches"
-                                    >
-                                        <History size={18} />
-                                        <span className="text-sm">Historique</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setShowOptionsInfoModal(true)}
-                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-cyan-400/90 hover:text-cyan-400"
-                                        title="Aide sur les options de recherche"
-                                    >
-                                        <Info size={18} />
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => setShowOptionsInfoModal(true)}
+                                    className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-cyan-400/90 hover:text-cyan-400"
+                                    title="Aide sur les options de recherche"
+                                >
+                                    <Info size={18} />
+                                </button>
                             }
                         >
                     <div className="space-y-3">
@@ -1428,6 +1432,27 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     )}
                                     {/* Badges Row */}
                                     <div className="flex flex-wrap items-center gap-2 mt-3">
+                                        {/* Status Badge - EN PREMIER */}
+                                        {ipDetails.scanner?.status && (
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                                                ipDetails.scanner.status === 'online'
+                                                    ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
+                                                    : 'bg-red-500/20 border border-red-500/50 text-red-400'
+                                            }`}>
+                                                {ipDetails.scanner.status === 'online' ? (
+                                                    <>
+                                                        <CheckCircle size={14} />
+                                                        En ligne
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <AlertCircle size={14} />
+                                                        Hors ligne
+                                                    </>
+                                                )}
+                                            </span>
+                                        )}
+                                        
                                         {/* Connection Type Badge */}
                                         {ipDetails.unifi?.client && (() => {
                                             const isWireless = ipDetails.unifi.client.is_wireless || 
@@ -1467,27 +1492,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 </span>
                                             );
                                         })()}
-                                        
-                                        {/* Status Badge */}
-                                        {ipDetails.scanner?.status && (
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                                                ipDetails.scanner.status === 'online'
-                                                    ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
-                                                    : 'bg-red-500/20 border border-red-500/50 text-red-400'
-                                            }`}>
-                                                {ipDetails.scanner.status === 'online' ? (
-                                                    <>
-                                                        <CheckCircle size={14} />
-                                                        En ligne
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <AlertCircle size={14} />
-                                                        Hors ligne
-                                                    </>
-                                                )}
-                                            </span>
-                                        )}
                                         
                                         {/* DHCP Badge — Freebox (violet) ou UniFi (bleu), tooltip au survol */}
                                         {(ipDetails.freebox?.dhcp || ipDetails.unifi?.client) ? (
@@ -1603,6 +1607,27 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </div>
                                         <div className="text-theme-primary font-mono font-medium text-lg">
                                             {formatMac(ipDetails.unifi?.client?.mac || ipDetails.freebox?.mac || ipDetails.scanner?.mac)}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* DHCP Card */}
+                                {(ipDetails.freebox?.dhcp || ipDetails.unifi?.client) && (
+                                    <div className="bg-theme-secondary/30 rounded-lg border border-theme p-4 hover:bg-theme-secondary/40 transition-colors">
+                                        <div className="text-xs font-semibold text-theme-tertiary uppercase mb-2 flex items-center gap-1.5">
+                                            {ipDetails.freebox?.dhcp ? (
+                                                <img src={logoFreebox} alt="Freebox" className="w-4 h-4 object-contain flex-shrink-0" />
+                                            ) : ipDetails.unifi?.client ? (
+                                                <img src={logoUnifi} alt="UniFi" className="w-4 h-4 object-contain flex-shrink-0" />
+                                            ) : null}
+                                            DHCP
+                                        </div>
+                                        <div className="text-theme-primary font-medium text-lg">
+                                            {ipDetails.freebox?.dhcp ? (
+                                                ipDetails.freebox.dhcp.static ? 'Réservation statique' : 'DHCP actif'
+                                            ) : ipDetails.unifi?.client ? (
+                                                'DHCP actif'
+                                            ) : '--'}
                                         </div>
                                     </div>
                                 )}
@@ -1835,8 +1860,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             {ipDetails.unifi?.client && (
                                 <div className="bg-blue-500/10 rounded-lg border border-blue-500/50 p-6 hover:bg-blue-500/15 transition-colors mb-6">
                                     <div className="flex items-center gap-2 mb-4">
-                                        <Wifi size={18} className="text-blue-400" />
-                                        <h3 className="text-lg font-semibold text-blue-400 uppercase">Connexion Unifi</h3>
+                                        <img src={logoUnifi} alt="UniFi" className="w-6 h-6 object-contain flex-shrink-0" />
+                                        <h3 className="text-lg font-semibold text-blue-400 uppercase">Connexion UniFi</h3>
                                     </div>
 
                                     {/* Schéma : [ Appareil ] ——trait——> [ Équipement | Port N ] */}
@@ -2531,6 +2556,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     });
                 }}
                 onDelete={removeFromSearchHistory}
+                onClearAll={clearAllSearchHistory}
             />
             
             {/* Latency Monitoring Modal */}

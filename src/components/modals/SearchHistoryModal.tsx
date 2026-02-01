@@ -19,6 +19,7 @@ interface SearchHistoryModalProps {
     history: SearchHistoryEntry[];
     onSelect: (entry: SearchHistoryEntry) => void;
     onDelete?: (index: number) => void;
+    onClearAll?: () => void;
 }
 
 const MAX_VISIBLE = 50;
@@ -28,7 +29,8 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
     onClose,
     history,
     onSelect,
-    onDelete
+    onDelete,
+    onClearAll
 }) => {
     if (!isOpen) return null;
 
@@ -57,13 +59,25 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                             <p className="text-xs text-gray-400 mt-0.5">Cliquez pour relancer avec les mêmes options</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                        aria-label="Fermer"
-                    >
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {onClearAll && history.length > 0 && (
+                            <button
+                                onClick={onClearAll}
+                                className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 rounded-lg transition-colors flex items-center gap-1.5"
+                                title="Effacer tout l'historique"
+                            >
+                                <Trash2 size={14} />
+                                Effacer tout
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+                            aria-label="Fermer"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
                     {displayed.length === 0 ? (

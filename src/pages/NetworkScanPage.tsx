@@ -1705,12 +1705,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors w-16" onClick={() => {
                                     if (sortBy === 'status') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('status'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Ports</span>
+                                        <span>Status</span>
                                         {sortBy === 'status' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
@@ -1927,17 +1927,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 return mac.slice(0, 8) + '…';
                                             })()}
                                         </td>
-                                        <td className="py-3 px-4">
-                                            <div className="flex items-center gap-2">
-                                                {scan.status === 'online' ? (
-                                                    <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
-                                                ) : scan.status === 'offline' ? (
-                                                    <XCircle size={16} className="text-red-400 flex-shrink-0" />
-                                                ) : (
-                                                    <Clock size={16} className="text-gray-400 flex-shrink-0" />
-                                                )}
-                                                <span className="text-sm capitalize break-words whitespace-normal">{scan.status}</span>
-                                            </div>
+                                        <td className="py-3 px-2 w-16">
+                                            {scan.status === 'online' ? (
+                                                <CheckCircle 
+                                                    size={16} 
+                                                    className="text-emerald-400 flex-shrink-0 mx-auto" 
+                                                    title="Online - Appareil en ligne"
+                                                />
+                                            ) : scan.status === 'offline' ? (
+                                                <XCircle 
+                                                    size={16} 
+                                                    className="text-red-400 flex-shrink-0 mx-auto" 
+                                                    title="Offline - Appareil hors ligne"
+                                                />
+                                            ) : (
+                                                <Clock 
+                                                    size={16} 
+                                                    className="text-gray-400 flex-shrink-0 mx-auto" 
+                                                    title="Unknown - Statut inconnu"
+                                                />
+                                            )}
                                         </td>
                                         <td className="py-3 px-4">
                                             <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`} title={formatLatency(scan.pingLatency)}>
