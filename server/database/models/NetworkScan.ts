@@ -38,7 +38,15 @@ export interface CreateNetworkScanInput {
 export interface NetworkScanFilters {
     status?: 'online' | 'offline' | 'unknown';
     ip?: string; // Partial IP match (e.g., "192.168.1")
-    search?: string; // Search in IP, MAC, hostname, vendor, or ports (openPorts)
+    search?: string; // Search in IP, MAC, hostname, vendor, or ports (openPorts) - legacy
+    /** Text-only search: hostname, vendor (no IP/MAC). Uses LIKE %value%. */
+    textSearch?: string;
+    /** IP exact or wildcard: e.g. "192.168.32.1" or "192.168.32.%" */
+    ipLike?: string;
+    /** MAC exact or wildcard: e.g. "AA:BB:CC:DD:EE:FF" or "AA:BB:%" */
+    macLike?: string;
+    /** IP range (last octet): e.g. prefix "192.168.32.", start 1, end 32 → 192.168.32.1-32 */
+    ipRange?: { prefix: string; start: number; end: number };
     startDate?: Date;
     endDate?: Date;
     limit?: number;
@@ -153,9 +161,29 @@ export class NetworkScanRepository {
             conditions.push('ip LIKE ?');
             values.push(`${filters.ip}%`);
         }
+
+        if (filters.textSearch !== undefined) {
+            const searchPattern = `%${filters.textSearch}%`;
+            conditions.push('(COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
+            values.push(searchPattern, searchPattern);
+        }
+
+        if (filters.ipLike !== undefined) {
+            conditions.push('ip LIKE ?');
+            values.push(filters.ipLike);
+        }
+
+        if (filters.macLike !== undefined) {
+            conditions.push('COALESCE(mac, \'\') LIKE ?');
+            values.push(filters.macLike);
+        }
+
+        if (filters.ipRange !== undefined) {
+            conditions.push('ip LIKE ?');
+            values.push(filters.ipRange.prefix + '%');
+        }
         
-        if (filters.search !== undefined) {
-            // Search in IP, MAC, hostname, vendor, and ports (additionalInfo.openPorts)
+        if (filters.search !== undefined && filters.textSearch === undefined && filters.ipLike === undefined && filters.macLike === undefined && filters.ipRange === undefined) {
             const searchPattern = `%${filters.search}%`;
             conditions.push(
                 '(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ? ' +
@@ -209,6 +237,17 @@ export class NetworkScanRepository {
         const rows = stmt.all(...values) as any[];
         
         let results = rows.map(row => this.mapRowToNetworkScan(row));
+
+        if (filters.ipRange !== undefined) {
+            const { start, end } = filters.ipRange;
+            results = results.filter((scan) => {
+                const parts = scan.ip.split('.');
+                if (parts.length !== 4) return false;
+                const lastOctet = parseInt(parts[3], 10);
+                if (isNaN(lastOctet)) return false;
+                return lastOctet >= start && lastOctet <= end;
+            });
+        }
         
         // Special handling for custom sorting: IP (numeric), hostname/mac/vendor (empty values at end)
         // IMPORTANT: This must be done on ALL results before pagination
@@ -295,9 +334,29 @@ export class NetworkScanRepository {
             conditions.push('ip LIKE ?');
             values.push(`${filters.ip}%`);
         }
+
+        if (filters.textSearch !== undefined) {
+            const searchPattern = `%${filters.textSearch}%`;
+            conditions.push('(COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ?)');
+            values.push(searchPattern, searchPattern);
+        }
+
+        if (filters.ipLike !== undefined) {
+            conditions.push('ip LIKE ?');
+            values.push(filters.ipLike);
+        }
+
+        if (filters.macLike !== undefined) {
+            conditions.push('COALESCE(mac, \'\') LIKE ?');
+            values.push(filters.macLike);
+        }
+
+        if (filters.ipRange !== undefined) {
+            conditions.push('ip LIKE ?');
+            values.push(filters.ipRange.prefix + '%');
+        }
         
-        if (filters.search !== undefined) {
-            // Search in IP, MAC, hostname, vendor, and ports (additionalInfo.openPorts)
+        if (filters.search !== undefined && filters.textSearch === undefined && filters.ipLike === undefined && filters.macLike === undefined && filters.ipRange === undefined) {
             const searchPattern = `%${filters.search}%`;
             conditions.push(
                 '(ip LIKE ? OR COALESCE(mac, \'\') LIKE ? OR COALESCE(hostname, \'\') LIKE ? OR COALESCE(vendor, \'\') LIKE ? ' +

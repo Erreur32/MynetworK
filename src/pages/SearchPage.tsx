@@ -5,8 +5,8 @@
  * with filtering, sorting, and pagination
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2, History, FolderInput, Terminal, Mail, Lock, Share2, Database, Monitor } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2, History, FolderInput, Terminal, Mail, Lock, Share2, Database, Monitor, Container } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
@@ -14,18 +14,22 @@ import { usePluginStore } from '../stores/pluginStore';
 import { SearchOptionsInfoModal } from '../components/modals/SearchOptionsInfoModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 import { SearchHistoryModal, type SearchHistoryEntry } from '../components/modals/SearchHistoryModal';
+import logoFreebox from '../icons/logo_ultra.svg';
+import logoUnifi from '../icons/logo_unifi.svg';
 
 /** Ports connus : numéro → nom du service (comme sur la page Scan) */
 const WELL_KNOWN_PORTS: Record<number, string> = {
     20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
     143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 1433: 'SQL Server', 3306: 'MySQL',
-    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin'
+    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin',
+    2375: 'Docker', 2376: 'Docker TLS'
 };
 
 const PORT_ICONS: Record<number, LucideIcon> = {
     20: FolderInput, 21: FolderInput, 22: Terminal, 23: Terminal, 25: Mail, 53: Globe, 80: Globe,
     110: Mail, 143: Mail, 443: Lock, 445: Share2, 993: Mail, 995: Mail, 1433: Database, 3306: Database,
-    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server
+    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server,
+    2375: Container, 2376: Container
 };
 function getPortIcon(port: number): LucideIcon {
     return PORT_ICONS[port] ?? Server;
@@ -56,6 +60,20 @@ function getPortCategoryColor(cat: string): { label: string; badge: string; icon
         default:
             return { label: 'text-cyan-400', badge: 'bg-cyan-500/30 border-cyan-500/50 text-cyan-300', icon: 'text-cyan-400/90' };
     }
+}
+
+/** Position du tooltip ports pour rester dans la fenêtre */
+function getPortsTooltipPosition(rect: { left: number; top: number; bottom: number; right: number }, w: number, h: number): { left: number; top: number } {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 300;
+    const margin = 16;
+    let left = rect.left;
+    if (left + w > vw - margin) left = vw - w - margin;
+    if (left < margin) left = margin;
+    let top = rect.bottom + 6;
+    if (top + h > vh - margin) top = rect.top - h - 8;
+    if (top < margin) top = margin;
+    return { left, top };
 }
 
 interface SearchResult {
@@ -188,7 +206,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [isExactIpSearch, setIsExactIpSearch] = useState(false); // Track if search is an exact IP
     
     // Search options
-    const [exactMatch, setExactMatch] = useState(true); // Default to exact match mode
     const [caseSensitive, setCaseSensitive] = useState(false);
     const [showOnlyActive, setShowOnlyActive] = useState(true); // Filter by default to show only active devices
     const [pingEnabled, setPingEnabled] = useState(false);
@@ -200,6 +217,31 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
     const [selectedIpForLatencyGraph, setSelectedIpForLatencyGraph] = useState<string | null>(null);
     const [showLatencyModal, setShowLatencyModal] = useState(false);
+
+    // Tooltip ports (recherche groupée) — comme sur la page Scan
+    const [portsTooltip, setPortsTooltip] = useState<{
+        ip: string;
+        openPorts: { port: number; protocol?: string }[];
+        lastPortScan?: string;
+        rect: { left: number; top: number; bottom: number; right: number };
+    } | null>(null);
+    const PORTS_TOOLTIP_W = 420;
+    const PORTS_TOOLTIP_H = 320;
+    const tooltipHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hideAllTooltips = useCallback(() => setPortsTooltip(null), []);
+    const scheduleTooltipHide = useCallback((ms = 80) => {
+        if (tooltipHideTimeoutRef.current) clearTimeout(tooltipHideTimeoutRef.current);
+        tooltipHideTimeoutRef.current = setTimeout(() => {
+            setPortsTooltip(null);
+            tooltipHideTimeoutRef.current = null;
+        }, ms);
+    }, []);
+    const cancelTooltipHide = useCallback(() => {
+        if (tooltipHideTimeoutRef.current) {
+            clearTimeout(tooltipHideTimeoutRef.current);
+            tooltipHideTimeoutRef.current = null;
+        }
+    }, []);
 
     // Search history (localStorage)
     const SEARCH_HISTORY_KEY = 'searchHistory';
@@ -230,18 +272,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         return withCount.slice(0, 5).map(([term]) => term);
     }, [searchTermCounts]);
 
-    const addToSearchHistory = (query: string, opts: { exactMatch: boolean; caseSensitive: boolean; showOnlyActive: boolean }) => {
+    const addToSearchHistory = (query: string, opts: { caseSensitive: boolean; showOnlyActive: boolean }) => {
         const trimmed = query.trim();
         const entry: SearchHistoryEntry = {
             query: trimmed,
             timestamp: Date.now(),
-            exactMatch: opts.exactMatch,
             caseSensitive: opts.caseSensitive,
             showOnlyActive: opts.showOnlyActive
         };
-        // Ne jamais mettre en double : même recherche = une seule entrée (on remplace / met à jour en tête)
         setSearchHistory(prev => {
-            const filtered = prev.filter(e => !(e.query === entry.query && e.exactMatch === entry.exactMatch && e.caseSensitive === entry.caseSensitive && e.showOnlyActive === entry.showOnlyActive));
+            const filtered = prev.filter(e => !(e.query === entry.query && e.caseSensitive === entry.caseSensitive && e.showOnlyActive === entry.showOnlyActive));
             const next = [entry, ...filtered].slice(0, 100);
             try {
                 localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
@@ -313,10 +353,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
     // Filters - Initialize with all active plugins by default
     const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
-    const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     
     // Sorting
-    const [sortField, setSortField] = useState<'name' | 'plugin' | 'type' | 'ip' | 'mac'>('name');
+    const [sortField, setSortField] = useState<'name' | 'plugin' | 'ip' | 'mac'>('name');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     
     // Pagination
@@ -629,7 +668,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         const target = query.trim();
         
         // Check if it's an IP range (only in extended mode when ping is enabled)
-        if (pingEnabled && !exactMatch && isIpRange(target)) {
+        if (pingEnabled && isIpRange(target)) {
             // Parse and ping a range of IPs
             const ipsToPing = parseIpRange(target);
             if (ipsToPing.length > 0) {
@@ -657,8 +696,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         }
     };
 
-    // Perform search (overrides allow applying options from history without waiting for state update)
-    const performSearch = async (query: string, overrides?: { exactMatch?: boolean; caseSensitive?: boolean; showOnlyActive?: boolean }) => {
+    // Perform search (overrides allow applying options from history)
+    const performSearch = async (query: string, overrides?: { caseSensitive?: boolean; showOnlyActive?: boolean }) => {
         if (!query.trim()) {
             setResults([]);
             setHasSearched(false);
@@ -667,27 +706,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             return;
         }
 
-        const useExact = overrides?.exactMatch ?? exactMatch;
         const useCase = overrides?.caseSensitive ?? caseSensitive;
         const useActive = overrides?.showOnlyActive ?? showOnlyActive;
 
         setIsLoading(true);
         setError(null);
-        setHasSearched(true); // Mark that a search has been performed
+        setHasSearched(true);
         setIpDetails(null);
         setIsExactIpSearch(false);
 
         const trimmedQuery = query.trim();
-        const isIp = isExactIp(trimmedQuery);
+        const isSingleExactIp = isExactIp(trimmedQuery);
 
         try {
-            // If it's an exact IP search, get aggregated details
-            if (isIp && useExact) {
+            if (isSingleExactIp) {
                 setIsExactIpSearch(true);
                 try {
                     const ipDetailsResponse = await api.get<IpDetailsResponse>(`/api/search/ip-details/${trimmedQuery}`);
                     if (ipDetailsResponse.success && ipDetailsResponse.result) {
-                        // Debug: log UniFi client data
                         if (ipDetailsResponse.result.unifi?.client) {
                             console.log('UniFi client data:', {
                                 name: ipDetailsResponse.result.unifi.client.name,
@@ -712,31 +748,25 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             console.log('UniFi data:', ipDetailsResponse.result.unifi);
                         }
                         setIpDetails(ipDetailsResponse.result);
-                        // Also perform regular search to get all results for this IP
                         const regularResponse = await api.post<SearchResultData>('/api/search', {
                             query: trimmedQuery,
                             pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
-                            types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                            exactMatch: true,
                             caseSensitive: useCase
                         });
                         if (regularResponse.success && regularResponse.result?.results) {
                             setResults(regularResponse.result.results);
-                            addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
+                            addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
                         }
                     } else {
-                        // Fallback to regular search if IP details fail
                         setIsExactIpSearch(false);
-            const response = await api.post<SearchResultData>('/api/search', {
+                        const response = await api.post<SearchResultData>('/api/search', {
                             query: trimmedQuery,
                             pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
-                            types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                            exactMatch: useExact,
                             caseSensitive: useCase
                         });
                         if (response.success && response.result?.results) {
                             setResults(response.result.results);
-                            addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
+                            addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
                         } else {
                             const errorMsg = response.error?.message || 'Erreur lors de la recherche';
                             setError(errorMsg);
@@ -744,19 +774,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         }
                     }
                 } catch (ipErr: any) {
-                    // If IP details fail, fallback to regular search
                     console.warn('Search', `Failed to get IP details, falling back to regular search:`, ipErr);
                     setIsExactIpSearch(false);
                     const response = await api.post<SearchResultData>('/api/search', {
                         query: trimmedQuery,
                         pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
-                        types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                        exactMatch: useExact,
                         caseSensitive: useCase
                     });
                     if (response.success && response.result?.results) {
                         setResults(response.result.results);
-                        addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
+                        addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
                     } else {
                         const errorMsg = response.error?.message || 'Erreur lors de la recherche';
                         setError(errorMsg);
@@ -764,31 +791,22 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     }
                 }
             } else {
-                // Regular search
                 const response = await api.post<SearchResultData>('/api/search', {
                     query: trimmedQuery,
-                pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
-                types: selectedTypes.length > 0 ? selectedTypes : undefined,
-                exactMatch: useExact,
-                caseSensitive: useCase
-            });
+                    pluginIds: selectedPlugins.length > 0 ? selectedPlugins : undefined,
+                    caseSensitive: useCase
+                });
 
-            if (response.success && response.result?.results) {
-                // Display results immediately
-                setResults(response.result.results);
-                addToSearchHistory(trimmedQuery, { exactMatch: useExact, caseSensitive: useCase, showOnlyActive: useActive });
-                
-                // If ping automatic is enabled, ping all local IPs in results (non-blocking)
-                // This runs in the background, results are already displayed
-                if (pingEnabled) {
-                    // Don't await - let it run in background while results are displayed
-                    pingAllResults(response.result.results);
-                }
-            } else {
-                // Handle API error response
-                const errorMsg = response.error?.message || 'Erreur lors de la recherche';
-                setError(errorMsg);
-                setResults([]);
+                if (response.success && response.result?.results) {
+                    setResults(response.result.results);
+                    addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
+                    if (pingEnabled) {
+                        pingAllResults(response.result.results);
+                    }
+                } else {
+                    const errorMsg = response.error?.message || 'Erreur lors de la recherche';
+                    setError(errorMsg);
+                    setResults([]);
                 }
             }
         } catch (err: any) {
@@ -866,7 +884,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         if (searchQuery && hasSearched) {
             performSearch(searchQuery);
         }
-    }, [selectedPlugins, selectedTypes, exactMatch, caseSensitive, showOnlyActive]);
+    }, [selectedPlugins, caseSensitive, showOnlyActive]);
+
+    // Scroll to port anchor when URL has #port-XXX and ipDetails (ports section) is rendered
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (!hash || !hash.startsWith('#port-') || !ipDetails?.scanner?.additionalInfo?.openPorts) return;
+        const portId = hash.slice(1);
+        const timer = setTimeout(() => {
+            const el = document.getElementById(portId);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [ipDetails]);
 
     // Fetch latency monitoring status for results with IPs and ipDetails
     useEffect(() => {
@@ -921,9 +951,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         if (selectedPlugins.length > 0) {
             filtered = filtered.filter(r => selectedPlugins.includes(r.pluginId));
         }
-        if (selectedTypes.length > 0) {
-            filtered = filtered.filter(r => selectedTypes.includes(r.type));
-        }
         // Filter by active status (default: show only active)
         if (showOnlyActive) {
             filtered = filtered.filter(r => r.active === true);
@@ -943,10 +970,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     aValue = a.pluginName?.toLowerCase() || '';
                     bValue = b.pluginName?.toLowerCase() || '';
                     break;
-                case 'type':
-                    aValue = a.type || '';
-                    bValue = b.type || '';
-                    break;
                 case 'ip':
                     aValue = a.ip || '';
                     bValue = b.ip || '';
@@ -965,7 +988,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         });
 
         return filtered;
-    }, [results, selectedPlugins, selectedTypes, showOnlyActive, sortField, sortDirection]);
+    }, [results, selectedPlugins, showOnlyActive, sortField, sortDirection]);
 
     // Paginated results
     const totalPages = Math.ceil(filteredResults.length / ITEMS_PER_PAGE);
@@ -977,27 +1000,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     // Reset to page 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedPlugins, selectedTypes, showOnlyActive, sortField, sortDirection]);
-
-    // Get unique types from results
-    const availableTypes = useMemo(() => {
-        const types = new Set<string>();
-        results.forEach(r => types.add(r.type));
-        return Array.from(types).sort();
-    }, [results]);
-
-    // Type labels
-    const getTypeLabel = (type: string): string => {
-        const labels: Record<string, string> = {
-            'device': 'Appareil',
-            'dhcp': 'DHCP',
-            'port-forward': 'Redirection de port',
-            'client': 'Client',
-            'ap': 'Point d\'accès',
-            'switch': 'Switch'
-        };
-        return labels[type] || type;
-    };
+    }, [selectedPlugins, showOnlyActive, sortField, sortDirection]);
 
     // Format MAC address
     const formatMac = (mac?: string): string => {
@@ -1039,15 +1042,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         );
     };
 
-    const toggleType = (type: string) => {
-        setSelectedTypes(prev =>
-            prev.includes(type)
-                ? prev.filter(t => t !== type)
-                : [...prev, type]
-        );
-    };
-
-    const handleSort = (field: 'name' | 'plugin' | 'type' | 'ip' | 'mac') => {
+    const handleSort = (field: 'name' | 'plugin' | 'ip' | 'mac') => {
         if (sortField === field) {
             setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
@@ -1063,8 +1058,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         setError(null);
         setHasSearched(false);
         setSelectedPlugins([]);
-        setSelectedTypes([]);
-        setExactMatch(true);
         setCaseSensitive(false);
         setShowOnlyActive(true);
         setPingEnabled(false);
@@ -1077,69 +1070,58 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
     return (
         <div className="min-h-screen bg-theme-primary">
-            <div className="max-w-[1920px] mx-auto p-4 md:p-6 space-y-6">
+            <div className="max-w-[1920px] mx-auto pt-0 px-4 pb-4 md:px-6 md:pb-6 space-y-6">
                 {/* Header */}
-                <div className="mb-6">
-                    <p className="text-sm text-theme-secondary">
-                        
-                    </p>
-                </div>
+
 
                 {/* Two columns layout: Search bar and Options/Filters */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Left column: Search bar */}
                     <div>
-                        <Card title="">
-                            <div className="space-y-4">
-                                <div className="flex gap-3">
+                        <Card title="" className="!p-3 sm:!p-4">
+                            <div className="space-y-3">
+                                <div className="flex gap-2">
                                     <div className="flex-1">
                                         <div className="relative">
-                                            <Search size={24} className="absolute left-4 top-1/2 -translate-y-1/2 text-accent-primary opacity-80 pointer-events-none" />
+                                            <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-accent-primary opacity-80 pointer-events-none" />
                                             <input
                                                 type="text"
                                                 value={searchQuery}
                                                 onChange={(e) => {
                                                     setSearchQuery(e.target.value);
-                                                    // Reset hasSearched when user types to prevent showing "no results" message
-                                                    if (hasSearched) {
-                                                        setHasSearched(false);
-                                                    }
+                                                    if (hasSearched) setHasSearched(false);
                                                 }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
-                                                        if (pingEnabled) {
-                                                            // If ping is enabled, ping the query instead of searching
-                                                            if (searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
-                                                                pingSearchQuery(searchQuery.trim());
-                                                            }
-                                                        } else {
-                                                    handleSearch();
+                                                        e.preventDefault();
+                                                        handleSearch();
+                                                        if (pingEnabled && searchQuery.trim() && (isValidIpOrDomain(searchQuery.trim()) || isIpRange(searchQuery.trim()))) {
+                                                            pingSearchQuery(searchQuery.trim());
+                                                        }
                                                     }
-                                                }
-                                            }}
-                                                placeholder={exactMatch ? "Strict : 1 IP ou 1 MAC uniquement — activer Étendu pour plus d'infos" : "Rechercher (mode étendu : correspondance partielle, plus d'infos)"}
-                                                className="w-full pl-14 pr-4 py-3 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
+                                                }}
+                                                placeholder="IP, MAC, 192.168.32.*, 192.168.32.1-32, ou texte (hostname, vendor…)"
+                                                className="w-full pl-11 pr-3 py-2.5 text-sm bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
                                             />
                                         </div>
-                                        <p className="text-[10px] text-theme-tertiary mt-1.5 ml-1">
-                                            {exactMatch ? "Strict : 1 IP ou 1 MAC seulement. Activer Étendu pour plus d'infos." : "Étendu : correspondance partielle, plus d'infos."}
+                                        <p className="text-[10px] text-theme-tertiary mt-1 ml-1">
+                                            * = plusieurs IP/MAC ; 1-32 = plage. Sinon recherche dans hostname, vendor, commentaire.
                                         </p>
                                     </div>
-                                    {/* Hide search button when ping is enabled */}
                                     {!pingEnabled && (
                                     <button
                                         onClick={handleSearch}
                                         disabled={isLoading || !searchQuery.trim()}
-                                        className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg shadow-gray-600/20"
+                                        className="px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 text-sm font-medium shadow shadow-gray-600/20 self-start"
                                     >
                                         {isLoading ? (
                                             <>
-                                                <Loader2 size={18} className="animate-spin" />
+                                                <Loader2 size={16} className="animate-spin" />
                                                 Recherche...
                                             </>
                                         ) : (
                                             <>
-                                                <Search size={18} />
+                                                <Search size={16} />
                                                 Rechercher
                                             </>
                                         )}
@@ -1182,7 +1164,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 type="button"
                                                 onClick={() => {
                                                     setSearchQuery(term);
-                                                    handleSearch();
+                                                    performSearch(term);
                                                 }}
                                                 className="px-2.5 py-1 rounded-lg text-xs font-medium bg-theme-secondary border border-theme text-theme-primary hover:bg-theme-tertiary hover:border-theme-hover transition-colors"
                                             >
@@ -1231,11 +1213,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     <div>
                         <Card 
                             title="Filtres"
+                            className="!p-3 sm:!p-4"
                             actions={
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => setShowHistoryModal(true)}
-                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary flex items-center gap-1.5"
+                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-amber-400/90 hover:text-amber-400 flex items-center gap-1.5"
                                         title="Historique des recherches"
                                     >
                                         <History size={18} />
@@ -1243,7 +1226,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     </button>
                                     <button
                                         onClick={() => setShowOptionsInfoModal(true)}
-                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-theme-secondary hover:text-theme-primary"
+                                        className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-cyan-400/90 hover:text-cyan-400"
                                         title="Aide sur les options de recherche"
                                     >
                                         <Info size={18} />
@@ -1251,7 +1234,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 </div>
                             }
                         >
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {/* Search options - Toggle buttons */}
                         <div className="flex flex-wrap gap-3 items-center text-sm">
                             <button
@@ -1279,32 +1262,26 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <span>IP Actif</span>
                                 <CheckCircle size={12} className={showOnlyActive ? 'text-emerald-400' : 'text-theme-tertiary'} />
                             </button>
-                            
+                            {false && (
                             <button
-                                onClick={() => {
-                                        setExactMatch(!exactMatch);
-                                    // If ping is enabled and we're switching to extended mode, clear ping results
-                                    if (pingEnabled && exactMatch) {
-                                        setPingResults({});
-                                        setPingingIps(new Set());
-                                    }
-                                }}
+                                onClick={() => {}}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-200 font-medium ${
-                                    !exactMatch
+                                    false
                                             ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
                                             : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
                                 }`}
                             >
                                 <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
-                                    !exactMatch ? 'bg-blue-500' : 'bg-theme-tertiary'
+                                    false ? 'bg-blue-500' : 'bg-theme-tertiary'
                                 }`}>
                                     <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-md ${
-                                        !exactMatch ? 'translate-x-5' : 'translate-x-0'
+                                        false ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Étendu</span>
+                                <span className="sr-only">Étendu (retiré)</span>
                             </button>
-                            {exactMatch && false && (
+                            )}
+                            {false && (
                                 <span className="text-[10px] text-theme-tertiary ml-0.5" title="Mode strict : recherche exacte avec IP, nom, MAC, port, hostname. La fiche détaillée (ports, UniFi) s’affiche uniquement pour une recherche par IP.">
                                     (strict : IP, nom, MAC…)
                                 </span>
@@ -1341,9 +1318,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     setPingEnabled(enabled);
                                     
                                     if (enabled) {
-                                        // Force exact match mode (strict mode) when ping is enabled
-                                        // This ensures only 1 exact IP is pinged by default
-                                        setExactMatch(true);
                                         setCaseSensitive(false);
                                         setShowOnlyActive(false);
                                         
@@ -1384,80 +1358,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     <Info size={16} className="text-cyan-400 mt-0.5 flex-shrink-0" />
                                     <div className="flex-1 text-xs text-theme-secondary">
                                         <p className="font-medium text-cyan-400 mb-1">Mode Ping activé</p>
-                                        {exactMatch ? (
-                                            <div className="space-y-1">
-                                                 <p className="text-theme-tertiary mt-2">💡 Activez le mode "Étendu" pour pinger des ranges d'IP (ex: 192.168.1.0/24 ou 192.168.1.1-254)</p>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-1">
-                                                <p>• Mode <span className="text-cyan-400 font-medium">étendu</span> : Ping de ranges d'IP autorisé</p>
-                                                <p>• Formats supportés :</p>
-                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.0/24 (notation CIDR)</p>
-                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-254 (plage simple)</p>
-                                                <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-192.168.1.254 (plage complète)</p>
-                                            </div>
-                                        )}
+                                        <div className="space-y-1">
+                                            <p>• Ping de ranges d'IP autorisé</p>
+                                            <p>• Formats supportés :</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.0/24 (notation CIDR)</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-254 (plage simple)</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-192.168.1.254 (plage complète)</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* Filters - Type filter */}
-                        {availableTypes.length > 0 && (
-                            <div className="pt-3 border-t border-theme">
-                                <div>
-                                    <label className="text-sm font-medium text-theme-secondary mb-3 block">
-                                        Types de résultats
-                                    </label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availableTypes.map(type => {
-                                            const isSelected = selectedTypes.includes(type);
-                                            const count = filteredResults.filter(r => r.type === type).length;
-                                            
-                                            // Color coding by type
-                                            let colorClass = '';
-                                            if (isSelected) {
-                                                switch (type) {
-                                                    case 'device':
-                                                    case 'client':
-                                                        colorClass = 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400';
-                                                        break;
-                                                    case 'ap':
-                                                    case 'switch':
-                                                        colorClass = 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400';
-                                                        break;
-                                                    case 'dhcp':
-                                                        colorClass = 'bg-amber-500/20 border-amber-500/50 text-amber-400';
-                                                        break;
-                                                    case 'port-forward':
-                                                        colorClass = 'bg-purple-500/20 border-purple-500/50 text-purple-400';
-                                                        break;
-                                                    default:
-                                                        colorClass = 'bg-accent-primary/20 border-accent-primary text-accent-primary';
-                                                }
-                                            } else {
-                                                colorClass = 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary';
-                                            }
-                                            
-                                            return (
-                                                <button
-                                                    key={type}
-                                                    onClick={() => toggleType(type)}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm border transition-all duration-200 font-medium ${colorClass}`}
-                                                >
-                                                    {getTypeLabel(type)}
-                                                    {isSelected && count > 0 && (
-                                                        <span className="ml-1.5 text-xs opacity-70">
-                                                            ({count})
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                         </Card>
                     </div>
@@ -1577,15 +1489,30 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             </span>
                                         )}
                                         
-                                        {/* DHCP Badge */}
-                                        {ipDetails.freebox?.dhcp && (
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                                                ipDetails.freebox.dhcp.static
-                                                    ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                                                    : 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
-                                            }`}>
+                                        {/* DHCP Badge — Freebox (violet) ou UniFi (bleu), tooltip au survol */}
+                                        {(ipDetails.freebox?.dhcp || ipDetails.unifi?.client) ? (
+                                            <span
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                                                    ipDetails.freebox?.dhcp
+                                                        ? ipDetails.freebox.dhcp.static
+                                                            ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                                                            : 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                                                        : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+                                                }`}
+                                                title={ipDetails.freebox?.dhcp ? 'DHCP géré par Freebox' : 'DHCP géré par UniFi'}
+                                            >
                                                 <Home size={14} />
-                                                {ipDetails.freebox.dhcp.static ? 'RÉSERVATION DHCP' : 'DHCP AUTOMATIQUE'}
+                                                {ipDetails.freebox?.dhcp
+                                                    ? (ipDetails.freebox.dhcp.static ? 'DHCP off (Réservation)' : 'DHCP on')
+                                                    : 'DHCP on'}
+                                            </span>
+                                        ) : (
+                                            <span
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-theme-secondary/50 border border-theme text-theme-tertiary"
+                                                title="Aucun DHCP réglé pour cette IP"
+                                            >
+                                                <Home size={14} />
+                                                DHCP
                                             </span>
                                         )}
                                         
@@ -1836,6 +1763,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         <div className="text-xs font-semibold text-theme-tertiary uppercase mb-3 flex items-center gap-1.5">
                                             <Activity size={14} className="text-amber-400" />
                                             Ports ouverts (machine)
+                                            <span className="ml-1.5 font-mono text-amber-400/90">
+                                                ({Array.isArray(ipDetails.scanner.additionalInfo?.openPorts) ? ipDetails.scanner.additionalInfo.openPorts.length : 0})
+                                            </span>
                                         </div>
                                         {Array.isArray(ipDetails.scanner.additionalInfo?.openPorts) && ipDetails.scanner.additionalInfo.openPorts.length > 0 ? (
                                             (() => {
@@ -1860,12 +1790,22 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                                         <div className="flex flex-wrap gap-2">
                                                                             {byCategory[cat].map((p) => {
                                                                                 const Icon = getPortIcon(p.port);
+                                                                                const protocol = p.port === 443 ? 'https' : 'http';
+                                                                                const portHref = `${protocol}://${ipDetails.ip}:${p.port}`;
                                                                                 return (
-                                                                                    <div key={p.port} className={`flex items-center gap-2 py-2.5 px-4 rounded-lg border min-w-[7rem] shrink-0 ${colors.badge}`}>
+                                                                                    <a
+                                                                                        key={p.port}
+                                                                                        id={`port-${p.port}`}
+                                                                                        href={portHref}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className={`flex items-center gap-2 py-2.5 px-4 rounded-lg border min-w-[7rem] shrink-0 ${colors.badge} hover:opacity-90 transition-opacity`}
+                                                                                        title={`Ouvrir ${ipDetails.ip}:${p.port}`}
+                                                                                    >
                                                                                         <Icon size={18} className={`${colors.icon} flex-shrink-0`} />
                                                                                         <span className="font-mono text-sm font-medium">{p.port}</span>
-                                                                                        <span className="text-xs opacity-90 whitespace-nowrap">{WELL_KNOWN_PORTS[p.port] ?? '—'}</span>
-                                                                                    </div>
+                                                                                        {WELL_KNOWN_PORTS[p.port] ? <span className="text-xs opacity-90 whitespace-nowrap">{WELL_KNOWN_PORTS[p.port]}</span> : null}
+                                                                                    </a>
                                                                                 );
                                                                             })}
                                                                         </div>
@@ -2221,11 +2161,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         </th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">
                                             <button
-                                                onClick={() => handleSort('type')}
+                                                onClick={() => handleSort('ip')}
                                                 className="flex items-center gap-1.5 hover:text-accent-primary transition-colors group"
                                             >
-                                                <span>Type</span>
-                                                <ArrowUpDown size={14} className={sortField === 'type' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
+                                                <span>IP</span>
+                                                <ArrowUpDown size={14} className={sortField === 'ip' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">
@@ -2237,15 +2177,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <ArrowUpDown size={14} className={sortField === 'name' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
-                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">
-                                            <button
-                                                onClick={() => handleSort('ip')}
-                                                className="flex items-center gap-1.5 hover:text-accent-primary transition-colors group"
-                                            >
-                                                <span>IP</span>
-                                                <ArrowUpDown size={14} className={sortField === 'ip' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
-                                            </button>
-                                        </th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">AP / Switch</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">
                                             <button
                                                 onClick={() => handleSort('mac')}
@@ -2255,67 +2187,82 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <ArrowUpDown size={14} className={sortField === 'mac' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">Ports</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">Statut</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">Dernière vue</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {paginatedResults.map((result, index) => {
-                                        const isFreebox = result.pluginId === 'freebox';
-                                        const isUnifi = result.pluginId === 'unifi';
-                                        // Recherche étendue : inverser les couleurs (exacte = Freebox violet, UniFi bleu ; étendue = inverse)
-                                        const swap = !exactMatch;
-                                        const freeboxColor = swap ? 'text-purple-400' : 'text-blue-400';
-                                        const unifiColor = swap ? 'text-blue-400' : 'text-purple-400';
+                                        const sources = (result.additionalData as { sources?: string[] } | undefined)?.sources;
+                                        const isMerged = Array.isArray(sources) && sources.length > 1;
+                                        const isFreebox = result.pluginId === 'freebox' || (isMerged && sources?.includes('Freebox'));
+                                        const isUnifi = result.pluginId === 'unifi' || (isMerged && sources?.some(s => s.toLowerCase().includes('unifi')));
+                                        const isScan = result.pluginId === 'scan-reseau' || (isMerged && sources?.some(s => s.includes('Scan')));
+                                        const dhcpFrom = (result.additionalData as { dhcpFrom?: 'freebox' | 'unifi' } | undefined)?.dhcpFrom;
+                                        const openPortsCount = (result.additionalData as { openPortsCount?: number } | undefined)?.openPortsCount ?? 0;
+                                        const adPorts = result.additionalData as { openPorts?: { port: number; protocol?: string }[]; lastPortScan?: string } | undefined;
+                                        const openPortsList = Array.isArray(adPorts?.openPorts) ? adPorts.openPorts : [];
+                                        const lastPortScan = adPorts?.lastPortScan;
                                         return (
                                             <tr
                                                 key={`${result.pluginId}-${result.id}-${index}`}
                                                 className="border-b border-theme hover:bg-theme-secondary/50 transition-colors"
                                             >
                                                 <td className="py-3 px-4">
-                                                    <div className="flex items-center gap-2">
-                                                        {isFreebox && <Server size={16} className={freeboxColor} />}
-                                                        {isUnifi && <Wifi size={16} className={unifiColor} />}
-                                                        <span className={`font-medium ${
-                                                            isFreebox ? freeboxColor : isUnifi ? unifiColor : 'text-theme-primary'
-                                                        }`}>
-                                                            {result.pluginName}
-                                                        </span>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        {isFreebox && (
+                                                            <img src={logoFreebox} alt="Freebox" className="w-4 h-4 object-contain flex-shrink-0" title="Freebox : appareils, DHCP, redirections de port" />
+                                                        )}
+                                                        {isUnifi && (
+                                                            <img src={logoUnifi} alt="UniFi" className="w-4 h-4 object-contain flex-shrink-0" title="UniFi : clients, points d'accès" />
+                                                        )}
+                                                        {isScan && (
+                                                            <Activity size={16} className="text-cyan-400 flex-shrink-0" title="Scan Réseau : découverte, ports ouverts" />
+                                                        )}
+                                                        {dhcpFrom && (
+                                                            <span
+                                                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                                                    dhcpFrom === 'freebox' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'
+                                                                }`}
+                                                                title={dhcpFrom === 'freebox' ? 'DHCP géré par Freebox' : 'DHCP géré par UniFi'}
+                                                            >
+                                                                <Router size={12} />
+                                                                DHCP
+                                                            </span>
+                                                        )}
+                                                        {(() => {
+                                                            const ad = result.additionalData as { is_wired?: boolean; is_wireless?: boolean } | undefined;
+                                                            if (ad?.is_wired) return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-500/20 text-slate-300" title="Filaire"><Cable size={12} /> Filaire</span>;
+                                                            if (ad?.is_wireless) return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300" title="WiFi"><Radio size={12} /> WiFi</span>;
+                                                            return null;
+                                                        })()}
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-4">
-                                                    <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${
-                                                        result.type === 'device' || result.type === 'client'
-                                                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                                                            : result.type === 'ap' || result.type === 'switch'
-                                                            ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
-                                                            : result.type === 'dhcp'
-                                                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
-                                                            : result.type === 'port-forward'
-                                                            ? 'bg-purple-500/20 border-purple-500/50 text-purple-400'
-                                                            : 'bg-theme-secondary border-theme text-theme-secondary'
-                                                    }`}>
-                                                        {getTypeLabel(result.type)}
-                                                    </span>
-                                                </td>
-                                            <td className="py-3 px-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-theme-primary font-medium">
-                                                        {result.name}
-                                                    </span>
-                                                    {result.hostname && result.hostname !== result.name && (
-                                                        <span className="text-xs text-theme-tertiary">
-                                                            {result.hostname}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
                                             <td className="py-3 px-4">
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-mono text-theme-secondary">
-                                                            {result.ip || '--'}
-                                                        </span>
+                                                        {result.ip ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const urlParams = new URLSearchParams(window.location.search);
+                                                                    urlParams.set('s', result.ip!);
+                                                                    const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                                                                    window.history.pushState(null, '', newUrl);
+                                                                    setSearchQuery(result.ip!);
+                                                                    performSearch(result.ip!);
+                                                                }}
+                                                                className={`text-left font-mono hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${result.active === false ? 'text-gray-500' : ''}`}
+                                                                style={result.active !== false ? { color: 'rgb(152, 181, 238)' } : undefined}
+                                                                title={`Rechercher ${result.ip} dans la page de recherche`}
+                                                            >
+                                                                <span>{result.ip}</span>
+                                                                <Link2 size={9} className="opacity-50 relative top-[-2px]" />
+                                                            </button>
+                                                        ) : (
+                                                            <span className="font-mono text-theme-secondary">--</span>
+                                                        )}
                                                         {/* Latency scatter badge - show if monitoring is enabled */}
                                                         {result.ip && monitoringStatus[result.ip] === true && (
                                                             <button
@@ -2378,9 +2325,71 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-theme-primary font-medium">
+                                                        {result.name}
+                                                    </span>
+                                                    {result.hostname && result.hostname !== result.name && (
+                                                        <span className="text-xs text-theme-tertiary">
+                                                            {result.hostname}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                {(() => {
+                                                    const ad = result.additionalData as { is_wired?: boolean; is_wireless?: boolean; ap_name?: string; sw_name?: string; ssid?: string } | undefined;
+                                                    const hasAp = !!(ad?.ap_name || ad?.ssid);
+                                                    const hasSw = !!ad?.sw_name;
+                                                    if (ad?.is_wireless || (hasAp && !hasSw)) {
+                                                        const label = ad?.ap_name || ad?.ssid || 'WiFi';
+                                                        return (
+                                                            <span className="text-xs text-theme-secondary flex items-center gap-1" title={ad?.ap_name || ad?.ssid ? 'Point d\'accès WiFi' : 'WiFi'}>
+                                                                <Radio size={12} className="text-blue-400/80" />
+                                                                {label}
+                                                            </span>
+                                                        );
+                                                    }
+                                                    if (ad?.is_wired || hasSw) {
+                                                        const label = ad?.sw_name || 'Filaire';
+                                                        return (
+                                                            <span className="text-xs text-theme-secondary flex items-center gap-1" title={ad?.sw_name ? 'Switch connecté' : 'Filaire'}>
+                                                                <Cable size={12} className="text-slate-400/80" />
+                                                                {label}
+                                                            </span>
+                                                        );
+                                                    }
+                                                    return <span className="text-theme-tertiary">--</span>;
+                                                })()}
+                                            </td>
+                                            <td className="py-3 px-4">
                                                 <span className="font-mono text-theme-secondary">
                                                     {formatMac(result.mac)}
                                                 </span>
+                                            </td>
+                                            <td className="py-3 px-4">
+                                                {openPortsCount > 0 ? (
+                                                    <span
+                                                        className="font-mono text-sm text-cyan-400 cursor-default"
+                                                        title={openPortsList.length > 0 ? undefined : `${openPortsCount} port(s) ouvert(s)`}
+                                                        onMouseEnter={(e) => {
+                                                            if (openPortsList.length === 0 || !result.ip) return;
+                                                            cancelTooltipHide();
+                                                            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                            setPortsTooltip({
+                                                                ip: result.ip,
+                                                                openPorts: openPortsList.map((p) => ({ port: p.port, protocol: p.protocol })),
+                                                                lastPortScan,
+                                                                rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right }
+                                                            });
+                                                        }}
+                                                        onMouseLeave={() => scheduleTooltipHide()}
+                                                    >
+                                                        {openPortsCount}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-theme-tertiary">--</span>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4">
                                                 {result.active !== undefined ? (
@@ -2451,6 +2460,61 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 onClose={() => setShowOptionsInfoModal(false)}
             />
 
+            {/* Hover tooltip Ports (recherche groupée) - comme page Scan */}
+            {portsTooltip && (() => {
+                const pos = getPortsTooltipPosition(portsTooltip.rect, PORTS_TOOLTIP_W, PORTS_TOOLTIP_H);
+                const sorted = [...portsTooltip.openPorts].sort((a, b) => a.port - b.port);
+                const byCategory = sorted.reduce<Record<string, { port: number; protocol?: string }[]>>((acc, p) => {
+                    const cat = getPortCategory(p.port);
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(p);
+                    return acc;
+                }, {});
+                const categoryOrder = ['Web', 'Bases de données', 'Mail', 'Système', 'Accès distant', 'Docker', 'Autres'];
+                const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(420px,calc(100vw-32px))]"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{portsTooltip.ip}</div>
+                        {sorted.length > 0 ? (
+                            <div className="space-y-3">
+                                {orderedCategories.map((cat) => {
+                                    const colors = getPortCategoryColor(cat);
+                                    return (
+                                        <div key={cat}>
+                                            <div className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${colors.label}`}>{cat}</div>
+                                            <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                                                {byCategory[cat].map((p) => {
+                                                    const Icon = getPortIcon(p.port);
+                                                    return (
+                                                        <div key={p.port} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg border ${colors.badge}`}>
+                                                            <Icon size={14} className={`${colors.icon} flex-shrink-0`} />
+                                                            <span className="font-mono text-sm">{p.port}</span>
+                                                            {WELL_KNOWN_PORTS[p.port] ? <span className="text-xs opacity-90 truncate" title={WELL_KNOWN_PORTS[p.port]}>{WELL_KNOWN_PORTS[p.port]}</span> : null}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-gray-500 py-1">Aucun port ouvert</div>
+                        )}
+                        {portsTooltip.lastPortScan && (
+                            <div className="mt-3 pt-3 border-t border-gray-700/80 text-xs text-gray-500">
+                                Scan : {new Date(portsTooltip.lastPortScan).toLocaleString('fr-FR')}
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
+
             {/* Search History Modal */}
             <SearchHistoryModal
                 isOpen={showHistoryModal}
@@ -2458,12 +2522,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 history={searchHistory}
                 onSelect={(entry) => {
                     setSearchQuery(entry.query);
-                    setExactMatch(entry.exactMatch);
                     setCaseSensitive(entry.caseSensitive);
                     setShowOnlyActive(entry.showOnlyActive);
                     setShowHistoryModal(false);
                     performSearch(entry.query, {
-                        exactMatch: entry.exactMatch,
                         caseSensitive: entry.caseSensitive,
                         showOnlyActive: entry.showOnlyActive
                     });

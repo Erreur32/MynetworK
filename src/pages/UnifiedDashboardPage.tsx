@@ -57,7 +57,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
             {/* Column 1 - à gauche (état des plugins + récapitulatif réseau + système serveur) */}
             <div className="flex flex-col gap-6">
                 <MultiSourceWidget onPluginClick={() => onNavigateToPlugins?.()} />
-                {hasFreebox && <NetworkSummaryWidget />}
+                {(hasFreebox || hasUniFi) && <NetworkSummaryWidget />}
                 <SystemServerWidget />
             </div>
 

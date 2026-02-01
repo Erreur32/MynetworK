@@ -19,19 +19,19 @@ const router = Router();
 
 /**
  * POST /api/search
- * Search across all active plugins
- * 
+ * Search across all active plugins.
+ * Mode is derived from query: IP/MAC (exact, wildcard *, range 1-32) vs text (hostname, vendor, comment).
+ *
  * Body:
  * {
  *   query: string (required)
  *   pluginIds?: string[] (optional - filter by plugins)
  *   types?: string[] (optional - filter by result types: device, dhcp, port-forward, client, ap, switch)
- *   exactMatch?: boolean (default: false)
  *   caseSensitive?: boolean (default: false)
  * }
  */
 router.post('/', requireAuth, autoLog('search', 'search'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { query, pluginIds, types, exactMatch, caseSensitive } = req.body;
+    const { query, pluginIds, types, caseSensitive } = req.body;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
         return res.status(400).json({
@@ -71,7 +71,6 @@ router.post('/', requireAuth, autoLog('search', 'search'), asyncHandler(async (r
             query: query.trim(),
             pluginIds,
             types,
-            exactMatch: exactMatch === true,
             caseSensitive: caseSensitive === true
         });
 

@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -20,14 +20,16 @@ import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringMo
 const WELL_KNOWN_PORTS: Record<number, string> = {
     20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
     143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS', 995: 'POP3S', 1433: 'SQL Server', 3306: 'MySQL',
-    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin'
+    3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt', 9000: 'PhpMyAdmin',
+    2375: 'Docker', 2376: 'Docker TLS'
 };
 
 /** Icônes Lucide par port (services connus) */
 const PORT_ICONS: Record<number, LucideIcon> = {
     20: FolderInput, 21: FolderInput, 22: Terminal, 23: Terminal, 25: Mail, 53: Globe, 80: Globe,
     110: Mail, 143: Mail, 443: Lock, 445: Share2, 993: Mail, 995: Mail, 1433: Database, 3306: Database,
-    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server
+    3389: Monitor, 5432: Database, 5900: Monitor, 6379: Database, 8080: Globe, 8443: Lock, 9000: Server,
+    2375: Container, 2376: Container
 };
 function getPortIcon(port: number): LucideIcon {
     return PORT_ICONS[port] ?? Server;
@@ -1708,7 +1710,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('status'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Statut</span>
+                                        <span>Ports</span>
                                         {sortBy === 'status' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
@@ -2091,7 +2093,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                         <div key={p.port} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg border ${colors.cell}`}>
                                                             <Icon size={14} className={`${colors.icon} flex-shrink-0`} />
                                                             <span className="font-mono text-sm">{p.port}</span>
-                                                            <span className="text-xs opacity-90 truncate" title={WELL_KNOWN_PORTS[p.port] ?? 'Service'}>{WELL_KNOWN_PORTS[p.port] ?? '—'}</span>
+                                                            {WELL_KNOWN_PORTS[p.port] ? <span className="text-xs opacity-90 truncate" title={WELL_KNOWN_PORTS[p.port]}>{WELL_KNOWN_PORTS[p.port]}</span> : null}
                                                         </div>
                                                     );
                                                 })}

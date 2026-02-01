@@ -9,7 +9,6 @@ import { X, History, Search, Trash2 } from 'lucide-react';
 export interface SearchHistoryEntry {
     query: string;
     timestamp: number;
-    exactMatch: boolean;
     caseSensitive: boolean;
     showOnlyActive: boolean;
 }
@@ -102,8 +101,6 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                                         )}
                                     </div>
                                     <div className="flex flex-wrap gap-1 mt-0.5 ml-9 mb-1">
-                                        {entry.exactMatch && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Exact</span>}
-                                        {!entry.exactMatch && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">Étendu</span>}
                                         {entry.caseSensitive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Case</span>}
                                         {entry.showOnlyActive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Actif</span>}
                                     </div>

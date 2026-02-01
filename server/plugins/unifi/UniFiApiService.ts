@@ -949,6 +949,28 @@ export class UniFiApiService {
     }
 
     /**
+     * Get network config (LAN networks) to check if DHCP is enabled (dhcpd_enabled).
+     * Used for dashboard "Gestionnaire d'IPs" when UniFi manages the network.
+     */
+    async getNetworkConfig(): Promise<{ dhcpEnabled: boolean }> {
+        try {
+            await this.ensureLoggedIn();
+            const encodedSite = encodeURIComponent(this.site);
+            const list = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/rest/networkconf`);
+            if (!Array.isArray(list) || list.length === 0) {
+                return { dhcpEnabled: false };
+            }
+            const lan = list.find((n: any) => (n.purpose === 'corporate' || n.purpose === 'vlan only' || !n.purpose) && n.dhcpd_enabled !== undefined)
+                ?? list[0];
+            const dhcpEnabled = lan?.dhcpd_enabled === true;
+            return { dhcpEnabled };
+        } catch (error) {
+            logger.debug('UniFi', 'Failed to get network config (dhcpd_enabled):', error);
+            return { dhcpEnabled: false };
+        }
+    }
+
+    /**
      * Get network statistics
      */
     async getNetworkStats(): Promise<UniFiStats> {

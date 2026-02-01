@@ -13,7 +13,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.4.7');
+        super('unifi', 'UniFi Controller', '0.4.8');
         this.apiService = new UniFiApiService();
     }
 
@@ -230,12 +230,13 @@ export class UniFiPlugin extends BasePlugin {
         }
 
         try {
-            const [devices, clients, stats, sysinfo, wlans] = await Promise.all([
+            const [devices, clients, stats, sysinfo, wlans, networkConf] = await Promise.all([
                 this.apiService.getDevices(),
                 this.apiService.getClients(),
                 this.apiService.getNetworkStats(),
                 this.apiService.getSystemInfo(),
-                this.apiService.getWlans().catch(() => []) // Get WLANs, but don't fail if unavailable
+                this.apiService.getWlans().catch(() => []), // Get WLANs, but don't fail if unavailable
+                this.apiService.getNetworkConfig().catch(() => ({ dhcpEnabled: false })) // DHCP on UniFi (rest/networkconf)
             ]);
 
             // Log summary only if debug is enabled
@@ -277,16 +278,16 @@ export class UniFiPlugin extends BasePlugin {
                 };
             });
 
-            // Add clients as devices too
+            // Add clients as devices too (spread client first so type is overwritten last → always 'client' for search/UI)
             const clientDevices: Device[] = clients.map((client: any) => ({
+                ...client,
                 id: client._id || client.mac || '',
                 name: client.name || client.hostname || 'Unknown Client',
                 ip: client.ip,
                 mac: client.mac,
                 type: 'client',
                 active: true,
-                lastSeen: client.last_seen ? new Date(client.last_seen * 1000) : undefined,
-                ...client
+                lastSeen: client.last_seen ? new Date(client.last_seen * 1000) : undefined
             }));
 
             // Combine devices and clients
@@ -325,6 +326,8 @@ export class UniFiPlugin extends BasePlugin {
                 apiMode: apiMode,
                 // Deployment type (unifios, controller, cloud, unknown)
                 deploymentType: deploymentType,
+                // DHCP enabled on UniFi (from rest/networkconf dhcpd_enabled)
+                dhcpEnabled: networkConf?.dhcpEnabled === true,
                 // Basic memory information if present
                 memory: sysinfo.mem ? {
                     total: sysinfo.mem.total,
