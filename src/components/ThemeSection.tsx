@@ -1237,7 +1237,11 @@ export const ThemeSection: React.FC = () => {
                         Choisissez l'animation affichée en arrière-plan pour votre thème.
                     </p>
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                        {FULL_ANIMATION_OPTIONS.map((option) => {
+                        {FULL_ANIMATION_OPTIONS.filter(option => {
+                            // Filtrer les animations supprimées (sécurité supplémentaire)
+                            const removedAnimations = ['animation.95.just-in-case', 'animation.99.media-background'];
+                            return !removedAnimations.includes(option.value);
+                        }).map((option) => {
                             // Use fullAnimationId for all themes when animation is enabled, 'off' when disabled
                             const currentValue = (currentTheme === 'full-animation' || bgAnimation !== 'off')
                                 ? fullAnimationId 

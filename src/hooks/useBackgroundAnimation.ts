@@ -89,6 +89,16 @@ export function setStoredBgAnimation(variant: BgAnimationVariant): void {
 export function getStoredFullAnimationId(): FullAnimationId {
   try {
     const v = localStorage.getItem(FULL_ANIMATION_ID_KEY);
+    // Migration : nettoyer les anciennes animations supprimées
+    const removedAnimations = ['animation.95.just-in-case', 'animation.99.media-background'];
+    if (v && removedAnimations.includes(v)) {
+      // Nettoyer l'ancienne valeur invalide
+      localStorage.removeItem(FULL_ANIMATION_ID_KEY);
+      // Supprimer aussi les paramètres associés
+      const paramKey = `mynetwork_animation_params_${v}`;
+      localStorage.removeItem(paramKey);
+      return DEFAULT_FULL;
+    }
     if (VALID_FULL_ANIMATION_IDS.includes(v as FullAnimationId)) return v as FullAnimationId;
   } catch {
     // ignore
