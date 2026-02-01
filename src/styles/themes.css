@@ -56,6 +56,7 @@
 
     /* Effects */
     --backdrop-blur: none;
+    --card-opacity: 1;
 }
 
 /* Dark Theme - Popular dark theme style (inspired by GitHub Dark, VS Code Dark+) */
@@ -805,6 +806,7 @@ html[data-theme="modern"] body[style*="background"] {
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
     border-color: transparent !important;
     box-shadow: var(--shadow-md) !important;
+    opacity: var(--card-opacity, 1) !important;
 }
 
 
@@ -1075,7 +1077,10 @@ a:hover:focus,
 [data-theme="dark"] .bg-theme-primary { background-color: var(--bg-primary) !important; }
 [data-theme="dark"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
 [data-theme="dark"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
-[data-theme="dark"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="dark"] .bg-theme-card { 
+    background-color: var(--bg-card) !important; 
+    opacity: var(--card-opacity, 1) !important;
+}
 [data-theme="dark"] .text-theme-primary { color: var(--text-primary) !important; }
 [data-theme="dark"] .text-theme-secondary { color: var(--text-secondary) !important; }
 [data-theme="dark"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
@@ -1086,6 +1091,15 @@ a:hover:focus,
    ============================================
    Replace hardcoded colors with theme variables
 */
+
+/* Global card opacity - applies to all themes */
+[data-theme] .bg-theme-card,
+[data-theme] [class*="card"],
+[data-theme] [class*="section"]:not([class*="bg-theme-primary"]):not([class*="bg-theme-secondary"]),
+[data-theme] [class*="widget"],
+[data-theme] [class*="panel"] {
+    opacity: var(--card-opacity, 1) !important;
+}
 
 /* Background colors - Replace hardcoded backgrounds */
 /* Dark theme: clear hierarchy with popular dark theme colors */
@@ -1225,7 +1239,10 @@ a:hover:focus,
 }
 [data-theme="modern"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
 [data-theme="modern"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
-[data-theme="modern"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="modern"] .bg-theme-card { 
+    background-color: var(--bg-card) !important; 
+    opacity: var(--card-opacity, 1) !important;
+}
 [data-theme="modern"] .text-theme-primary { color: var(--text-primary) !important; }
 [data-theme="modern"] .text-theme-secondary { color: var(--text-secondary) !important; }
 [data-theme="modern"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
@@ -1282,6 +1299,7 @@ a:hover:focus,
     background-color: var(--bg-card) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    opacity: var(--card-opacity, 1) !important;
 }
 [data-theme="nightly"] .text-theme-primary { color: var(--text-primary) !important; }
 [data-theme="nightly"] .text-theme-secondary { color: var(--text-secondary) !important; }
@@ -1428,6 +1446,7 @@ a:hover:focus,
     backdrop-filter: var(--backdrop-blur) !important;
     -webkit-backdrop-filter: var(--backdrop-blur) !important;
     border-color: var(--card-border) !important;
+    opacity: var(--card-opacity, 1) !important;
     /* Very light shadows - minimal glow effect */
     box-shadow: 
         0 1px 3px rgba(192, 132, 252, 0.1),
@@ -2061,6 +2080,7 @@ html[data-theme="elegant"] body[style*="background"] {
     border: none !important;
     border-color: transparent !important;
     box-shadow: none !important;
+    opacity: var(--card-opacity, 1) !important;
 }
 
 /* Elegant theme - Input/Textarea styles */
@@ -2138,7 +2158,10 @@ html[data-theme="elegant"] body[style*="background"] {
 }
 [data-theme="elegant"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
 [data-theme="elegant"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
-[data-theme="elegant"] .bg-theme-card { background-color: var(--bg-card) !important; }
+[data-theme="elegant"] .bg-theme-card { 
+    background-color: var(--bg-card) !important; 
+    opacity: var(--card-opacity, 1) !important;
+}
 [data-theme="elegant"] .border-theme { border-color: var(--border-color) !important; }
 
 /* Elegant theme - Override any inline styles or hardcoded backgrounds */
@@ -2158,6 +2181,131 @@ html[data-theme="elegant"] body[style*="background"] {
     border: none !important;
     border-color: transparent !important;
     box-shadow: none !important;
+}
+
+/* ============================================
+   FULL-ANIMATION THEME - Glass effect + animated background
+   Cadres en verre (backdrop-blur), bordures discrètes (pas de blanc)
+   ============================================ */
+[data-theme="full-animation"] {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: rgba(18, 18, 28, 0.72);
+    --bg-tertiary: rgba(28, 28, 40, 0.6);
+    --bg-card: rgba(22, 22, 32, 0.78);
+    --bg-header: rgba(12, 12, 20, 0.85);
+    --bg-footer: rgba(12, 12, 20, 0.88);
+    --border-color: rgba(255, 255, 255, 0.06);
+    --border-color-light: rgba(255, 255, 255, 0.08);
+    --border-color-hover: rgba(255, 255, 255, 0.12);
+    --text-primary: #e8e8e8;
+    --text-secondary: #a8a8b8;
+    --text-tertiary: #787888;
+    --accent-primary: #3b82f6;
+    --accent-primary-hover: #2563eb;
+    --accent-unifi: #1fb0ec;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --accent-error: #ef4444;
+    --accent-info: #06b6d4;
+    --button-bg: rgba(30, 30, 45, 0.7);
+    --button-text: #e8e8e8;
+    --button-hover-bg: rgba(40, 40, 55, 0.8);
+    --button-hover-text: #ffffff;
+    --button-active-bg: #3b82f6;
+    --button-active-text: #ffffff;
+    --button-border: rgba(255, 255, 255, 0.08);
+    --input-bg: rgba(25, 25, 38, 0.7);
+    --input-text: #e8e8e8;
+    --input-border: rgba(255, 255, 255, 0.08);
+    --input-border-focus: #3b82f6;
+    --input-placeholder: #787888;
+    --card-bg: rgba(22, 22, 32, 0.78);
+    --card-border: rgba(255, 255, 255, 0.06);
+    --header-border: rgba(255, 255, 255, 0.06);
+    --footer-border: rgba(255, 255, 255, 0.06);
+    --bg-unifi-card: rgba(22, 22, 32, 0.78);
+    --backdrop-blur: blur(14px);
+}
+
+/* Full-animation: fond transparent pour laisser voir l'animation en arrière-plan */
+[data-theme="full-animation"] .bg-theme-primary,
+[data-theme="full-animation"] main,
+[data-theme="full-animation"] #root,
+[data-theme="full-animation"] [class*="min-h-screen"].bg-theme-primary {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+[data-theme="full-animation"] .bg-theme-secondary { background-color: var(--bg-secondary) !important; }
+[data-theme="full-animation"] .bg-theme-tertiary { background-color: var(--bg-tertiary) !important; }
+[data-theme="full-animation"] .bg-theme-card { 
+    background-color: var(--bg-card) !important; 
+    opacity: var(--card-opacity, 1) !important;
+}
+[data-theme="full-animation"] .text-theme-primary { color: var(--text-primary) !important; }
+[data-theme="full-animation"] .text-theme-secondary { color: var(--text-secondary) !important; }
+[data-theme="full-animation"] .text-theme-tertiary { color: var(--text-tertiary) !important; }
+[data-theme="full-animation"] .border-theme { border-color: var(--border-color) !important; }
+
+/* Full-animation: effet glass sur header et footer */
+[data-theme="full-animation"] header,
+[data-theme="full-animation"] .bg-theme-header,
+[data-theme="full-animation"] header.bg-theme-header {
+    background-color: var(--bg-header) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--header-border) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+[data-theme="full-animation"] footer,
+[data-theme="full-animation"] .bg-theme-footer,
+[data-theme="full-animation"] footer.bg-theme-footer {
+    background-color: var(--bg-footer) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--footer-border) !important;
+    border-top: 1px solid var(--border-color) !important;
+}
+
+/* Full-animation: effet glass sur cartes, sections, widgets, panels */
+[data-theme="full-animation"] [class*="card"],
+[data-theme="full-animation"] [class*="section"],
+[data-theme="full-animation"] [class*="widget"],
+[data-theme="full-animation"] [class*="panel"],
+[data-theme="full-animation"] .bg-theme-secondary,
+[data-theme="full-animation"] .bg-theme-card {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--border-color) !important;
+    opacity: var(--card-opacity, 1) !important;
+}
+
+/* Full-animation: bordures discrètes (pas de blanc) sur tous les éléments génériques */
+[data-theme="full-animation"] .border,
+[data-theme="full-animation"] .border-theme,
+[data-theme="full-animation"] [class*="border"]:not([class*="border-red"]):not([class*="border-green"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-purple"]):not([class*="border-orange"]):not([class*="border-cyan"]):not([class*="border-pink"]):not([class*="border-indigo"]):not([class*="border-emerald"]):not([class*="border-teal"]):not([class*="border-amber"]):not([class*="border-violet"]):not([class*="border-fuchsia"]):not([class*="border-rose"]):not([class*="border-lime"]):not([class*="border-sky"]) {
+    border-color: var(--border-color) !important;
+}
+
+/* Full-animation: override bordures grises / blanches codées en dur */
+[data-theme="full-animation"] .border-gray-700,
+[data-theme="full-animation"] .border-gray-800,
+[data-theme="full-animation"] .border-gray-600,
+[data-theme="full-animation"] .border-gray-500,
+[data-theme="full-animation"] .border-white {
+    border-color: var(--border-color) !important;
+}
+
+/* Full-animation: cartes et conteneurs avec fond glass */
+[data-theme="full-animation"] [class*="bg-[#1a1a1a]"],
+[data-theme="full-animation"] [class*="bg-[#181818]"],
+[data-theme="full-animation"] [class*="bg-[#1b1b1b]"] {
+    background-color: var(--card-bg) !important;
+    backdrop-filter: var(--backdrop-blur) !important;
+    -webkit-backdrop-filter: var(--backdrop-blur) !important;
+    border-color: var(--border-color) !important;
 }
 
 

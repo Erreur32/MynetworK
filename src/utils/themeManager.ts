@@ -4,10 +4,11 @@
  * Gère le changement de thème et la persistance dans localStorage
  */
 
-export type Theme = 'dark' | 'glass' | 'modern' | 'nightly' | 'neon' | 'elegant';
+export type Theme = 'dark' | 'glass' | 'modern' | 'nightly' | 'neon' | 'elegant' | 'full-animation';
 
 const THEME_STORAGE_KEY = 'mynetwork_theme';
 const DEFAULT_THEME: Theme = 'dark';
+const VALID_THEMES: Theme[] = ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant', 'full-animation'];
 
 /**
  * Applique un thème au document
@@ -16,7 +17,7 @@ export const applyTheme = (theme: Theme): void => {
   const html = document.documentElement;
   
   // Validate theme
-  if (!['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(theme)) {
+  if (!VALID_THEMES.includes(theme)) {
     console.warn(`Invalid theme: ${theme}, using default: ${DEFAULT_THEME}`);
     theme = DEFAULT_THEME;
   }
@@ -45,7 +46,7 @@ export const getCurrentTheme = (): Theme => {
   // Vérifier d'abord dans localStorage
   try {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-    if (savedTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(savedTheme)) {
+    if (savedTheme && VALID_THEMES.includes(savedTheme as Theme)) {
       return savedTheme as Theme;
     }
   } catch (error) {
@@ -54,7 +55,7 @@ export const getCurrentTheme = (): Theme => {
   
   // Vérifier l'attribut data-theme sur le HTML
   const htmlTheme = document.documentElement.getAttribute('data-theme');
-  if (htmlTheme && ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(htmlTheme)) {
+  if (htmlTheme && VALID_THEMES.includes(htmlTheme as Theme)) {
     return htmlTheme as Theme;
   }
   
@@ -157,6 +158,11 @@ export const getAvailableThemes = (): Array<{ id: Theme; name: string; descripti
       id: 'elegant',
       name: 'Élégant',
       description: 'Thème animé avec dégradés élégants et animations subtiles'
+    },
+    {
+      id: 'full-animation',
+      name: 'Full animation',
+      description: 'Arrière-plan animé avec choix d\'animation (étoiles, circuit, rubans, vagues)'
     }
   ];
 };

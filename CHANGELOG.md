@@ -3,7 +3,77 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.0] - 2026-02-01
+
+### ✨ Ajouté
+
+**Gestion des Thèmes - Sélection d'Animation Améliorée**
+- ✅ Nouvelle section "Sélection de l'animation" avec grille multi-colonnes (2/3/4/5/6 colonnes selon la taille d'écran)
+- ✅ Option "NON" en première position pour désactiver facilement les animations
+- ✅ Affichage du nom de l'animation sélectionnée dans le preview de chaque thème
+- ✅ Cartes cliquables pour chaque animation avec indicateur visuel de sélection (check jaune/rouge)
+- ✅ Style distinct pour l'option "NON" (bordure rouge au lieu de jaune)
+
+**Gestion des Thèmes - Réorganisation de l'Interface**
+- ✅ Section "Opacité des blocs" déplacée en première position (avant la sélection des thèmes)
+- ✅ Opacité fonctionne indépendamment de l'état de l'animation (même si animation désactivée)
+- ✅ Réorganisation logique : Opacité → Thèmes → Animations → Paramètres
+
+### 🔧 Modifié
+
+**Gestion des Thèmes - Menu de Sélection d'Animation**
+- 🔧 Menu de sélection d'animation modernisé : menu déroulant centré à l'écran au lieu d'un simple select
+- 🔧 Menu scrollable avec toutes les animations visibles sans icônes (texte uniquement)
+- 🔧 Largeur optimisée (500px) avec max-width responsive pour petits écrans
+- 🔧 Boutons d'animation dans la grille : padding horizontal réduit (px-1.5) pour boutons plus compacts
+- 🔧 Texte optimisé avec `leading-tight` pour meilleure utilisation de l'espace
+
+**Gestion des Thèmes - Simplification de l'Interface**
+- 🔧 Suppression de la section redondante "Arrière-plan animé" avec toggle d'activation
+- 🔧 L'activation/désactivation se fait maintenant uniquement via l'option "NON" dans la grille d'animations
+- 🔧 Section "Vitesse d'animation" et "Paramètres d'animation" affichées uniquement si animation activée
+
+### 🗑️ Supprimé
+
+**Thème Media Background**
+- 🗑️ Suppression complète du thème "Media Background" (animation.99.media-background)
+- 🗑️ Retrait du composant `MediaBackgroundCanvas` et de toutes ses dépendances
+- 🗑️ Nettoyage des références dans `ThemeSection.tsx`, `AnimatedBackground.tsx`, `useBackgroundAnimation.ts` et `useAnimationParameters.ts`
+
+---
+
 ## [0.4.8] - 2026-02-01
+
+### ✨ Ajouté
+
+**Dashboard - Récapitulatif Réseau**
+- ✅ Nouvelle route **GET /api/dashboard/network-summary** : agrégation Freebox (LAN, DMZ, DHCP, NAT) + UniFi (gateway, DHCP, clients)
+- ✅ Affichage du widget Récapitulatif Réseau dès qu’un plugin Freebox **ou** UniFi est actif (au lieu de Freebox seul)
+- ✅ Détection du rôle réseau : **Freebox**, **UniFi (Cloud Gateway)** ou **UniFi (via DMZ Freebox)** selon mode Freebox (bridge/routeur), DMZ et présence du gateway UniFi
+- ✅ Passerelle et sous-réseau adaptés au setup (Freebox ou UniFi selon qui gère le réseau)
+- ✅ Section **Freebox** : mode (Routeur/Bridge), IP, DMZ (actif/inactif + IP cible)
+- ✅ Section **UniFi Gateway** : IP et nom du gateway (UGW, UDM, UCG)
+- ✅ Liste **DHCP** : statut Actif/Inactif par source (Freebox, UniFi) avec détail (plage ou nombre de clients)
+- ✅ **Règles NAT Freebox** : liste des redirections (commentaire, proto/port → IP:port), indicateur activé/désactivé
+- ✅ **Gestionnaire d’IPs Réseau (Freebox)** : IPv4 libres/utilisées, utilisation % (quand le réseau est géré par Freebox et DHCP actif)
+- ✅ **Gestionnaire d’IPs Réseau (UniFi)** : DHCP UniFi actif, nombre d’IP utilisées (clients) — affiché dès qu’un gateway UniFi + DHCP actif + comptage clients sont disponibles (indépendamment du rôle)
+
+**UniFi - Vérification DHCP**
+- ✅ **getNetworkConfig()** dans UniFiApiService : appel à `/api/s/<site>/rest/networkconf` pour lire `dhcpd_enabled` sur le réseau LAN
+- ✅ Exposition de **dhcpEnabled** dans les stats système du plugin UniFi (dashboard et récap réseau)
+
+### 🔧 Modifié
+
+**Page Recherche - Colonne AP/Switch**
+- 🔧 Backend (searchService) : déduction de **is_wireless** / **is_wired** à partir de `ap_name` ou `sw_name` lorsque les flags sont absents sur les clients UniFi
+- 🔧 Frontend (SearchPage) : affichage du libellé AP/Switch dès qu’on a **ap_name** ou **sw_name**, même sans les flags is_wired/is_wireless (évite "--" pour les appareils comme Echo M5Stack)
+
+**Dashboard**
+- 🔧 Récapitulatif Réseau : source de données unique via `/api/dashboard/network-summary` (remplace les appels directs Freebox LAN/DHCP)
+
+### 🐛 Corrigé
+
+- 🐛 Colonne AP/Switch vide ("--") pour certains clients UniFi lorsque l’API ne renvoie pas is_wired/is_wireless : utilisation de ap_name/sw_name pour déduire le type et afficher WiFi/Filaire
 
 ---
 

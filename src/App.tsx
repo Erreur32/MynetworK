@@ -15,6 +15,7 @@ import {
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
+import AnimatedBackground from './components/AnimatedBackground';
 
 // Lazy load pages for code splitting
 // Use default exports when available, otherwise use named exports
@@ -33,6 +34,9 @@ const SearchPage = lazy(() => import('./pages/SearchPage').then(m => ({ default:
 const NetworkScanPage = lazy(() => import('./pages/NetworkScanPage').then(m => ({ default: m.NetworkScanPage })));
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
+import { useBackgroundAnimation } from './hooks/useBackgroundAnimation';
+import { useAnimationParameters } from './hooks/useAnimationParameters';
+import type { FullAnimationId } from './hooks/useBackgroundAnimation';
 import { fetchEnvironmentInfo } from './constants/version';
 import {
   useAuthStore,
@@ -101,6 +105,15 @@ const App: React.FC = () => {
 
   // Capabilities store for model-specific features
   const { capabilities, supportsVm, hasLimitedVmSupport, getMaxVms } = useCapabilitiesStore();
+
+  // Background animation (CSS or full-animation theme)
+  const { variant: bgVariant, prefersReducedMotion, animationSpeed, theme } = useBackgroundAnimation();
+  
+  // Get animation parameters for the current animation
+  const currentAnimationId: FullAnimationId = typeof bgVariant === 'string' && bgVariant.startsWith('animation.') 
+    ? bgVariant as FullAnimationId 
+    : 'animation.80.particle-waves';
+  const animationParameters = useAnimationParameters(currentAnimationId);
 
   // Local state
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
@@ -455,20 +468,28 @@ const App: React.FC = () => {
   }
 
 
-  // Helper component to render page with footer
+  // Helper component to render page with footer (with optional animated background)
   const renderPageWithFooter = (pageContent: React.ReactNode) => (
-    <div className="min-h-screen pb-20 bg-theme-primary text-theme-primary font-sans selection:bg-accent-primary/30">
-      <Suspense fallback={<PageLoader />}>
-      {pageContent}
-      </Suspense>
-      <Footer
-        currentPage={currentPage}
-        onPageChange={handlePageChange}
-        onReboot={handleReboot}
-        onLogout={handleLogout}
-        onFreeboxOptions={handleFreeboxOptionsClick}
-        userRole={user?.role}
+    <div className="relative min-h-screen">
+      <AnimatedBackground 
+        variant={bgVariant} 
+        disabled={prefersReducedMotion} 
+        animationSpeed={animationSpeed}
+        animationParameters={animationParameters.parameters}
       />
+      <div className="relative z-0 min-h-screen pb-20 bg-theme-primary/95 text-theme-primary font-sans selection:bg-accent-primary/30">
+        <Suspense fallback={<PageLoader />}>
+          {pageContent}
+        </Suspense>
+        <Footer
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
+          onReboot={handleReboot}
+          onLogout={handleLogout}
+          onFreeboxOptions={handleFreeboxOptionsClick}
+          userRole={user?.role}
+        />
+      </div>
     </div>
   );
 
