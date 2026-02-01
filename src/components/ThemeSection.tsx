@@ -1239,9 +1239,10 @@ export const ThemeSection: React.FC = () => {
                     </p>
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {FULL_ANIMATION_OPTIONS.map((option) => {
-                            const currentValue = currentTheme === 'full-animation' 
+                            // Use fullAnimationId for all themes when animation is enabled, 'off' when disabled
+                            const currentValue = (currentTheme === 'full-animation' || bgAnimation !== 'off')
                                 ? fullAnimationId 
-                                : (bgAnimation !== 'off' ? bgAnimation : 'off');
+                                : 'off';
                             const isSelected = currentValue === option.value;
                             return (
                                 <button
