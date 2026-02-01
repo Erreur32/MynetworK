@@ -187,7 +187,7 @@ export function useBackgroundAnimation(): {
   const setAnimationSpeed = useCallback((s: AnimationSpeed) => {
     setStoredAnimationSpeed(s);
     setSpeedState(s);
-    window.dispatchEvent(new StorageEvent('storage', { key: ANIMATION_SPEED_KEY, newValue: s }));
+    window.dispatchEvent(new StorageEvent('storage', { key: ANIMATION_SPEED_KEY, newValue: String(s) }));
   }, []);
 
   useEffect(() => {

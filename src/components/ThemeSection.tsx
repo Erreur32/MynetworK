@@ -279,6 +279,9 @@ const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; label: string }[
     { value: 'animation.10.css-dark-particles', label: 'CSS dark particles' },
 ];
 
+// Liste des animations supprimées (ne plus afficher)
+const REMOVED_ANIMATIONS = ['animation.95.just-in-case', 'animation.99.media-background'];
+
 // Animation speed maintenant numérique (0.5-3.5), géré par slider
 
 // Composant AnimationSelector moderne avec menu déroulant et cartes visuelles
@@ -414,6 +417,10 @@ export const ThemeSection: React.FC = () => {
         const animationId = currentTheme === 'full-animation' 
             ? fullAnimationId 
             : (bgAnimation !== 'off' ? bgAnimation : fullAnimationId);
+        // Si l'animation a été supprimée, retourner la valeur par défaut
+        if (REMOVED_ANIMATIONS.includes(String(animationId))) {
+            return 'Particle waves';
+        }
         const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === animationId);
         return option?.label || 'Aucune';
     };
@@ -421,11 +428,19 @@ export const ThemeSection: React.FC = () => {
     // Get animation name for a specific theme preview
     const getAnimationNameForTheme = (themeId: Theme): string => {
         if (themeId === 'full-animation') {
+            // Si l'animation a été supprimée, retourner la valeur par défaut
+            if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
+                return 'Particle waves';
+            }
             const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
             return option?.label || 'Particle waves';
         }
         // For other themes, show the animation if it's enabled
         if (bgAnimation !== 'off') {
+            // Si l'animation a été supprimée, retourner la valeur par défaut
+            if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
+                return 'Particle waves';
+            }
             // Use fullAnimationId since that's what's actually used for rendering
             const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
             return option?.label || 'Particle waves';
@@ -1239,8 +1254,8 @@ export const ThemeSection: React.FC = () => {
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {FULL_ANIMATION_OPTIONS.filter(option => {
                             // Filtrer les animations supprimées (sécurité supplémentaire)
-                            const removedAnimations = ['animation.95.just-in-case', 'animation.99.media-background'];
-                            return !removedAnimations.includes(option.value);
+                            const valueStr = String(option.value);
+                            return !REMOVED_ANIMATIONS.includes(valueStr);
                         }).map((option) => {
                             // Use fullAnimationId for all themes when animation is enabled, 'off' when disabled
                             const currentValue = (currentTheme === 'full-animation' || bgAnimation !== 'off')
