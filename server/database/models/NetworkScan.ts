@@ -70,7 +70,7 @@ export class NetworkScanRepository {
         const existing = this.findByIp(input.ip);
         
         if (existing) {
-            // Update existing entry. Only refresh lastSeen when device (re)appears (was offline/unknown), not when already online.
+            // Update existing entry. Always update lastSeen when device is online (for both full scan and refresh)
             const updatePayload: Parameters<typeof this.update>[1] = {
                 mac: input.mac,
                 hostname: input.hostname,
@@ -82,7 +82,8 @@ export class NetworkScanRepository {
                 additionalInfo: input.additionalInfo,
                 scanCount: existing.scanCount + 1
             };
-            if (existing.status !== 'online') {
+            // Always update lastSeen when status is online (for both full scan and refresh)
+            if (input.status === 'online') {
                 updatePayload.lastSeen = new Date();
             }
             return this.update(input.ip, updatePayload)!;

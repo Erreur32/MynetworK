@@ -693,12 +693,9 @@ export class NetworkScanService {
                     const existing = NetworkScanRepository.findByIp(ip);
                     const updateData: Partial<NetworkScan> = {
                         status: 'online',
-                        pingLatency: latency
+                        pingLatency: latency,
+                        lastSeen: new Date() // Always update lastSeen on refresh when ping succeeds
                     };
-                    // Only refresh lastSeen when device (re)appears (was offline/unknown), not when already online
-                    if (!existing || existing.status !== 'online') {
-                        updateData.lastSeen = new Date();
-                    }
                     
                     // If full scan, update MAC, vendor, and hostname
                     if (scanType === 'full') {
