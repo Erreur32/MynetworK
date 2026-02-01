@@ -273,7 +273,6 @@ const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; label: string }[
     { value: 'animation.90.aurora', label: 'Icelandic Aurora' },
     { value: 'animation.92.aurora-v2', label: 'Icelandic Aurora v2' },
     { value: 'animation.94.alien-blackout', label: 'Alien Blackout' },
-    { value: 'animation.95.just-in-case', label: 'Just In Case' },
     { value: 'animation.96.stars', label: 'Stars' },
     { value: 'animation.97.space', label: 'Space' },
     { value: 'animation.98.sidelined', label: 'Sidelined' },

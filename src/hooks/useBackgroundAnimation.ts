@@ -20,7 +20,6 @@ export type FullAnimationId =
   | 'animation.92.aurora-v2'
   | 'animation.93.particules-line'
   | 'animation.94.alien-blackout'
-  | 'animation.95.just-in-case'
   | 'animation.96.stars'
   | 'animation.97.space'
   | 'animation.98.sidelined';
@@ -56,7 +55,6 @@ export const VALID_FULL_ANIMATION_IDS: FullAnimationId[] = [
   'animation.92.aurora-v2',
   'animation.93.particules-line',
   'animation.94.alien-blackout',
-  'animation.95.just-in-case',
   'animation.96.stars',
   'animation.97.space',
   'animation.98.sidelined',

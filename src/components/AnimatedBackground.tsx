@@ -31,7 +31,6 @@ const FULL_ID_TO_VISUAL: Record<string, string> = {
   'animation.92.aurora-v2': 'aurora-v2', // Icelandic Aurora v2 avec Canvas 2D
   'animation.93.particules-line': 'particules-line', // Copie de particle-waves
   'animation.94.alien-blackout': 'alien-blackout', // Alien Blackout Intro Scene - Étoiles animées
-  'animation.95.just-in-case': 'just-in-case', // Just In Case - Shader animé avec motif
   'animation.96.stars': 'stars', // Stars - Étoiles en orbite avec scintillement
   'animation.97.space': 'space', // Space - Effet de tunnel spatial 3D
   'animation.98.sidelined': 'sidelined', // Sidelined - Lignes diagonales animées
@@ -225,23 +224,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
           speed={animationParameters?.speed as number | undefined}
           starCount={animationParameters?.starCount as number | undefined}
           starSize={animationParameters?.starSize as number | undefined}
-        />
-      </div>
-    );
-  }
-
-  // Just In Case (animation.95.just-in-case) - Shader animé avec motif
-  if (visual === 'just-in-case') {
-    return (
-      <div 
-        className="fixed inset-0 -z-10 animated-bg-wrapper" 
-        aria-hidden
-        style={{ ['--animation-speed' as string]: speedMultiplier }}
-      >
-        <JustInCaseCanvas 
-          animationSpeed={animationSpeed}
-          speed={animationParameters?.speed as number | undefined}
-          intensity={animationParameters?.intensity as number | undefined}
         />
       </div>
     );
@@ -2286,168 +2268,6 @@ const AlienBlackoutCanvas: React.FC<{
       className="fixed inset-0 -z-10 w-full h-full"
       aria-hidden
       style={{ background: '#000' }}
-    />
-  );
-};
-
-/** Just In Case (animation.95.just-in-case) - Shader animé avec motif */
-const JustInCaseCanvas: React.FC<{
-  animationSpeed?: AnimationSpeed;
-  speed?: number;
-  intensity?: number;
-}> = ({
-  animationSpeed = 0.75,
-  speed: customSpeed,
-  intensity: customIntensity
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number | null>(null);
-  const timeRef = useRef(0);
-  const speedMult = speedToMultiplier(animationSpeed);
-  const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
-    : Math.max(0.1, Math.min(2.0, customSpeed));
-  const baseSpeedValue = defaultSpeed;
-  const intensity = customIntensity !== undefined ? customIntensity : 0.5;
-
-  // Fonction de bruit aléatoire
-  const rnd = (p: number[]) => {
-    const x = ((p[0] * 12.9898 + p[1] * 78.233) % 1);
-    const y = ((x * 34.56) % 1);
-    return ((x + y) * (x + y + 34.56)) % 1;
-  };
-
-  // Fonction noise (simplifiée)
-  const noise = (p: number[]) => {
-    const i = [Math.floor(p[0]), Math.floor(p[1])];
-    const f = [p[0] - i[0], p[1] - i[1]];
-    const u = [f[0] * f[0] * (3 - 2 * f[0]), f[1] * f[1] * (3 - 2 * f[1])];
-    
-    const a = rnd([i[0], i[1]]);
-    const b = rnd([i[0] + 1, i[1]]);
-    const c = rnd([i[0], i[1] + 1]);
-    const d = rnd([i[0] + 1, i[1] + 1]);
-    
-    return (1 - u[1]) * ((1 - u[0]) * a + u[0] * b) + u[1] * ((1 - u[0]) * c + u[0] * d);
-  };
-
-  // Fractional Brownian Motion
-  const fbm = (p: number[], time: number) => {
-    let t = 0;
-    let a = 1;
-    let h = 0;
-    const m = [[1, -1.2], [0.2, 1.2]];
-    
-    for (let i = 0; i < 5; i++) {
-      t += a * noise([p[0], p[1]]);
-      p = [p[0] * 2 * m[0][0] + p[1] * 2 * m[0][1], p[0] * 2 * m[1][0] + p[1] * 2 * m[1][1]];
-      a *= 0.5;
-      h += a;
-    }
-    
-    return t / h;
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    // ImageData pour le rendu pixel par pixel
-    let imageData: ImageData | null = null;
-
-    const tick = () => {
-      timeRef.current += 0.016 * baseSpeedValue;
-      const t = timeRef.current + 660; // Offset comme dans l'original
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const resolution = [w, h];
-      const minDim = Math.min(w, h);
-
-      if (!imageData || imageData.width !== w || imageData.height !== h) {
-        imageData = ctx.createImageData(w, h);
-      }
-
-      const data = imageData.data;
-
-      // Rendre pixel par pixel (simulation du fragment shader)
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = (y * w + x) * 4;
-          
-          // Coordonnées UV normalisées
-          let uv = [(x - w * 0.5) / minDim, (y - h * 0.5) / minDim];
-          uv[0] += 0.25;
-          uv = [uv[0] * 2, uv[1]];
-          
-          const k = [0, t * 0.015];
-          
-          // Calcul du bruit
-          const n1 = fbm([uv[0] * 0.28, uv[1] * 0.28], t);
-          const n = noise([uv[0] * 3 + n1 * 2, uv[1] * 3 + n1 * 2]);
-          
-          // Calcul des canaux RGB avec décalages
-          let col = [1, 1, 1];
-          col[0] -= fbm([uv[0] + k[0] + n, uv[1] + k[1] + n], t) * intensity;
-          col[1] -= fbm([uv[0] * 1.003 + k[0] + n + 0.003, uv[1] * 1.003 + k[1] + n + 0.003], t) * intensity;
-          col[2] -= fbm([uv[0] * 1.006 + k[0] + n + 0.006, uv[1] * 1.006 + k[1] + n + 0.006], t) * intensity;
-          
-          // Mix avec luminance
-          const lum = col[0] * 0.21 + col[1] * 0.71 + col[2] * 0.07;
-          col = [lum + (col[0] - lum) * 0.5, lum + (col[1] - lum) * 0.5, lum + (col[2] - lum) * 0.5];
-          
-          // Fade in au début
-          const fadeIn = Math.min(t * 0.1, 1);
-          col = [0.08 + (col[0] - 0.08) * fadeIn, 0.08 + (col[1] - 0.08) * fadeIn, 0.08 + (col[2] - 0.08) * fadeIn];
-          
-          // Clamp
-          col[0] = Math.max(0.08, Math.min(1, col[0]));
-          col[1] = Math.max(0.08, Math.min(1, col[1]));
-          col[2] = Math.max(0.08, Math.min(1, col[2]));
-          
-          // Convertir en valeurs 0-255
-          data[idx] = Math.floor(col[0] * 255);
-          data[idx + 1] = Math.floor(col[1] * 255);
-          data[idx + 2] = Math.floor(col[2] * 255);
-          data[idx + 3] = 255;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-
-      animRef.current = requestAnimationFrame(tick);
-    };
-    animRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-    };
-  }, [baseSpeedValue, intensity]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 -z-10 w-full h-full"
-      aria-hidden
-      style={{ background: '#141414' }}
     />
   );
 };

@@ -287,26 +287,6 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       description: 'Taille des étoiles (1.0-5.0)',
     },
   ],
-  'animation.95.just-in-case': [
-    {
-      name: 'speed',
-      type: 'range',
-      default: 0.5,
-      min: 0.1,
-      max: 2.0,
-      step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
-    },
-    {
-      name: 'intensity',
-      type: 'range',
-      default: 0.5,
-      min: 0.1,
-      max: 1.0,
-      step: 0.1,
-      description: 'Intensité du motif (0.1-1.0)',
-    },
-  ],
   'animation.96.stars': [
     {
       name: 'speed',
