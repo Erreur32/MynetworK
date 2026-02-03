@@ -3,6 +3,58 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.2] - 2026-02-03
+
+### ✨ Ajouté
+
+**Scanner Réseau - Système de Blacklist IPs**
+- ✅ Nouveau service `ipBlacklistService.ts` pour gérer la blacklist des IPs bannies
+- ✅ Routes API blacklist : `GET /api/network-scan/blacklist`, `POST /api/network-scan/blacklist/add`, `DELETE /api/network-scan/blacklist/:ip`
+- ✅ Bouton "Bannir" (icône orange ShieldX) dans la colonne Actions de la page Scanner pour bannir une IP
+- ✅ Les IPs bannies sont exclues de tous les scans futurs et supprimées de la base de données
+- ✅ Stockage de la blacklist dans `AppConfigRepository` avec la clé `network_scan_blacklist`
+
+**Scanner Réseau - Rescan avec Ports**
+- ✅ Nouvelle méthode `rescanSingleIpWithPorts()` pour rescanner une IP unique en mode complet
+- ✅ Route API `POST /api/network-scan/:id/rescan` pour rescanner une IP avec scan de ports
+- ✅ Bouton "Rescanner" (icône jaune RefreshCw) dans la colonne Actions de la page Scanner
+- ✅ Bouton "Rescanner" dans la page de Recherche (résultats groupés et IP unique)
+- ✅ Le rescan effectue : ping + détection MAC + hostname + vendor + scan de ports (nmap)
+
+**Page de Recherche - Rescan IP**
+- ✅ Bouton "Rescanner" dans la colonne Actions du tableau de résultats groupés
+- ✅ Bouton "Rescanner" dans la section de détails d'une IP unique
+- ✅ Rafraîchissement automatique des résultats après le rescan pour afficher les ports mis à jour
+
+### 🔧 Modifié
+
+**Scanner Réseau - Respect du Range Configuré**
+- 🔧 Fonction `refreshExistingIps()` : filtrage par range configuré avant de scanner les IPs existantes
+- 🔧 Fonction `parseIpRange()` : exclusion automatique des IPs Docker de la liste générée
+- 🔧 Fonction `scanNetwork()` : exclusion des IPs Docker et bannies avant le scan
+- 🔧 Fonction `scanSingleIp()` : vérification et exclusion des IPs Docker et bannies
+- 🔧 Route `/api/network-scan/history` : filtrage automatique par range configuré, exclusion Docker et blacklist
+- 🔧 Ajout de fonctions utilitaires : `isIpInRange()`, `isDockerIp()`, `getConfiguredRange()`
+
+**Scanner Réseau - Exclusion des IPs Docker**
+- 🔧 Détection automatique des IPs Docker : ranges 172.17.0.0/16 à 172.31.255.255 et 10.10.0.0/16
+- 🔧 Exclusion des IPs Docker dans tous les scans (scan complet, refresh, scan unique)
+- 🔧 Les IPs Docker n'apparaissent plus dans l'affichage des résultats
+
+**Page de Recherche - Nettoyage URL**
+- 🔧 Suppression automatique du paramètre `s` de l'URL lors de la navigation hors de la page de recherche
+- 🔧 Nettoyage dans `App.tsx` via `useEffect` qui surveille les changements de page
+- 🔧 Nettoyage dans `SearchPage.tsx` via wrapper `handleBack` et cleanup `useEffect`
+
+### 🐛 Corrigé
+
+**Scanner Réseau - Problèmes d'Affichage**
+- 🐛 Correction : les IPs Docker (10.10.1.x, 172.17-31.x.x) n'apparaissent plus même si elles ne sont pas dans le range configuré
+- 🐛 Correction : le refresh scannait toutes les IPs de la base sans respecter le range configuré (192.168.32.0/24)
+- 🐛 Correction : les IPs hors du range configuré apparaissaient dans les résultats de recherche
+
+---
+
 ## [0.5.1] - 2026-01-23
 
 ### ✨ Ajouté

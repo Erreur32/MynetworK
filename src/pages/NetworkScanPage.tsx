@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -170,6 +170,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [manualMac, setManualMac] = useState('');
     const [manualHostname, setManualHostname] = useState('');
     const [isAddingIp, setIsAddingIp] = useState(false);
+    const [rescanningIp, setRescanningIp] = useState<string | null>(null);
     
     // Port scan (nmap) progress - active when scan ports runs in background after full scan
     const [portScanProgress, setPortScanProgress] = useState<{ active: boolean; current: number; total: number; currentIp?: string } | null>(null);
@@ -868,6 +869,48 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         } catch (error: any) {
             console.error('Delete failed:', error);
             alert('Erreur lors de la suppression: ' + (error.message || 'Erreur inconnue'));
+        }
+    };
+
+    const handleRescan = async (ip: string) => {
+        if (rescanningIp === ip) return; // Prevent double-click
+
+        setRescanningIp(ip);
+        try {
+            const response = await api.post(`/api/network-scan/${ip}/rescan`);
+
+            if (response.success) {
+                await fetchHistory();
+                await fetchStats();
+                // Refresh port scan progress if available
+                await fetchPortScanProgress();
+            } else {
+                alert(response.error?.message || 'Erreur lors du rescan');
+            }
+        } catch (error: any) {
+            console.error('Rescan failed:', error);
+            alert('Erreur lors du rescan: ' + (error.message || 'Erreur inconnue'));
+        } finally {
+            setRescanningIp(null);
+        }
+    };
+
+    const handleBan = async (ip: string) => {
+        const confirmed = window.confirm(`Êtes-vous sûr de vouloir bannir l'IP ${ip} ?\n\nCette IP sera exclue de tous les scans futurs et supprimée de la base de données.`);
+        if (!confirmed) return;
+
+        try {
+            const response = await api.post('/api/network-scan/blacklist/add', { ip });
+
+            if (response.success) {
+                await fetchHistory();
+                await fetchStats();
+            } else {
+                alert(response.error?.message || 'Erreur lors du bannissement');
+            }
+        } catch (error: any) {
+            console.error('Ban failed:', error);
+            alert('Erreur lors du bannissement: ' + (error.message || 'Erreur inconnue'));
         }
     };
 
@@ -2036,13 +2079,34 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             {formatRelativeTime(scan.lastSeen)}
                                         </td>
                                         <td className="py-3 pr-2 pl-0 text-right w-1 whitespace-nowrap">
-                                            <button
-                                                onClick={() => handleDelete(scan.ip)}
-                                                className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"
-                                                title="Supprimer"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            <div className="flex items-center gap-1 justify-end">
+                                                <button
+                                                    onClick={() => handleRescan(scan.ip)}
+                                                    disabled={rescanningIp === scan.ip}
+                                                    className="p-1 hover:bg-yellow-500/10 text-yellow-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    title="Rescanner (scan complet + ports)"
+                                                >
+                                                    {rescanningIp === scan.ip ? (
+                                                        <Loader2 size={16} className="animate-spin" />
+                                                    ) : (
+                                                        <RefreshCw size={16} />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleBan(scan.ip)}
+                                                    className="p-1 hover:bg-orange-500/10 text-orange-400 rounded transition-colors"
+                                                    title="Bannir cette IP (exclure des scans futurs)"
+                                                >
+                                                    <ShieldX size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(scan.ip)}
+                                                    className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"
+                                                    title="Supprimer"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

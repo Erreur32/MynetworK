@@ -15,6 +15,8 @@ import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { metricsCollector } from './metricsCollector.js';
 import { pluginManager } from './pluginManager.js';
 import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
+import { AppConfigRepository } from '../database/models/AppConfig.js';
+import { ipBlacklistService } from './ipBlacklistService.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -157,7 +159,34 @@ export class NetworkScanService {
         const startTime = Date.now();
         
         // Parse IP range to get list of IPs to scan
-        const ipsToScan = this.parseIpRange(range);
+        let ipsToScan = this.parseIpRange(range);
+
+        // Filter out Docker IPs and blacklisted IPs before scanning
+        const blacklist = ipBlacklistService.getBlacklist();
+        if (blacklist.length > 0) {
+            // Ensure blacklisted IPs are not kept in the main table
+            for (const bannedIp of blacklist) {
+                try {
+                    if (this.isValidIp(bannedIp)) {
+                        NetworkScanRepository.delete(bannedIp);
+                    }
+                } catch {
+                    // Ignore delete errors, database issues are logged inside the repository
+                }
+            }
+        }
+
+        ipsToScan = ipsToScan.filter(ip => {
+            if (this.isDockerIp(ip)) {
+                logger.debug('NetworkScanService', `Skipping Docker IP during scan: ${ip}`);
+                return false;
+            }
+            if (ipBlacklistService.isBlacklisted(ip)) {
+                logger.info('NetworkScanService', `Skipping blacklisted IP during scan: ${ip}`);
+                return false;
+            }
+            return true;
+        });
         
         if (ipsToScan.length === 0) {
             throw new Error('Invalid IP range format. Use CIDR (192.168.1.0/24) or range (192.168.1.1-254)');
@@ -506,6 +535,23 @@ export class NetworkScanService {
             return null;
         }
 
+        // Skip Docker IPs completely to avoid scanning internal container networks
+        if (this.isDockerIp(ip)) {
+            logger.debug('NetworkScanService', `Skipping Docker IP in scanSingleIp: ${ip}`);
+            return null;
+        }
+
+        // Skip and clean up blacklisted IPs
+        if (ipBlacklistService.isBlacklisted(ip)) {
+            logger.info('NetworkScanService', `Skipping blacklisted IP in scanSingleIp: ${ip}`);
+            try {
+                NetworkScanRepository.delete(ip);
+            } catch {
+                // Repository already logs database errors; we do not fail the scan here
+            }
+            return null;
+        }
+
         try {
             // Ping the IP first
             const pingResult = await this.pingHost(ip);
@@ -598,6 +644,77 @@ export class NetworkScanService {
     }
 
     /**
+     * Rescan a single IP address with full scan including port scan
+     * This performs a complete rescan: ping, MAC detection, hostname resolution, vendor detection, and port scan
+     * 
+     * @param ip IP address to rescan
+     * @returns NetworkScan entry with updated information including open ports
+     */
+    async rescanSingleIpWithPorts(ip: string): Promise<NetworkScan | null> {
+        if (!this.isValidIp(ip)) {
+            logger.error('NetworkScanService', `Invalid IP address: ${ip}`);
+            return null;
+        }
+
+        // Skip Docker IPs completely
+        if (this.isDockerIp(ip)) {
+            logger.debug('NetworkScanService', `Skipping Docker IP in rescanSingleIpWithPorts: ${ip}`);
+            return null;
+        }
+
+        // Skip blacklisted IPs
+        if (ipBlacklistService.isBlacklisted(ip)) {
+            logger.info('NetworkScanService', `Skipping blacklisted IP in rescanSingleIpWithPorts: ${ip}`);
+            return null;
+        }
+
+        try {
+            // First, perform full scan (ping + MAC + hostname + vendor)
+            const scanResult = await this.scanSingleIp(ip, true);
+            
+            if (!scanResult || scanResult.status !== 'online') {
+                logger.info('NetworkScanService', `[${ip}] IP is offline, skipping port scan`);
+                return scanResult;
+            }
+
+            // Then perform port scan if IP is online
+            try {
+                const { portScanService } = await import('./portScanService.js');
+                const isNmapAvailable = await portScanService.isNmapAvailable();
+                
+                if (isNmapAvailable) {
+                    logger.info('NetworkScanService', `[${ip}] Starting port scan...`);
+                    const { openPorts } = await portScanService.runPortScan(ip);
+                    
+                    // Update the scan entry with port scan results
+                    const existing = NetworkScanRepository.findByIp(ip);
+                    const existingAdditionalInfo = existing?.additionalInfo || {};
+                    const merged: Record<string, unknown> = {
+                        ...existingAdditionalInfo,
+                        openPorts,
+                        lastPortScan: new Date().toISOString()
+                    };
+                    
+                    const updated = NetworkScanRepository.update(ip, { additionalInfo: merged });
+                    logger.info('NetworkScanService', `[${ip}] Port scan completed: ${openPorts.length} open port(s) found`);
+                    
+                    return updated || scanResult;
+                } else {
+                    logger.warn('NetworkScanService', `[${ip}] nmap not available, skipping port scan`);
+                    return scanResult;
+                }
+            } catch (portScanError: any) {
+                logger.warn('NetworkScanService', `[${ip}] Port scan failed: ${portScanError.message || portScanError}`);
+                // Return the scan result even if port scan failed
+                return scanResult;
+            }
+        } catch (error: any) {
+            logger.error('NetworkScanService', `[${ip}] Failed to rescan IP with ports: ${error.message || error}`);
+            return null;
+        }
+    }
+
+    /**
      * Refresh existing IPs in the database (re-ping known IPs)
      * 
      * @param scanType 'full' for ping + MAC + hostname, 'quick' for ping only
@@ -620,7 +737,52 @@ export class NetworkScanService {
         
         // Get all existing IPs from database
         const existingScans = NetworkScanRepository.find({ limit: 10000 });
-        const ipsToRefresh = existingScans.map(scan => scan.ip);
+
+        // Load configured range and blacklist to restrict refresh scope
+        const configuredRange = this.getConfiguredRange();
+        const blacklist = ipBlacklistService.getBlacklist();
+
+        // Ensure blacklisted IPs are not kept in the main table
+        if (blacklist.length > 0) {
+            for (const bannedIp of blacklist) {
+                try {
+                    if (this.isValidIp(bannedIp)) {
+                        NetworkScanRepository.delete(bannedIp);
+                    }
+                } catch {
+                    // Ignore delete errors, repository already logs failures
+                }
+            }
+        }
+
+        const ipsToRefresh = existingScans
+            .map(scan => scan.ip)
+            .filter(ip => {
+                // Always skip invalid IPs early
+                if (!this.isValidIp(ip)) {
+                    return false;
+                }
+
+                // Skip Docker networks such as 172.17-31.x.x and 10.10.x.x
+                if (this.isDockerIp(ip)) {
+                    logger.debug('NetworkScanService', `Skipping Docker IP during refresh: ${ip}`);
+                    return false;
+                }
+
+                // Skip blacklisted IPs completely
+                if (ipBlacklistService.isBlacklisted(ip)) {
+                    logger.info('NetworkScanService', `Skipping blacklisted IP during refresh: ${ip}`);
+                    return false;
+                }
+
+                // If a configured range exists, keep only IPs inside this range
+                if (configuredRange) {
+                    return this.isIpInRange(ip, configuredRange);
+                }
+
+                // No configured range: keep the IP
+                return true;
+            });
         
         if (ipsToRefresh.length === 0) {
             return {
@@ -1018,7 +1180,12 @@ export class NetworkScanService {
             if (cidr === 24) {
                 const baseIp = `${networkParts[0]}.${networkParts[1]}.${networkParts[2]}`;
                 for (let i = 1; i <= 254; i++) {
-                    ips.push(`${baseIp}.${i}`);
+                    const candidateIp = `${baseIp}.${i}`;
+                    // Skip Docker and blacklisted IPs directly in the generated list
+                    if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                        continue;
+                    }
+                    ips.push(candidateIp);
                 }
             } else if (cidr >= 16 && cidr < 24) {
                 // For /16 to /23, scan all hosts (limit to reasonable size)
@@ -1030,9 +1197,14 @@ export class NetworkScanService {
                 for (let i = 0; i < numHosts && i < 1000; i++) {
                     const third = Math.floor(i / 256);
                     const fourth = i % 256;
-                    if (fourth !== 0 && fourth !== 255) {
-                        ips.push(`${baseIp}.${third}.${fourth}`);
+                    if (fourth === 0 || fourth === 255) {
+                        continue;
                     }
+                    const candidateIp = `${baseIp}.${third}.${fourth}`;
+                    if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                        continue;
+                    }
+                    ips.push(candidateIp);
                 }
             } else {
                 throw new Error(`CIDR /${cidr} not supported. Only /16 to /24 are supported.`);
@@ -1066,7 +1238,11 @@ export class NetworkScanService {
             }
             
             for (let i = startNum; i <= endNum && i <= 254; i++) {
-                ips.push(`${baseIp}.${i}`);
+                const candidateIp = `${baseIp}.${i}`;
+                if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                    continue;
+                }
+                ips.push(candidateIp);
             }
         }
         // Single IP
@@ -2522,6 +2698,153 @@ export class NetworkScanService {
         ];
         
         return privatePatterns.some(pattern => pattern.test(range));
+    }
+
+    /**
+     * Check if an IP belongs to a Docker network that should be ignored.
+     *
+     * Important notes:
+     * - Docker uses 172.17.0.0/16 by default, but many setups use 172.17-31.x.x.
+     * - In this application, we also know that 10.10.x.x is used by Docker on some hosts.
+     * - We explicitly skip these ranges so that the scanner focuses on the real LAN.
+     */
+    private isDockerIp(ip: string): boolean {
+        if (!ip || !this.isValidIp(ip)) {
+            return false;
+        }
+
+        const parts = ip.split('.').map(Number);
+        if (parts.length !== 4 || parts.some(p => Number.isNaN(p))) {
+            return false;
+        }
+
+        // 172.17.0.0/16 to 172.31.255.255 (typical Docker bridge networks)
+        if (parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
+            return true;
+        }
+
+        // 10.10.0.0/16 (user-specific Docker network where 10.10.1.x is used)
+        if (parts[0] === 10 && parts[1] === 10) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get configured default network range from AppConfig.
+     * Returns null if no valid configuration is found.
+     *
+     * This is used to ensure that:
+     * - Manual refresh operations only re-ping IPs in the expected LAN range.
+     * - History views can be limited to the primary LAN when desired.
+     */
+    getConfiguredRange(): string | null {
+        try {
+            const raw = AppConfigRepository.get('network_scan_default');
+            if (!raw) {
+                return null;
+            }
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.defaultRange === 'string' && parsed.defaultRange.trim().length > 0) {
+                return parsed.defaultRange.trim();
+            }
+            return null;
+        } catch (error: any) {
+            logger.warn('NetworkScanService', `Failed to parse network_scan_default config: ${error.message || error}`);
+            return null;
+        }
+    }
+
+    /**
+     * Check if an IP address belongs to a given range.
+     * Supports the same notations as parseIpRange (CIDR and simple last-octet ranges).
+     *
+     * This helper is intentionally conservative:
+     * - For invalid inputs, it returns false instead of throwing.
+     * - It only supports IPv4 addresses in dotted notation.
+     */
+    private isIpInRange(ip: string, range: string): boolean {
+        if (!this.isValidIp(ip)) {
+            return false;
+        }
+        const trimmedRange = range.trim();
+        if (trimmedRange.length === 0) {
+            return false;
+        }
+
+        // CIDR notation: 192.168.1.0/24
+        if (trimmedRange.includes('/')) {
+            const [network, cidrStr] = trimmedRange.split('/');
+            const cidr = parseInt(cidrStr, 10);
+            if (Number.isNaN(cidr) || cidr < 0 || cidr > 32) {
+                return false;
+            }
+
+            const networkParts = network.split('.').map(Number);
+            const ipParts = ip.split('.').map(Number);
+            if (networkParts.length !== 4 || ipParts.length !== 4) {
+                return false;
+            }
+            if (networkParts.some(p => Number.isNaN(p) || p < 0 || p > 255) ||
+                ipParts.some(p => Number.isNaN(p) || p < 0 || p > 255)) {
+                return false;
+            }
+
+            const toInt = (parts: number[]): number =>
+                (parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
+
+            const mask = cidr === 0 ? 0 : (~0 << (32 - cidr)) >>> 0;
+            const networkInt = toInt(networkParts) & mask;
+            const ipInt = toInt(ipParts) & mask;
+            return networkInt === ipInt;
+        }
+
+        // Simple range notation: 192.168.1.1-254
+        if (trimmedRange.includes('-')) {
+            const parts = trimmedRange.split('-');
+            if (parts.length !== 2) {
+                return false;
+            }
+            const startIp = parts[0].trim();
+            const endStr = parts[1].trim();
+
+            const startParts = startIp.split('.').map(Number);
+            const ipParts = ip.split('.').map(Number);
+            if (startParts.length !== 4 || ipParts.length !== 4) {
+                return false;
+            }
+            if (startParts.some(p => Number.isNaN(p) || p < 0 || p > 255) ||
+                ipParts.some(p => Number.isNaN(p) || p < 0 || p > 255)) {
+                return false;
+            }
+
+            const endNum = parseInt(endStr, 10);
+            if (Number.isNaN(endNum) || endNum < 1 || endNum > 255) {
+                return false;
+            }
+
+            const basePrefix = `${startParts[0]}.${startParts[1]}.${startParts[2]}`;
+            const basePrefixIp = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+            if (basePrefix !== basePrefixIp) {
+                return false;
+            }
+
+            const startNum = startParts[3];
+            const ipLast = ipParts[3];
+            if (endNum < startNum) {
+                return false;
+            }
+
+            return ipLast >= startNum && ipLast <= endNum;
+        }
+
+        // Single IP: exact match
+        if (this.isValidIp(trimmedRange)) {
+            return ip === trimmedRange;
+        }
+
+        return false;
     }
 
     /**

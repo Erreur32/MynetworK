@@ -30,6 +30,7 @@ import {
 import { PluginPriorityConfigService } from '../services/pluginPriorityConfig.js';
 import { WiresharkVendorService } from '../services/wiresharkVendorService.js';
 import { portScanService } from '../services/portScanService.js';
+import { ipBlacklistService } from '../services/ipBlacklistService.js';
 
 const router = Router();
 
@@ -393,20 +394,58 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
         if (ip) filters.ip = ip as string;
         if (search) filters.search = search as string;
 
-        const items = NetworkScanRepository.find(filters);
-        const total = NetworkScanRepository.count({
-            status: filters.status,
-            ip: filters.ip,
-            search: filters.search
+        // Get all items first
+        let items = NetworkScanRepository.find(filters);
+        
+        // Filter by configured range if available
+        const defaultConfigStr = AppConfigRepository.get('network_scan_default');
+        let configuredRange: string | null = null;
+        if (defaultConfigStr) {
+            try {
+                const defaultConfig = JSON.parse(defaultConfigStr);
+                if (defaultConfig.defaultRange && !defaultConfig.defaultAutoDetect) {
+                    configuredRange = defaultConfig.defaultRange;
+                }
+            } catch {
+                // Ignore parse errors
+            }
+        }
+        
+        // Filter out Docker IPs and blacklisted IPs, and filter by range if configured
+        items = items.filter((item) => {
+            // Exclude Docker IPs
+            if (networkScanService.isDockerIp(item.ip)) {
+                return false;
+            }
+            
+            // Exclude blacklisted IPs
+            if (ipBlacklistService.isBlacklisted(item.ip)) {
+                return false;
+            }
+            
+            // Filter by configured range if available
+            if (configuredRange && !networkScanService.isIpInRange(item.ip, configuredRange)) {
+                return false;
+            }
+            
+            return true;
         });
+        
+        // Re-count total after filtering (before pagination)
+        const total = items.length;
+        
+        // Apply pagination after filtering
+        const offsetNum = parseInt(offset as string) || 0;
+        const limitNum = Math.min(parseInt(limit as string) || 100, 1000);
+        items = items.slice(offsetNum, offsetNum + limitNum);
 
         res.json({
             success: true,
             result: {
                 items,
                 total,
-                limit: filters.limit,
-                offset: filters.offset
+                limit: limitNum,
+                offset: offsetNum
             }
         });
     } catch (error: any) {
@@ -1463,6 +1502,179 @@ router.delete('/:id', requireAuth, autoLog('network-scan', 'delete'), asyncHandl
             error: {
                 message: error.message || 'Failed to delete IP',
                 code: 'DELETE_IP_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/:id/rescan
+ * Rescan a single IP address with full scan including port scan
+ * Performs complete rescan: ping, MAC detection, hostname resolution, vendor detection, and port scan
+ */
+router.post('/:id/rescan', requireAuth, autoLog('network-scan', 'rescan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ip = req.params.id;
+
+    // Validate IP format
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(ip)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'Invalid IP address format',
+                code: 'INVALID_IP'
+            }
+        });
+    }
+
+    try {
+        const scanResult = await networkScanService.rescanSingleIpWithPorts(ip);
+        
+        if (scanResult) {
+            res.json({
+                success: true,
+                result: {
+                    ip: scanResult.ip,
+                    status: scanResult.status,
+                    pingLatency: scanResult.pingLatency,
+                    mac: scanResult.mac,
+                    hostname: scanResult.hostname,
+                    vendor: scanResult.vendor,
+                    additionalInfo: scanResult.additionalInfo,
+                    message: scanResult.status === 'online' 
+                        ? 'IP rescannée avec succès (scan complet + ports)' 
+                        : 'IP rescannée mais hors ligne'
+                }
+            });
+        } else {
+            return res.status(404).json({
+                success: false,
+                error: {
+                    message: 'Failed to rescan IP address (may be Docker IP or blacklisted)',
+                    code: 'RESCAN_FAILED'
+                }
+            });
+        }
+    } catch (error: any) {
+        logger.error('NetworkScan', `Failed to rescan IP ${ip}:`, error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to rescan IP address',
+                code: 'RESCAN_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/blacklist
+ * Get all blacklisted IPs
+ */
+router.get('/blacklist', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const blacklist = ipBlacklistService.getBlacklist();
+        res.json({
+            success: true,
+            result: blacklist
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get blacklist:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get blacklist',
+                code: 'BLACKLIST_GET_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/blacklist/add
+ * Add an IP to the blacklist
+ * Body: { ip: string }
+ */
+router.post('/blacklist/add', requireAuth, autoLog('network-scan', 'blacklist-add'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { ip } = req.body;
+
+    // Validate IP format
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ip || !ipRegex.test(ip)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'Invalid IP address format',
+                code: 'INVALID_IP'
+            }
+        });
+    }
+
+    try {
+        ipBlacklistService.addToBlacklist(ip);
+        
+        // Delete the IP from database if it exists
+        try {
+            NetworkScanRepository.delete(ip);
+        } catch {
+            // Ignore deletion errors
+        }
+        
+        res.json({
+            success: true,
+            result: {
+                ip,
+                message: 'IP added to blacklist and removed from database'
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', `Failed to add IP ${ip} to blacklist:`, error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to add IP to blacklist',
+                code: 'BLACKLIST_ADD_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * DELETE /api/network-scan/blacklist/:ip
+ * Remove an IP from the blacklist
+ */
+router.delete('/blacklist/:ip', requireAuth, autoLog('network-scan', 'blacklist-remove'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ip = req.params.ip;
+
+    // Validate IP format
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(ip)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'Invalid IP address format',
+                code: 'INVALID_IP'
+            }
+        });
+    }
+
+    try {
+        ipBlacklistService.removeFromBlacklist(ip);
+        
+        res.json({
+            success: true,
+            result: {
+                ip,
+                message: 'IP removed from blacklist'
+            }
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', `Failed to remove IP ${ip} from blacklist:`, error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to remove IP from blacklist',
+                code: 'BLACKLIST_REMOVE_ERROR'
             }
         });
     }

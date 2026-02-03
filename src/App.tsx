@@ -152,8 +152,7 @@ const App: React.FC = () => {
     const searchParam = urlParams.get('s');
     if (searchParam) {
       setCurrentPage('search');
-      // Clean the URL parameter after reading it (optional, or keep it for bookmarking)
-      // We'll keep it in the URL so users can bookmark/share the search
+      // Keep the URL parameter while on search page for bookmarking/sharing
     }
     
     checkUserAuth();
@@ -401,6 +400,20 @@ const App: React.FC = () => {
   const handleWifiToggle = async (bssId: string, enabled: boolean) => {
     await toggleBss(bssId, enabled);
   };
+
+  // Clean up URL parameter 's' when leaving search page
+  useEffect(() => {
+    if (currentPage !== 'search') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('s')) {
+        urlParams.delete('s');
+        const newUrl = urlParams.toString() 
+          ? `${window.location.pathname}?${urlParams.toString()}`
+          : window.location.pathname;
+        window.history.replaceState(null, '', newUrl);
+      }
+    }
+  }, [currentPage]);
 
   const handlePageChange = (page: PageType) => {
     setCurrentPage(page);

@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2, History, FolderInput, Terminal, Mail, Lock, Share2, Database, Monitor, Container } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Loader2, X, CheckCircle, AlertCircle, Server, Wifi, RotateCw, Power, Info, Network, Globe, Home, Router, Cable, Radio, Activity, Clock, Signal, Zap, Link2, ArrowUpDown as ArrowUpDownIcon, BarChart2, History, FolderInput, Terminal, Mail, Lock, Share2, Database, Monitor, Container, RefreshCw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
@@ -182,6 +182,23 @@ interface SearchPageProps {
 export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const { plugins } = usePluginStore();
     
+    // Wrapper for onBack that cleans up URL parameter 's' before navigating away
+    const handleBack = useCallback(() => {
+        // Clean up URL parameter 's' before navigating away
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('s')) {
+            urlParams.delete('s');
+            const newUrl = urlParams.toString() 
+                ? `${window.location.pathname}?${urlParams.toString()}`
+                : window.location.pathname;
+            window.history.replaceState(null, '', newUrl);
+        }
+        // Call original onBack function
+        if (onBack) {
+            onBack();
+        }
+    }, [onBack]);
+    
     // Get query from URL parameter 's' (priority) or sessionStorage (fallback)
     const [searchQuery, setSearchQuery] = useState<string>(() => {
         // First, try to get from URL parameter
@@ -212,6 +229,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const [pingResults, setPingResults] = useState<Record<string, { success: boolean; time?: number; error?: string }>>({});
     const [pingingIps, setPingingIps] = useState<Set<string>>(new Set());
     const [showOptionsInfoModal, setShowOptionsInfoModal] = useState(false);
+    const [rescanningIp, setRescanningIp] = useState<string | null>(null);
     
     // Latency monitoring state
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
@@ -523,6 +541,42 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 newSet.delete(target);
                 return newSet;
             });
+        }
+    };
+
+    // Rescan a single IP with full scan including port scan
+    const handleRescan = async (ip: string) => {
+        if (rescanningIp === ip) return; // Prevent double-click
+
+        setRescanningIp(ip);
+        try {
+            const response = await api.post(`/api/network-scan/${ip}/rescan`);
+
+            if (response.success) {
+                // Refresh search results to show updated port scan data
+                if (searchQuery.trim()) {
+                    await performSearch(searchQuery.trim());
+                }
+                // Also refresh IP details if we're viewing a single IP
+                if (isExactIpSearch && ipDetails?.ip === ip) {
+                    try {
+                        const ipDetailsResponse = await api.get<IpDetailsResponse>(`/api/search/ip-details/${ip}`);
+                        if (ipDetailsResponse.success && ipDetailsResponse.result) {
+                            setIpDetails(ipDetailsResponse.result);
+                        }
+                    } catch (err) {
+                        // Ignore errors when refreshing IP details
+                        console.error('Failed to refresh IP details:', err);
+                    }
+                }
+            } else {
+                alert(response.error?.message || 'Erreur lors du rescan');
+            }
+        } catch (error: any) {
+            console.error('Rescan failed:', error);
+            alert('Erreur lors du rescan: ' + (error.message || 'Erreur inconnue'));
+        } finally {
+            setRescanningIp(null);
         }
     };
 
@@ -864,6 +918,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             }
         }
     }, [searchQuery]);
+
+    // Clean up URL parameter 's' when component unmounts (when navigating away from search page)
+    useEffect(() => {
+        return () => {
+            // Cleanup: remove 's' parameter from URL when leaving search page
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('s')) {
+                urlParams.delete('s');
+                const newUrl = urlParams.toString() 
+                    ? `${window.location.pathname}?${urlParams.toString()}`
+                    : window.location.pathname;
+                window.history.replaceState(null, '', newUrl);
+            }
+        };
+    }, []);
 
     // Listen for URL changes (browser back/forward buttons)
     useEffect(() => {
@@ -1543,6 +1612,31 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                             Latency scatter
                                         </button>
                                     )}
+                                    {/* Rescan button - only for local IPs */}
+                                    {ipDetails.ip && isLocalIPv4(ipDetails.ip) && (
+                                        <button
+                                            onClick={() => handleRescan(ipDetails.ip)}
+                                            disabled={rescanningIp === ipDetails.ip}
+                                            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 font-medium ${
+                                                rescanningIp === ipDetails.ip
+                                                    ? 'bg-theme-tertiary text-theme-secondary cursor-not-allowed'
+                                                    : 'bg-yellow-500 text-white hover:bg-yellow-600 shadow-lg shadow-yellow-500/20'
+                                            }`}
+                                            title="Rescanner cette IP (scan complet + ports)"
+                                        >
+                                            {rescanningIp === ipDetails.ip ? (
+                                                <>
+                                                    <Loader2 size={18} className="animate-spin" />
+                                                    Rescan...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <RefreshCw size={18} />
+                                                    Rescan
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
                                     {pingEnabled && ipDetails.ip && (
                                         <button
                                             onClick={() => pingSingleTarget(ipDetails.ip)}
@@ -2215,6 +2309,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">Ports</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">Statut</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">Dernière vue</th>
+                                        <th className="text-right py-3 px-4 font-semibold text-theme-primary">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2443,6 +2538,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <span className="text-xs text-theme-tertiary">
                                                     {formatDate(result.lastSeen)}
                                                 </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-right">
+                                                {result.ip && isLocalIPv4(result.ip) ? (
+                                                    <button
+                                                        onClick={() => handleRescan(result.ip!)}
+                                                        disabled={rescanningIp === result.ip}
+                                                        className="p-1 hover:bg-yellow-500/10 text-yellow-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Rescanner cette IP (scan complet + ports)"
+                                                    >
+                                                        {rescanningIp === result.ip ? (
+                                                            <Loader2 size={16} className="animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw size={16} />
+                                                        )}
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-theme-tertiary text-xs">--</span>
+                                                )}
                                             </td>
                                         </tr>
                                         );
