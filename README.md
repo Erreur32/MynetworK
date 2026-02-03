@@ -48,6 +48,14 @@
 - **UniFi Controller** - Surveillance et gestion de votre infrastructure UniFi
 - **Scan Réseau** - Détection et analyse des appareils réseau avec détection automatique des vendors
 
+<details>
+<summary>Cliquez pour voir l'image</summary>
+
+![Capture MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/mynetwork_scan.png?raw=true)
+
+</details>
+
+
 ### ✨ Caractéristiques principales
 
 - 🔐 **Authentification utilisateur** - Système JWT avec gestion des rôles (admin, user, viewer)
