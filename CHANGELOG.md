@@ -3,6 +3,34 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.4] - 2026-02-03
+
+### ✨ Ajouté
+
+**UniFi - Onglet NAT**
+- ✅ Nouvel onglet "NAT" dans la page UniFi (placé après "Vue d'ensemble")
+- ✅ Affichage de toutes les règles NAT/port forwarding configurées dans UniFi
+- ✅ Détails des règles : nom, statut (Actif/Inactif), protocole, port destination, redirection (IP:port), source
+- ✅ Filtre par statut : boutons "Tous" et "Actifs" pour filtrer les règles
+- ✅ Compteur de règles : affiche "X règle(s) affichée(s) sur Y"
+- ✅ Design cohérent avec les autres onglets UniFi (même style de cartes et badges)
+
+**UniFi - API Backend NAT**
+- ✅ Nouvelle méthode `getPortForwardingRules()` dans UniFiApiService pour récupérer les règles NAT depuis UniFi (`/api/s/<site>/rest/portforward`)
+- ✅ Route API `GET /api/plugins/unifi/nat` pour exposer les règles NAT au frontend
+- ✅ Normalisation des données : mapping des champs UniFi vers un format standardisé (id, name, enabled, protocol, dst_port, fwd_port, fwd_host, src, comment)
+
+### 🔧 Modifié
+
+**UniFi - Optimisation du Refresh NAT**
+- 🔧 Séparation du chargement initial (`isInitialLoading`) et du refresh périodique (`isRefreshing`)
+- 🔧 Polling conditionnel : le refresh ne s'active que quand l'onglet NAT est actif (`isActive`)
+- 🔧 Indicateur de refresh discret : petite icône `RefreshCw` qui tourne dans le header (au lieu de recharger toute la page)
+- 🔧 Suppression du scintillement : les refreshes périodiques sont silencieux et n'interrompent plus l'affichage
+- 🔧 Chargement initial uniquement quand l'onglet devient actif (optimisation des performances)
+
+---
+
 ## [0.5.3] - 2026-02-03
 
 ### ✨ Ajouté

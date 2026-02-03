@@ -976,6 +976,46 @@ export class UniFiApiService {
     }
 
     /**
+     * Get port forwarding rules (NAT rules) from UniFi gateway
+     * Returns array of port forwarding rules configured in UniFi
+     */
+    async getPortForwardingRules(): Promise<Array<{
+        id: string;
+        name?: string;
+        enabled: boolean;
+        protocol: string;
+        dst_port?: string;
+        fwd_port?: string;
+        fwd_host?: string;
+        src?: string;
+        comment?: string;
+    }>> {
+        try {
+            await this.ensureLoggedIn();
+            const encodedSite = encodeURIComponent(this.site);
+            // UniFi uses /api/s/<site>/rest/portforward for port forwarding rules
+            const rules = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/rest/portforward`);
+            if (!Array.isArray(rules)) {
+                return [];
+            }
+            return rules.map((r: any) => ({
+                id: r._id || r.id || '',
+                name: r.name || r.comment || '',
+                enabled: r.enabled !== false,
+                protocol: r.proto || r.protocol || 'tcp',
+                dst_port: r.dst_port || r.dstPort || '',
+                fwd_port: r.fwd_port || r.fwdPort || '',
+                fwd_host: r.fwd_host || r.fwdHost || r.fwd_ip || r.fwdIp || '',
+                src: r.src || r.source || '',
+                comment: r.comment || r.name || ''
+            }));
+        } catch (error) {
+            logger.debug('UniFi', 'Failed to get port forwarding rules:', error);
+            return [];
+        }
+    }
+
+    /**
      * Get network statistics
      */
     async getNetworkStats(): Promise<UniFiStats> {

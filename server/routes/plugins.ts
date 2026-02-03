@@ -633,5 +633,32 @@ router.get('/:id/token', requireAuth, asyncHandler(async (req: AuthenticatedRequ
     }
 }), autoLog('plugin.getToken', 'plugin', (req) => req.params.id));
 
+// GET /api/plugins/unifi/nat - Get UniFi NAT/port forwarding rules
+router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi');
+    
+    if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+        throw createError('UniFi plugin not enabled', 404, 'PLUGIN_NOT_ENABLED');
+    }
+
+    try {
+        const unifiPluginAny = unifiPlugin as any;
+        if (!unifiPluginAny.apiService) {
+            throw createError('UniFi API service not available', 500, 'API_SERVICE_UNAVAILABLE');
+        }
+
+        const rules = await unifiPluginAny.apiService.getPortForwardingRules();
+        
+        res.json({
+            success: true,
+            result: rules
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to get NAT rules';
+        logger.error('UniFi', 'Failed to get NAT rules:', error);
+        throw createError(message, 500, 'NAT_RULES_ERROR');
+    }
+}), autoLog('plugin.getNatRules', 'plugin', () => 'unifi'));
+
 export default router;
 

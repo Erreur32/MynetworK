@@ -6,20 +6,21 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2 } from 'lucide-react';
+import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
 import { NetworkEventsWidget } from '../components/widgets/NetworkEventsWidget';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../utils/constants';
+import { api } from '../api/client';
 
 interface UniFiPageProps {
     onBack: () => void;
     onNavigateToSearch?: (ip: string) => void;
 }
 
-type TabType = 'overview' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
+type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
@@ -169,6 +170,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
+        { id: 'nat', label: 'NAT', icon: Router },
         { id: 'clients', label: 'Clients', icon: Users },
         { id: 'switches', label: 'Switch', icon: Network },
         { id: 'analyse', label: 'Analyse', icon: Activity },
@@ -2821,6 +2823,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         </div>
                     )}
 
+                    {/* NAT Tab */}
+                    {activeTab === 'nat' && (
+                        <NatTabContent isActive={activeTab === 'nat'} />
+                    )}
+
                     {/* Debug Tab */}
                     {activeTab === 'debug' && (
                         <div className="col-span-full space-y-6">
@@ -3020,3 +3027,195 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     );
 };
 
+// NAT Tab Component
+interface NatTabContentProps {
+    isActive: boolean;
+}
+
+const NatTabContent: React.FC<NatTabContentProps> = ({ isActive }) => {
+    const [natRules, setNatRules] = useState<Array<{
+        id: string;
+        name?: string;
+        enabled: boolean;
+        protocol: string;
+        dst_port?: string;
+        fwd_port?: string;
+        fwd_host?: string;
+        src?: string;
+        comment?: string;
+    }>>([]);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [filterStatus, setFilterStatus] = useState<'all' | 'active'>('all');
+
+    const fetchNatRules = async (isRefresh = false) => {
+        try {
+            if (isRefresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsInitialLoading(true);
+            }
+            setError(null);
+            const res = await api.get<{ success: boolean; result: Array<any> }>('/api/plugins/unifi/nat');
+            if (res.success && res.result) {
+                setNatRules(res.result);
+            } else {
+                setError('Impossible de charger les règles NAT');
+            }
+        } catch (err) {
+            setError('Erreur lors du chargement des règles NAT');
+            console.error('NAT rules error:', err);
+        } finally {
+            setIsInitialLoading(false);
+            setIsRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isActive) {
+            fetchNatRules(false);
+        }
+    }, [isActive]);
+
+    usePolling(() => {
+        if (isActive) {
+            fetchNatRules(true);
+        }
+    }, {
+        enabled: isActive,
+        interval: POLLING_INTERVALS.system
+    });
+
+    const filteredRules = filterStatus === 'active' 
+        ? natRules.filter(rule => rule.enabled)
+        : natRules;
+
+    return (
+        <div className="col-span-full space-y-6">
+            <Card 
+                title="Règles NAT"
+                actions={
+                    isRefreshing && !isInitialLoading ? (
+                        <RefreshCw size={14} className="text-gray-400 animate-spin" />
+                    ) : null
+                }
+                className="bg-unifi-card border border-gray-800 rounded-xl"
+            >
+                {isInitialLoading ? (
+                    <div className="text-center py-8 text-gray-500">
+                        <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
+                        <p className="text-sm">Chargement des règles NAT...</p>
+                    </div>
+                ) : error ? (
+                    <div className="text-center py-8 text-red-500">
+                        <AlertCircle size={24} className="mx-auto mb-2" />
+                        <p className="text-sm">{error}</p>
+                    </div>
+                ) : natRules.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                        <Router size={32} className="mx-auto mb-2" />
+                        <p className="text-sm">Aucune règle NAT configurée</p>
+                        <p className="text-xs text-gray-600 mt-1">Les règles NAT sont gérées par le gateway UniFi</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* Filtres */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs mb-4 pb-3 border-b border-gray-800">
+                            <span className="text-gray-500">
+                                {filteredRules.length} règle(s) affichée(s) sur {natRules.length}
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <span className="text-[11px] text-gray-500 mr-1">Statut:</span>
+                                {(['all', 'active'] as const).map((mode) => {
+                                    const active = filterStatus === mode;
+                                    const activeClasses = mode === 'all' 
+                                        ? 'bg-purple-500/20 border-purple-400 text-purple-100'
+                                        : 'bg-green-500/20 border-green-400 text-green-200';
+                                    return (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => setFilterStatus(mode)}
+                                            className={`px-2 py-0.5 rounded-full border text-[11px] transition-colors ${
+                                                active
+                                                    ? activeClasses
+                                                    : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
+                                            }`}
+                                        >
+                                            {mode === 'all' ? 'Tous' : 'Actifs'}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        {filteredRules.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 text-xs">
+                                Aucune règle pour ce filtre. Essayez "Tous" pour voir toutes les règles.
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-gray-800">
+                                {filteredRules.map((rule) => (
+                            <div
+                                key={rule.id}
+                                className="px-4 py-3 flex items-start justify-between gap-3 hover:bg-gray-900/50 transition-colors"
+                            >
+                                <div className="flex items-start gap-3 flex-1 min-w-0">
+                                    <div className={`mt-1 shrink-0 ${rule.enabled ? 'text-green-400' : 'text-gray-500'}`}>
+                                        {rule.enabled ? (
+                                            <CheckCircle size={16} />
+                                        ) : (
+                                            <XCircle size={16} />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-sm font-semibold text-white">
+                                                {rule.name || rule.comment || `Règle ${rule.id.substring(0, 8)}`}
+                                            </span>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                                rule.enabled 
+                                                    ? 'bg-green-500/20 border border-green-500/50 text-green-300' 
+                                                    : 'bg-gray-500/20 border border-gray-500/50 text-gray-400'
+                                            }`}>
+                                                {rule.enabled ? 'Actif' : 'Inactif'}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-gray-400 space-y-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-500">Protocole:</span>
+                                                <span className="text-gray-300 font-mono uppercase">{rule.protocol || 'TCP'}</span>
+                                            </div>
+                                            {rule.dst_port && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-500">Port destination:</span>
+                                                    <span className="text-gray-300 font-mono">{rule.dst_port}</span>
+                                                </div>
+                                            )}
+                                            {rule.fwd_host && rule.fwd_port && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-500">Redirection:</span>
+                                                    <span className="text-gray-300 font-mono">
+                                                        {rule.fwd_host}:{rule.fwd_port}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {rule.src && (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-500">Source:</span>
+                                                    <span className="text-gray-300 font-mono">{rule.src}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </Card>
+        </div>
+    );
+};
