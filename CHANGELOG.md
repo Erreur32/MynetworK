@@ -3,6 +3,47 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.3] - 2026-02-03
+
+### ✨ Ajouté
+
+**Dashboard - Récapitulatif Réseau Séparé**
+- ✅ Création de deux widgets distincts : `NetworkSummaryDashboardWidget` (dashboard principal) et `NetworkSummaryFreeboxWidget` (page Freebox)
+- ✅ Widget dashboard : affiche UniFi + DHCP UniFi détaillé (statut, clients connectés, plage IP, gateway) + Freebox si présent
+- ✅ Widget Freebox : affiche uniquement les informations Freebox (pas d'UniFi)
+- ✅ Section DHCP UniFi détaillée dans le widget dashboard avec plage IP et nombre de clients
+
+**UniFi - InfoSystème Enrichi**
+- ✅ Ajout des informations DHCP UniFi dans InfoSystème : statut (Actif/Inactif), plage IP, IP utilisées (clients)
+- ✅ Ajout des informations NAT UniFi dans InfoSystème : statut (Actif/Inactif), Gateway IP, nom du gateway
+- ✅ Réorganisation de InfoSystème en 4 colonnes pour une meilleure compacité : Système, DHCP, NAT, Controller
+
+**UniFi - API Backend DHCP**
+- ✅ Extension de `getNetworkConfig()` dans UniFiApiService pour récupérer la plage DHCP (`dhcpd_start` et `dhcpd_stop`)
+- ✅ Exposition de `dhcpRange` dans les stats système du plugin UniFi
+- ✅ Transmission de la plage DHCP au frontend via l'API `/api/dashboard/network-summary`
+
+### 🔧 Modifié
+
+**Dashboard - Récapitulatif Réseau**
+- 🔧 Suppression du doublon "Gestionnaire d'IPs Réseau (UniFi)" dans le widget dashboard (les informations DHCP UniFi sont maintenant uniquement dans la section dédiée)
+- 🔧 Correction du doublon de plage IP dans le widget Freebox (affichage unique de la plage IP)
+
+**UniFi - Interface Mobile**
+- 🔧 Amélioration de l'intégration des badges de statut (Connexion, Site, Données) pour mobile
+- 🔧 Header responsive : passage en colonne sur mobile (`flex-col sm:flex-row`)
+- 🔧 Badges optimisés : texte réduit (`text-[10px] sm:text-xs`), icônes plus petites, espacements réduits
+- 🔧 Séparateurs "•" masqués sur mobile pour plus de compacité
+- 🔧 URL du controller tronquée (hostname uniquement sur mobile)
+- 🔧 Titre et URL avec `truncate` pour éviter les débordements
+
+**UniFi - InfoSystème**
+- 🔧 Réorganisation en grille 2x2 colonnes pour meilleure utilisation de l'espace
+- 🔧 Réduction des tailles de police pour les valeurs (`text-xs` pour certaines informations)
+- 🔧 URL du controller avec hostname uniquement pour économiser l'espace
+
+---
+
 ## [0.5.2] - 2026-02-03
 
 ### ✨ Ajouté

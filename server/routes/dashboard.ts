@@ -201,6 +201,10 @@ router.get(
           // Fallback: UniFiOS gateway typically runs DHCP for LAN when no networkconf available
           unifi.dhcpEnabled = !!unifiGateway;
         }
+        // DHCP range from network config
+        if (sys?.dhcpRange) {
+          unifi.dhcpRange = sys.dhcpRange;
+        }
         // Count clients (devices with type 'client' and an IP) = IPs used on UniFi network
         const clientsWithIp = devices.filter((d: any) => (d.type === 'client' || (d as any).type === 'client') && d.ip && /^\d+\.\d+\.\d+\.\d+$/.test(String(d.ip)));
         const uniqueClientIps = new Set(clientsWithIp.map((d: any) => String(d.ip)));

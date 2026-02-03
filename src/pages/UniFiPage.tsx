@@ -232,60 +232,75 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         <div className="text-gray-300">
             <div className="max-w-[96rem] mx-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2 sm:gap-4">
                         <button
                             onClick={onBack}
-                            className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
+                            className="p-2 hover:bg-[#1a1a1a] rounded transition-colors shrink-0"
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <div>
-                            <h1 className="text-2xl font-semibold flex items-center gap-3">
+                        <div className="min-w-0">
+                            <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2 sm:gap-3">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     viewBox="0 0 24 24"
-                                    className="w-6 h-6"
+                                    className="w-5 h-5 sm:w-6 sm:h-6 shrink-0"
                                 >
                                     <path
                                         fill="#1fb0ec"
                                         d="M5.343 4.222h1.099v1.1H5.343zm7.438 14.435a7.2 7.2 0 0 1-3.51-.988a6.5 6.5 0 0 0 2.947 3.936l.66.364c5.052-.337 8.009-3.6 8.009-7.863v-.924c-1.201 3.918-3.995 5.66-8.106 5.475m-4.107-2.291V8.355H7.562v4.1H6.448V10h-1.11v1.1H4.225V5.042H3.113v9.063c0 4.508 3.3 7.9 8.888 7.9a6.82 6.82 0 0 1-3.327-5.639M7.562 4.772h1.112v1.1H7.562zM3.113 2h1.112v1.111H3.113zm2.231 5.805h1.1v1.1h-1.1zm1.111-1.649h1.1v1.1h-1.1zm-.006-3.045h1.113V4.21H6.449zm8.876 2.677v10.577a9 9 0 0 1-.164 1.7c2.671-.486 4.414-2.137 5.3-5.014l.431-1.407V2.012c-5.042 0-5.567 1.931-5.567 3.776"
                                     />
                                 </svg>
-                                UniFi
+                                <span className="truncate">UniFi</span>
                             </h1>
-                            <p className="text-sm text-gray-500 mt-1">
+                            <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
                                 {(() => {
                                     const url = (unifiPlugin.settings?.url as string) || null;
                                     if (url) {
-                                        return (
-                                            <a
-                                                href={url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
-                                                title={`Ouvrir ${url} dans un nouvel onglet`}
-                                            >
-                                                {url}
-                                            </a>
-                                        );
+                                        try {
+                                            const urlObj = new URL(url);
+                                            return (
+                                                <a
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                                                    title={url}
+                                                >
+                                                    {urlObj.hostname}
+                                                </a>
+                                            );
+                                        } catch {
+                                            return (
+                                                <a
+                                                    href={url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                                                    title={url}
+                                                >
+                                                    {url}
+                                                </a>
+                                            );
+                                        }
                                     }
                                     return 'Non configuré';
                                 })()}
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {/* Visual step-by-step status for UniFi plugin */}
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#050b14] border border-gray-800 rounded-lg text-xs">
+                    {/* Visual step-by-step status for UniFi plugin - Better mobile integration */}
+                    <div className="flex items-center justify-end sm:justify-start">
+                        <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 bg-[#050b14] border border-gray-800 rounded-lg text-[10px] sm:text-xs">
                             {/* Étape 1 : Connexion */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5 sm:gap-1">
                                 {connectionOk ? (
-                                    <CheckCircle size={12} className="text-green-400" />
+                                    <CheckCircle size={10} className="sm:w-3 sm:h-3 text-green-400 shrink-0" />
                                 ) : hasConfig ? (
-                                    <AlertCircle size={12} className="text-yellow-400" />
+                                    <AlertCircle size={10} className="sm:w-3 sm:h-3 text-yellow-400 shrink-0" />
                                 ) : (
-                                    <XCircle size={12} className="text-red-400" />
+                                    <XCircle size={10} className="sm:w-3 sm:h-3 text-red-400 shrink-0" />
                                 )}
                                 <span
                                     className={
@@ -299,15 +314,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     Connexion
                                 </span>
                             </div>
-                            <span className="text-gray-500">•</span>
+                            <span className="text-gray-500 hidden sm:inline">•</span>
                             {/* Étape 2 : Site */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5 sm:gap-1">
                                 {siteOk ? (
-                                    <CheckCircle size={12} className="text-green-400" />
+                                    <CheckCircle size={10} className="sm:w-3 sm:h-3 text-green-400 shrink-0" />
                                 ) : connectionOk ? (
-                                    <AlertCircle size={12} className="text-yellow-400" />
+                                    <AlertCircle size={10} className="sm:w-3 sm:h-3 text-yellow-400 shrink-0" />
                                 ) : (
-                                    <XCircle size={12} className="text-red-400" />
+                                    <XCircle size={10} className="sm:w-3 sm:h-3 text-red-400 shrink-0" />
                                 )}
                                 <span
                                     className={
@@ -321,15 +336,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     Site
                                 </span>
                             </div>
-                            <span className="text-gray-500">•</span>
+                            <span className="text-gray-500 hidden sm:inline">•</span>
                             {/* Étape 3 : Données */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5 sm:gap-1">
                                 {dataOk ? (
-                                    <CheckCircle size={12} className="text-green-400" />
+                                    <CheckCircle size={10} className="sm:w-3 sm:h-3 text-green-400 shrink-0" />
                                 ) : siteOk ? (
-                                    <AlertCircle size={12} className="text-yellow-400" />
+                                    <AlertCircle size={10} className="sm:w-3 sm:h-3 text-yellow-400 shrink-0" />
                                 ) : (
-                                    <XCircle size={12} className="text-red-400" />
+                                    <XCircle size={10} className="sm:w-3 sm:h-3 text-red-400 shrink-0" />
                                 )}
                                 <span
                                     className={
@@ -442,94 +457,150 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         title="InfoSystème"
                                         className="bg-unifi-card border border-gray-800 rounded-xl"
                                     >
-                                        <div className="flex flex-col justify-center text-sm text-gray-300 space-y-1">
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-400">Uptime contrôleur:</span>
-                                                <span>
-                                                    {(() => {
-                                                        const uptime = (overviewComputed as any).controller?.uptime as number | undefined;
-                                                        if (!uptime || uptime <= 0) return 'N/A';
-                                                        const hours = Math.floor(uptime / 3600);
-                                                        const days = Math.floor(hours / 24);
-                                                        if (days > 0) return `${days} j ${hours % 24} h`;
-                                                        return `${hours} h`;
-                                                    })()}
-                                        </span>
-                                    </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-400">Équipements gérés:</span>
-                                                <span>{(overviewComputed as any).totalEquipments ?? 0}</span>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-300">
+                                            {/* Colonne 1 - Système */}
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">Uptime contrôleur:</span>
+                                                    <span>
+                                                        {(() => {
+                                                            const uptime = (overviewComputed as any).controller?.uptime as number | undefined;
+                                                            if (!uptime || uptime <= 0) return 'N/A';
+                                                            const hours = Math.floor(uptime / 3600);
+                                                            const days = Math.floor(hours / 24);
+                                                            if (days > 0) return `${days} j ${hours % 24} h`;
+                                                            return `${hours} h`;
+                                                        })()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">Équipements:</span>
+                                                    <span>{(overviewComputed as any).totalEquipments ?? 0}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">Clients:</span>
+                                                    <span>{(unifiStats?.devices || []).filter((d: any) => (d.type || '').toLowerCase() === 'client').length}</span>
+                                                </div>
                                             </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-400">Clients connectés:</span>
-                                                <span>{(unifiStats?.devices || []).filter((d: any) => (d.type || '').toLowerCase() === 'client').length}</span>
+
+                                            {/* Colonne 2 - DHCP */}
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-400">DHCP:</span>
+                                                    <span className={systemInfo?.dhcpEnabled ? 'text-green-400' : 'text-gray-500'}>
+                                                        {systemInfo?.dhcpEnabled ? 'Actif' : 'Inactif'}
+                                                    </span>
+                                                </div>
+                                                {systemInfo?.dhcpEnabled && systemInfo?.dhcpRange && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-400">Plage IP:</span>
+                                                        <span className="text-white font-mono text-xs">{systemInfo.dhcpRange}</span>
+                                                    </div>
+                                                )}
+                                                {systemInfo?.dhcpEnabled && (() => {
+                                                    const clientsCount = (unifiStats?.devices || []).filter((d: any) => 
+                                                        (d.type || '').toLowerCase() === 'client' && d.ip && /^\d+\.\d+\.\d+\.\d+$/.test(String(d.ip))
+                                                    ).length;
+                                                    return clientsCount > 0 ? (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-400">IP utilisées:</span>
+                                                            <span className="text-orange-400">{clientsCount}</span>
+                                                        </div>
+                                                    ) : null;
+                                                })()}
                                             </div>
-                                            {/* Informations du controller (déplacées ici) */}
-                                            <div className="mt-3 border-t border-gray-800 pt-2 space-y-1">
+
+                                            {/* Colonne 3 - NAT */}
+                                            <div className="space-y-1">
+                                                {(() => {
+                                                    const gateway = devicesArr.find((d: any) => {
+                                                        const type = (d.type || '').toString().toLowerCase();
+                                                        const model = (d.model || '').toString().toLowerCase();
+                                                        return (
+                                                            type.includes('ugw') ||
+                                                            type.includes('udm') ||
+                                                            type.includes('ucg') ||
+                                                            type.includes('gateway') ||
+                                                            model.includes('ugw') ||
+                                                            model.includes('udm') ||
+                                                            model.includes('ucg') ||
+                                                            model.includes('gateway')
+                                                        );
+                                                    });
+                                                    const natActive = !!gateway?.ip;
+                                                    return (
+                                                        <>
+                                                            <div className="flex justify-between">
+                                                                <span className="text-gray-400">NAT:</span>
+                                                                <span className={natActive ? 'text-green-400' : 'text-gray-500'}>
+                                                                    {natActive ? 'Actif' : 'Inactif'}
+                                                                </span>
+                                                            </div>
+                                                            {natActive && gateway?.ip && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-400">Gateway IP:</span>
+                                                                    <span className="text-white font-mono text-xs">{gateway.ip}</span>
+                                                                </div>
+                                                            )}
+                                                            {natActive && gateway?.name && gateway.name !== gateway.ip && (
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-gray-400">Gateway:</span>
+                                                                    <span className="text-white text-xs truncate" title={gateway.name}>{gateway.name}</span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+
+                                            {/* Colonne 4 - Controller */}
+                                            <div className="space-y-1">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">URL:</span>
                                                     {(() => {
                                                         const url = (unifiPlugin.settings?.url as string) || null;
                                                         if (url) {
-                                                            return (
-                                                                <a
-                                                                    href={url}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-white font-mono hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
-                                                                    title={`Ouvrir ${url} dans un nouvel onglet`}
-                                                                >
-                                                                    {url}
-                                                                </a>
-                                                            );
+                                                            try {
+                                                                const urlObj = new URL(url);
+                                                                return (
+                                                                    <a
+                                                                        href={url}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="text-white font-mono text-xs hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2 truncate"
+                                                                        title={url}
+                                                                    >
+                                                                        {urlObj.hostname}
+                                                                    </a>
+                                                                );
+                                                            } catch {
+                                                                return <span className="text-white font-mono text-xs">N/A</span>;
+                                                            }
                                                         }
-                                                        return <span className="text-white font-mono">N/A</span>;
+                                                        return <span className="text-white font-mono text-xs">N/A</span>;
                                                     })()}
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">IP:</span>
-                                                    <span className="text-white font-mono">
-                                            {(() => {
-                                                const url = unifiPlugin.settings?.url as string;
-                                                if (url) {
-                                                    try {
-                                                        const urlObj = new URL(url);
-                                                        return urlObj.hostname;
-                                                    } catch {
-                                                        return url.split('://')[1]?.split(':')[0] || 'N/A';
-                                                    }
-                                                }
-                                                return 'N/A';
-                                            })()}
-                                        </span>
-                                    </div>
-                                                <div className="flex justify-between">
                                                     <span className="text-gray-400">Port:</span>
-                                                    <span className="text-white font-mono">
-                                            {(() => {
-                                                const url = unifiPlugin.settings?.url as string;
-                                                if (url) {
-                                                    try {
-                                                        const urlObj = new URL(url);
-                                                        return urlObj.port || (urlObj.protocol === 'https:' ? '8443' : '8080');
-                                                    } catch {
-                                                        const port = url.split(':').pop()?.split('/')[0];
-                                                        return port || 'N/A';
-                                                    }
-                                                }
-                                                return 'N/A';
-                                            })()}
-                                        </span>
-                                    </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-400">Utilisateur:</span>
-                                                    <span className="text-white">
-                                                        {(unifiPlugin.settings?.username as string) || 'N/A'}
-                                        </span>
-                                    </div>
+                                                    <span className="text-white font-mono text-xs">
+                                                        {(() => {
+                                                            const url = unifiPlugin.settings?.url as string;
+                                                            if (url) {
+                                                                try {
+                                                                    const urlObj = new URL(url);
+                                                                    return urlObj.port || (urlObj.protocol === 'https:' ? '8443' : '8080');
+                                                                } catch {
+                                                                    const port = url.split(':').pop()?.split('/')[0];
+                                                                    return port || 'N/A';
+                                                                }
+                                                            }
+                                                            return 'N/A';
+                                                        })()}
+                                                    </span>
+                                                </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">Site:</span>
-                                                    <span className="text-white">
+                                                    <span className="text-white text-xs">
                                                         {(() => {
                                                             const statsName =
                                                                 (unifiStats?.system as any)?.name ||
@@ -539,19 +610,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                             }
                                                             return (unifiPlugin.settings?.site as string) || 'default';
                                                         })()}
-                                        </span>
-                                    </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-400">Mode:</span>
-                                                    <span className="text-white">
-                                                        {(unifiPlugin.settings?.apiMode as string) === 'site-manager'
-                                                            ? 'Site Manager API'
-                                                            : 'Controller Local'}
-                                        </span>
+                                                    </span>
                                                 </div>
-                                    </div>
-                                </div>
-                            </Card>
+                                            </div>
+                                        </div>
+                                    </Card>
                                     <Card
                                         title="Alertes Réseau"
                                         className="bg-unifi-card border border-gray-800 rounded-xl"

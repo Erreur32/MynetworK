@@ -11,7 +11,7 @@ import {
   SpeedtestWidget,
   HistoryLog,
   MultiSourceWidget,
-  NetworkSummaryWidget
+  NetworkSummaryFreeboxWidget
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
@@ -770,7 +770,7 @@ const App: React.FC = () => {
 
             {/* Network Summary Widget */}
             {isFreeboxLoggedIn && (
-              <NetworkSummaryWidget />
+              <NetworkSummaryFreeboxWidget />
             )}
 
             {/* Freebox Status (only if Freebox is connected) */}

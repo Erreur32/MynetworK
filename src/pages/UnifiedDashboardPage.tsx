@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkScanWidget, NetworkSummaryWidget } from '../components/widgets';
+import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkScanWidget, NetworkSummaryDashboardWidget } from '../components/widgets';
 import { TrafficHistoryModal } from '../components/modals';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
@@ -57,7 +57,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
             {/* Column 1 - à gauche (état des plugins + récapitulatif réseau + système serveur) */}
             <div className="flex flex-col gap-6">
                 <MultiSourceWidget onPluginClick={() => onNavigateToPlugins?.()} />
-                {(hasFreebox || hasUniFi) && <NetworkSummaryWidget />}
+                {(hasFreebox || hasUniFi) && <NetworkSummaryDashboardWidget />}
                 <SystemServerWidget />
             </div>
 

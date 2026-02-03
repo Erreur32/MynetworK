@@ -951,8 +951,9 @@ export class UniFiApiService {
     /**
      * Get network config (LAN networks) to check if DHCP is enabled (dhcpd_enabled).
      * Used for dashboard "Gestionnaire d'IPs" when UniFi manages the network.
+     * Also retrieves DHCP range (dhcpd_start, dhcpd_stop) if available.
      */
-    async getNetworkConfig(): Promise<{ dhcpEnabled: boolean }> {
+    async getNetworkConfig(): Promise<{ dhcpEnabled: boolean; dhcpRange?: string }> {
         try {
             await this.ensureLoggedIn();
             const encodedSite = encodeURIComponent(this.site);
@@ -963,7 +964,11 @@ export class UniFiApiService {
             const lan = list.find((n: any) => (n.purpose === 'corporate' || n.purpose === 'vlan only' || !n.purpose) && n.dhcpd_enabled !== undefined)
                 ?? list[0];
             const dhcpEnabled = lan?.dhcpd_enabled === true;
-            return { dhcpEnabled };
+            let dhcpRange: string | undefined;
+            if (dhcpEnabled && lan?.dhcpd_start && lan?.dhcpd_stop) {
+                dhcpRange = `${lan.dhcpd_start} - ${lan.dhcpd_stop}`;
+            }
+            return { dhcpEnabled, dhcpRange };
         } catch (error) {
             logger.debug('UniFi', 'Failed to get network config (dhcpd_enabled):', error);
             return { dhcpEnabled: false };

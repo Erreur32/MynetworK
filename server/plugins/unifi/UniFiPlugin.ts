@@ -13,7 +13,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.5.2');
+        super('unifi', 'UniFi Controller', '0.5.3');
         this.apiService = new UniFiApiService();
     }
 
@@ -328,6 +328,8 @@ export class UniFiPlugin extends BasePlugin {
                 deploymentType: deploymentType,
                 // DHCP enabled on UniFi (from rest/networkconf dhcpd_enabled)
                 dhcpEnabled: networkConf?.dhcpEnabled === true,
+                // DHCP range on UniFi (from rest/networkconf dhcpd_start/dhcpd_stop)
+                dhcpRange: networkConf?.dhcpRange,
                 // Basic memory information if present
                 memory: sysinfo.mem ? {
                     total: sysinfo.mem.total,
