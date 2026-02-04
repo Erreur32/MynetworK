@@ -21,7 +21,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.5.4');
+        super('freebox', 'Freebox', '0.5.5');
     }
 
     async initialize(config: PluginConfig): Promise<void> {

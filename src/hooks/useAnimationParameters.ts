@@ -1,10 +1,13 @@
 /**
  * Hook for managing animation-specific parameters
  * Each animation can have its own configurable parameters
+ * State is shared via AnimationParametersContext so that sliders (ThemeSection)
+ * and AnimatedBackground (App) use the same values.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import type { FullAnimationId } from './useBackgroundAnimation';
+import { CYCLEABLE_ANIMATION_IDS } from './useBackgroundAnimation';
 
 export type AnimationParameterValue = string | number | boolean | any[];
 
@@ -21,8 +24,38 @@ export interface AnimationParameter {
 
 export type AnimationParameters = Record<string, AnimationParameterValue>;
 
-// Définition des paramètres pour chaque animation
+/**
+ * Options spécifiques par animation — chaque ID a sa propre liste de paramètres.
+ * Ne pas réutiliser les mêmes options pour toutes les animations.
+ * Validation: chaque clé doit exister dans FullAnimationId (useBackgroundAnimation)
+ * et les props passées dans AnimatedBackground.tsx doivent correspondre aux noms ici.
+ */
 export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]> = {
+  /* All: cycle through selected animations */
+  'animation.all': [
+    {
+      name: 'cycleAnimations',
+      type: 'array',
+      default: [...CYCLEABLE_ANIMATION_IDS],
+      description: 'Animations à inclure dans le cycle (cocher celles à afficher)',
+    },
+    {
+      name: 'cycleDuration',
+      type: 'range',
+      default: 15,
+      min: 5,
+      max: 3600,
+      step: 5,
+      description: 'Durée par animation (5 s à 1 h)',
+    },
+    {
+      name: 'cycleRandom',
+      type: 'boolean',
+      default: false,
+      description: 'Ordre aléatoire (sinon séquentiel)',
+    },
+  ],
+  /* Playstation 3 - RetroArch Menu Ribbon (Boris Šehovac / Codepen), port Canvas 2D */
   'animation.72.playstation-3-bg-style': [
     {
       name: 'speed',
@@ -31,13 +64,37 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       min: 0.1,
       max: 2.0,
       step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
+      description: 'Vitesse du ruban (0.1-2.0)',
     },
     {
       name: 'waveColor',
       type: 'color',
-      default: 'rgb(255, 255, 255)',
-      description: 'Couleur de la vague',
+      default: 'rgb(31, 29, 139)',
+      description: 'Couleur du ruban (format RGB)',
+    },
+    {
+      name: 'targetFPS',
+      type: 'range',
+      default: 60,
+      min: 10,
+      max: 100,
+      step: 5,
+      description: 'Images par seconde cible (10-100)',
+    },
+    {
+      name: 'animationTimeout',
+      type: 'range',
+      default: 5000,
+      min: 0,
+      max: 60000,
+      step: 1000,
+      description: 'Arrêt après (ms), 0 = infini',
+    },
+    {
+      name: 'enableAnimationTimeout',
+      type: 'boolean',
+      default: false,
+      description: 'Arrêt de l\'animation après le délai (désactivé par défaut, économie CPU)',
     },
   ],
   'animation.1.home-assistant-particles': [
@@ -70,7 +127,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
     {
       name: 'speed',
       type: 'range',
-      default: 0.5,
+      default: 0.2,
       min: 0.1,
       max: 2.0,
       step: 0.1,
@@ -99,7 +156,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
     {
       name: 'speed',
       type: 'range',
-      default: 0.5,
+      default: 0.2,
       min: 0.1,
       max: 2.0,
       step: 0.1,
@@ -119,11 +176,11 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
     {
       name: 'speed',
       type: 'range',
-      default: 1.0,
-      min: 0.1,
+      default: 0.1,
+      min: 0.05,
       max: 2.0,
-      step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
+      step: 0.05,
+      description: 'Vitesse d\'animation (0.05=lent, 2.0=rapide)',
     },
     {
       name: 'particleCount',
@@ -139,7 +196,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
     {
       name: 'speed',
       type: 'range',
-      default: 0.5,
+      default: 0.1,
       min: 0.1,
       max: 2.0,
       step: 0.1,
@@ -190,45 +247,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       min: 0.1,
       max: 2.0,
       step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
-    },
-    {
-      name: 'blurIntensity',
-      type: 'range',
-      default: 40,
-      min: 10,
-      max: 100,
-      step: 5,
-      description: 'Intensité du flou (10-100)',
-    },
-    {
-      name: 'colorIntensity',
-      type: 'range',
-      default: 0.7,
-      min: 0.3,
-      max: 1.0,
-      step: 0.1,
-      description: 'Intensité des couleurs (0.3-1.0)',
-    },
-    {
-      name: 'streakCount',
-      type: 'range',
-      default: 7,
-      min: 3,
-      max: 12,
-      step: 1,
-      description: 'Nombre de streaks d\'aurore (3-12)',
-    },
-  ],
-  'animation.92.aurora-v2': [
-    {
-      name: 'speed',
-      type: 'range',
-      default: 0.5,
-      min: 0.1,
-      max: 2.0,
-      step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
+      description: 'Vitesse de mouvement (0.1-2.0)',
     },
     {
       name: 'blurIntensity',
@@ -257,7 +276,95 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       step: 1,
       description: 'Nombre de streaks d\'aurore (3-12)',
     },
+    {
+      name: 'targetFPS',
+      type: 'range',
+      default: 60,
+      min: 10,
+      max: 100,
+      step: 5,
+      description: 'Images par seconde cible (10-100)',
+    },
+    {
+      name: 'animationTimeout',
+      type: 'range',
+      default: 5000,
+      min: 0,
+      max: 60000,
+      step: 1000,
+      description: 'Arrêt après (ms), 0 = infini',
+    },
+    {
+      name: 'enableAnimationTimeout',
+      type: 'boolean',
+      default: false,
+      description: 'Arrêt de l\'animation après le délai (désactivé par défaut, économie CPU)',
+    },
   ],
+  /* Icelandic Aurora v2 (improved performance): speed, blur, color, streakCount, targetFPS, timeout options. */
+  'animation.92.aurora-v2': [
+    {
+      name: 'speed',
+      type: 'range',
+      default: 0.5,
+      min: 0.1,
+      max: 2.0,
+      step: 0.1,
+      description: 'Vitesse de mouvement (0.1-2.0)',
+    },
+    {
+      name: 'blurIntensity',
+      type: 'range',
+      default: 60,
+      min: 10,
+      max: 100,
+      step: 5,
+      description: 'Intensité du flou (10-100)',
+    },
+    {
+      name: 'colorIntensity',
+      type: 'range',
+      default: 0.7,
+      min: 0.3,
+      max: 1.0,
+      step: 0.1,
+      description: 'Intensité des couleurs (0.3-1.0)',
+    },
+    {
+      name: 'streakCount',
+      type: 'range',
+      default: 7,
+      min: 3,
+      max: 12,
+      step: 1,
+      description: 'Nombre de streaks d\'aurore (3-12)',
+    },
+    {
+      name: 'targetFPS',
+      type: 'range',
+      default: 60,
+      min: 10,
+      max: 100,
+      step: 5,
+      description: 'Images par seconde cible (10-100)',
+    },
+    {
+      name: 'animationTimeout',
+      type: 'range',
+      default: 5000,
+      min: 0,
+      max: 60000,
+      step: 1000,
+      description: 'Arrêt après (ms), 0 = infini',
+    },
+    {
+      name: 'enableAnimationTimeout',
+      type: 'boolean',
+      default: false,
+      description: 'Arrêt de l\'animation après le délai (désactivé par défaut, économie CPU)',
+    },
+  ],
+  /* Alien: Blackout Intro Scene (React + WebGL style, Canvas 2D) – Boris Šehovac / Codepen */
   'animation.94.alien-blackout': [
     {
       name: 'speed',
@@ -266,7 +373,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       min: 0.1,
       max: 2.0,
       step: 0.1,
-      description: 'Vitesse d\'animation (0.1-2.0)',
+      description: 'Vitesse de défilement des étoiles (0.1-2.0)',
     },
     {
       name: 'starCount',
@@ -286,12 +393,57 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       step: 0.1,
       description: 'Taille des étoiles (1.0-5.0)',
     },
+    {
+      name: 'targetFPS',
+      type: 'range',
+      default: 60,
+      min: 10,
+      max: 100,
+      step: 5,
+      description: 'Images par seconde cible (10-100)',
+    },
+    {
+      name: 'animationTimeout',
+      type: 'range',
+      default: 5000,
+      min: 0,
+      max: 60000,
+      step: 1000,
+      description: 'Arrêt après (ms), 0 = infini',
+    },
+    {
+      name: 'enableAnimationTimeout',
+      type: 'boolean',
+      default: false,
+      description: 'Arrêt de l\'animation après le délai (désactivé par défaut, économie CPU)',
+    },
+  ],
+  /* Bit Ocean (Griffin Moyer / Codepen) - grille de points animée par bruit, couleurs changeantes */
+  'animation.95.bit-ocean': [
+    {
+      name: 'speed',
+      type: 'range',
+      default: 1.0,
+      min: 0.2,
+      max: 2.0,
+      step: 0.1,
+      description: 'Vitesse de l\'océan (0.2-2.0)',
+    },
+    {
+      name: 'pointSize',
+      type: 'range',
+      default: 2,
+      min: 1,
+      max: 5,
+      step: 0.5,
+      description: 'Taille des points (1-5)',
+    },
   ],
   'animation.96.stars': [
     {
       name: 'speed',
       type: 'range',
-      default: 0.5,
+      default: 0.1,
       min: 0.1,
       max: 2.0,
       step: 0.1,
@@ -435,6 +587,25 @@ export function getDefaultParameters(animationId: FullAnimationId): AnimationPar
     params[param.name] = param.default;
   });
   return params;
+}
+
+/** Context value: same shape as useAnimationParameters return. Shared so ThemeSection sliders and AnimatedBackground stay in sync. */
+export type AnimationParametersContextValue = {
+  parameters: AnimationParameters;
+  setParameter: (name: string, value: AnimationParameterValue) => void;
+  resetParameters: () => void;
+  parameterDefinitions: AnimationParameter[];
+};
+
+export const AnimationParametersContext = createContext<AnimationParametersContextValue | null>(null);
+
+/** Use animation parameters from the shared context (e.g. in ThemeSection). Must be used inside a provider that passes useAnimationParameters(animationId). */
+export function useAnimationParametersContext(): AnimationParametersContextValue {
+  const ctx = useContext(AnimationParametersContext);
+  if (!ctx) {
+    throw new Error('useAnimationParametersContext must be used within a provider that supplies AnimationParametersContext');
+  }
+  return ctx;
 }
 
 export function useAnimationParameters(animationId: FullAnimationId) {

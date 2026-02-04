@@ -35,7 +35,7 @@ const NetworkScanPage = lazy(() => import('./pages/NetworkScanPage').then(m => (
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { useBackgroundAnimation } from './hooks/useBackgroundAnimation';
-import { useAnimationParameters } from './hooks/useAnimationParameters';
+import { useAnimationParameters, AnimationParametersContext } from './hooks/useAnimationParameters';
 import type { FullAnimationId } from './hooks/useBackgroundAnimation';
 import { fetchEnvironmentInfo } from './constants/version';
 import {
@@ -107,13 +107,11 @@ const App: React.FC = () => {
   const { capabilities, supportsVm, hasLimitedVmSupport, getMaxVms } = useCapabilitiesStore();
 
   // Background animation (CSS or full-animation theme)
-  const { variant: bgVariant, prefersReducedMotion, animationSpeed, theme } = useBackgroundAnimation();
+  const { variant: bgVariant, fullAnimationId, prefersReducedMotion, animationSpeed, theme } = useBackgroundAnimation();
   
-  // Get animation parameters for the current animation
-  const currentAnimationId: FullAnimationId = typeof bgVariant === 'string' && bgVariant.startsWith('animation.') 
-    ? bgVariant as FullAnimationId 
-    : 'animation.80.particle-waves';
-  const animationParameters = useAnimationParameters(currentAnimationId);
+  // Animation params: always use the user-selected animation id (fullAnimationId). When "All" is selected,
+  // Settings must show the "All" transition rules (cycle duration, random, pause), not the currently displayed animation's params.
+  const animationParameters = useAnimationParameters(fullAnimationId);
 
   // Local state
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
@@ -482,19 +480,21 @@ const App: React.FC = () => {
 
 
   // Helper component to render page with footer (with optional animated background)
+  // Provider shares animation parameters so ThemeSection sliders and AnimatedBackground stay in sync
   const renderPageWithFooter = (pageContent: React.ReactNode) => (
-    <div className="relative min-h-screen">
-      <AnimatedBackground 
-        variant={bgVariant} 
-        disabled={prefersReducedMotion} 
-        animationSpeed={animationSpeed}
-        animationParameters={animationParameters.parameters}
-      />
-      <div className="relative z-0 min-h-screen pb-20 bg-theme-primary/95 text-theme-primary font-sans selection:bg-accent-primary/30">
-        <Suspense fallback={<PageLoader />}>
-          {pageContent}
-        </Suspense>
-        <Footer
+    <AnimationParametersContext.Provider value={animationParameters}>
+      <div className="relative min-h-screen">
+        <AnimatedBackground 
+          variant={bgVariant} 
+          disabled={prefersReducedMotion} 
+          animationSpeed={animationSpeed}
+          animationParameters={animationParameters.parameters}
+        />
+        <div className="relative z-0 min-h-screen pb-20 bg-theme-primary/95 text-theme-primary font-sans selection:bg-accent-primary/30">
+          <Suspense fallback={<PageLoader />}>
+            {pageContent}
+          </Suspense>
+          <Footer
           currentPage={currentPage}
           onPageChange={handlePageChange}
           onReboot={handleReboot}
@@ -502,8 +502,9 @@ const App: React.FC = () => {
           onFreeboxOptions={handleFreeboxOptionsClick}
           userRole={user?.role}
         />
+        </div>
       </div>
-    </div>
+    </AnimationParametersContext.Provider>
   );
 
   // Render TV page

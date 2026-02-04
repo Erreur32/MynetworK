@@ -11,11 +11,12 @@ import { api } from '../api/client';
 import { Section, SettingRow } from '../pages/SettingsPage';
 import {
     useBackgroundAnimation,
+    CYCLEABLE_ANIMATION_IDS,
     type BgAnimationVariant,
     type FullAnimationId,
     type AnimationSpeed
 } from '../hooks/useBackgroundAnimation';
-import { useAnimationParameters } from '../hooks/useAnimationParameters';
+import { useAnimationParametersContext } from '../hooks/useAnimationParameters';
 
 interface ThemeColors {
     // Primary colors
@@ -256,15 +257,9 @@ const DEFAULT_COLORS: Record<Theme, ThemeColors> = {
 
 const VALID_THEMES: Theme[] = ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant', 'full-animation'];
 
-// Options d'animation pour les autres thèmes (non full-animation)
-const BG_ANIMATION_OPTIONS: { value: BgAnimationVariant; label: string }[] = [
-    { value: 'animation.80.particle-waves', label: 'Particle waves' },
-    { value: 'animation.93.particules-line', label: 'Particules line' },
-    { value: 'animation.1.home-assistant-particles', label: 'Home Assistant particles' },
-];
-
 const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; label: string }[] = [
     { value: 'off', label: 'NON' },
+    { value: 'animation.all', label: 'All' },
     { value: 'animation.80.particle-waves', label: 'Particle waves' },
     { value: 'animation.93.particules-line', label: 'Particules line' },
     { value: 'animation.1.home-assistant-particles', label: 'Home Assistant particles' },
@@ -273,11 +268,19 @@ const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; label: string }[
     { value: 'animation.90.aurora', label: 'Icelandic Aurora' },
     { value: 'animation.92.aurora-v2', label: 'Icelandic Aurora v2' },
     { value: 'animation.94.alien-blackout', label: 'Alien Blackout' },
+    { value: 'animation.95.bit-ocean', label: 'Bit Ocean' },
     { value: 'animation.96.stars', label: 'Stars' },
     { value: 'animation.97.space', label: 'Space' },
     { value: 'animation.98.sidelined', label: 'Sidelined' },
     { value: 'animation.10.css-dark-particles', label: 'CSS dark particles' },
 ];
+
+// Valeurs BgAnimationVariant (sous-ensemble) — source unique pour éviter doublons
+const BG_ANIMATION_VALUES: BgAnimationVariant[] = ['animation.80.particle-waves', 'animation.93.particules-line', 'animation.1.home-assistant-particles'];
+// Options pour thèmes non full-animation, dérivées de FULL_ANIMATION_OPTIONS
+const BG_ANIMATION_OPTIONS: { value: BgAnimationVariant; label: string }[] = FULL_ANIMATION_OPTIONS.filter(
+    (opt): opt is { value: BgAnimationVariant; label: string } => opt.value !== 'off' && BG_ANIMATION_VALUES.includes(opt.value as BgAnimationVariant)
+);
 
 // Liste des animations supprimées (ne plus afficher)
 const REMOVED_ANIMATIONS = ['animation.95.just-in-case', 'animation.99.media-background'];
@@ -405,23 +408,17 @@ export const ThemeSection: React.FC = () => {
     const availableThemes = getAvailableThemes();
     const { bgAnimation, setBgAnimation, fullAnimationId, setFullAnimationId, animationSpeed, setAnimationSpeed, minSpeed, maxSpeed, theme } = useBackgroundAnimation();
     
-    // Get current animation ID and its parameters
-    // For all themes, use fullAnimationId if available, otherwise fallback to bgAnimation
-    const currentAnimationId: FullAnimationId = currentTheme === 'full-animation' 
-        ? fullAnimationId 
-        : (bgAnimation !== 'off' ? (bgAnimation as FullAnimationId) : fullAnimationId);
-    const { parameters, setParameter, parameterDefinitions } = useAnimationParameters(currentAnimationId);
+    // Animation réellement affichée = fullAnimationId (voir useBackgroundAnimation: variant = fullAnimationId quand animation activée)
+    const currentAnimationId: FullAnimationId = fullAnimationId;
+    // Use shared context so slider changes apply to AnimatedBackground (same source as App)
+    const { parameters, setParameter, resetParameters, parameterDefinitions } = useAnimationParametersContext();
     
-    // Get animation name for display
+    // Nom de l'animation affichée (et dont on affiche les options) = fullAnimationId
     const getCurrentAnimationName = (): string => {
-        const animationId = currentTheme === 'full-animation' 
-            ? fullAnimationId 
-            : (bgAnimation !== 'off' ? bgAnimation : fullAnimationId);
-        // Si l'animation a été supprimée, retourner la valeur par défaut
-        if (REMOVED_ANIMATIONS.includes(String(animationId))) {
+        if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
             return 'Particle waves';
         }
-        const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === animationId);
+        const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
         return option?.label || 'Aucune';
     };
     
@@ -448,6 +445,16 @@ export const ThemeSection: React.FC = () => {
         // If animation is off, show "NON"
         return 'NON';
     };
+
+    // Sync global animation speed from per-animation "speed" param when this animation has one (single source of truth for speed)
+    useEffect(() => {
+        const hasSpeedParam = parameterDefinitions.some((p) => p.name === 'speed');
+        const paramSpeed = parameters?.speed;
+        if (hasSpeedParam && typeof paramSpeed === 'number') {
+            const sliderFromParam = ((2.0 - paramSpeed) / 1.9) * 1.5;
+            setAnimationSpeed(Math.max(0, Math.min(1.5, sliderFromParam)));
+        }
+    }, [currentAnimationId, parameterDefinitions, parameters?.speed]);
 
     useEffect(() => {
         // Load saved theme configuration from server
@@ -730,9 +737,9 @@ export const ThemeSection: React.FC = () => {
 
     return (
         <Section title="Thème de l'interface" icon={Lightbulb} iconColor="yellow">
-            <div className="space-y-8">
-                {/* Theme Selection - Professional Cards Layout */}
-                <div>
+            <div className="space-y-6">
+                {/* Card: Thème principal */}
+                <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm">
                     <div className="mb-4">
                         <h3 className="text-base font-semibold text-theme-primary mb-1">Thème principal</h3>
                         <p className="text-sm text-theme-secondary">Sélectionnez le thème de base pour l'interface</p>
@@ -1218,11 +1225,10 @@ export const ThemeSection: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Opacité des blocs - Au-dessus du choix des animations - Fonctionne même si animation off */}
-                <div className="border-t border-theme pt-6 space-y-4">
- 
+                {/* Card: Opacité des blocs */}
+                <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm space-y-4">
                     <SettingRow
-                        label="Opacité des blocs"
+                        label="Opacité des blocs du site"
                         description={`Réglez l'opacité des cartes et blocs. Valeur actuelle: ${Math.round((cardOpacity[currentTheme] ?? 1.0) * 100)}%`}
                     >
                         <div className="flex items-center gap-3 w-full">
@@ -1245,12 +1251,565 @@ export const ThemeSection: React.FC = () => {
                     </SettingRow>
                 </div>
 
-                {/* Sélection d'animation - Sous l'opacité, en plusieurs colonnes */}
-                <div className="border-t border-theme pt-6 space-y-4">
-                    <h3 className="text-base font-semibold text-theme-primary mb-1">Sélection de l'animation</h3>
-                    <p className="text-sm text-theme-secondary">
-                        Choisissez l'animation affichée en arrière-plan pour votre thème.
-                    </p>
+                {/* Card: Personnalisation des couleurs du thème (interface uniquement) */}
+                <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-base font-semibold text-theme-primary mb-1 flex items-center gap-2">
+                                <Palette size={18} className="text-yellow-400" />
+                                Personnalisation des couleurs du thème
+                            </h3>
+                            <p className="text-sm text-theme-secondary">Couleurs de l&apos;interface (menus, cartes, textes, boutons). Ces réglages s&apos;appliquent au thème visuel choisi ci‑dessus et ne concernent pas l&apos;animation d&apos;arrière-plan.</p>
+                        </div>
+                        <button
+                            onClick={() => setIsColorEditorOpen(!isColorEditorOpen)}
+                            className="px-4 py-2 bg-theme-secondary border border-theme hover:border-yellow-500/50 rounded-lg transition-all flex items-center gap-2 text-sm text-theme-primary"
+                        >
+                            {isColorEditorOpen ? (
+                                <>
+                                    <ChevronUp size={16} />
+                                    <span>Masquer</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ChevronDown size={16} />
+                                    <span>Afficher</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    {isColorEditorOpen && (
+                        <div className="space-y-6">
+                            {/* Action Buttons */}
+                            <div className="flex items-center justify-end gap-3 pb-4 border-b border-theme">
+                                <button
+                                    onClick={handleReset}
+                                    className="px-4 py-2 bg-theme-secondary border border-theme hover:border-red-500/50 rounded-lg transition-all flex items-center gap-2 text-sm text-theme-primary hover:bg-theme-primary"
+                                >
+                                    <RefreshCw size={14} />
+                                    Réinitialiser
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="px-4 py-2 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium shadow-lg shadow-yellow-500/20"
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <RefreshCw size={14} className="animate-spin" />
+                                            <span>Sauvegarde...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save size={14} />
+                                            <span>Sauvegarder</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Color Categories Grid - Compact blocks like plugin cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                            {/* Primary Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-blue-500 rounded-full" />
+                                    Couleurs principales
+                                </h5>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Couleur primaire
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentPrimary')}
+                                                onChange={(e) => handleColorChange('accentPrimary', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentPrimary')}
+                                                onChange={(e) => handleColorChange('accentPrimary', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                                placeholder="#3b82f6"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentPrimary'), color: '#fff' }}
+                                            >
+                                                Ex
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Couleur primaire (hover)
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentPrimaryHover')}
+                                                onChange={(e) => handleColorChange('accentPrimaryHover', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentPrimaryHover')}
+                                                onChange={(e) => handleColorChange('accentPrimaryHover', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                                placeholder="#2563eb"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentPrimaryHover'), color: '#fff' }}
+                                            >
+                                                Ex
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                                    Couleurs de statut
+                                </h5>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                            Succès
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentSuccess')}
+                                                onChange={(e) => handleColorChange('accentSuccess', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentSuccess')}
+                                                onChange={(e) => handleColorChange('accentSuccess', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentSuccess'), color: '#fff' }}
+                                            >
+                                                ✓
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                                            Avertissement
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentWarning')}
+                                                onChange={(e) => handleColorChange('accentWarning', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentWarning')}
+                                                onChange={(e) => handleColorChange('accentWarning', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentWarning'), color: '#000' }}
+                                            >
+                                                ⚠
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                                            Erreur
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentError')}
+                                                onChange={(e) => handleColorChange('accentError', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentError')}
+                                                onChange={(e) => handleColorChange('accentError', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentError'), color: '#fff' }}
+                                            >
+                                                ✕
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
+                                            Information
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('accentInfo')}
+                                                onChange={(e) => handleColorChange('accentInfo', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('accentInfo')}
+                                                onChange={(e) => handleColorChange('accentInfo', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{ backgroundColor: getColorValue('accentInfo'), color: '#fff' }}
+                                            >
+                                                i
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Background Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-purple-500 rounded-full" />
+                                    Arrière-plans
+                                </h5>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Arrière-plan principal
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('bgPrimary').replace(/rgba?\([^)]+\)/, '#0f0f0f')}
+                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('bgPrimary')}
+                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
+                                                style={{ backgroundColor: getColorValue('bgPrimary') }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Text Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-cyan-500 rounded-full" />
+                                    Couleurs de texte
+                                </h5>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Texte principal
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('textPrimary')}
+                                                onChange={(e) => handleColorChange('textPrimary', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('textPrimary')}
+                                                onChange={(e) => handleColorChange('textPrimary', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('bgSecondary'),
+                                                    color: getColorValue('textPrimary')
+                                                }}
+                                            >
+                                                Aa
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Texte secondaire
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('textSecondary')}
+                                                onChange={(e) => handleColorChange('textSecondary', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('textSecondary')}
+                                                onChange={(e) => handleColorChange('textSecondary', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('bgSecondary'),
+                                                    color: getColorValue('textSecondary')
+                                                }}
+                                            >
+                                                Aa
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Border Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-gray-500 rounded-full" />
+                                    Couleurs de bordure
+                                </h5>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Bordure
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('borderColor').replace(/rgba?\([^)]+\)/, '#333333')}
+                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('borderColor')}
+                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('bgSecondary'),
+                                                    borderColor: getColorValue('borderColor')
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Bordure (light)
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('borderColorLight').replace(/rgba?\([^)]+\)/, '#444444')}
+                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('borderColorLight')}
+                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('bgSecondary'),
+                                                    borderColor: getColorValue('borderColorLight')
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Button Colors */}
+                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
+                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-orange-500 rounded-full" />
+                                    Couleurs des boutons
+                                </h5>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Fond du bouton
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('buttonBg').replace(/rgba?\([^)]+\)/, '#1a1a1a')}
+                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('buttonBg')}
+                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <button
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('buttonBg'),
+                                                    color: getColorValue('buttonText')
+                                                }}
+                                            >
+                                                Btn
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Texte du bouton
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('buttonText')}
+                                                onChange={(e) => handleColorChange('buttonText', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('buttonText')}
+                                                onChange={(e) => handleColorChange('buttonText', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <button
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('buttonBg'),
+                                                    color: getColorValue('buttonText')
+                                                }}
+                                            >
+                                                Btn
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Fond du bouton (actif)
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('buttonActiveBg')}
+                                                onChange={(e) => handleColorChange('buttonActiveBg', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('buttonActiveBg')}
+                                                onChange={(e) => handleColorChange('buttonActiveBg', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <button
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('buttonActiveBg'),
+                                                    color: getColorValue('buttonActiveText')
+                                                }}
+                                            >
+                                                Act
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Texte du bouton (actif)
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('buttonActiveText')}
+                                                onChange={(e) => handleColorChange('buttonActiveText', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('buttonActiveText')}
+                                                onChange={(e) => handleColorChange('buttonActiveText', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <button
+                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('buttonActiveBg'),
+                                                    color: getColorValue('buttonActiveText')
+                                                }}
+                                            >
+                                                Act
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
+                                            Bordure du bouton
+                                        </label>
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="color"
+                                                value={getColorValue('buttonBorder').replace(/rgba?\([^)]+\)/, '#333333')}
+                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
+                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={getColorValue('buttonBorder')}
+                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
+                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
+                                            />
+                                            <div
+                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
+                                                style={{
+                                                    backgroundColor: getColorValue('buttonBg'),
+                                                    borderColor: getColorValue('buttonBorder')
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+
+                {/* Card: Sélection d'animation + Paramètres (sans trait entre les deux) */}
+                <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm space-y-6">
+                    <div>
+                        <h3 className="text-base font-semibold text-theme-primary mb-1">Sélection de l'animation</h3>
+                        <p className="text-sm text-theme-secondary mb-4">
+                            Choisissez l'animation affichée en arrière-plan pour votre thème.
+                        </p>
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {FULL_ANIMATION_OPTIONS.filter(option => {
                             // Filtrer les animations supprimées (sécurité supplémentaire)
@@ -1281,7 +1840,7 @@ export const ThemeSection: React.FC = () => {
                                             if (currentTheme !== 'full-animation') {
                                                 // Try to set bgAnimation, but if it's not in BG_ANIMATION_OPTIONS, 
                                                 // we'll use fullAnimationId in the variant logic
-                                                if (['animation.80.particle-waves', 'animation.93.particules-line', 'animation.1.home-assistant-particles'].includes(option.value)) {
+                                                if (BG_ANIMATION_VALUES.includes(option.value as BgAnimationVariant)) {
                                                     setBgAnimation(option.value as BgAnimationVariant);
                                                 } else {
                                                     // For animations not in BG_ANIMATION_OPTIONS, keep bgAnimation as a generic enabled state
@@ -1316,12 +1875,13 @@ export const ThemeSection: React.FC = () => {
                             );
                         })}
                     </div>
-                </div>
+                    </div>
 
-                {/* Vitesse d'animation et paramètres */}
-                {(currentTheme === 'full-animation' || bgAnimation !== 'off') && (
-                <div className="border-t border-theme pt-6 space-y-4">
-                    {/* Vitesse d'animation */}
+                    {/* Vitesse d'animation (unique) et paramètres : dans la même carte, sans trait de séparation */}
+                    {(currentTheme === 'full-animation' || bgAnimation !== 'off') && (
+                    <div className="space-y-4 pt-2">
+                    {/* Vitesse d'animation globale : masquée pour "All" (chaque animation garde sa vitesse), affichée pour les autres sans param "speed" */}
+                    {!parameterDefinitions.some((p) => p.name === 'speed') && currentAnimationId !== 'animation.all' && (
                     <SettingRow
                         label="Vitesse d'animation"
                         description={`${animationSpeed.toFixed(2)} (${animationSpeed >= 1.2 ? 'Lent' : animationSpeed >= 0.75 ? 'Normal' : animationSpeed >= 0.4 ? 'Rapide' : 'Très rapide'})`}
@@ -1332,11 +1892,11 @@ export const ThemeSection: React.FC = () => {
                                 min={minSpeed}
                                 max={maxSpeed}
                                 step={0.1}
-                                value={animationSpeed}
-                                onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
+                                value={maxSpeed - animationSpeed}
+                                onChange={(e) => setAnimationSpeed(maxSpeed - parseFloat(e.target.value))}
                                 className="flex-1 h-2 bg-theme-secondary rounded-lg appearance-none cursor-pointer accent-yellow-500"
                                 style={{
-                                    background: `linear-gradient(to right, rgba(251, 191, 36, 0.3) 0%, rgba(251, 191, 36, 0.3) ${((animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) ${((animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
+                                    background: `linear-gradient(to right, rgba(251, 191, 36, 0.3) 0%, rgba(251, 191, 36, 0.3) ${((maxSpeed - animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) ${((maxSpeed - animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
                                 }}
                             />
                             <span className="text-sm text-theme-secondary font-mono min-w-[3rem] text-right">
@@ -1344,11 +1904,34 @@ export const ThemeSection: React.FC = () => {
                             </span>
                         </div>
                     </SettingRow>
+                    )}
                     
-                    {/* Animation Parameters Configuration */}
+                    {/* Options spécifiques à l'animation sélectionnée (chaque animation a sa propre liste dans useAnimationParameters) */}
                     {parameterDefinitions.length > 0 && parameters && (
-                        <div className="mt-4 space-y-4 pt-4 border-t border-theme">
-                            <h4 className="text-base font-semibold text-theme-primary mb-4">Paramètres d'animation</h4>
+                        <div className="space-y-4 pt-4" key={currentAnimationId}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-base font-semibold text-theme-primary">
+                                    Paramètres — {getCurrentAnimationName()}
+                                </h4>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        resetParameters();
+                                        const defaultSpeedParam = parameterDefinitions.find((p) => p.name === 'speed');
+                                        if (defaultSpeedParam && typeof defaultSpeedParam.default === 'number') {
+                                            const paramSpeed = defaultSpeedParam.default;
+                                            const sliderFromParam = ((2.0 - paramSpeed) / 1.9) * 1.5;
+                                            setAnimationSpeed(Math.max(0, Math.min(1.5, sliderFromParam)));
+                                        }
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-950 bg-amber-400/90 border border-amber-500/50 rounded-lg hover:bg-amber-400 hover:border-amber-400 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-theme-secondary"
+                                    title="Remettre les réglages de cette animation par défaut"
+                                >
+                                    <RefreshCw size={16} className="text-amber-900" />
+                                    Réinitialiser
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {parameterDefinitions.map((param) => {
                                 const value = parameters[param.name];
                                 
@@ -1406,15 +1989,39 @@ export const ThemeSection: React.FC = () => {
                                 
                                 if (param.type === 'range') {
                                     const rangeValue = typeof value === 'number' ? value : (param.default as number || 0);
+                                    const handleRangeChange = (newVal: number) => {
+                                        setParameter(param.name, newVal);
+                                        if (param.name === 'speed') {
+                                            const sliderFromParam = ((2.0 - newVal) / 1.9) * 1.5;
+                                            setAnimationSpeed(Math.max(0, Math.min(1.5, sliderFromParam)));
+                                        }
+                                    };
+                                    const isTimeParam = param.name === 'cycleDuration' || (param.description && (param.description.includes('secondes') || param.description.includes('Durée') || param.description.includes('ms')));
+                                    const unit = param.name === 'cycleDuration' || (param.description && param.description.includes('secondes')) ? ' s' : (param.description && param.description.includes('ms')) ? ' ms' : '';
+                                    const formatDuration = (seconds: number): string => {
+                                        if (param.name !== 'cycleDuration') return rangeValue.toFixed(param.step && param.step < 1 ? 1 : 0) + unit;
+                                        if (seconds >= 3600) return `${Math.round(seconds / 3600)} h`;
+                                        if (seconds >= 60) return `${Math.round(seconds / 60)} min`;
+                                        return `${Math.round(seconds)} s`;
+                                    };
+                                    const formatDurationMinMax = (s: number): string => {
+                                        if (param.name !== 'cycleDuration') return `${s}${unit}`;
+                                        if (s >= 3600) return `${s / 3600} h`;
+                                        if (s >= 60) return `${s / 60} min`;
+                                        return `${s} s`;
+                                    };
+                                    const displayValue = param.name === 'cycleDuration' ? formatDuration(rangeValue) : rangeValue.toFixed(param.step && param.step < 1 ? 1 : 0) + unit;
                                     return (
-                                        <div key={param.name} className="space-y-2">
+                                        <div key={param.name} className="space-y-1.5">
                                             <div>
-                                                <label className="text-sm font-medium text-theme-primary block mb-1">
+                                                <label className="text-sm font-medium text-theme-primary block mb-0.5">
                                                     {param.description || param.name}
                                                 </label>
-                                                <p className="text-xs text-theme-secondary">
-                                                    {rangeValue}{param.min !== undefined && param.max !== undefined ? ` (min: ${param.min}, max: ${param.max})` : ''}
-                                                </p>
+                                                {param.min !== undefined && param.max !== undefined && (
+                                                    <p className="text-xs text-theme-secondary">
+                                                        min: {formatDurationMinMax(param.min)} — max: {formatDurationMinMax(param.max)}
+                                                    </p>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-3 w-full">
                                                 <input
@@ -1423,11 +2030,11 @@ export const ThemeSection: React.FC = () => {
                                                     max={param.max}
                                                     step={param.step || 1}
                                                     value={rangeValue}
-                                                    onChange={(e) => setParameter(param.name, parseFloat(e.target.value))}
-                                                    className="flex-1 h-2 bg-theme-secondary rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                                                    onChange={(e) => handleRangeChange(parseFloat(e.target.value))}
+                                                    className="flex-1 h-1.5 bg-theme-secondary rounded-full appearance-none cursor-pointer accent-yellow-500 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-yellow-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-yellow-500"
                                                 />
-                                                <span className="text-sm text-theme-secondary font-mono min-w-[3rem] text-right">
-                                                    {rangeValue.toFixed(param.step && param.step < 1 ? 1 : 0)}
+                                                <span className="text-lg font-semibold text-theme-primary tabular-nums min-w-[4rem] text-right">
+                                                    {displayValue}
                                                 </span>
                                             </div>
                                         </div>
@@ -1554,6 +2161,49 @@ export const ThemeSection: React.FC = () => {
                                         </div>
                                     );
                                 }
+                                if (param.type === 'array' && param.name === 'cycleAnimations') {
+                                    const selectedIds: string[] = Array.isArray(value) ? value : (Array.isArray(param.default) ? (param.default as string[]) : []);
+                                    const toggleId = (id: FullAnimationId) => {
+                                        const next = selectedIds.includes(id)
+                                            ? selectedIds.filter((x) => x !== id)
+                                            : [...selectedIds, id];
+                                        setParameter(param.name, next.length ? next : [...CYCLEABLE_ANIMATION_IDS]);
+                                    };
+                                    const options = FULL_ANIMATION_OPTIONS.filter(
+                                        (opt) => opt.value !== 'off' && opt.value !== 'animation.all' && !REMOVED_ANIMATIONS.includes(String(opt.value))
+                                    ) as { value: FullAnimationId; label: string }[];
+                                    return (
+                                        <div key={param.name} className="space-y-3">
+                                            <label className="text-sm font-medium text-theme-primary block">
+                                                {param.description || param.name}
+                                            </label>
+                                            <p className="text-xs text-theme-secondary mb-2">
+                                                {selectedIds.length} animation(s) sélectionnée(s)
+                                            </p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {options.map((opt) => {
+                                                    const isChecked = selectedIds.includes(opt.value);
+                                                    return (
+                                                        <label
+                                                            key={opt.value}
+                                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border cursor-pointer transition-colors ${
+                                                                isChecked ? 'border-yellow-500 bg-yellow-500/10' : 'border-theme bg-theme-secondary hover:border-yellow-500/50'
+                                                            }`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isChecked}
+                                                                onChange={() => toggleId(opt.value)}
+                                                                className="w-3 h-3 rounded border-theme text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
+                                                            />
+                                                            <span className="text-xs text-theme-primary">{opt.label}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                }
                                 if (param.type === 'boolean') {
                                     const boolValue = value === true || value === false ? value : (param.default as boolean || false);
                                     return (
@@ -1585,562 +2235,13 @@ export const ThemeSection: React.FC = () => {
                                 
                                 return null;
                             })}
+                            </div>
                         </div>
                     )}
-                </div>
-                )}
-
-                {/* Color Customization - Professional Layout */}
-                <div className="border-t border-theme pt-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="text-base font-semibold text-theme-primary mb-1 flex items-center gap-2">
-                                <Palette size={18} className="text-yellow-400" />
-                                Personnalisation des couleurs
-                            </h3>
-                            <p className="text-sm text-theme-secondary">Ajustez les couleurs selon vos préférences</p>
-                        </div>
-                        <button
-                            onClick={() => setIsColorEditorOpen(!isColorEditorOpen)}
-                            className="px-4 py-2 bg-theme-secondary border border-theme hover:border-yellow-500/50 rounded-lg transition-all flex items-center gap-2 text-sm text-theme-primary"
-                        >
-                            {isColorEditorOpen ? (
-                                <>
-                                    <ChevronUp size={16} />
-                                    <span>Masquer</span>
-                                </>
-                            ) : (
-                                <>
-                                    <ChevronDown size={16} />
-                                    <span>Afficher</span>
-                                </>
-                            )}
-                        </button>
                     </div>
-                    
-                    {isColorEditorOpen && (
-                        <div className="space-y-6">
-                            {/* Action Buttons */}
-                            <div className="flex items-center justify-end gap-3 pb-4 border-b border-theme">
-                                <button
-                                    onClick={handleReset}
-                                    className="px-4 py-2 bg-theme-secondary border border-theme hover:border-red-500/50 rounded-lg transition-all flex items-center gap-2 text-sm text-theme-primary hover:bg-theme-primary"
-                                >
-                                    <RefreshCw size={14} />
-                                    Réinitialiser
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={isSaving}
-                                    className="px-4 py-2 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium shadow-lg shadow-yellow-500/20"
-                                >
-                                    {isSaving ? (
-                                        <>
-                                            <RefreshCw size={14} className="animate-spin" />
-                                            <span>Sauvegarde...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save size={14} />
-                                            <span>Sauvegarder</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Color Categories Grid - Compact blocks like plugin cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                            {/* Primary Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-blue-500 rounded-full" />
-                                    Couleurs principales
-                                </h5>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Couleur primaire
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentPrimary')}
-                                                onChange={(e) => handleColorChange('accentPrimary', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentPrimary')}
-                                                onChange={(e) => handleColorChange('accentPrimary', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                                placeholder="#3b82f6"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentPrimary'), color: '#fff' }}
-                                            >
-                                                Ex
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Couleur primaire (hover)
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentPrimaryHover')}
-                                                onChange={(e) => handleColorChange('accentPrimaryHover', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentPrimaryHover')}
-                                                onChange={(e) => handleColorChange('accentPrimaryHover', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                                placeholder="#2563eb"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentPrimaryHover'), color: '#fff' }}
-                                            >
-                                                Ex
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Status Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                                    Couleurs de statut
-                                </h5>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                            Succès
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentSuccess')}
-                                                onChange={(e) => handleColorChange('accentSuccess', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentSuccess')}
-                                                onChange={(e) => handleColorChange('accentSuccess', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentSuccess'), color: '#fff' }}
-                                            >
-                                                ✓
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
-                                            Avertissement
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentWarning')}
-                                                onChange={(e) => handleColorChange('accentWarning', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentWarning')}
-                                                onChange={(e) => handleColorChange('accentWarning', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentWarning'), color: '#000' }}
-                                            >
-                                                ⚠
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                                            Erreur
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentError')}
-                                                onChange={(e) => handleColorChange('accentError', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentError')}
-                                                onChange={(e) => handleColorChange('accentError', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentError'), color: '#fff' }}
-                                            >
-                                                ✕
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
-                                            Information
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('accentInfo')}
-                                                onChange={(e) => handleColorChange('accentInfo', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('accentInfo')}
-                                                onChange={(e) => handleColorChange('accentInfo', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ backgroundColor: getColorValue('accentInfo'), color: '#fff' }}
-                                            >
-                                                i
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Background Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-purple-500 rounded-full" />
-                                    Arrière-plans
-                                </h5>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Arrière-plan principal
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('bgPrimary').replace(/rgba?\([^)]+\)/, '#0f0f0f')}
-                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('bgPrimary')}
-                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
-                                                style={{ backgroundColor: getColorValue('bgPrimary') }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Text Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-cyan-500 rounded-full" />
-                                    Couleurs de texte
-                                </h5>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Texte principal
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('textPrimary')}
-                                                onChange={(e) => handleColorChange('textPrimary', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('textPrimary')}
-                                                onChange={(e) => handleColorChange('textPrimary', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('bgSecondary'),
-                                                    color: getColorValue('textPrimary')
-                                                }}
-                                            >
-                                                Aa
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Texte secondaire
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('textSecondary')}
-                                                onChange={(e) => handleColorChange('textSecondary', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('textSecondary')}
-                                                onChange={(e) => handleColorChange('textSecondary', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('bgSecondary'),
-                                                    color: getColorValue('textSecondary')
-                                                }}
-                                            >
-                                                Aa
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Border Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-gray-500 rounded-full" />
-                                    Couleurs de bordure
-                                </h5>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Bordure
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('borderColor').replace(/rgba?\([^)]+\)/, '#333333')}
-                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('borderColor')}
-                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('bgSecondary'),
-                                                    borderColor: getColorValue('borderColor')
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Bordure (light)
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('borderColorLight').replace(/rgba?\([^)]+\)/, '#444444')}
-                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('borderColorLight')}
-                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('bgSecondary'),
-                                                    borderColor: getColorValue('borderColorLight')
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Button Colors */}
-                            <div className="bg-theme-secondary rounded-xl border border-theme p-4">
-                                <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-orange-500 rounded-full" />
-                                    Couleurs des boutons
-                                </h5>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Fond du bouton
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('buttonBg').replace(/rgba?\([^)]+\)/, '#1a1a1a')}
-                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonBg')}
-                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <button 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('buttonBg'),
-                                                    color: getColorValue('buttonText')
-                                                }}
-                                            >
-                                                Btn
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Texte du bouton
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('buttonText')}
-                                                onChange={(e) => handleColorChange('buttonText', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonText')}
-                                                onChange={(e) => handleColorChange('buttonText', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <button 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('buttonBg'),
-                                                    color: getColorValue('buttonText')
-                                                }}
-                                            >
-                                                Btn
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Fond du bouton (actif)
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('buttonActiveBg')}
-                                                onChange={(e) => handleColorChange('buttonActiveBg', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonActiveBg')}
-                                                onChange={(e) => handleColorChange('buttonActiveBg', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <button 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('buttonActiveBg'),
-                                                    color: getColorValue('buttonActiveText')
-                                                }}
-                                            >
-                                                Act
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Texte du bouton (actif)
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('buttonActiveText')}
-                                                onChange={(e) => handleColorChange('buttonActiveText', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonActiveText')}
-                                                onChange={(e) => handleColorChange('buttonActiveText', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <button 
-                                                className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('buttonActiveBg'),
-                                                    color: getColorValue('buttonActiveText')
-                                                }}
-                                            >
-                                                Act
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Bordure du bouton
-                                        </label>
-                                        <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorValue('buttonBorder').replace(/rgba?\([^)]+\)/, '#333333')}
-                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonBorder')}
-                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
-                                            <div 
-                                                className="w-8 h-8 rounded border border-theme/30 transition-all"
-                                                style={{ 
-                                                    backgroundColor: getColorValue('buttonBg'),
-                                                    borderColor: getColorValue('buttonBorder')
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            </div>
-                            {/* End of Color Categories Grid */}
-                        </div>
                     )}
                 </div>
+ 
             </div>
         </Section>
     );

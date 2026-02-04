@@ -3,14 +3,15 @@
  * full-animation theme selection, and animation speed.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCurrentTheme } from '../utils/themeManager';
 
 // Pour les autres thèmes (non full-animation), on peut choisir parmi ces animations
 export type BgAnimationVariant = 'off' | 'animation.80.particle-waves' | 'animation.93.particules-line' | 'animation.1.home-assistant-particles';
 
-/** Full animation IDs (lovelace-style). Default: animation.80.particle-waves */
+/** Full animation IDs (lovelace-style). Includes 'animation.all' for cycling through all. Default: animation.80.particle-waves */
 export type FullAnimationId =
+  | 'animation.all'
   | 'animation.1.home-assistant-particles'
   | 'animation.10.css-dark-particles'
   | 'animation.72.playstation-3-bg-style'
@@ -20,19 +21,36 @@ export type FullAnimationId =
   | 'animation.92.aurora-v2'
   | 'animation.93.particules-line'
   | 'animation.94.alien-blackout'
+  | 'animation.95.bit-ocean'
   | 'animation.96.stars'
   | 'animation.97.space'
   | 'animation.98.sidelined';
+
+/** IDs used when cycling (all except 'animation.all') */
+export const CYCLEABLE_ANIMATION_IDS: FullAnimationId[] = [
+  'animation.1.home-assistant-particles',
+  'animation.10.css-dark-particles',
+  'animation.72.playstation-3-bg-style',
+  'animation.79.canvas-ribbons',
+  'animation.80.particle-waves',
+  'animation.90.aurora',
+  'animation.92.aurora-v2',
+  'animation.93.particules-line',
+  'animation.94.alien-blackout',
+  'animation.95.bit-ocean',
+  'animation.96.stars',
+  'animation.97.space',
+  'animation.98.sidelined',
+];
 
 /** Animation speed slider value: 0-1.5 (0 = très rapide, 1.5 = très lent) */
 export type AnimationSpeed = number;
 
 /** Convert slider value (0-1.5) to animation multiplier (0.3-3.0) */
 export function speedToMultiplier(speed: number): number {
-  // Transform 0-1.5 range to 0.3-3.0 multiplier range
-  // speed = 0 → 0.3 (très rapide)
-  // speed = 1.5 → 3.0 (très lent)
-  return 0.3 + (speed / 1.5) * 2.7;
+  // Slider: 0 = rapide (right), 1.5 = lent (left). Mult: plus haut = animation plus rapide.
+  // speed = 0 → 3.0 (rapide), speed = 1.5 → 0.3 (lent)
+  return 0.3 + ((1.5 - speed) / 1.5) * 2.7;
 }
 
 const BG_ANIMATION_KEY = 'mynetwork_bg_animation';
@@ -46,18 +64,8 @@ export const MIN_SPEED = 0; // Très rapide (multiplicateur 0.3)
 export const MAX_SPEED = 1.5; // Lent (multiplicateur 3.0)
 
 export const VALID_FULL_ANIMATION_IDS: FullAnimationId[] = [
-  'animation.1.home-assistant-particles',
-  'animation.10.css-dark-particles',
-  'animation.72.playstation-3-bg-style',
-  'animation.79.canvas-ribbons',
-  'animation.80.particle-waves',
-  'animation.90.aurora',
-  'animation.92.aurora-v2',
-  'animation.93.particules-line',
-  'animation.94.alien-blackout',
-  'animation.96.stars',
-  'animation.97.space',
-  'animation.98.sidelined',
+  'animation.all',
+  ...CYCLEABLE_ANIMATION_IDS,
 ];
 
 export function getStoredBgAnimation(): BgAnimationVariant {
@@ -153,9 +161,34 @@ export function useBackgroundAnimation(): {
 } {
   const [bgAnimation, setBgState] = useState<BgAnimationVariant>(getStoredBgAnimation);
   const [fullAnimationId, setFullState] = useState<FullAnimationId>(getStoredFullAnimationId);
+  const [cycleIndex, setCycleIndex] = useState(0);
   const [animationSpeed, setSpeedState] = useState<AnimationSpeed>(getStoredAnimationSpeed);
   const [theme, setThemeState] = useState<string>(getCurrentTheme());
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  const CYCLE_PARAMS_KEY = 'mynetwork_animation_params_animation.all';
+  const getCycleParams = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(CYCLE_PARAMS_KEY);
+      const p = raw ? JSON.parse(raw) : {};
+      const cycleAnimations = Array.isArray(p.cycleAnimations)
+        ? p.cycleAnimations.filter((id: string) => CYCLEABLE_ANIMATION_IDS.includes(id as FullAnimationId))
+        : [];
+      return {
+        cycleDuration: typeof p.cycleDuration === 'number' ? Math.max(5, Math.min(3600, p.cycleDuration)) : 15,
+        cycleRandom: p.cycleRandom === true,
+        cycleAnimations: cycleAnimations.length > 0 ? cycleAnimations : CYCLEABLE_ANIMATION_IDS,
+      };
+    } catch {
+      return {
+        cycleDuration: 15,
+        cycleRandom: false,
+        cycleAnimations: CYCLEABLE_ANIMATION_IDS,
+      };
+    }
+  }, []);
+
+  const lastSwitchTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -211,14 +244,41 @@ export function useBackgroundAnimation(): {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  useEffect(() => {
+    if (fullAnimationId !== 'animation.all' || prefersReducedMotion) return;
+    lastSwitchTimeRef.current = Date.now();
+    const tickMs = 1000;
+    const timer = window.setInterval(() => {
+      const params = getCycleParams();
+      const list = params.cycleAnimations;
+      const durationMs = params.cycleDuration * 1000;
+      if (Date.now() - lastSwitchTimeRef.current >= durationMs) {
+        lastSwitchTimeRef.current = Date.now();
+        setCycleIndex((i) => {
+          if (params.cycleRandom) {
+            return Math.floor(Math.random() * list.length);
+          }
+          return (i + 1) % list.length;
+        });
+      }
+    }, tickMs);
+    return () => window.clearInterval(timer);
+  }, [fullAnimationId, prefersReducedMotion, getCycleParams]);
+
   const isFullAnimationTheme = theme === 'full-animation';
-  const variant: EffectiveVariant = prefersReducedMotion
+  const cycleList = fullAnimationId === 'animation.all' ? getCycleParams().cycleAnimations : CYCLEABLE_ANIMATION_IDS;
+  const effectiveVariant: EffectiveVariant = prefersReducedMotion
     ? 'off'
     : isFullAnimationTheme
-      ? fullAnimationId
+      ? fullAnimationId === 'animation.all'
+        ? cycleList[cycleIndex % cycleList.length]
+        : fullAnimationId
       : bgAnimation === 'off'
         ? 'off'
-        : fullAnimationId; // Use fullAnimationId for all themes when animation is enabled
+        : fullAnimationId === 'animation.all'
+          ? cycleList[cycleIndex % cycleList.length]
+          : fullAnimationId;
+  const variant = effectiveVariant;
 
   return {
     variant,

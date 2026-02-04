@@ -3,7 +3,44 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
-## [0.5.4] - 2026-02-03
+## [0.5.5] - 2026-02-04
+
+### ✨ Ajouté
+
+**Thème / Réglages - Animation "All"**
+- ✅ Option pour choisir les animations incluses dans le cycle (cases à cocher par animation)
+- ✅ Durée par animation étendue : de 5 s à 1 h (3600 s), affichage adapté (s / min / h)
+- ✅ Paramètres "All" toujours affichés en réglages (réglages de transition, pas ceux de l'animation diffusée)
+
+**Thème / Réglages - Opacité des blocs**
+- ✅ Application de l'opacité au chargement de l'app (themeManager) : prise en compte sur toutes les pages (dashboard, réglages, etc.), pas seulement après passage par la page Réglages
+- ✅ Chargement de l'opacité depuis l'API thème si disponible (cohérence multi-onglets / serveur)
+
+### 🔧 Modifié
+
+**Thème / Réglages - Organisation**
+- 🔧 Personnalisation des couleurs du thème déplacée au-dessus de la section Animation
+- 🔧 Titre clarifié : "Personnalisation des couleurs du thème" avec sous-texte explicite (interface, pas animation)
+
+**Thème / Réglages - Animation "All"**
+- 🔧 Suppression de l'option "Pause entre animations"
+- 🔧 Vitesse d'animation globale masquée pour le mode "All" (chaque animation garde sa propre vitesse)
+- 🔧 Durée par animation : relecture des paramètres à chaque tick (1 s) pour prise en compte immédiate du réglage
+
+**Thème / Réglages - Options animation**
+- 🔧 Paramètres affichés en grille multi-colonnes (1 / 2 / 3 colonnes selon écran)
+- 🔧 Curseurs (sliders) plus fins, valeurs en gros avec unités (s, min, h, ms selon le paramètre)
+- 🔧 Choix des animations (cycle "All") : chips et cases plus compacts
+
+**Thème / Réglages - Bouton Réinitialiser**
+- 🔧 Libellé raccourci : "Réinitialiser" (au lieu de "Réinitialiser cette animation")
+- 🔧 Style ambre pour meilleure visibilité (bordure et fond ambre)
+
+**App / Contexte animation**
+- 🔧 Contexte des paramètres d'animation basé sur fullAnimationId (choix utilisateur) : en mode "All", les réglages affichés sont toujours ceux du défilement (durée, aléatoire, liste d'animations)
+
+---
+ 
 
 ### ✨ Ajouté
 

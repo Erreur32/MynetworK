@@ -31,6 +31,7 @@ const FULL_ID_TO_VISUAL: Record<string, string> = {
   'animation.92.aurora-v2': 'aurora-v2', // Icelandic Aurora v2 avec Canvas 2D
   'animation.93.particules-line': 'particules-line', // Copie de particle-waves
   'animation.94.alien-blackout': 'alien-blackout', // Alien Blackout Intro Scene - Étoiles animées
+  'animation.95.bit-ocean': 'bit-ocean', // Bit Ocean - grille de points (Griffin Moyer / Codepen)
   'animation.96.stars': 'stars', // Stars - Étoiles en orbite avec scintillement
   'animation.97.space': 'space', // Space - Effet de tunnel spatial 3D
   'animation.98.sidelined': 'sidelined', // Sidelined - Lignes diagonales animées
@@ -46,7 +47,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   variant,
   disabled,
   animationSpeed = 0.75,
-  animationParameters = {},
+  animationParameters = {} as AnimationParameters,
 }) => {
   const visual = getVisualKey(variant);
   if (disabled || !visual) return null;
@@ -67,9 +68,9 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
       >
         <HomeAssistantParticlesCanvas 
           animationSpeed={animationSpeed}
-          particleCount={animationParameters.particleCount as number}
-          connectionDistance={animationParameters.connectionDistance as number}
-          particleColor={animationParameters.particleColor as string}
+          particleCount={animationParameters?.particleCount as number | undefined}
+          connectionDistance={animationParameters?.connectionDistance as number | undefined}
+          particleColor={animationParameters?.particleColor as string | undefined}
         />
       </div>
     );
@@ -86,8 +87,8 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
         <ParticleWavesCanvas 
           animationSpeed={animationSpeed}
           speed={animationParameters?.speed as number | undefined}
-          particleSize={animationParameters.particleSize as number}
-          waveHeight={animationParameters.waveHeight as number}
+          particleSize={animationParameters?.particleSize as number | undefined}
+          waveHeight={animationParameters?.waveHeight as number | undefined}
         />
       </div>
     );
@@ -103,13 +104,14 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
       >
         <ParticulesLineCanvas 
           animationSpeed={animationSpeed}
-          particleSize={animationParameters.particleSize as number}
+          speed={animationParameters?.speed as number | undefined}
+          particleSize={animationParameters?.particleSize as number | undefined}
         />
       </div>
     );
   }
 
-  // PlayStation animation avec paramètres
+  // Playstation 3 - RetroArch Menu Ribbon (animation.72.playstation-3-bg-style)
   if (visual === 'playstation') {
     return (
       <div
@@ -118,13 +120,16 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
         style={{ 
           background: 'var(--bg-primary, #0a0a0f)',
           ['--animation-speed' as string]: speedMultiplier,
-          ['--wave-color' as string]: animationParameters.waveColor || 'rgb(255, 255, 255)'
+          ['--wave-color' as string]: animationParameters?.waveColor || 'rgb(31, 29, 139)'
         }}
       >
         <PlaystationCanvas 
           animationSpeed={animationSpeed}
           speed={animationParameters?.speed as number | undefined}
-          waveColor={(animationParameters?.waveColor as string) || 'rgb(255, 255, 255)'} 
+          waveColor={(animationParameters?.waveColor as string) || 'rgb(31, 29, 139)'}
+          targetFPS={animationParameters?.targetFPS as number | undefined}
+          animationTimeout={animationParameters?.animationTimeout as number | undefined}
+          enableAnimationTimeout={animationParameters?.enableAnimationTimeout as boolean | undefined}
         />
       </div>
     );
@@ -132,17 +137,17 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
 
   // CSS Dark Particles (animation.10.css-dark-particles) - 200 particules CSS animées
   if (visual === 'css-dark-particles') {
-    // Pour CSS Dark Particles, utiliser le paramètre speed personnalisé ou inverser la vitesse globale
-    // speedMultiplier va de 0.3 (rapide) à 3.0 (lent), on inverse pour CSS Dark Particles
+    // CSS: duration * --animation-speed → plus la var est grande, plus c'est lent. Param speed 0.05=lent, 2.0=rapide.
+    // Donc --animation-speed = 1/param pour que param 2.0 → var 0.5 (rapide), param 0.05 → var 20 (très lent)
     const customSpeed = animationParameters?.speed as number | undefined;
-    const invertedSpeed = customSpeed !== undefined 
-      ? Math.max(0.1, Math.min(2.0, customSpeed))
+    const cssSpeedVar = customSpeed !== undefined
+      ? 1 / Math.max(0.05, Math.min(2.0, customSpeed))
       : 1 / speedMultiplier;
     return (
       <div 
         className="fixed inset-0 -z-10 animated-bg-wrapper" 
         aria-hidden
-        style={{ ['--animation-speed' as string]: invertedSpeed }}
+        style={{ ['--animation-speed' as string]: cssSpeedVar }}
       >
         <CssDarkParticles 
           animationSpeed={animationSpeed}
@@ -173,7 +178,7 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
     );
   }
 
-  // Aurora (animation.90.aurora) - Aurore boréale originale optimisée
+  // Aurora (animation.90.aurora) - Icelandic Aurora (lovelace-bg-animation v1)
   if (visual === 'aurora') {
     return (
       <div 
@@ -187,12 +192,15 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
           blurIntensity={animationParameters?.blurIntensity as number | undefined}
           colorIntensity={animationParameters?.colorIntensity as number | undefined}
           streakCount={animationParameters?.streakCount as number | undefined}
+          targetFPS={animationParameters?.targetFPS as number | undefined}
+          animationTimeout={animationParameters?.animationTimeout as number | undefined}
+          enableAnimationTimeout={animationParameters?.enableAnimationTimeout as boolean | undefined}
         />
       </div>
     );
   }
 
-  // Aurora v2 (animation.92.aurora-v2) - Aurore boréale avec Canvas 2D
+  // Aurora v2 (animation.92.aurora-v2) - Icelandic Aurora v2
   if (visual === 'aurora-v2') {
     return (
       <div 
@@ -206,12 +214,32 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
           blurIntensity={animationParameters?.blurIntensity as number | undefined}
           colorIntensity={animationParameters?.colorIntensity as number | undefined}
           streakCount={animationParameters?.streakCount as number | undefined}
+          targetFPS={animationParameters?.targetFPS as number | undefined}
+          animationTimeout={animationParameters?.animationTimeout as number | undefined}
+          enableAnimationTimeout={animationParameters?.enableAnimationTimeout as boolean | undefined}
         />
       </div>
     );
   }
 
-  // Alien Blackout (animation.94.alien-blackout) - Étoiles animées style Alien
+  // Bit Ocean (animation.95.bit-ocean) - grille de points animée par bruit (Griffin Moyer / Codepen)
+  if (visual === 'bit-ocean') {
+    return (
+      <div
+        className="fixed inset-0 -z-10 animated-bg-wrapper"
+        aria-hidden
+        style={{ ['--animation-speed' as string]: speedMultiplier }}
+      >
+        <BitOceanCanvas
+          animationSpeed={animationSpeed}
+          speed={animationParameters?.speed as number | undefined}
+          pointSize={animationParameters?.pointSize as number | undefined}
+        />
+      </div>
+    );
+  }
+
+  // Alien Blackout (animation.94.alien-blackout) - Alien: Blackout Intro Scene (React + WebGL style)
   if (visual === 'alien-blackout') {
     return (
       <div 
@@ -224,6 +252,9 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
           speed={animationParameters?.speed as number | undefined}
           starCount={animationParameters?.starCount as number | undefined}
           starSize={animationParameters?.starSize as number | undefined}
+          targetFPS={animationParameters?.targetFPS as number | undefined}
+          animationTimeout={animationParameters?.animationTimeout as number | undefined}
+          enableAnimationTimeout={animationParameters?.enableAnimationTimeout as boolean | undefined}
         />
       </div>
     );
@@ -333,7 +364,7 @@ const ParticlesCanvas: React.FC = () => {
     }
 
     const tick = () => {
-      ctx.fillStyle = 'rgba(15, 15, 15, 0.15)';
+      ctx.fillStyle = 'rgb(15, 15, 15)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       particles.forEach((p) => {
         p.x += p.vx;
@@ -423,7 +454,8 @@ const HomeAssistantParticlesCanvas: React.FC<{
     }
 
     const tick = () => {
-      ctx.fillStyle = 'rgba(17, 17, 17, 0.1)';
+      // Clear fully with background color (opacity 1) to avoid visible trails
+      ctx.fillStyle = 'rgb(17, 17, 17)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const mouse = mouseRef.current;
@@ -541,7 +573,7 @@ const ParticleWavesCanvas: React.FC<{
   const startTimeRef = useRef<number | null>(null);
   const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
 
@@ -645,8 +677,7 @@ const ParticleWavesCanvas: React.FC<{
       const h = canvas.height;
       const dpi = window.devicePixelRatio || 1;
 
-      // Fond avec fade (blend mode additif simulé)
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillStyle = 'rgb(0, 0, 0)';
       ctx.fillRect(0, 0, w, h);
 
       // Calculer les positions 3D avec vagues (formule exacte du shader)
@@ -732,15 +763,19 @@ const ParticleWavesCanvas: React.FC<{
 /** Particules Line (animation.93.particules-line) - copie de Particle Waves */
 const ParticulesLineCanvas: React.FC<{ 
   animationSpeed?: AnimationSpeed;
+  speed?: number;
   particleSize?: number;
 }> = ({ 
   animationSpeed = 0.75,
+  speed: customSpeed,
   particleSize = 1.2
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
   const timeRef = useRef(0);
-  const speedMult = speedToMultiplier(animationSpeed); // Convert slider value to multiplier
+  const speedMult = speedToMultiplier(animationSpeed);
+  const paramMultiplier = customSpeed !== undefined ? Math.max(0.1, Math.min(2.0, customSpeed)) : 1;
+  const effectiveSpeed = speedMult * paramMultiplier;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -772,13 +807,14 @@ const ParticulesLineCanvas: React.FC<{
     }
 
     const tick = () => {
-      timeRef.current += 0.016 * speedMult;
+      timeRef.current += 0.016 * effectiveSpeed;
       const t = timeRef.current;
       const w = canvas.width;
       const h = canvas.height;
       const linkDist = Math.min(w, h) * 0.11;
 
-      ctx.fillStyle = 'rgba(10, 10, 18, 0.25)';
+      // Clear fully with background color (opacity 1) to avoid visible trails
+      ctx.fillStyle = 'rgb(10, 10, 18)';
       ctx.fillRect(0, 0, w, h);
 
       const positions: { x: number; y: number }[] = particles.map((p) => ({
@@ -827,7 +863,7 @@ const ParticulesLineCanvas: React.FC<{
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [speedMult]);
+  }, [effectiveSpeed, particleSize]);
 
   return (
     <canvas
@@ -839,27 +875,34 @@ const ParticulesLineCanvas: React.FC<{
   );
 };
 
-/** PlayStation 3 style animation (animation.72.playstation-3-bg-style) - Ruban 3D animé style RetroArch */
+/** Playstation 3 - RetroArch Menu Ribbon (animation.72.playstation-3-bg-style), port Canvas 2D */
 const PlaystationCanvas: React.FC<{ 
   animationSpeed?: AnimationSpeed;
   speed?: number;
   waveColor?: string;
+  targetFPS?: number;
+  animationTimeout?: number;
+  enableAnimationTimeout?: boolean;
 }> = ({ 
   animationSpeed = 0.75,
   speed: customSpeed,
-  waveColor = 'rgb(255, 255, 255)'
+  waveColor = 'rgb(31, 29, 139)',
+  targetFPS: customTargetFPS = 60,
+  animationTimeout: timeoutMs = 5000,
+  enableAnimationTimeout = true,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
   const timeRef = useRef(0);
+  const lastFrameTimeRef = useRef(0);
+  const animationStartTimeRef = useRef<number>(0);
   const speedMult = speedToMultiplier(animationSpeed);
-  // Utiliser le paramètre speed personnalisé ou calculer depuis animationSpeed
-  // Pour PlayStation, on veut une vitesse plus élevée par défaut
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
-  // Multiplier par un facteur pour rendre l'animation plus visible (vitesse de base plus élevée)
-  const baseSpeedValue = defaultSpeed * 5.0; // Multiplier par 5 pour une vitesse raisonnable
+  const baseSpeedValue = defaultSpeed * 5.0;
+  const targetFPS = Math.max(10, Math.min(100, customTargetFPS));
+  const frameInterval = 1000 / targetFPS;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -968,26 +1011,19 @@ const PlaystationCanvas: React.FC<{
       return Math.cos(z * 4) * Math.cos(z + t / 10 + x);
     };
 
-    const tick = () => {
-      // Vitesse d'animation : multiplier la vitesse de base pour rendre l'animation plus visible
-      // baseSpeedValue va de 0.1 à 2.0, on multiplie par un facteur pour avoir une vitesse raisonnable
-      timeRef.current += 0.01 * baseSpeedValue;
+    const doFrame = () => {
       const t = timeRef.current;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); // Limiter DPR pour performance
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = window.innerWidth;
       const h = window.innerHeight;
       const centerX = w / 2;
       const centerY = h / 2;
       const aspect = w / h;
-      
-      // Échelle pour correspondre au scale de Three.js (aspect * 1.55, 0.75)
       const scaleX = aspect * 1.55;
       const scaleY = 0.75;
       const baseScale = Math.min(w, h);
 
-      // Fond avec fade (utiliser les dimensions réelles, pas la résolution haute)
-      // Utiliser un fade plus subtil comme dans l'original
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillStyle = 'rgb(0, 0, 0)';
       ctx.fillRect(0, 0, w, h);
 
       // Calculer les positions 3D des points (simulation exacte du vertex shader)
@@ -1194,7 +1230,21 @@ const PlaystationCanvas: React.FC<{
       }
       
       ctx.globalCompositeOperation = 'source-over';
+    };
 
+    const tick = (currentTime: number = 0) => {
+      if (animationStartTimeRef.current === 0) {
+        animationStartTimeRef.current = currentTime;
+      }
+      if (enableAnimationTimeout && timeoutMs > 0 && (currentTime - animationStartTimeRef.current >= timeoutMs)) {
+        doFrame();
+        return;
+      }
+      if (currentTime - lastFrameTimeRef.current >= frameInterval) {
+        timeRef.current += 0.01 * baseSpeedValue;
+        doFrame();
+        lastFrameTimeRef.current = currentTime;
+      }
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
@@ -1203,7 +1253,7 @@ const PlaystationCanvas: React.FC<{
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [baseSpeedValue, waveColor]);
+  }, [baseSpeedValue, waveColor, frameInterval, timeoutMs, enableAnimationTimeout]);
 
   return (
     <canvas
@@ -1377,7 +1427,7 @@ const CanvasRibbons: React.FC<{
   // Utiliser le paramètre speed personnalisé ou calculer depuis animationSpeed
   const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
 
@@ -1569,36 +1619,38 @@ const CanvasRibbons: React.FC<{
   );
 };
 
-/** Aurora (animation.90.aurora) - Aurore boréale originale optimisée */
+/** Aurora (animation.90.aurora) - Icelandic Aurora (lovelace-bg-animation v1) */
 const AuroraCanvas: React.FC<{
   animationSpeed?: AnimationSpeed;
   speed?: number;
   blurIntensity?: number;
   colorIntensity?: number;
   streakCount?: number;
+  targetFPS?: number;
+  animationTimeout?: number;
+  enableAnimationTimeout?: boolean;
 }> = ({ 
   animationSpeed = 0.75, 
   speed: customSpeed,
-  blurIntensity = 40,
+  blurIntensity = 60,
   colorIntensity = 0.7,
-  streakCount
+  streakCount,
+  targetFPS: customTargetFPS = 60,
+  animationTimeout: timeoutMs = 5000,
+  enableAnimationTimeout = true,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
-  // Utiliser le paramètre speed personnalisé ou calculer depuis animationSpeed
-  // Le paramètre speed contrôle directement la vitesse (0.1-2.0)
-  // Si non fourni, on utilise animationSpeed comme base avec une conversion
   const speedMult = speedToMultiplier(animationSpeed);
-  // Convertir speedMult (0.3=rapide, 3.0=lent) en vitesse (2.0=rapide, 0.1=lent)
-  // Formule inverse : rapide slider -> vitesse élevée, lent slider -> vitesse faible
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const streaksRef = useRef<AuroraStreakOptimized[]>([]);
   const timeRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
-  const targetFPS = 60;
+  const animationStartTimeRef = useRef<number>(0);
+  const targetFPS = Math.max(10, Math.min(100, customTargetFPS));
   const frameInterval = 1000 / targetFPS;
 
   // Générer des streaks d'aurore aléatoires avec pré-calculs
@@ -1765,14 +1817,18 @@ const AuroraCanvas: React.FC<{
     };
 
     const animate = (currentTime: number = 0) => {
-      // Limitation du frame rate pour performance cohérente
+      if (animationStartTimeRef.current === 0) {
+        animationStartTimeRef.current = currentTime;
+      }
+      if (enableAnimationTimeout && timeoutMs > 0 && (currentTime - animationStartTimeRef.current >= timeoutMs)) {
+        render(currentTime);
+        return;
+      }
       if (currentTime - lastFrameTimeRef.current >= frameInterval) {
-        // Utiliser baseSpeedValue qui est toujours positif
         timeRef.current += baseSpeedValue * 16;
         render(currentTime);
         lastFrameTimeRef.current = currentTime;
       }
-
       animRef.current = requestAnimationFrame(animate);
     };
     animRef.current = requestAnimationFrame(animate);
@@ -1781,7 +1837,7 @@ const AuroraCanvas: React.FC<{
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [baseSpeedValue, blurIntensity, colorIntensity, generateRandomStreaks]);
+  }, [baseSpeedValue, blurIntensity, colorIntensity, generateRandomStreaks, frameInterval, timeoutMs, enableAnimationTimeout]);
 
   return (
     <canvas
@@ -1817,33 +1873,38 @@ interface AuroraStreakOptimized {
   };
 }
 
-/** Aurora v2 (animation.92.aurora-v2) - Aurore boréale avec Canvas 2D */
+/** Aurora v2 (animation.92.aurora-v2) - Icelandic Aurora v2 */
 const AuroraV2Canvas: React.FC<{
   animationSpeed?: AnimationSpeed;
   speed?: number;
   blurIntensity?: number;
   colorIntensity?: number;
   streakCount?: number;
+  targetFPS?: number;
+  animationTimeout?: number;
+  enableAnimationTimeout?: boolean;
 }> = ({ 
   animationSpeed = 0.75,
   speed: customSpeed,
   blurIntensity = 60,
   colorIntensity = 0.7,
-  streakCount
+  streakCount,
+  targetFPS: customTargetFPS = 60,
+  animationTimeout: timeoutMs = 5000,
+  enableAnimationTimeout = true,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
-  // Utiliser le paramètre speed personnalisé ou calculer depuis animationSpeed
   const speedMult = speedToMultiplier(animationSpeed);
-  // Convertir speedMult (0.3=rapide, 3.0=lent) en vitesse (2.0=rapide, 0.1=lent)
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const streaksRef = useRef<AuroraStreak[]>([]);
   const timeRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
-  const targetFPS = 60;
+  const animationStartTimeRef = useRef<number>(0);
+  const targetFPS = Math.max(10, Math.min(100, customTargetFPS));
   const frameInterval = 1000 / targetFPS;
 
   // Générer des streaks d'aurore aléatoires
@@ -1991,13 +2052,18 @@ const AuroraV2Canvas: React.FC<{
     };
 
     const animate = (currentTime: number = 0) => {
+      if (animationStartTimeRef.current === 0) {
+        animationStartTimeRef.current = currentTime;
+      }
+      if (enableAnimationTimeout && timeoutMs > 0 && (currentTime - animationStartTimeRef.current >= timeoutMs)) {
+        render(currentTime);
+        return;
+      }
       if (currentTime - lastFrameTimeRef.current >= frameInterval) {
-        // Utiliser baseSpeedValue qui est toujours positif
         timeRef.current += baseSpeedValue * 16;
         render(currentTime);
         lastFrameTimeRef.current = currentTime;
       }
-
       animRef.current = requestAnimationFrame(animate);
     };
     animRef.current = requestAnimationFrame(animate);
@@ -2006,7 +2072,7 @@ const AuroraV2Canvas: React.FC<{
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [baseSpeedValue, blurIntensity, colorIntensity, generateRandomStreaks]);
+  }, [baseSpeedValue, blurIntensity, colorIntensity, generateRandomStreaks, frameInterval, timeoutMs, enableAnimationTimeout]);
 
   return (
     <canvas
@@ -2029,28 +2095,201 @@ interface AuroraStreak {
   angleSpeed: number;
 }
 
-/** Alien Blackout (animation.94.alien-blackout) - Étoiles animées style Alien */
-const AlienBlackoutCanvas: React.FC<{
+/** Bit Ocean (animation.95.bit-ocean) - grille de points animée par bruit, couleurs changeantes (Griffin Moyer / Codepen), port Canvas 2D */
+const BitOceanCanvas: React.FC<{
   animationSpeed?: AnimationSpeed;
   speed?: number;
-  starCount?: number;
-  starSize?: number;
+  pointSize?: number;
 }> = ({
   animationSpeed = 0.75,
   speed: customSpeed,
-  starCount: customStarCount,
-  starSize: customStarSize
+  pointSize: customPointSize = 2,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
   const timeRef = useRef(0);
   const speedMult = speedToMultiplier(animationSpeed);
+  const baseSpeed = customSpeed !== undefined ? Math.max(0.2, Math.min(2.0, customSpeed)) : 0.5 + (speedMult - 0.3) / (3.0 - 0.3) * 1.5;
+  const pointSize = Math.max(1, Math.min(5, customPointSize));
+
+  const gridSize = 400;
+  const spacing = 5;
+  const verticesRef = useRef<Array<{ x: number; z: number }>>([]);
+  const colorRef = useRef({
+    r: 0, g: 0, b: 255,
+    rt: 0, gt: 0, bt: 255,
+    rs: 0, gs: 0, bs: 0,
+  });
+
+  const noise2D = useMemo(() => {
+    const perm = new Uint8Array(512);
+    const p = [151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142, 8, 99, 37, 240, 21, 10, 23, 190, 6, 148];
+    for (let i = 0; i < 256; i++) perm[i] = perm[256 + i] = p[i % p.length];
+    const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+    const grad2 = (hash: number, x: number, y: number) => {
+      const h = hash & 3;
+      const u = h < 2 ? x : y;
+      const v = h < 2 ? y : x;
+      return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+    };
+    return (x: number, y: number): number => {
+      const X = Math.floor(x) & 255;
+      const Y = Math.floor(y) & 255;
+      x -= Math.floor(x);
+      y -= Math.floor(y);
+      const u = fade(x);
+      const v = fade(y);
+      const A = perm[X] + Y;
+      const AA = perm[A];
+      const AB = perm[A + 1];
+      const B = perm[X + 1] + Y;
+      const BA = perm[B];
+      const BB = perm[B + 1];
+      return (1 + grad2(AA, x, y) * (1 - u) * (1 - v)
+        + grad2(BA, x - 1, y) * u * (1 - v)
+        + grad2(AB, x, y - 1) * (1 - u) * v
+        + grad2(BB, x - 1, y - 1) * u * v) / 2;
+    };
+  }, []);
+
+  const noise = useCallback((x: number, z: number) => (noise2D(x / 100, z / 100) - 0.5) * 30, [noise2D]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const vertices: Array<{ x: number; z: number }> = [];
+    for (let x = 0; x < gridSize; x += spacing) {
+      for (let z = 0; z < gridSize; z += spacing) {
+        vertices.push({ x: x - gridSize / 2, z: z - gridSize });
+      }
+    }
+    verticesRef.current = vertices;
+
+    const cameraZ = 350;
+    const cameraY = 150;
+    const fovRad = (20 * Math.PI) / 180;
+    const tanHalfFov = Math.tan(fovRad / 2);
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const randint = (min: number, max: number) => Math.floor(Math.random() * (max - min)) + min;
+
+    const tick = () => {
+      timeRef.current += baseSpeed;
+      const t = timeRef.current;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const aspect = w / h;
+      const color = colorRef.current;
+
+      if (Math.abs(color.r - color.rt) >= 5) color.r += color.rs;
+      if (Math.abs(color.g - color.gt) >= 5) color.g += color.gs;
+      if (Math.abs(color.b - color.bt) >= 5) color.b += color.bs;
+      if (Math.abs(color.r - color.rt) < 5 && Math.abs(color.g - color.gt) < 5 && Math.abs(color.b - color.bt) < 5) {
+        color.rt = randint(0, 256);
+        color.gt = randint(0, 256);
+        color.bt = randint(0, 256);
+        const divisor = 50;
+        color.rs = (color.rt > color.r ? 1 : -1) * randint(5, 46) / divisor;
+        color.gs = (color.gt > color.g ? 1 : -1) * randint(5, 46) / divisor;
+        color.bs = (color.bt > color.b ? 1 : -1) * randint(5, 46) / divisor;
+      }
+      const r = Math.round(Math.max(0, Math.min(255, color.r)));
+      const g = Math.round(Math.max(0, Math.min(255, color.g)));
+      const b = Math.round(Math.max(0, Math.min(255, color.b)));
+
+      ctx.fillStyle = 'rgb(0, 0, 0)';
+      ctx.fillRect(0, 0, w, h);
+
+      const scaleY = (h / 2) / tanHalfFov;
+      const scaleX = (w / 2) / (tanHalfFov * aspect);
+      const centerX = w / 2;
+      const centerY = h / 2;
+
+      const vertices = verticesRef.current;
+      for (let i = 0; i < vertices.length; i++) {
+        const v = vertices[i];
+        const y = cameraY + noise(v.x + t / 20, v.z + t / 10);
+        const zView = cameraZ - v.z;
+        if (zView <= 10) continue;
+        const xProj = v.x / zView;
+        const yProj = (y - cameraY) / zView;
+        const sx = centerX + xProj * scaleX;
+        const sy = centerY - yProj * scaleY;
+        if (sx < -pointSize || sx > w + pointSize || sy < -pointSize || sy > h + pointSize) continue;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, pointSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
+  }, [baseSpeed, pointSize, noise]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 -z-10 w-full h-full"
+      aria-hidden
+      style={{ background: '#000' }}
+    />
+  );
+};
+
+/** Alien Blackout (animation.94.alien-blackout) - Alien: Blackout Intro Scene (React + WebGL style, Canvas 2D) */
+const AlienBlackoutCanvas: React.FC<{
+  animationSpeed?: AnimationSpeed;
+  speed?: number;
+  starCount?: number;
+  starSize?: number;
+  targetFPS?: number;
+  animationTimeout?: number;
+  enableAnimationTimeout?: boolean;
+}> = ({
+  animationSpeed = 0.75,
+  speed: customSpeed,
+  starCount: customStarCount,
+  starSize: customStarSize,
+  targetFPS: customTargetFPS = 60,
+  animationTimeout: timeoutMs = 5000,
+  enableAnimationTimeout = true,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number | null>(null);
+  const timeRef = useRef(0);
+  const lastFrameTimeRef = useRef(0);
+  const animationStartTimeRef = useRef<number>(0);
+  const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const starCount = customStarCount !== undefined ? customStarCount : 2000;
   const baseStarSize = customStarSize !== undefined ? customStarSize : 2.5;
+  const targetFPS = Math.max(10, Math.min(100, customTargetFPS));
+  const frameInterval = 1000 / targetFPS;
   const starsRef = useRef<Array<{
     x: number;
     y: number;
@@ -2224,39 +2463,44 @@ const AlienBlackoutCanvas: React.FC<{
     resize();
     window.addEventListener('resize', resize);
 
-    const tick = () => {
-      timeRef.current += 0.016 * baseSpeedValue;
+    const render = (currentTime: number) => {
       const t = timeRef.current;
       const w = window.innerWidth;
       const h = window.innerHeight;
-      const speed = -50 * baseSpeedValue; // Vitesse de déplacement horizontal
+      const speed = -50 * baseSpeedValue;
 
-      // Effacer avec fade subtil
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillStyle = 'rgb(0, 0, 0)';
       ctx.fillRect(0, 0, w, h);
 
-      // Dessiner les étoiles
       ctx.fillStyle = '#ffffff';
       starsRef.current.forEach((star) => {
-        // Mettre à jour la position X avec wrap-around
         star.x = ((star.initialX + t * speed) % (w * 2) + (w * 2)) % (w * 2);
-
-        // Calculer l'alpha avec effet de scintillement
         let alpha = star.alpha;
         if (star.twinkle) {
           const min = 0.2;
           alpha = min * star.alpha + ((Math.sin(t * star.twinkleSpeed) + 1) / 2) * (1 - min) * star.alpha;
         }
-
-        // Dessiner l'étoile comme un cercle
         ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.size / 2, 0, Math.PI * 2);
         ctx.fill();
       });
-
       ctx.globalAlpha = 1.0;
+    };
 
+    const tick = (currentTime: number = 0) => {
+      if (animationStartTimeRef.current === 0) {
+        animationStartTimeRef.current = currentTime;
+      }
+      if (enableAnimationTimeout && timeoutMs > 0 && (currentTime - animationStartTimeRef.current >= timeoutMs)) {
+        render(currentTime);
+        return;
+      }
+      if (currentTime - lastFrameTimeRef.current >= frameInterval) {
+        timeRef.current += 0.016 * baseSpeedValue;
+        render(currentTime);
+        lastFrameTimeRef.current = currentTime;
+      }
       animRef.current = requestAnimationFrame(tick);
     };
     animRef.current = requestAnimationFrame(tick);
@@ -2265,7 +2509,7 @@ const AlienBlackoutCanvas: React.FC<{
       window.removeEventListener('resize', resize);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [baseSpeedValue, generateStars]);
+  }, [baseSpeedValue, generateStars, frameInterval, timeoutMs, enableAnimationTimeout]);
 
   return (
     <canvas
@@ -2294,7 +2538,7 @@ const StarsCanvas: React.FC<{
   const animRef = useRef<number | null>(null);
   const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const starCount = customStarCount !== undefined ? customStarCount : 1200;
@@ -2463,7 +2707,7 @@ const SpaceCanvas: React.FC<{
   const isMouseDownRef = useRef(false);
   const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const particleCount = customParticleCount !== undefined ? customParticleCount : 500;
@@ -2639,7 +2883,7 @@ const SidelinedCanvas: React.FC<{
   const startTimeRef = useRef<number | null>(null);
   const speedMult = speedToMultiplier(animationSpeed);
   const defaultSpeed = customSpeed === undefined
-    ? Math.max(0.1, Math.min(2.0, 2.0 - ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
+    ? Math.max(0.1, Math.min(2.0, 0.1 + ((speedMult - 0.3) / (3.0 - 0.3)) * 1.9))
     : Math.max(0.1, Math.min(2.0, customSpeed));
   const baseSpeedValue = defaultSpeed;
   const lineCount = customLineCount !== undefined ? customLineCount : 3;

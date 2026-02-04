@@ -7,6 +7,7 @@
 export type Theme = 'dark' | 'glass' | 'modern' | 'nightly' | 'neon' | 'elegant' | 'full-animation';
 
 const THEME_STORAGE_KEY = 'mynetwork_theme';
+const CARD_OPACITY_STORAGE_KEY = 'mynetwork_card_opacity';
 const DEFAULT_THEME: Theme = 'dark';
 const VALID_THEMES: Theme[] = ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant', 'full-animation'];
 
@@ -40,6 +41,27 @@ export const applyTheme = (theme: Theme): void => {
 };
 
 /**
+ * Apply card opacity from localStorage for the given theme.
+ * Used at init and ensures --card-opacity is set on root so all pages (not only Settings) get the correct opacity.
+ */
+export const applyCardOpacity = (theme: Theme): void => {
+  const root = document.documentElement;
+  let opacity = 1;
+  try {
+    const raw = localStorage.getItem(CARD_OPACITY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, number>;
+      if (parsed && typeof parsed[theme] === 'number') {
+        opacity = Math.max(0.1, Math.min(1, parsed[theme]));
+      }
+    }
+  } catch {
+    // ignore
+  }
+  root.style.setProperty('--card-opacity', String(opacity));
+};
+
+/**
  * Récupère le thème actuel
  */
 export const getCurrentTheme = (): Theme => {
@@ -70,7 +92,9 @@ export const getCurrentTheme = (): Theme => {
 export const initTheme = async (): Promise<void> => {
   const theme = getCurrentTheme();
   applyTheme(theme);
-  
+  // Apply card opacity from localStorage so it is active on all pages (dashboard, settings, etc.)
+  applyCardOpacity(theme);
+
   // Check if user is authenticated before making API call
   // This prevents 401 errors in console when user is not logged in yet
   let token: string | null = null;
@@ -82,14 +106,13 @@ export const initTheme = async (): Promise<void> => {
     // localStorage might not be available (e.g., in private mode)
     return;
   }
-  
+
   // Only try to load custom colors if user is authenticated
-  // This prevents unnecessary 401 errors in console
   if (!token) {
     return;
   }
-  
-  // Try to load custom colors from server
+
+  // Try to load theme config (custom colors + card opacity) from server
   try {
     const response = await fetch('/api/settings/theme', {
       headers: {
@@ -97,18 +120,23 @@ export const initTheme = async (): Promise<void> => {
         'Content-Type': 'application/json'
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
-      if (data.success && data.result?.customColors) {
-        applyCustomColors(data.result.customColors);
+      if (data.success && data.result) {
+        if (data.result.customColors) {
+          applyCustomColors(data.result.customColors);
+        }
+        // Apply server card opacity for current theme so it is consistent on all pages
+        if (typeof data.result.cardOpacity === 'number') {
+          const opacity = Math.max(0.1, Math.min(1, data.result.cardOpacity));
+          document.documentElement.style.setProperty('--card-opacity', String(opacity));
+        }
       }
     }
     // Silently ignore 401/403 errors - user might have logged out or token expired
-    // The theme will still work with default colors
   } catch (error) {
     // Silently fail - use default theme colors
-    // Network errors are expected if server is not ready yet
   }
 };
 
