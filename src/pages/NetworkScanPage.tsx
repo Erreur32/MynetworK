@@ -421,10 +421,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         lastExecution: null
                     },
                     refresh: {
-                        config: { enabled: false, interval: 10 },
+                        config: { enabled: false, interval: 10, scanType: 'quick' },
                         scheduler: { enabled: false, running: false },
                         lastExecution: null
-                    }
+                    },
+                    lastScan: null
                 });
             }
         } catch (error) {
@@ -438,10 +439,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     lastExecution: null
                 },
                 refresh: {
-                    config: { enabled: false, interval: 10 },
+                    config: { enabled: false, interval: 10, scanType: 'quick' },
                     scheduler: { enabled: false, running: false },
                     lastExecution: null
-                }
+                },
+                lastScan: null
             });
         } finally {
             setAutoStatusLoading(false);
@@ -557,7 +559,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         // Poll progress every 2 seconds during auto scans
         const progressInterval = setInterval(async () => {
             try {
-                const progressResponse = await api.get('/api/network-scan/progress');
+                const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
                 if (progressResponse.success && progressResponse.result) {
                     setScanProgress(progressResponse.result);
                 } else if (progressResponse.success && !progressResponse.result) {
@@ -798,7 +800,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             
             // Fetch scan progress (refresh also uses the same progress system)
             try {
-                const progressResponse = await api.get('/api/network-scan/progress');
+                const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
                 if (progressResponse.success && progressResponse.result) {
                     setScanProgress(progressResponse.result);
                 } else if (progressResponse.success && !progressResponse.result) {
@@ -1774,7 +1776,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     <div className="flex items-center gap-2">
                                         {portScanProgress?.active ? (
                                             <>
-                                                <Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" title="Scan des ports en cours" />
+                                                <span title="Scan des ports en cours"><Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" /></span>
                                                 <span>Ports ouverts</span>
                                                 <span className="text-amber-400/90 text-xs font-normal" title={`${portScanProgress.current}/${portScanProgress.total} IP(s)`}>
                                                     ({portScanProgress.current}/{portScanProgress.total})
@@ -1972,23 +1974,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         </td>
                                         <td className="py-3 px-2 w-16">
                                             {scan.status === 'online' ? (
-                                                <CheckCircle 
-                                                    size={16} 
-                                                    className="text-emerald-400 flex-shrink-0 mx-auto" 
-                                                    title="Online - Appareil en ligne"
-                                                />
+                                                <span title="Online - Appareil en ligne"><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
                                             ) : scan.status === 'offline' ? (
-                                                <XCircle 
-                                                    size={16} 
-                                                    className="text-red-400 flex-shrink-0 mx-auto" 
-                                                    title="Offline - Appareil hors ligne"
-                                                />
+                                                <span title="Offline - Appareil hors ligne"><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
                                             ) : (
-                                                <Clock 
-                                                    size={16} 
-                                                    className="text-gray-400 flex-shrink-0 mx-auto" 
-                                                    title="Unknown - Statut inconnu"
-                                                />
+                                                <span title="Unknown - Statut inconnu"><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
                                             )}
                                         </td>
                                         <td className="py-3 px-4">

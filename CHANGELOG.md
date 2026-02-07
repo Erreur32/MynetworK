@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.3] - 2026-02-07
+
+### Fixed
+
+- **SearchPage:** `Card` requires `title` prop — added `title=""` to all result-state cards (loading, error, no results, filtered empty, IP details)
+- **SearchPage:** Lucide `Activity` does not accept `title` — wrapped in `<span title="...">` for tooltip
+- **NetworkScanPage:** `refresh.config` and `AutoStatus` — added missing `scanType: 'quick'` in default state and `lastScan: null` in fallback state; typed `api.get` for `/api/network-scan/progress` so `setScanProgress(result)` is type-safe
+- **NetworkScanPage:** Lucide icons (Loader2, CheckCircle, XCircle, Clock) — removed invalid `title` prop, wrapped in `<span title="...">` for tooltips
+- **NetworkScanConfigModal:** `api.get` responses typed for `wireshark-vendor-stats` and `plugin-priority-config` so setState accepts `result`; refresh fallback object now includes `scanType: 'quick'`
+
+### Modified
+
+- Typed API responses (`api.get<T>`) where result was assigned to typed state to resolve "Argument of type 'unknown' is not assignable" errors
+
+---
+
 ## [0.7.2] - 2026-02-07
 
 ### Added

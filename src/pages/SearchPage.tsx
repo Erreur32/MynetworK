@@ -1450,21 +1450,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
                 {/* Results */}
                 {isLoading ? (
-                    <Card>
+                    <Card title="">
                         <div className="flex items-center justify-center py-12">
                             <Loader2 size={32} className="animate-spin text-accent-primary" />
                             <span className="ml-3 text-theme-secondary">Recherche en cours...</span>
                         </div>
                     </Card>
                 ) : error ? (
-                    <Card>
+                    <Card title="">
                         <div className="flex items-center justify-center py-12 text-accent-error">
                             <AlertCircle size={24} className="mr-2" />
                             <span>{error}</span>
                         </div>
                     </Card>
                 ) : results.length === 0 && searchQuery && hasSearched && !isLoading ? (
-                    <Card>
+                    <Card title="">
                         <div className="flex items-center justify-center py-12 text-theme-secondary">
                             <AlertCircle size={24} className="mr-2" />
                             <div className="text-center space-y-2">
@@ -1481,14 +1481,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         </div>
                     </Card>
                 ) : filteredResults.length === 0 && hasSearched && !isLoading ? (
-                    <Card>
+                    <Card title="">
                         <div className="flex items-center justify-center py-12 text-theme-secondary">
                             <span>Aucun résultat ne correspond aux filtres sélectionnés</span>
                         </div>
                     </Card>
                 ) : isExactIpSearch && ipDetails ? (
                     // Display aggregated IP details in a single unified card - Structured like UniFi table
-                    <Card>
+                    <Card title="">
                         <div className="space-y-6">
                             {/* Header Section */}
                             <div className="flex items-start justify-between gap-4 pb-4 border-b border-theme">
@@ -2338,7 +2338,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                             <img src={logoUnifi} alt="UniFi" className="w-4 h-4 object-contain flex-shrink-0" title="UniFi : clients, points d'accès" />
                                                         )}
                                                         {isScan && (
-                                                            <Activity size={16} className="text-cyan-400 flex-shrink-0" title="Scan Réseau : découverte, ports ouverts" />
+                                                            <span title="Scan Réseau : découverte, ports ouverts"><Activity size={16} className="text-cyan-400 flex-shrink-0" /></span>
                                                         )}
                                                         {dhcpFrom && (
                                                             <span

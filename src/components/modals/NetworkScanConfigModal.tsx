@@ -156,7 +156,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     
     const fetchWiresharkVendorStats = async () => {
         try {
-            const response = await api.get('/api/network-scan/wireshark-vendor-stats');
+            const response = await api.get<{ totalVendors: number; lastUpdate: string | null }>('/api/network-scan/wireshark-vendor-stats');
             if (response.success && response.result) {
                 setWiresharkVendorStats(response.result);
             }
@@ -212,7 +212,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const fetchPluginPriorityConfig = async () => {
         setIsLoadingPriority(true);
         try {
-            const response = await api.get('/api/network-scan/plugin-priority-config');
+            const response = await api.get<{ hostnamePriority: ('freebox' | 'unifi' | 'scanner')[]; vendorPriority: ('freebox' | 'unifi' | 'scanner')[]; overwriteExisting: { hostname: boolean; vendor: boolean } }>('/api/network-scan/plugin-priority-config');
             if (response.success && response.result) {
                 setPluginPriorityConfig(response.result);
                 setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(response.result))); // Deep copy
@@ -609,7 +609,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                     ...unifiedConfig, 
                                                     enabled: newEnabled,
                                                       fullScan: unifiedConfig.fullScan || { enabled: false, interval: 1440, portScanEnabled: false },
-                                                      refresh: unifiedConfig.refresh || { enabled: false, interval: 10 }
+                                                      refresh: unifiedConfig.refresh || { enabled: false, interval: 10, scanType: 'quick' }
                                                 });
                                             }}
                                             className="w-5 h-5 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500 focus:ring-2"
