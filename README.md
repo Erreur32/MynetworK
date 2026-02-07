@@ -17,7 +17,7 @@
 
 <h1 align="center">MynetworK</h1>
 <p align="center">
-  Unified Freebox + UniFi management.
+  Unified Freebox + UniFi management + Network Scanner.
 </p>
 
 **📖 [Read in French (Lire en français)](README.fr.md)**
