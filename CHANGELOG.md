@@ -3,6 +3,27 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.6.0] - 2026-02-07
+
+### ✨ Ajouté
+
+**Docker - Build multi-arch (GHCR / Home Assistant 2026)**
+- ✅ Workflow GitHub Actions : build et push pour `linux/amd64`, `linux/arm64`, `linux/arm/v7` (manifest list)
+- ✅ Même tag d’image (`ghcr.io/.../mynetwork:0.6.0`) résolu automatiquement selon l’architecture (compatible Raspberry / HA add-on)
+- ✅ Dockerfile : ARG `TARGETPLATFORM` / `BUILDPLATFORM`, stage builder et runtime en `FROM --platform=$TARGETPLATFORM` pour une image finale cohérente par arch
+- ✅ Compilation des modules natifs (ex. better-sqlite3) pour l’arch cible (builder sur TARGETPLATFORM), plus de risque « wrong ELF class » sur ARM
+
+### 🔧 Modifié
+
+**Docker - Workflow**
+- 🔧 `docker-publish.yml` : `platforms: linux/amd64,linux/arm64,linux/arm/v7` (QEMU + Buildx déjà en place)
+
+**Docker - Dockerfile**
+- 🔧 Stage builder : `FROM --platform=$TARGETPLATFORM` (au lieu de BUILDPLATFORM) pour compiler les natives pour la bonne arch
+- 🔧 Stage runtime : `FROM --platform=$TARGETPLATFORM` + re-déclaration `ARG TARGETPLATFORM` avant le 2ᵉ stage
+
+---
+
 ## [0.5.6] - 2026-02-07
 
 ### ✨ Ajouté

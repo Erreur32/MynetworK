@@ -1,9 +1,13 @@
 # ===========================================
 # MynetworK - Node 22 Alpine (OPTIMIZED MULTI-STAGE)
 # ===========================================
+# Multi-arch: Buildx sets TARGETPLATFORM (amd64/arm64/arm/v7) per build.
+# Builder uses TARGETPLATFORM so native modules (e.g. better-sqlite3) are compiled for the target arch.
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 # ---------- Stage 1 : Build (avec outils de build) ----------
-FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
+FROM --platform=$TARGETPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -27,7 +31,10 @@ RUN npm prune --production && npm cache clean --force
 
 
 # ---------- Stage 2 : Runtime (image finale légère) ----------
-FROM node:22-alpine
+# Re-declare so this stage gets Buildx TARGETPLATFORM (global ARG is not available after first FROM)
+ARG TARGETPLATFORM
+# Use TARGETPLATFORM so the runtime base matches the built arch (required for HA / Raspberry)
+FROM --platform=$TARGETPLATFORM node:22-alpine
 
 WORKDIR /app
 
