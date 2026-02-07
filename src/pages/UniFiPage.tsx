@@ -512,24 +512,20 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 })()}
                                             </div>
 
-                                            {/* Colonne 3 - NAT */}
+                                            {/* Colonne 3 - NAT (Gateway, WAN/LAN ports, règles) */}
                                             <div className="space-y-1">
                                                 {(() => {
-                                                    const gateway = devicesArr.find((d: any) => {
-                                                        const type = (d.type || '').toString().toLowerCase();
-                                                        const model = (d.model || '').toString().toLowerCase();
-                                                        return (
-                                                            type.includes('ugw') ||
-                                                            type.includes('udm') ||
-                                                            type.includes('ucg') ||
-                                                            type.includes('gateway') ||
-                                                            model.includes('ugw') ||
-                                                            model.includes('udm') ||
-                                                            model.includes('ucg') ||
-                                                            model.includes('gateway')
-                                                        );
-                                                    });
-                                                    const natActive = !!gateway?.ip;
+                                                    const sys = unifiStats?.system as any;
+                                                    const gSummary = sys?.gatewaySummary;
+                                                    const natRulesCount = typeof sys?.natRulesCount === 'number' ? sys.natRulesCount : 0;
+                                                    const natActive = !!(gSummary?.ip || devicesArr.find((d: any) => {
+                                                        const t = (d.type || '').toString().toLowerCase();
+                                                        const m = (d.model || '').toString().toLowerCase();
+                                                        return t.includes('ugw') || t.includes('udm') || t.includes('ucg') || t.includes('gateway') || m.includes('gateway');
+                                                    })?.ip);
+                                                    const wanPorts = gSummary?.wanPorts || [];
+                                                    const lanPorts = gSummary?.lanPorts || [];
+                                                    const portCount = gSummary?.portCount;
                                                     return (
                                                         <>
                                                             <div className="flex justify-between">
@@ -538,16 +534,48 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     {natActive ? 'Actif' : 'Inactif'}
                                                                 </span>
                                                             </div>
-                                                            {natActive && gateway?.ip && (
+                                                            {natActive && gSummary?.ip && (
                                                                 <div className="flex justify-between">
                                                                     <span className="text-gray-400">Gateway IP:</span>
-                                                                    <span className="text-white font-mono text-xs">{gateway.ip}</span>
+                                                                    <span className="text-white font-mono text-xs">{gSummary.ip}</span>
                                                                 </div>
                                                             )}
-                                                            {natActive && gateway?.name && gateway.name !== gateway.ip && (
+                                                            {natActive && gSummary?.name && gSummary.name !== gSummary?.ip && (
                                                                 <div className="flex justify-between">
                                                                     <span className="text-gray-400">Gateway:</span>
-                                                                    <span className="text-white text-xs truncate" title={gateway.name}>{gateway.name}</span>
+                                                                    <span className="text-white text-xs truncate" title={gSummary.name}>{gSummary.name}</span>
+                                                                </div>
+                                                            )}
+                                                            {natActive && wanPorts.length > 0 && (
+                                                                <div className="flex flex-col gap-0.5 mt-0.5">
+                                                                    <span className="text-gray-400 text-[11px]">WAN:</span>
+                                                                    {wanPorts.map((p: { name: string; ip?: string; up?: boolean }, i: number) => (
+                                                                        <div key={i} className="flex justify-between text-xs">
+                                                                            <span className="text-cyan-400/90">{p.name}</span>
+                                                                            <span className="text-white font-mono truncate ml-1" title={p.ip || ''}>
+                                                                                {p.ip ? (p.ip.length > 12 ? `${p.ip.slice(0, 10)}…` : p.ip) : (p.up ? 'OK' : '—')}
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            {natActive && (lanPorts.length > 0 || portCount != null) && (
+                                                                <div className="flex flex-col gap-0.5 mt-0.5">
+                                                                    <span className="text-gray-400 text-[11px]">LAN:</span>
+                                                                    {lanPorts.length > 0 ? lanPorts.map((p: { name: string; ip?: string }, i: number) => (
+                                                                        <div key={i} className="flex justify-between text-xs">
+                                                                            <span className="text-emerald-400/90">{p.name}</span>
+                                                                            {p.ip && <span className="text-white font-mono text-[11px] truncate">{p.ip}</span>}
+                                                                        </div>
+                                                                    )) : (
+                                                                        <span className="text-white text-xs">{portCount != null ? `${portCount} port(s)` : '—'}</span>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {natActive && (
+                                                                <div className="flex justify-between mt-0.5 pt-0.5 border-t border-gray-700/50">
+                                                                    <span className="text-gray-400 text-[11px]">Règles NAT:</span>
+                                                                    <span className="text-purple-300 text-xs font-mono">{natRulesCount}</span>
                                                                 </div>
                                                             )}
                                                         </>
@@ -2825,7 +2853,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                     {/* NAT Tab */}
                     {activeTab === 'nat' && (
-                        <NatTabContent isActive={activeTab === 'nat'} />
+                        <NatTabContent isActive={activeTab === 'nat'} systemStats={unifiStats?.system as any} />
                     )}
 
                     {/* Debug Tab */}
@@ -3030,9 +3058,20 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 // NAT Tab Component
 interface NatTabContentProps {
     isActive: boolean;
+    systemStats?: {
+        gatewaySummary?: {
+            ip?: string;
+            name?: string;
+            model?: string;
+            wanPorts: Array<{ name: string; type?: string; ip?: string; up?: boolean }>;
+            lanPorts: Array<{ name: string; type?: string; ip?: string }>;
+            portCount?: number;
+        } | null;
+        natRulesCount?: number;
+    };
 }
 
-const NatTabContent: React.FC<NatTabContentProps> = ({ isActive }) => {
+const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) => {
     const [natRules, setNatRules] = useState<Array<{
         id: string;
         name?: string;
@@ -3091,8 +3130,79 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive }) => {
         ? natRules.filter(rule => rule.enabled)
         : natRules;
 
+    const gSummary = systemStats?.gatewaySummary;
+    const natRulesCount = typeof systemStats?.natRulesCount === 'number' ? systemStats.natRulesCount : null;
+    const hasGatewaySummary = gSummary && (gSummary.ip || gSummary.wanPorts?.length || gSummary.lanPorts?.length || gSummary.portCount != null);
+
     return (
         <div className="col-span-full space-y-6">
+            {/* Gateway & WAN/LAN ports summary */}
+            {hasGatewaySummary && (
+                <Card title="Gateway & Ports" className="bg-unifi-card border border-gray-800 rounded-xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium">
+                                <Network size={16} />
+                                WAN
+                            </div>
+                            {gSummary.wanPorts && gSummary.wanPorts.length > 0 ? (
+                                <ul className="space-y-1.5">
+                                    {gSummary.wanPorts.map((p: { name: string; ip?: string; up?: boolean }, i: number) => (
+                                        <li key={i} className="flex items-center justify-between text-xs bg-gray-800/50 rounded px-2 py-1.5">
+                                            <span className="text-gray-300">{p.name}</span>
+                                            <span className="font-mono text-cyan-300 truncate max-w-[140px]" title={p.ip || ''}>
+                                                {p.ip || (p.up ? 'Connecté' : '—')}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-xs text-gray-500">Aucune info WAN (network_table non disponible)</p>
+                            )}
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                                <Link2 size={16} />
+                                LAN
+                            </div>
+                            {gSummary.lanPorts && gSummary.lanPorts.length > 0 ? (
+                                <ul className="space-y-1.5">
+                                    {gSummary.lanPorts.map((p: { name: string; ip?: string }, i: number) => (
+                                        <li key={i} className="flex items-center justify-between text-xs bg-gray-800/50 rounded px-2 py-1.5">
+                                            <span className="text-gray-300">{p.name}</span>
+                                            {p.ip && <span className="font-mono text-emerald-300 truncate max-w-[140px]">{p.ip}</span>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : gSummary.portCount != null ? (
+                                <p className="text-xs text-gray-300">{gSummary.portCount} port(s) Ethernet</p>
+                            ) : gSummary.ip ? (
+                                <p className="text-xs text-gray-300 font-mono">{gSummary.ip} (gateway)</p>
+                            ) : (
+                                <p className="text-xs text-gray-500">Aucune info LAN</p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gray-800 flex flex-wrap items-center gap-4 text-xs">
+                        {gSummary.ip && (
+                            <span className="text-gray-400">
+                                Gateway: <span className="text-white font-mono">{gSummary.ip}</span>
+                            </span>
+                        )}
+                        {gSummary.name && gSummary.name !== gSummary.ip && (
+                            <span className="text-gray-400">
+                                Nom: <span className="text-white">{gSummary.name}</span>
+                            </span>
+                        )}
+                        {natRulesCount != null && (
+                            <span className="text-gray-400">
+                                Règles NAT: <span className="text-purple-300 font-mono">{natRulesCount}</span>
+                            </span>
+                        )}
+                    </div>
+                </Card>
+            )}
+
             <Card 
                 title="Règles NAT"
                 actions={

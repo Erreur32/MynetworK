@@ -272,6 +272,23 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
 
                 {/* Form */}
                 <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="p-4 space-y-4">
+                    {/* Freebox: warn when plugin is disabled (must enable for auto-discovery) */}
+                    {pluginId === 'freebox' && !plugin.enabled && (
+                        <div className="p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-lg">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle size={22} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-semibold text-amber-400 mb-1">
+                                        Plugin désactivé
+                                    </p>
+                                    <p className="text-xs text-amber-200/90">
+                                        Activez le plugin Freebox dans la liste des plugins (Administration) pour permettre la <strong>découverte automatique</strong> de votre Freebox et l&apos;accès au tableau de bord.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* API Mode Selection (UniFi only) */}
                     {pluginId === 'unifi' && (
                         <div>

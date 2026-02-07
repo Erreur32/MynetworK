@@ -3,6 +3,27 @@
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
 
+## [0.5.6] - 2026-02-07
+
+### ✨ Ajouté
+
+**UniFi - NAT / Gateway & Ports**
+- ✅ Résumé gateway dans les stats système : `gatewaySummary` (IP, nom, modèle, WAN/LAN ports, `portCount`) et `natRulesCount`
+- ✅ Extraction des ports WAN/LAN depuis `network_table` du gateway (quand exposé par l’API UniFi)
+- ✅ Carte « Gateway & Ports » dans l’onglet NAT : blocs WAN (cyan) et LAN (emerald) avec liste des interfaces
+- ✅ Colonne NAT (Info Système) enrichie : ports WAN avec IP/statut, ports LAN, nombre de règles NAT
+
+**Freebox - Administration plugins**
+- ✅ Avertissement dans la modale de configuration du plugin Freebox lorsque le plugin est désactivé : inviter à activer le plugin pour la découverte automatique
+
+### 🔧 Modifié
+
+**UniFi - Backend**
+- 🔧 Correction TypeScript : `getNetworkConfig().catch()` retourne un objet avec `dhcpRange: undefined` pour garder un type cohérent
+- 🔧 Récupération des règles NAT en parallèle dans `getStats()` (`getPortForwardingRules`) pour exposer le nombre et le résumé gateway
+
+---
+
 ## [0.5.5] - 2026-02-04
 
 ### ✨ Ajouté

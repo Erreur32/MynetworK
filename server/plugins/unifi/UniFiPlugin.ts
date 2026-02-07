@@ -9,11 +9,67 @@ import { UniFiApiService } from './UniFiApiService.js';
 import { logger } from '../../utils/logger.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 
+/**
+ * Builds a summary of the gateway device for NAT/WAN/LAN display.
+ * Extracts WAN and LAN ports from the gateway's network_table when available
+ * (UniFi API returns interface list with name, type, ip, etc.).
+ */
+function buildGatewayNatSummary(
+    gatewayDevice: any,
+    _portForwardRules: Array<{ enabled: boolean }>
+): {
+    ip?: string;
+    name?: string;
+    model?: string;
+    wanPorts: Array<{ name: string; type: string; ip?: string; up?: boolean }>;
+    lanPorts: Array<{ name: string; type?: string; ip?: string }>;
+    portCount?: number;
+} | null {
+    if (!gatewayDevice) {
+        return null;
+    }
+    const wanPorts: Array<{ name: string; type: string; ip?: string; up?: boolean }> = [];
+    const lanPorts: Array<{ name: string; type?: string; ip?: string }> = [];
+
+    // UniFi gateway devices may expose network_table (array of interfaces: WAN, WAN2, LAN, etc.)
+    const networkTable = gatewayDevice.network_table || gatewayDevice.networkTable || [];
+    if (Array.isArray(networkTable) && networkTable.length > 0) {
+        for (const net of networkTable) {
+            const name = (net.name || net.display_name || net.interface_name || '').toString().trim() || 'Interface';
+            const type = (net.type || net.purpose || '').toString().toLowerCase();
+            const ip = net.ip || net.address;
+            const up = net.up !== undefined ? !!net.up : (!!ip && type.indexOf('wan') !== -1);
+
+            if (type.indexOf('wan') !== -1 || (name.toLowerCase().indexOf('wan') !== -1 && type !== 'lan')) {
+                wanPorts.push({ name, type: type || 'wan', ip, up });
+            } else if (type.indexOf('lan') !== -1 || name.toLowerCase().indexOf('lan') !== -1) {
+                lanPorts.push({ name, type: type || 'lan', ip });
+            }
+        }
+    }
+
+    // Fallback: single WAN/LAN when no network_table (e.g. USG) - use device ip as LAN
+    if (wanPorts.length === 0 && lanPorts.length === 0 && gatewayDevice.ip) {
+        lanPorts.push({ name: 'LAN', type: 'lan', ip: gatewayDevice.ip });
+    }
+
+    const portCount = typeof gatewayDevice.num_port === 'number' ? gatewayDevice.num_port : undefined;
+
+    return {
+        ip: gatewayDevice.ip,
+        name: gatewayDevice.name || gatewayDevice.model,
+        model: gatewayDevice.model,
+        wanPorts,
+        lanPorts,
+        portCount
+    };
+}
+
 export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.5.5');
+        super('unifi', 'UniFi Controller', '0.5.6');
         this.apiService = new UniFiApiService();
     }
 
@@ -230,13 +286,14 @@ export class UniFiPlugin extends BasePlugin {
         }
 
         try {
-            const [devices, clients, stats, sysinfo, wlans, networkConf] = await Promise.all([
+            const [devices, clients, stats, sysinfo, wlans, networkConf, portForwardRules] = await Promise.all([
                 this.apiService.getDevices(),
                 this.apiService.getClients(),
                 this.apiService.getNetworkStats(),
                 this.apiService.getSystemInfo(),
                 this.apiService.getWlans().catch(() => []), // Get WLANs, but don't fail if unavailable
-                this.apiService.getNetworkConfig().catch(() => ({ dhcpEnabled: false })) // DHCP on UniFi (rest/networkconf)
+                this.apiService.getNetworkConfig().catch(() => ({ dhcpEnabled: false, dhcpRange: undefined })), // DHCP on UniFi (rest/networkconf)
+                this.apiService.getPortForwardingRules().catch(() => []) // NAT rules count and list for dashboard
             ]);
 
             // Log summary only if debug is enabled
@@ -306,6 +363,15 @@ export class UniFiPlugin extends BasePlugin {
             // Get deployment type from API service
             const deploymentType = this.apiService.getDeploymentType();
 
+            // Build NAT / gateway summary from gateway device (WAN/LAN ports, rule count)
+            const gatewayDevice = devices.find((d: any) => {
+                const type = (d.type || '').toString().toLowerCase();
+                const model = (d.model || '').toString().toLowerCase();
+                return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
+                    || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
+            });
+            const gatewaySummary = buildGatewayNatSummary(gatewayDevice, portForwardRules);
+
             // Normalize system stats
             const systemStats: any = {
                 // Uptime (in seconds) if available
@@ -330,6 +396,9 @@ export class UniFiPlugin extends BasePlugin {
                 dhcpEnabled: networkConf?.dhcpEnabled === true,
                 // DHCP range on UniFi (from rest/networkconf dhcpd_start/dhcpd_stop)
                 dhcpRange: networkConf?.dhcpRange,
+                // NAT: rule count and gateway WAN/LAN port summary for dashboard
+                natRulesCount: Array.isArray(portForwardRules) ? portForwardRules.length : 0,
+                gatewaySummary: gatewaySummary,
                 // Basic memory information if present
                 memory: sysinfo.mem ? {
                     total: sysinfo.mem.total,
