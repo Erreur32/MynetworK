@@ -33,7 +33,7 @@
 
 **A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
-[Installation](#installation) | [Features](#-main-features) | [Configuration](#configuration) | [Documentation](#-documentation)
+[Installation](#installation) | [Features](#main-features) | [Configuration](#configuration) | [Documentation](#documentation)
 
 </div>
 
