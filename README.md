@@ -22,7 +22,7 @@
 
 **📖 [Read in French (Lire en français)](README.fr.md)**
 
----
+
 
 <p align="center">
   <sub>Powered by</sub><br/>
@@ -39,7 +39,6 @@
 
 ---
 
-> **DEV Version** - This project is under active development. Bugs may occur and some features may not work as expected.
 
 ## Overview
 
