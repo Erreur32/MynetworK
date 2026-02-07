@@ -205,6 +205,7 @@ app.use((req, _res, next) => {
 import logsRoutes from './routes/logs.js';
 import updatesRoutes from './routes/updates.js';
 import debugRoutes from './routes/debug.js';
+import infoRoutes from './routes/info.js';
 import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
 import latencyMonitoringRoutes from './routes/latency-monitoring.js';
@@ -264,6 +265,7 @@ app.use('/api/dhcp', dhcpRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/updates', updatesRoutes);
 app.use('/api/debug', debugRoutes);
+app.use('/api/info', infoRoutes);
 app.use('/api/security', securityRoutes);
 
 // Health check

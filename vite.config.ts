@@ -28,6 +28,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default defineConfig({
+  base: './',
   server: {
     port: parseInt(process.env.VITE_PORT || '5173', 10),
     host: '0.0.0.0', // Listen on all interfaces to allow access via IP
@@ -157,7 +158,6 @@ export default defineConfig({
     }
   },
   build: {
-    base: './',
     rollupOptions: {
       output: {
         manualChunks: (id) => {

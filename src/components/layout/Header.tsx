@@ -16,7 +16,7 @@ import {
 import logoUltra from '../../icons/logo_ultra.svg';
 import logoMynetworK from '../../icons/logo_mynetwork.svg';
 import logoUnifi from '../../icons/logo_unifi.svg';
-import { StatusBadge, UserMenu, LanguageSwitcher } from '../ui';
+import { StatusBadge, UserMenu } from '../ui';
 import { useAuthStore } from '../../stores/authStore';
 import { useConnectionStore } from '../../stores';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
@@ -926,8 +926,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Language switcher + User Menu */}
-        <LanguageSwitcher />
+        {/* User Menu */}
         {user && user.username && (
           <UserMenu
             user={user}

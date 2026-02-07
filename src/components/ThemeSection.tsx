@@ -258,29 +258,29 @@ const DEFAULT_COLORS: Record<Theme, ThemeColors> = {
 
 const VALID_THEMES: Theme[] = ['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant', 'full-animation'];
 
-const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; label: string }[] = [
-    { value: 'off', label: 'NON' },
-    { value: 'animation.all', label: 'All' },
-    { value: 'animation.80.particle-waves', label: 'Particle waves' },
-    { value: 'animation.93.particules-line', label: 'Particules line' },
-    { value: 'animation.1.home-assistant-particles', label: 'Home Assistant particles' },
-    { value: 'animation.72.playstation-3-bg-style', label: 'PlayStation 3 style' },
-    { value: 'animation.79.canvas-ribbons', label: 'Canvas ribbons' },
-    { value: 'animation.90.aurora', label: 'Icelandic Aurora' },
-    { value: 'animation.92.aurora-v2', label: 'Icelandic Aurora v2' },
-    { value: 'animation.94.alien-blackout', label: 'Alien Blackout' },
-    { value: 'animation.95.bit-ocean', label: 'Bit Ocean' },
-    { value: 'animation.96.stars', label: 'Stars' },
-    { value: 'animation.97.space', label: 'Space' },
-    { value: 'animation.98.sidelined', label: 'Sidelined' },
-    { value: 'animation.10.css-dark-particles', label: 'CSS dark particles' },
+const FULL_ANIMATION_OPTIONS: { value: FullAnimationId | 'off'; labelKey: string }[] = [
+    { value: 'off', labelKey: 'theme.animationOff' },
+    { value: 'animation.all', labelKey: 'theme.animationAll' },
+    { value: 'animation.80.particle-waves', labelKey: 'theme.animationParticleWaves' },
+    { value: 'animation.93.particules-line', labelKey: 'theme.animationParticulesLine' },
+    { value: 'animation.1.home-assistant-particles', labelKey: 'theme.animationHomeAssistant' },
+    { value: 'animation.72.playstation-3-bg-style', labelKey: 'theme.animationPlaystation' },
+    { value: 'animation.79.canvas-ribbons', labelKey: 'theme.animationCanvasRibbons' },
+    { value: 'animation.90.aurora', labelKey: 'theme.animationAurora' },
+    { value: 'animation.92.aurora-v2', labelKey: 'theme.animationAuroraV2' },
+    { value: 'animation.94.alien-blackout', labelKey: 'theme.animationAlienBlackout' },
+    { value: 'animation.95.bit-ocean', labelKey: 'theme.animationBitOcean' },
+    { value: 'animation.96.stars', labelKey: 'theme.animationStars' },
+    { value: 'animation.97.space', labelKey: 'theme.animationSpace' },
+    { value: 'animation.98.sidelined', labelKey: 'theme.animationSidelined' },
+    { value: 'animation.10.css-dark-particles', labelKey: 'theme.animationCssDarkParticles' },
 ];
 
 // Valeurs BgAnimationVariant (sous-ensemble) — source unique pour éviter doublons
 const BG_ANIMATION_VALUES: BgAnimationVariant[] = ['animation.80.particle-waves', 'animation.93.particules-line', 'animation.1.home-assistant-particles'];
 // Options pour thèmes non full-animation, dérivées de FULL_ANIMATION_OPTIONS
-const BG_ANIMATION_OPTIONS: { value: BgAnimationVariant; label: string }[] = FULL_ANIMATION_OPTIONS.filter(
-    (opt): opt is { value: BgAnimationVariant; label: string } => opt.value !== 'off' && BG_ANIMATION_VALUES.includes(opt.value as BgAnimationVariant)
+const BG_ANIMATION_OPTIONS: { value: BgAnimationVariant; labelKey: string }[] = FULL_ANIMATION_OPTIONS.filter(
+    (opt): opt is { value: BgAnimationVariant; labelKey: string } => opt.value !== 'off' && BG_ANIMATION_VALUES.includes(opt.value as BgAnimationVariant)
 );
 
 // Liste des animations supprimées (ne plus afficher)
@@ -291,11 +291,12 @@ const REMOVED_ANIMATIONS = ['animation.95.just-in-case', 'animation.99.media-bac
 // Composant AnimationSelector moderne avec menu déroulant et cartes visuelles
 interface AnimationSelectorProps {
     value: FullAnimationId;
-    options: { value: FullAnimationId; label: string }[];
+    options: { value: FullAnimationId; labelKey: string }[];
     onChange: (value: FullAnimationId) => void;
 }
 
 const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, onChange }) => {
+    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const selectedOption = options.find(opt => opt.value === value);
@@ -325,7 +326,7 @@ const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, o
                 className="w-full bg-theme-secondary border border-theme rounded-lg px-4 py-3 text-left flex items-center justify-between hover:border-yellow-500/50 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
             >
                 <span className="text-sm font-medium text-theme-primary">
-                    {selectedOption?.label || 'Sélectionner une animation'}
+                    {selectedOption ? t(selectedOption.labelKey) : t('theme.selectAnimation')}
                 </span>
                 <ChevronDownIcon 
                     className={`w-5 h-5 text-theme-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -355,7 +356,7 @@ const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, o
                                     >
                                         <div className="flex items-center justify-between">
                                             <span className={`text-sm font-medium ${isSelected ? 'text-yellow-500' : 'text-theme-primary'}`}>
-                                                {option.label}
+                                                {t(option.labelKey)}
                                             </span>
                                             {isSelected && (
                                                 <Check className="w-4 h-4 text-yellow-500 flex-shrink-0 ml-2" />
@@ -370,6 +371,42 @@ const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, o
             )}
         </div>
     );
+};
+
+const THEME_NAME_KEYS: Record<string, string> = {
+    dark: 'theme.themeNameDark',
+    glass: 'theme.themeNameGlass',
+    modern: 'theme.themeNameModern',
+    nightly: 'theme.themeNameNightly',
+    neon: 'theme.themeNameNeon',
+    elegant: 'theme.themeNameElegant',
+    'full-animation': 'theme.themeNameFullAnimation',
+};
+const THEME_DESC_KEYS: Record<string, string> = {
+    dark: 'theme.themeDescDark',
+    glass: 'theme.themeDescGlass',
+    modern: 'theme.themeDescModern',
+    nightly: 'theme.themeDescNightly',
+    neon: 'theme.themeDescNeon',
+    elegant: 'theme.themeDescElegant',
+    'full-animation': 'theme.themeDescFullAnimation',
+};
+const ANIMATION_LABEL_KEYS: Record<string, string> = {
+    off: 'theme.animationOff',
+    'animation.all': 'theme.animationAll',
+    'animation.80.particle-waves': 'theme.animationParticleWaves',
+    'animation.93.particules-line': 'theme.animationParticulesLine',
+    'animation.1.home-assistant-particles': 'theme.animationHomeAssistant',
+    'animation.72.playstation-3-bg-style': 'theme.animationPlaystation',
+    'animation.79.canvas-ribbons': 'theme.animationCanvasRibbons',
+    'animation.90.aurora': 'theme.animationAurora',
+    'animation.92.aurora-v2': 'theme.animationAuroraV2',
+    'animation.94.alien-blackout': 'theme.animationAlienBlackout',
+    'animation.95.bit-ocean': 'theme.animationBitOcean',
+    'animation.96.stars': 'theme.animationStars',
+    'animation.97.space': 'theme.animationSpace',
+    'animation.98.sidelined': 'theme.animationSidelined',
+    'animation.10.css-dark-particles': 'theme.animationCssDarkParticles',
 };
 
 export const ThemeSection: React.FC = () => {
@@ -415,37 +452,27 @@ export const ThemeSection: React.FC = () => {
     // Use shared context so slider changes apply to AnimatedBackground (same source as App)
     const { parameters, setParameter, resetParameters, parameterDefinitions } = useAnimationParametersContext();
     
-    // Nom de l'animation affichée (et dont on affiche les options) = fullAnimationId
     const getCurrentAnimationName = (): string => {
         if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
-            return 'Particle waves';
+            return t('theme.animationParticleWaves');
         }
-        const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
-        return option?.label || t('theme.none');
+        const key = ANIMATION_LABEL_KEYS[String(fullAnimationId)];
+        return key ? t(key) : t('theme.none');
     };
+
+    /** Resolve param label from i18n (descriptionKey) or fallback to description/name */
+    const getParamLabel = (p: { descriptionKey?: string; description?: string; name: string }): string =>
+        p.descriptionKey ? t(p.descriptionKey) : (p.description || p.name);
     
-    // Get animation name for a specific theme preview
     const getAnimationNameForTheme = (themeId: Theme): string => {
-        if (themeId === 'full-animation') {
-            // Si l'animation a été supprimée, retourner la valeur par défaut
+        if (themeId === 'full-animation' || bgAnimation !== 'off') {
             if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
-                return 'Particle waves';
+                return t('theme.animationParticleWaves');
             }
-            const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
-            return option?.label || 'Particle waves';
+            const key = ANIMATION_LABEL_KEYS[String(fullAnimationId)];
+            return key ? t(key) : t('theme.animationParticleWaves');
         }
-        // For other themes, show the animation if it's enabled
-        if (bgAnimation !== 'off') {
-            // Si l'animation a été supprimée, retourner la valeur par défaut
-            if (REMOVED_ANIMATIONS.includes(String(fullAnimationId))) {
-                return 'Particle waves';
-            }
-            // Use fullAnimationId since that's what's actually used for rendering
-            const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
-            return option?.label || 'Particle waves';
-        }
-        // If animation is off, show "NON"
-        return 'NON';
+        return t('theme.animationOff');
     };
 
     // Sync global animation speed from per-animation "speed" param when this animation has one (single source of truth for speed)
@@ -696,7 +723,7 @@ export const ThemeSection: React.FC = () => {
             });
             
             await saveThemeConfig(currentTheme, onlyCustomColors, cardOpacity[currentTheme]);
-            alert('Thème sauvegardé avec succès');
+            alert(t('theme.savedSuccess'));
             // Re-apply colors to ensure consistency after save
             applyCustomColors();
         } catch (error) {
@@ -740,11 +767,11 @@ export const ThemeSection: React.FC = () => {
     return (
         <Section title={t('theme.interfaceTheme')} icon={Lightbulb} iconColor="yellow">
             <div className="space-y-6">
-                {/* Card: Thème principal */}
+                {/* Card: Main theme */}
                 <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm">
                     <div className="mb-4">
-                        <h3 className="text-base font-semibold text-theme-primary mb-1">Thème principal</h3>
-                        <p className="text-sm text-theme-secondary">Sélectionnez le thème de base pour l'interface</p>
+                        <h3 className="text-base font-semibold text-theme-primary mb-1">{t('theme.mainThemeTitle')}</h3>
+                        <p className="text-sm text-theme-secondary">{t('theme.mainThemeDesc')}</p>
                     </div>
                     
                     {/* Black themes category */}
@@ -910,12 +937,12 @@ export const ThemeSection: React.FC = () => {
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                     style={{ backgroundColor: themeColors.accentPrimary }}
-                                                    title="Couleur principale"
+                                                    title={t('theme.mainColor')}
                                                 />
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                     style={{ backgroundColor: themeColors.textPrimary }}
-                                                    title="Couleur texte"
+                                                    title={t('theme.textColor')}
                                                 />
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
@@ -925,7 +952,7 @@ export const ThemeSection: React.FC = () => {
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                     style={{ backgroundColor: themeColors.buttonBg }}
-                                                    title="Couleur bouton"
+                                                    title={t('theme.buttonColor')}
                                                 />
                                             </div>
                                         </div>
@@ -934,19 +961,19 @@ export const ThemeSection: React.FC = () => {
                                             className="text-lg font-semibold mb-1"
                                             style={{ color: themeColors.textPrimary }}
                                         >
-                                            {theme.name}
+                                            {t(THEME_NAME_KEYS[theme.id] || 'theme.themeNameDark')}
                                         </div>
                                         <div 
                                             className="text-xs mb-1"
                                             style={{ color: themeColors.textSecondary }}
                                         >
-                                            {theme.description}
+                                            {t(THEME_DESC_KEYS[theme.id] || 'theme.themeDescDark')}
                                         </div>
                                         <div 
                                             className="text-xs font-medium mt-1"
                                             style={{ color: themeColors.accentPrimary }}
                                         >
-                                            Animation: {getAnimationNameForTheme(theme.id)}
+                                            {t('theme.animationLabel')}: {getAnimationNameForTheme(theme.id)}
                                         </div>
                                     </div>
                                 </button>
@@ -957,7 +984,7 @@ export const ThemeSection: React.FC = () => {
                     
                     {/* Color themes category */}
                     <div className="mb-8">
-                        <h4 className="text-sm font-semibold text-theme-primary mb-4 px-6">Couleur</h4>
+                        <h4 className="text-sm font-semibold text-theme-primary mb-4 px-6">{t('theme.colorCategory')}</h4>
                         <div className="grid grid-cols-4 gap-8 px-6">
                             {availableThemes.filter(theme => ['modern', 'neon'].includes(theme.id)).map((theme) => {
                                 const themeColors = DEFAULT_COLORS[theme.id];
@@ -1053,12 +1080,12 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.accentPrimary }}
-                                                        title="Couleur principale"
+                                                        title={t('theme.mainColor')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.textPrimary }}
-                                                        title="Couleur texte"
+                                                        title={t('theme.textColor')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
@@ -1068,7 +1095,7 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.buttonBg }}
-                                                        title="Couleur bouton"
+                                                        title={t('theme.buttonColor')}
                                                     />
                                                 </div>
                                             </div>
@@ -1077,20 +1104,20 @@ export const ThemeSection: React.FC = () => {
                                                 className="text-lg font-semibold mb-1"
                                                 style={{ color: themeColors.textPrimary }}
                                             >
-                                                {theme.name}
-                                            </div>
-                                            <div 
-                                                className="text-xs mb-1"
-                                                style={{ color: themeColors.textSecondary }}
-                                            >
-                                                {theme.description}
-                                            </div>
-                                            <div 
-                                                className="text-xs font-medium mt-1"
-                                                style={{ color: themeColors.accentPrimary }}
-                                            >
-                                                Animation: {getAnimationNameForTheme(theme.id)}
-                                            </div>
+                                                {t(THEME_NAME_KEYS[theme.id] || 'theme.themeNameDark')}
+                                                </div>
+                                                <div 
+                                                    className="text-xs mb-1"
+                                                    style={{ color: themeColors.textSecondary }}
+                                                >
+                                                    {t(THEME_DESC_KEYS[theme.id] || 'theme.themeDescDark')}
+                                                </div>
+                                                <div 
+                                                    className="text-xs font-medium mt-1"
+                                                    style={{ color: themeColors.accentPrimary }}
+                                                >
+                                                    {t('theme.animationLabel')}: {getAnimationNameForTheme(theme.id)}
+                                                </div>
                                         </div>
                                     </button>
                                 );
@@ -1135,7 +1162,7 @@ export const ThemeSection: React.FC = () => {
                                                         color: themeColors.textPrimary,
                                                         backdropFilter: 'blur(4px)'
                                                     }}>
-                                                        {FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId)?.label || 'Particle waves'}
+                                                        {(() => { const opt = FULL_ANIMATION_OPTIONS.find(o => o.value === fullAnimationId); return opt ? t(opt.labelKey) : t('theme.animationParticleWaves'); })()}
                                                     </div>
                                                 )}
                                             </>
@@ -1181,12 +1208,12 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm elegant-icon-pulse"
                                                         style={{ backgroundColor: themeColors.accentPrimary }}
-                                                        title="Couleur principale"
+                                                        title={t('theme.mainColor')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.textPrimary }}
-                                                        title="Couleur texte"
+                                                        title={t('theme.textColor')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm elegant-icon-pulse"
@@ -1196,7 +1223,7 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.buttonBg }}
-                                                        title="Couleur bouton"
+                                                        title={t('theme.buttonColor')}
                                                     />
                                                 </div>
                                             </div>
@@ -1261,7 +1288,7 @@ export const ThemeSection: React.FC = () => {
                                 <Palette size={18} className="text-yellow-400" />
                                 Personnalisation des couleurs du thème
                             </h3>
-                            <p className="text-sm text-theme-secondary">Couleurs de l&apos;interface (menus, cartes, textes, boutons). Ces réglages s&apos;appliquent au thème visuel choisi ci‑dessus et ne concernent pas l&apos;animation d&apos;arrière-plan.</p>
+                            <p className="text-sm text-theme-secondary">{t('theme.interfaceColorsDesc')}</p>
                         </div>
                         <button
                             onClick={() => setIsColorEditorOpen(!isColorEditorOpen)}
@@ -1318,12 +1345,12 @@ export const ThemeSection: React.FC = () => {
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
                                     <div className="w-1 h-4 bg-blue-500 rounded-full" />
-                                    Couleurs principales
+                                    {t('theme.mainColors')}
                                 </h5>
                                 <div className="space-y-3">
                                     <div>
                                         <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Couleur primaire
+                                            {t('theme.primaryColor')}
                                         </label>
                                         <div className="flex items-center gap-1.5">
                                             <input
@@ -1349,7 +1376,7 @@ export const ThemeSection: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-medium text-theme-secondary mb-1.5">
-                                            Couleur primaire (hover)
+                                            {t('theme.primaryColorHover')}
                                         </label>
                                         <div className="flex items-center gap-1.5">
                                             <input
@@ -1380,7 +1407,7 @@ export const ThemeSection: React.FC = () => {
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
                                     <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                                    Couleurs de statut
+                                    {t('theme.statusColors')}
                                 </h5>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
@@ -1527,7 +1554,7 @@ export const ThemeSection: React.FC = () => {
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
                                     <div className="w-1 h-4 bg-cyan-500 rounded-full" />
-                                    Couleurs de texte
+                                    {t('theme.textColors')}
                                 </h5>
                                 <div className="space-y-3">
                                     <div>
@@ -1593,7 +1620,7 @@ export const ThemeSection: React.FC = () => {
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
                                     <div className="w-1 h-4 bg-gray-500 rounded-full" />
-                                    Couleurs de bordure
+                                    {t('theme.borderColors')}
                                 </h5>
                                 <div className="space-y-3">
                                     <div>
@@ -1655,7 +1682,7 @@ export const ThemeSection: React.FC = () => {
                             <div className="bg-theme-secondary rounded-xl border border-theme p-4">
                                 <h5 className="text-xs font-semibold text-theme-primary mb-3 flex items-center gap-2">
                                     <div className="w-1 h-4 bg-orange-500 rounded-full" />
-                                    Couleurs des boutons
+                                    {t('theme.buttonColors')}
                                 </h5>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
@@ -1808,9 +1835,9 @@ export const ThemeSection: React.FC = () => {
                 {/* Card: Sélection d'animation + Paramètres (sans trait entre les deux) */}
                 <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm space-y-6">
                     <div>
-                        <h3 className="text-base font-semibold text-theme-primary mb-1">Sélection de l'animation</h3>
+                        <h3 className="text-base font-semibold text-theme-primary mb-1">{t('theme.animationSelectionTitle')}</h3>
                         <p className="text-sm text-theme-secondary mb-4">
-                            Choisissez l'animation affichée en arrière-plan pour votre thème.
+                            {t('theme.animationSelectionDesc')}
                         </p>
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                         {FULL_ANIMATION_OPTIONS.filter(option => {
@@ -1866,7 +1893,7 @@ export const ThemeSection: React.FC = () => {
                                             ? isSelected ? 'text-red-500' : 'text-theme-primary'
                                             : isSelected ? 'text-yellow-500' : 'text-theme-primary'
                                     }`}>
-                                        {option.label}
+                                        {t(option.labelKey)}
                                     </div>
                                     {isSelected && (
                                         <div className="absolute top-1 right-1">
@@ -1885,8 +1912,8 @@ export const ThemeSection: React.FC = () => {
                     {/* Vitesse d'animation globale : masquée pour "All" (chaque animation garde sa vitesse), affichée pour les autres sans param "speed" */}
                     {!parameterDefinitions.some((p) => p.name === 'speed') && currentAnimationId !== 'animation.all' && (
                     <SettingRow
-                        label="Vitesse d'animation"
-                        description={`${animationSpeed.toFixed(2)} (${animationSpeed >= 1.2 ? 'Lent' : animationSpeed >= 0.75 ? 'Normal' : animationSpeed >= 0.4 ? 'Rapide' : 'Très rapide'})`}
+                        label={t('theme.animationSpeed')}
+                        description={`${animationSpeed.toFixed(2)} (${animationSpeed >= 1.2 ? t('theme.speedSlow') : animationSpeed >= 0.75 ? t('theme.speedNormal') : animationSpeed >= 0.4 ? t('theme.speedFast') : t('theme.speedVeryFast')})`}
                     >
                         <div className="flex items-center gap-3 w-full">
                             <input
@@ -1959,9 +1986,9 @@ export const ThemeSection: React.FC = () => {
                                         <div key={param.name} className="space-y-2">
                                             <div>
                                                 <label className="text-sm font-medium text-theme-primary block mb-1">
-                                                    {param.description || param.name}
+                                                    {getParamLabel(param)}
                                                 </label>
-                                                <p className="text-xs text-theme-secondary mb-2">Couleur actuelle: {colorValue}</p>
+                                                <p className="text-xs text-theme-secondary mb-2">{t('theme.currentColor')}: {colorValue}</p>
                                             </div>
                                             <div className="flex items-center gap-3 w-full">
                                                 <input
@@ -2017,11 +2044,11 @@ export const ThemeSection: React.FC = () => {
                                         <div key={param.name} className="space-y-1.5">
                                             <div>
                                                 <label className="text-sm font-medium text-theme-primary block mb-0.5">
-                                                    {param.description || param.name}
+                                                    {getParamLabel(param)}
                                                 </label>
                                                 {param.min !== undefined && param.max !== undefined && (
                                                     <p className="text-xs text-theme-secondary">
-                                                        min: {formatDurationMinMax(param.min)} — max: {formatDurationMinMax(param.max)}
+                                                        {t('theme.durationMinMax', { min: formatDurationMinMax(param.min), max: formatDurationMinMax(param.max) })}
                                                     </p>
                                                 )}
                                             </div>
@@ -2048,7 +2075,7 @@ export const ThemeSection: React.FC = () => {
                                     return (
                                         <div key={param.name} className="space-y-2">
                                             <label className="text-sm font-medium text-theme-primary block">
-                                                {param.description || param.name}
+                                                {getParamLabel(param)}
                                             </label>
                                             {param.enum ? (
                                                 <select
@@ -2068,7 +2095,7 @@ export const ThemeSection: React.FC = () => {
                                                     value={stringValue}
                                                     onChange={(e) => setParameter(param.name, e.target.value)}
                                                     className="w-full px-3 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                                                    placeholder={param.description || param.name}
+                                                    placeholder={getParamLabel(param)}
                                                 />
                                             )}
                                         </div>
@@ -2081,7 +2108,7 @@ export const ThemeSection: React.FC = () => {
                                         <div key={param.name} className="space-y-2">
                                             <div>
                                                 <label className="text-sm font-medium text-theme-primary block mb-1">
-                                                    {param.description || param.name}
+                                                    {getParamLabel(param)}
                                                 </label>
                                                 <p className="text-xs text-theme-secondary mb-3">{mediaListValue.length} média(s)</p>
                                             </div>
@@ -2173,14 +2200,14 @@ export const ThemeSection: React.FC = () => {
                                     };
                                     const options = FULL_ANIMATION_OPTIONS.filter(
                                         (opt) => opt.value !== 'off' && opt.value !== 'animation.all' && !REMOVED_ANIMATIONS.includes(String(opt.value))
-                                    ) as { value: FullAnimationId; label: string }[];
+                                    ) as { value: FullAnimationId; labelKey: string }[];
                                     return (
                                         <div key={param.name} className="space-y-3">
                                             <label className="text-sm font-medium text-theme-primary block">
-                                                {param.description || param.name}
+                                                {getParamLabel(param)}
                                             </label>
                                             <p className="text-xs text-theme-secondary mb-2">
-                                                {selectedIds.length} animation(s) sélectionnée(s)
+                                                {t('theme.animationsSelected', { count: selectedIds.length })}
                                             </p>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {options.map((opt) => {
@@ -2198,7 +2225,7 @@ export const ThemeSection: React.FC = () => {
                                                                 onChange={() => toggleId(opt.value)}
                                                                 className="w-3 h-3 rounded border-theme text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
                                                             />
-                                                            <span className="text-xs text-theme-primary">{opt.label}</span>
+                                                            <span className="text-xs text-theme-primary">{t(opt.labelKey)}</span>
                                                         </label>
                                                     );
                                                 })}
@@ -2212,9 +2239,9 @@ export const ThemeSection: React.FC = () => {
                                         <div key={param.name} className="flex items-center justify-between py-2">
                                             <div>
                                                 <label className="text-sm font-medium text-theme-primary block">
-                                                    {param.description || param.name}
+                                                    {getParamLabel(param)}
                                                 </label>
-                                                <p className="text-xs text-theme-secondary">{boolValue ? 'Activé' : 'Désactivé'}</p>
+                                                <p className="text-xs text-theme-secondary">{boolValue ? t('theme.enabled') : t('theme.disabled')}</p>
                                             </div>
                                             <button
                                                 type="button"

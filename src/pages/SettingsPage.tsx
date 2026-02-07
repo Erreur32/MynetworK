@@ -1,4 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Settings,
   Wifi,
@@ -40,7 +43,7 @@ import {
   Upload
 } from 'lucide-react';
 import { api } from '../api/client';
-import { API_ROUTES } from '../utils/constants';
+import { API_ROUTES, GITHUB_REPO_URL } from '../utils/constants';
 import { ParentalControlModal } from '../components/modals/ParentalControlModal';
 import { PortForwardingModal } from '../components/modals/PortForwardingModal';
 import { VpnModal } from '../components/modals/VpnModal';
@@ -171,6 +174,8 @@ export const Section: React.FC<{
 
 // Database Management Section Component
 const DatabaseManagementSection: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
   const [retentionConfig, setRetentionConfig] = useState({
     historyRetentionDays: 30,
     scanRetentionDays: 90,
@@ -247,12 +252,12 @@ const DatabaseManagementSection: React.FC = () => {
         setRetentionConfig(response.result);
         setMessage(null); // Clear any previous error
       } else {
-        const errorMsg = response.error?.message || response.error?.code || 'Erreur lors du chargement de la configuration';
+        const errorMsg = response.error?.message || response.error?.code || t('admin.database.loadError');
         setMessage({ type: 'error', text: errorMsg });
       }
     } catch (error: any) {
       console.error('Failed to load retention config:', error);
-      const errorMsg = error?.response?.data?.error?.message || error?.message || 'Erreur lors du chargement de la configuration';
+      const errorMsg = error?.response?.data?.error?.message || error?.message || t('admin.database.loadError');
       setMessage({ type: 'error', text: errorMsg });
     }
   };
@@ -271,11 +276,11 @@ const DatabaseManagementSection: React.FC = () => {
         });
       } else {
         console.error('Failed to load database stats:', response.error);
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement des statistiques' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.loadStatsError') });
       }
     } catch (error: any) {
       console.error('Failed to load database stats:', error);
-      const errorMsg = error?.response?.data?.error?.message || error?.message || 'Erreur lors du chargement des statistiques';
+      const errorMsg = error?.response?.data?.error?.message || error?.message || t('admin.database.loadStatsError');
       setMessage({ type: 'error', text: errorMsg });
     } finally {
       setIsLoading(false);
@@ -289,20 +294,20 @@ const DatabaseManagementSection: React.FC = () => {
       const response = await api.post('/api/network-scan/retention-config', retentionConfig);
       if (response.success && response.result) {
         setRetentionConfig(response.result);
-        setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
+        setMessage({ type: 'success', text: t('admin.database.saveSuccess') });
         setTimeout(() => setMessage(null), 3000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
+      setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handlePurge = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir purger les données anciennes selon la rétention configurée ? Cette action est irréversible.')) {
+    if (!confirm(t('admin.database.confirmPurge'))) {
       return;
     }
     setIsPurging(true);
@@ -317,24 +322,30 @@ const DatabaseManagementSection: React.FC = () => {
           (response.result.latencyMeasurementsDeleted || 0);
         setMessage({ 
           type: 'success', 
-          text: `Purge terminée : ${totalDeleted} entrées supprimées (Historique: ${response.result.historyDeleted || 0}, Scans: ${response.result.scansDeleted || 0}, Offline: ${response.result.offlineDeleted || 0}, Latence: ${response.result.latencyMeasurementsDeleted || 0})` 
+          text: t('admin.database.purgeSuccess', {
+            total: totalDeleted,
+            history: response.result.historyDeleted || 0,
+            scans: response.result.scansDeleted || 0,
+            offline: response.result.offlineDeleted || 0,
+            latency: response.result.latencyMeasurementsDeleted || 0
+          })
         });
         loadDatabaseStats();
         loadSizeEstimate();
         loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la purge' });
+      setMessage({ type: 'error', text: t('admin.database.purgeError') });
     } finally {
       setIsPurging(false);
     }
   };
 
   const handlePurgeHistory = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir purger l\'historique selon la rétention configurée ? Cette action est irréversible.')) {
+    if (!confirm(t('admin.database.confirmPurgeHistory'))) {
       return;
     }
     setIsPurgingHistory(true);
@@ -344,24 +355,24 @@ const DatabaseManagementSection: React.FC = () => {
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
-          text: `Historique purgé : ${response.result.deleted} entrées supprimées` 
+          text: t('admin.database.purgeHistorySuccess', { count: response.result.deleted })
         });
         loadDatabaseStats();
         loadSizeEstimate();
         loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge de l\'historique' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeHistoryError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la purge de l\'historique' });
+      setMessage({ type: 'error', text: t('admin.database.purgeHistoryError') });
     } finally {
       setIsPurgingHistory(false);
     }
   };
 
   const handlePurgeScans = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir purger les scans selon la rétention configurée ? Cette action est irréversible.')) {
+    if (!confirm(t('admin.database.confirmPurgeScans'))) {
       return;
     }
     setIsPurgingScans(true);
@@ -371,24 +382,24 @@ const DatabaseManagementSection: React.FC = () => {
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
-          text: `Scans purgés : ${response.result.deleted} entrées supprimées` 
+          text: t('admin.database.purgeScansSuccess', { count: response.result.deleted })
         });
         loadDatabaseStats();
         loadSizeEstimate();
         loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des scans' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeScansError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la purge des scans' });
+      setMessage({ type: 'error', text: t('admin.database.purgeScansError') });
     } finally {
       setIsPurgingScans(false);
     }
   };
 
   const handlePurgeOffline = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir purger les IPs offline selon la rétention configurée ? Cette action est irréversible.')) {
+    if (!confirm(t('admin.database.confirmPurgeOffline'))) {
       return;
     }
     setIsPurgingOffline(true);
@@ -398,24 +409,24 @@ const DatabaseManagementSection: React.FC = () => {
       if (response.success && response.result) {
         setMessage({ 
           type: 'success', 
-          text: `IPs offline purgées : ${response.result.deleted} entrées supprimées` 
+          text: t('admin.database.purgeOfflineSuccess', { count: response.result.deleted })
         });
         loadDatabaseStats();
         loadSizeEstimate();
         loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la purge des IPs offline' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeOfflineError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la purge des IPs offline' });
+      setMessage({ type: 'error', text: t('admin.database.purgeOfflineError') });
     } finally {
       setIsPurgingOffline(false);
     }
   };
 
   const handlePurgeAll = async () => {
-    if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment supprimer TOUTES les données de scan réseau (historique + scans + mesures de latence) sans tenir compte de la rétention ? Cette action est irréversible.')) {
+    if (!confirm(t('admin.database.confirmPurgeAll'))) {
       return;
     }
     setIsPurgingAll(true);
@@ -432,17 +443,24 @@ const DatabaseManagementSection: React.FC = () => {
         const totalDeleted = (historyResponse.result?.deleted || 0) + (scansResponse.result?.deleted || 0) + (offlineResponse.result?.deleted || 0) + (latencyResponse.result?.deleted || 0);
         setMessage({ 
           type: 'success', 
-          text: `Toutes les données supprimées : ${scansResponse.result?.deleted || 0} scans, ${historyResponse.result?.deleted || 0} historique, ${offlineResponse.result?.deleted || 0} offline, ${latencyResponse.result?.deleted || 0} mesures de latence (Total: ${totalDeleted})${keepIps ? ' - Les IPs ont été conservées' : ''}` 
+          text: t('admin.database.purgeAllSuccess', {
+            scans: scansResponse.result?.deleted || 0,
+            history: historyResponse.result?.deleted || 0,
+            offline: offlineResponse.result?.deleted || 0,
+            latency: latencyResponse.result?.deleted || 0,
+            total: totalDeleted,
+            ipsKept: keepIps ? t('admin.database.ipsKeptSuffix') : ''
+          })
         });
         loadDatabaseStats();
         loadSizeEstimate();
         loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: 'Erreur lors de la purge complète' });
+        setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la purge complète' });
+      setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
     } finally {
       setIsPurgingAll(false);
     }
@@ -450,7 +468,7 @@ const DatabaseManagementSection: React.FC = () => {
 
 
   const handleOptimize = async () => {
-    if (!confirm('Optimiser la base de données peut prendre quelques instants. Continuer ?')) {
+    if (!confirm(t('admin.database.confirmOptimize'))) {
       return;
     }
     setIsOptimizing(true);
@@ -458,14 +476,14 @@ const DatabaseManagementSection: React.FC = () => {
     try {
       const response = await api.post('/api/network-scan/optimize-database');
       if (response.success) {
-        setMessage({ type: 'success', text: 'Optimisation de la base de données terminée' });
+        setMessage({ type: 'success', text: t('admin.database.optimizeSuccess') });
         loadDatabaseStats();
         setTimeout(() => setMessage(null), 3000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de l\'optimisation' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.optimizeError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de l\'optimisation' });
+      setMessage({ type: 'error', text: t('admin.database.optimizeError') });
     } finally {
       setIsOptimizing(false);
     }
@@ -481,7 +499,7 @@ const DatabaseManagementSection: React.FC = () => {
 
   const formatDate = (dateStr: string | null): string => {
     if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
+    return new Date(dateStr).toLocaleDateString(dateLocale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -492,7 +510,7 @@ const DatabaseManagementSection: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <Section title="Rétention des données de scan" icon={Database} iconColor="purple">
+      <Section title={t('admin.database.retentionTitle')} icon={Database} iconColor="purple">
         <div className="space-y-6">
           {message && (
             <div className={`p-3 rounded-lg ${
@@ -507,8 +525,8 @@ const DatabaseManagementSection: React.FC = () => {
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-6">
               <SettingRow
-                label="Rétention de l'historique"
-                description="Nombre de jours à conserver dans l'historique des scans (network_scan_history)"
+                label={t('admin.database.retentionHistory')}
+                description={t('admin.database.retentionHistoryDesc')}
               >
                 <div className="flex items-center gap-3">
                   <input
@@ -519,13 +537,13 @@ const DatabaseManagementSection: React.FC = () => {
                     onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
                     className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-sm text-gray-400">jours</span>
+                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
                 </div>
               </SettingRow>
 
               <SettingRow
-                label="Rétention des scans"
-                description="Nombre de jours à conserver les entrées de scan (network_scans)"
+                label={t('admin.database.retentionScans')}
+                description={t('admin.database.retentionScansDesc')}
               >
                 <div className="flex items-center gap-3">
                   <input
@@ -536,13 +554,13 @@ const DatabaseManagementSection: React.FC = () => {
                     onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
                     className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-sm text-gray-400">jours</span>
+                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
                 </div>
               </SettingRow>
 
               <SettingRow
-                label="Rétention des IPs offline"
-                description="Nombre de jours à conserver les IPs offline (suppression plus rapide)"
+                label={t('admin.database.retentionOffline')}
+                description={t('admin.database.retentionOfflineDesc')}
               >
                 <div className="flex items-center gap-3">
                   <input
@@ -553,13 +571,13 @@ const DatabaseManagementSection: React.FC = () => {
                     onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
                     className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-sm text-gray-400">jours</span>
+                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
                 </div>
               </SettingRow>
 
               <SettingRow
-                label="Rétention des mesures de latence"
-                description="Nombre de jours à conserver les mesures de latence (latency_measurements)"
+                label={t('admin.database.retentionLatency')}
+                description={t('admin.database.retentionLatencyDesc')}
               >
                 <div className="flex items-center gap-3">
                   <input
@@ -570,15 +588,15 @@ const DatabaseManagementSection: React.FC = () => {
                     onChange={(e) => setRetentionConfig({ ...retentionConfig, latencyMeasurementsRetentionDays: parseInt(e.target.value) || 30 })}
                     className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-sm text-gray-400">jours</span>
+                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
                 </div>
               </SettingRow>
             </div>
 
             <div className="space-y-6">
               <SettingRow
-                label="Garder les IPs lors de la purge"
-                description="Conserver les IPs scannées même après purge pour surveiller le nombre total réel d'IPs du réseau"
+                label={t('admin.database.keepIpsOnPurge')}
+                description={t('admin.database.keepIpsOnPurgeDesc')}
               >
                 <Toggle
                   enabled={retentionConfig.keepIpsOnPurge}
@@ -587,8 +605,8 @@ const DatabaseManagementSection: React.FC = () => {
               </SettingRow>
 
               <SettingRow
-                label="Purge automatique"
-                description="Activer la purge automatique selon la planification"
+                label={t('admin.database.autoPurge')}
+                description={t('admin.database.autoPurgeDesc')}
               >
                 <Toggle
                   enabled={retentionConfig.autoPurgeEnabled}
@@ -598,14 +616,14 @@ const DatabaseManagementSection: React.FC = () => {
 
               {retentionConfig.autoPurgeEnabled && (
                 <SettingRow
-                  label="Planification de la purge"
-                  description="Expression cron pour la planification (ex: '0 2 * * *' = tous les jours à 2h)"
+                  label={t('admin.database.purgeSchedule')}
+                  description={t('admin.database.purgeScheduleDesc')}
                 >
                   <input
                     type="text"
                     value={retentionConfig.purgeSchedule}
                     onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
-                    placeholder="0 2 * * *"
+                    placeholder={t('admin.database.purgeSchedulePlaceholder')}
                     className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
                   />
                 </SettingRow>
@@ -620,49 +638,49 @@ const DatabaseManagementSection: React.FC = () => {
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
             >
               {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Sauvegarder
+              {t('admin.database.save')}
             </button>
           </div>
         </div>
       </Section>
 
       <div className="grid grid-cols-2 gap-6">
-        <Section title="Statistiques de la base" icon={Database} iconColor="purple">
+        <Section title={t('admin.database.statsTitle')} icon={Database} iconColor="purple">
           <div className="space-y-4">
             {databaseStats ? (
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">Entrées de scan</div>
+                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.scanEntries')}</div>
                     <div className="text-lg font-semibold text-gray-200">{databaseStats.scansCount.toLocaleString()}</div>
                   </div>
                   <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">Entrées d'historique</div>
+                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.historyEntries')}</div>
                     <div className="text-lg font-semibold text-gray-200">{databaseStats.historyCount.toLocaleString()}</div>
                   </div>
                   <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">Plus ancien scan</div>
+                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.oldestScan')}</div>
                     <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
                   </div>
                   <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">Plus ancien historique</div>
+                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.oldestHistory')}</div>
                     <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
                   </div>
                 </div>
                 {sizeEstimate && (
                   <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-2">Estimation de taille</div>
+                    <div className="text-xs text-gray-400 mb-2">{t('admin.database.sizeEstimate')}</div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Taille actuelle :</span>
+                        <span className="text-gray-400">{t('admin.database.currentSize')}</span>
                         <span className="text-gray-200 font-medium">{sizeEstimate.currentSizeMB.toFixed(2)} MB</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Taille estimée (après purge) :</span>
+                        <span className="text-gray-400">{t('admin.database.estimatedSizeAfterPurge')}</span>
                         <span className="text-gray-200 font-medium">{sizeEstimate.estimatedSizeAfterPurgeMB.toFixed(2)} MB</span>
                       </div>
                       <div className="flex justify-between text-sm pt-1 border-t border-gray-700">
-                        <span className="text-gray-400">Espace libéré estimé :</span>
+                        <span className="text-gray-400">{t('admin.database.freedEstimate')}</span>
                         <span className="text-emerald-400 font-medium">~{sizeEstimate.estimatedFreedMB.toFixed(2)} MB</span>
                       </div>
                     </div>
@@ -671,21 +689,21 @@ const DatabaseManagementSection: React.FC = () => {
                 {dbStats && (
                   <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700">
                     <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">Taille de la DB</div>
+                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.dbSize')}</div>
                       <div className="text-lg font-semibold text-gray-200">{formatBytes(dbStats.dbSize)}</div>
                     </div>
                     <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">Mode journal</div>
+                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.journalMode')}</div>
                       <div className="text-lg font-semibold text-gray-200">{dbStats.journalMode}</div>
                     </div>
                     <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">Taille du cache</div>
+                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.cacheSize')}</div>
                       <div className="text-lg font-semibold text-gray-200">{formatBytes(Math.abs(dbStats.cacheSize) * 1024)}</div>
                     </div>
                     <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">Mode synchrone</div>
+                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.syncMode')}</div>
                       <div className="text-lg font-semibold text-gray-200">
-                        {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
+                        {dbStats.synchronous === 0 ? t('admin.database.syncOff') : dbStats.synchronous === 1 ? t('admin.database.syncNormal') : t('admin.database.syncFull')}
                       </div>
                     </div>
                   </div>
@@ -694,24 +712,24 @@ const DatabaseManagementSection: React.FC = () => {
             ) : (
               <div className="text-center py-8 text-gray-400">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2" />
-                <div>Chargement des statistiques...</div>
+                <div>{t('admin.database.loadingStats')}</div>
               </div>
             )}
           </div>
         </Section>
 
-        <Section title="Actions de maintenance" icon={Trash2} iconColor="red">
+        <Section title={t('admin.database.maintenanceTitle')} icon={Trash2} iconColor="red">
         <div className="space-y-4">
           <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
             <p className="text-sm text-amber-400 mb-2">
-              <strong>⚠️ Attention :</strong> Ces actions sont irréversibles. Assurez-vous d'avoir sauvegardé vos données si nécessaire.
+              <strong>⚠️ {t('admin.debug.attention')}</strong> {t('admin.database.warningIrreversible')}
             </p>
           </div>
 
           <div className="space-y-4">
 
           <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Optimisation  </h4>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">{t('admin.database.optimizeTitle')}</h4>
  
               <div className="flex items-start gap-4">
                 <button
@@ -720,11 +738,11 @@ const DatabaseManagementSection: React.FC = () => {
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
                 >
                   {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                  Optimiser la DB
+                  {t('admin.database.optimizeDb')}
                 </button>
                 <div className="flex-1">
                   <p className="text-xs text-gray-400">
-                    Optimisation de la base de données (VACUUM + optimisation index + actualisation stats)
+                    {t('admin.database.optimizeDesc')}
                   </p>
                 </div>
               </div>
@@ -732,7 +750,7 @@ const DatabaseManagementSection: React.FC = () => {
 
 
             <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Nettoyage de la base</h4>
+              <h4 className="text-sm font-semibold text-gray-300 mb-2">{t('admin.database.cleanDbSection')}</h4>
 
               <div className="flex items-start gap-4">
                 <button
@@ -741,17 +759,17 @@ const DatabaseManagementSection: React.FC = () => {
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
                 >
                   {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  Nettoyer la base
+                  {t('admin.database.cleanDb')}
                 </button>
                 <div className="flex-1">
                   <p className="text-xs text-gray-400">
-                    Purge selon rétention configurée :
-                    <br />- Historique ({retentionConfig.historyRetentionDays} jours)
-                    <br />- Scans ({retentionConfig.scanRetentionDays} jours)
-                    <br />- IPs offline ({retentionConfig.offlineRetentionDays} jours)
-                    <br />- Mesures de latence ({retentionConfig.latencyMeasurementsRetentionDays} jours)
+                    {t('admin.database.purgeRetentionDesc')}
+                    <br />- {t('admin.database.historyDays', { days: retentionConfig.historyRetentionDays })}
+                    <br />- {t('admin.database.scansDays', { days: retentionConfig.scanRetentionDays })}
+                    <br />- {t('admin.database.offlineDays', { days: retentionConfig.offlineRetentionDays })}
+                    <br />- {t('admin.database.latencyDays', { days: retentionConfig.latencyMeasurementsRetentionDays })}
                     {retentionConfig.keepIpsOnPurge && (
-                      <><br /><span className="text-emerald-400">✓ Les IPs seront conservées</span></>
+                      <><br /><span className="text-emerald-400">{t('admin.database.ipsKept')}</span></>
                     )}
                   </p>
                 </div>
@@ -759,7 +777,7 @@ const DatabaseManagementSection: React.FC = () => {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold text-red-400 mb-2">Actions dangereuses</h4>
+              <h4 className="text-sm font-semibold text-red-400 mb-2">{t('admin.database.dangerousActions')}</h4>
               <div className="flex items-start gap-4">
                 <button
                   onClick={handlePurgeAll}
@@ -767,12 +785,12 @@ const DatabaseManagementSection: React.FC = () => {
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
                 >
                   {isPurgingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  Tout supprimer
+                  {t('admin.database.deleteAll')}
                 </button>
                 {retentionConfig.keepIpsOnPurge && (
                   <div className="flex-1">
                     <p className="text-xs text-amber-400">
-                      ⚠️ Note : Supprime les données de scan réseau uniquement, Les IPs seront conservées (option "Garder les IPs" activée)
+                      {t('admin.database.noteIpsKept')}
                     </p>
                   </div>
                 )}
@@ -785,7 +803,7 @@ const DatabaseManagementSection: React.FC = () => {
         </Section>
       </div>
 
-      <Section title="Performance de la base de données (Docker)" icon={Sparkles} iconColor="blue">
+      <Section title={t('admin.database.perfSectionTitle')} icon={Sparkles} iconColor="blue">
         <DatabasePerformanceSection />
       </Section>
 
@@ -1268,6 +1286,7 @@ const PluginPrioritySection: React.FC = () => {
 
 // Database Performance Section Component
 const DatabasePerformanceSection: React.FC = () => {
+  const { t } = useTranslation();
   const [dbConfig, setDbConfig] = useState({
     walMode: 'WAL' as 'WAL' | 'DELETE' | 'TRUNCATE' | 'PERSIST' | 'MEMORY' | 'OFF',
     walCheckpointInterval: 1000,
@@ -1293,11 +1312,11 @@ const DatabasePerformanceSection: React.FC = () => {
       if (response.success && response.result) {
         setDbConfig(response.result);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement de la configuration' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.loadError') });
       }
     } catch (error: any) {
       console.error('Failed to load DB config:', error);
-      setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
+      setMessage({ type: 'error', text: t('admin.database.loadError') });
     } finally {
       setIsLoading(false);
     }
@@ -1310,13 +1329,13 @@ const DatabasePerformanceSection: React.FC = () => {
       const response = await api.post('/api/database/config', dbConfig);
       if (response.success && response.result) {
         setDbConfig(response.result);
-        setMessage({ type: 'success', text: 'Configuration de performance sauvegardée' });
+        setMessage({ type: 'success', text: t('admin.database.perfSaveSuccess') });
         setTimeout(() => setMessage(null), 3000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
+      setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
     }
@@ -1334,7 +1353,7 @@ const DatabasePerformanceSection: React.FC = () => {
     return (
       <div className="py-4 text-center text-gray-500">
         <Loader2 size={24} className="animate-spin mx-auto mb-2" />
-        Chargement de la configuration...
+        {t('admin.database.perfLoading')}
       </div>
     );
   }
@@ -1355,8 +1374,8 @@ const DatabasePerformanceSection: React.FC = () => {
       <div className="grid grid-cols-2 gap-6">
         <div className="space-y-6">
           <SettingRow
-            label="Optimisations Docker"
-            description="Active les optimisations spécifiques pour Docker (checkpoint WAL automatique toutes les 5 min)"
+            label={t('admin.database.perfDocker')}
+            description={t('admin.database.perfDockerDesc')}
           >
             <Toggle
               enabled={dbConfig.optimizeForDocker}
@@ -1365,8 +1384,8 @@ const DatabasePerformanceSection: React.FC = () => {
           </SettingRow>
 
           <SettingRow
-            label="Checkpoint WAL automatique"
-            description="Active le checkpoint WAL automatique (recommandé pour Docker)"
+            label={t('admin.database.walAutoCheckpoint')}
+            description={t('admin.database.walAutoCheckpointDesc')}
           >
             <Toggle
               enabled={dbConfig.walAutoCheckpoint}
@@ -1375,15 +1394,15 @@ const DatabasePerformanceSection: React.FC = () => {
           </SettingRow>
 
           <SettingRow
-            label="Mode WAL"
-            description="Mode de journalisation (WAL recommandé pour Docker)"
+            label={t('admin.database.walMode')}
+            description={t('admin.database.walModeDesc')}
           >
             <select
               value={dbConfig.walMode}
               onChange={(e) => setDbConfig({ ...dbConfig, walMode: e.target.value as any })}
               className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
             >
-              <option value="WAL">WAL (Recommandé)</option>
+              <option value="WAL">{t('admin.database.walRecommended')}</option>
               <option value="DELETE">DELETE</option>
               <option value="TRUNCATE">TRUNCATE</option>
               <option value="PERSIST">PERSIST</option>
@@ -1395,23 +1414,23 @@ const DatabasePerformanceSection: React.FC = () => {
 
         <div className="space-y-6">
           <SettingRow
-            label="Mode synchrone"
-            description="0=OFF (rapide, risqué), 1=NORMAL (équilibré), 2=FULL (sûr, lent)"
+            label={t('admin.database.syncModeLabel')}
+            description={t('admin.database.syncModeDesc')}
           >
             <select
               value={dbConfig.synchronous}
               onChange={(e) => setDbConfig({ ...dbConfig, synchronous: parseInt(e.target.value) as 0 | 1 | 2 })}
               className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
             >
-              <option value="0">OFF (Rapide)</option>
-              <option value="1">NORMAL (Recommandé)</option>
-              <option value="2">FULL (Sûr)</option>
+              <option value="0">{t('admin.database.syncOff')}</option>
+              <option value="1">{t('admin.database.syncNormal')}</option>
+              <option value="2">{t('admin.database.syncFull')}</option>
             </select>
           </SettingRow>
 
           <SettingRow
-            label="Taille du cache (KB)"
-            description="Cache SQLite en KB (négatif = KB, positif = pages). Défaut: -64000 (64 MB)"
+            label={t('admin.database.cacheSizeLabel')}
+            description={t('admin.database.cacheSizeDesc')}
           >
             <div className="flex items-center gap-3">
               <input
@@ -1427,8 +1446,8 @@ const DatabasePerformanceSection: React.FC = () => {
           </SettingRow>
 
           <SettingRow
-            label="Timeout de verrouillage (ms)"
-            description="Temps d'attente pour les verrous de base de données (défaut: 5000ms)"
+            label={t('admin.database.busyTimeoutLabel')}
+            description={t('admin.database.busyTimeoutDesc')}
           >
             <input
               type="number"
@@ -1452,7 +1471,7 @@ const DatabasePerformanceSection: React.FC = () => {
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
         >
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          Sauvegarder
+          {t('admin.database.save')}
         </button>
       </div>
   </div>
@@ -1461,6 +1480,8 @@ const DatabasePerformanceSection: React.FC = () => {
 
 // App Logs Section Component (for Administration > Debug tab)
 const AppLogsSection: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const timeLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
   const [logs, setLogs] = useState<Array<{
     timestamp: string;
     level: 'error' | 'warn' | 'info' | 'debug' | 'verbose';
@@ -1524,7 +1545,7 @@ const AppLogsSection: React.FC = () => {
   };
 
   const clearLogs = async () => {
-    if (!confirm('Voulez-vous vraiment nettoyer la mémoire ?\n\nCela supprimera tous les logs du buffer en mémoire (max 1000 logs). Cette action est irréversible.')) return;
+    if (!confirm(t('admin.debug.confirmClear'))) return;
     try {
       await api.delete('/api/debug/logs');
       setLogs([]);
@@ -1553,7 +1574,7 @@ const AppLogsSection: React.FC = () => {
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('fr-FR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return date.toLocaleTimeString(timeLocale, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
   // Memoize filtered logs to ensure updates when logs or filter change
@@ -1575,9 +1596,9 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-gray-600 text-white border-2 border-gray-500'
                 : 'bg-[#1a1a1a] text-gray-400 border border-gray-700 hover:bg-gray-800 hover:text-gray-300'
             }`}
-            title="Afficher tous les logs (tous niveaux confondus)"
+            title={t('admin.debug.filterAllTitle')}
           >
-            Tous
+            {t('admin.debug.filterAll')}
           </button>
           <button
             onClick={() => setFilter('error')}
@@ -1586,9 +1607,9 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-red-600 text-white border-2 border-red-400'
                 : 'bg-[#1a1a1a] text-red-400 border border-red-800/50 hover:bg-red-900/20 hover:text-red-300'
             }`}
-            title="Afficher uniquement les logs d'erreur (niveau error)"
+            title={t('admin.debug.filterErrorTitle')}
           >
-            Erreurs
+            {t('admin.debug.filterError')}
           </button>
           <button
             onClick={() => setFilter('warn')}
@@ -1597,9 +1618,9 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-yellow-600 text-white border-2 border-yellow-400'
                 : 'bg-[#1a1a1a] text-yellow-400 border border-yellow-800/50 hover:bg-yellow-900/20 hover:text-yellow-300'
             }`}
-            title="Afficher uniquement les logs d'avertissement (niveau warn)"
+            title={t('admin.debug.filterWarnTitle')}
           >
-            Avertissements
+            {t('admin.debug.filterWarn')}
           </button>
           <button
             onClick={() => setFilter('info')}
@@ -1608,9 +1629,9 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-cyan-600 text-white border-2 border-cyan-400'
                 : 'bg-[#1a1a1a] text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/20 hover:text-cyan-300'
             }`}
-            title="Afficher uniquement les logs informatifs (niveau info)"
+            title={t('admin.debug.filterInfoTitle')}
           >
-            Infos
+            {t('admin.debug.filterInfo')}
           </button>
           <button
             onClick={() => setFilter('debug')}
@@ -1619,9 +1640,9 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-blue-600 text-white border-2 border-blue-400'
                 : 'bg-[#1a1a1a] text-blue-400 border border-blue-800/50 hover:bg-blue-900/20 hover:text-blue-300'
             }`}
-            title="Afficher uniquement les logs de débogage (niveau debug)"
+            title={t('admin.debug.filterDebugTitle')}
           >
-            Debug
+            {t('admin.debug.filterDebug')}
           </button>
           <button
             onClick={() => setFilter('verbose')}
@@ -1630,16 +1651,15 @@ const AppLogsSection: React.FC = () => {
                 ? 'bg-purple-600 text-white border-2 border-purple-400'
                 : 'bg-[#1a1a1a] text-purple-400 border border-purple-800/50 hover:bg-purple-900/20 hover:text-purple-300'
             }`}
-            title="Afficher uniquement les logs verbeux (niveau verbose)"
+            title={t('admin.debug.filterVerboseTitle')}
           >
-            Verbose
+            {t('admin.debug.filterVerbose')}
           </button>
           <span 
             className="text-xs text-gray-500 ml-2"
-            title={`${filteredLogs.length} log${filteredLogs.length !== 1 ? 's' : ''} affiché${filteredLogs.length !== 1 ? 's' : ''}${totalLogs > filteredLogs.length ? ` sur ${totalLogs} au total` : ''}`}
+            title={totalLogs > filteredLogs.length ? t('admin.debug.logsCountTotal', { count: filteredLogs.length, total: totalLogs }) : t('admin.debug.logsCount', { count: filteredLogs.length })}
           >
-            {filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''}
-            {totalLogs > filteredLogs.length && ` / ${totalLogs} total`}
+            {totalLogs > filteredLogs.length ? t('admin.debug.logsCountTotal', { count: filteredLogs.length, total: totalLogs }) : t('admin.debug.logsCount', { count: filteredLogs.length })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -1654,28 +1674,28 @@ const AppLogsSection: React.FC = () => {
                 : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
             }`}
             title={showAllLogs 
-                ? 'Afficher les 500 derniers logs' 
-                : `Afficher tous les logs (${totalLogs} au total)`
+                ? t('admin.debug.showLast500Title') 
+                : t('admin.debug.showAllTitle', { total: totalLogs })
             }
           >
             <FileText size={14} />
-            <span>{showAllLogs ? '500 derniers' : 'Voir tout'}</span>
+            <span>{showAllLogs ? t('admin.debug.showLast500') : t('admin.debug.showAll')}</span>
           </button>
           <button
             onClick={loadLogs}
             disabled={isLoading}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
-            title="Rafraîchir manuellement la liste des logs"
+            title={t('admin.debug.refreshTitle')}
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={clearLogs}
             className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
-            title="Nettoyer la mémoire : supprime tous les logs du buffer en mémoire (max 1000 logs). Utile pour libérer la mémoire après un débogage."
+            title={t('admin.debug.clearTitle')}
           >
             <Sparkles size={14} />
-            <span>Nettoyer</span>
+            <span>{t('admin.debug.clearBtn')}</span>
           </button>
         </div>
       </div>
@@ -1685,8 +1705,7 @@ const AppLogsSection: React.FC = () => {
           <div className="flex items-center gap-2 text-yellow-400 text-sm">
             <AlertCircle size={16} />
             <span>
-              <strong>Attention :</strong> Affichage de {filteredLogs.length.toLocaleString()} logs. 
-              Cela peut affecter les performances du navigateur.
+              <strong>{t('admin.debug.attention')}</strong> {t('admin.debug.warningManyLogs', { count: filteredLogs.length.toLocaleString() })}
             </span>
           </div>
         </div>
@@ -1696,8 +1715,8 @@ const AppLogsSection: React.FC = () => {
           {filteredLogs.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <FileText size={32} className="mx-auto mb-2 opacity-50" />
-              <p>Aucun log disponible</p>
-              <p className="text-xs text-gray-400 mt-2">Utilisez le bouton "Rafraîchir" pour charger les logs</p>
+              <p>{t('admin.debug.noLogsAvailable')}</p>
+              <p className="text-xs text-gray-400 mt-2">{t('admin.debug.useRefreshToLoad')}</p>
             </div>
           ) : (
             <>
@@ -1726,6 +1745,7 @@ const AppLogsSection: React.FC = () => {
 
 // Debug Log Section Component (for Administration > Debug tab)
 const DebugLogSection: React.FC = () => {
+  const { t } = useTranslation();
   const [debugConfig, setDebugConfig] = useState<{ debug: boolean; verbose: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1769,7 +1789,7 @@ const DebugLogSection: React.FC = () => {
     return (
       <div className="py-4 text-center text-gray-500">
         <Loader2 size={20} className="mx-auto mb-2 animate-spin" />
-        <p className="text-sm">Chargement...</p>
+        <p className="text-sm">{t('admin.debug.loading')}</p>
       </div>
     );
   }
@@ -1777,8 +1797,8 @@ const DebugLogSection: React.FC = () => {
   return (
     <>
       <SettingRow
-        label="Logs de debug"
-        description="Active l'affichage des logs de debug dans la console du serveur (informations détaillées sur les opérations)"
+        label={t('admin.debug.debugLogsLabel')}
+        description={t('admin.debug.debugLogsDesc')}
       >
         <Toggle
           enabled={debugConfig.debug}
@@ -1787,8 +1807,8 @@ const DebugLogSection: React.FC = () => {
         />
       </SettingRow>
       <SettingRow
-        label="Logs verbeux"
-        description="Active l'affichage des logs très détaillés (verbose) - nécessite que le mode debug soit activé"
+        label={t('admin.debug.verboseLogsLabel')}
+        description={t('admin.debug.verboseLogsDesc')}
       >
         <Toggle
           enabled={debugConfig.verbose}
@@ -1799,14 +1819,14 @@ const DebugLogSection: React.FC = () => {
       {!debugConfig.debug && (
         <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
           <p className="text-xs text-blue-400">
-            Les logs de debug sont désactivés. Activez-les pour voir les détails des opérations dans les logs du serveur.
+            {t('admin.debug.debugDisabledMsg')}
           </p>
         </div>
       )}
       {debugConfig.debug && (
         <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
           <p className="text-xs text-amber-400">
-            Les logs de debug sont activés. Les logs du serveur afficheront plus d'informations détaillées.
+            {t('admin.debug.debugEnabledMsg')}
           </p>
         </div>
       )}
@@ -1816,6 +1836,7 @@ const DebugLogSection: React.FC = () => {
 
 // Update Check Section Component (for Administration > General tab)
 const UpdateCheckSection: React.FC = () => {
+  const { t } = useTranslation();
   const { updateConfig, updateInfo, loadConfig, setConfig, checkForUpdates, isLoading } = useUpdateStore();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1840,8 +1861,8 @@ const UpdateCheckSection: React.FC = () => {
   return (
     <>
       <SettingRow
-        label="Vérification automatique des mises à jour"
-        description="Active la vérification des nouvelles versions disponibles sur GitHub Container Registry"
+        label={t('admin.updateCheck.autoCheckLabel')}
+        description={t('admin.updateCheck.autoCheckDescription')}
       >
         <Toggle
           enabled={updateConfig?.enabled ?? true}
@@ -1853,20 +1874,20 @@ const UpdateCheckSection: React.FC = () => {
         <>
           <div className="py-3 border-t border-gray-800">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-400">Version actuelle</span>
+              <span className="text-sm text-gray-400">{t('admin.updateCheck.currentVersion')}</span>
               <span className="text-sm font-mono text-white">{updateInfo?.currentVersion || '0.0.0'}</span>
             </div>
             {updateInfo?.latestVersion && (
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">Dernière version disponible</span>
+                <span className="text-sm text-gray-400">{t('admin.updateCheck.latestVersionAvailable')}</span>
                 <span className="text-sm font-mono text-amber-400">{updateInfo.latestVersion}</span>
               </div>
             )}
             {updateInfo?.updateAvailable && (
               <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <p className="text-xs text-amber-400 font-semibold mb-1">Nouvelle version disponible !</p>
+                <p className="text-xs text-amber-400 font-semibold mb-1">{t('admin.updateCheck.newVersionAvailable')}</p>
                 <p className="text-xs text-gray-400">
-                  Une mise à jour est disponible. Pour mettre à jour, utilisez :
+                  {t('admin.updateCheck.updateAvailableHint')}
                 </p>
                 <code className="block mt-2 text-xs text-cyan-300 bg-[#0a0a0a] p-2 rounded border border-gray-800">
                   docker-compose pull && docker-compose up -d
@@ -1875,12 +1896,12 @@ const UpdateCheckSection: React.FC = () => {
             )}
             {updateInfo?.error && (
               <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-xs text-red-400">Erreur lors de la vérification : {updateInfo.error}</p>
+                <p className="text-xs text-red-400">{t('admin.updateCheck.checkError')}: {updateInfo.error}</p>
               </div>
             )}
             <div className="mt-3 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
               <p className="text-xs text-gray-400">
-                La vérification manuelle des mises à jour est temporairement désactivée.
+                {t('admin.updateCheck.manualCheckDisabled')}
               </p>
             </div>
             <button
@@ -1889,7 +1910,7 @@ const UpdateCheckSection: React.FC = () => {
               className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-gray-600 text-gray-400 text-sm rounded-lg transition-colors opacity-50 cursor-not-allowed"
             >
               <RefreshCw size={14} />
-              Vérifier maintenant
+              {t('admin.updateCheck.checkNow')}
             </button>
           </div>
         </>
@@ -1900,6 +1921,7 @@ const UpdateCheckSection: React.FC = () => {
 
 // Backup Section Component (for Administration > Backup tab)
 const BackupSection: React.FC = () => {
+  const { t } = useTranslation();
   const { freeboxUrl, isRegistered: isFreeboxRegistered } = useAuthStore();
   const { plugins } = usePluginStore();
   
@@ -1936,31 +1958,27 @@ const BackupSection: React.FC = () => {
           <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-amber-400 mb-2">
-              Important : Sauvegardes manuelles recommandées
+              {t('admin.backupImportantTitle')}
             </h3>
             <p className="text-sm text-gray-300 mb-2">
-              Il est difficile de créer des sauvegardes automatiques via cette application pour les équipements réseau (Freebox, UniFi Controller).
-              Les APIs de ces équipements ne fournissent pas d'endpoints officiels pour déclencher des exports de configuration de manière automatisée.
+              {t('admin.backupIntro')}
             </p>
             <p className="text-sm text-gray-300">
-              <strong className="text-amber-400">Recommandation :</strong> Pensez à effectuer régulièrement des sauvegardes manuelles de vos configurations d'équipements réseau
-              via les interfaces web natives. Les liens ci-dessous vous permettent d'accéder directement aux pages de sauvegarde.
+              <strong className="text-amber-400">{t('admin.backupRecommendationLabel')}</strong> {t('admin.backupRecommendationText')}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Freebox Backup Section */}
-      <Section title="Sauvegarde Freebox" icon={Server} iconColor="cyan">
+      <Section title={t('admin.freeboxBackup')} icon={Server} iconColor="cyan">
         <div className="space-y-4">
           <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <p className="text-sm text-gray-300 mb-3">
-              La Freebox permet d'exporter et d'importer sa configuration via l'interface web native.
-              Cette fonctionnalité est disponible depuis la version 4.5.3 du firmware Freebox OS.
+              {t('admin.freeboxBackupDesc')}
+              {t('admin.freeboxBackupFirmwareNote')}
             </p>
             <p className="text-xs text-gray-400 mb-4">
-              <strong className="text-gray-300">Note :</strong> L'export contient une partie de la configuration de votre Freebox Server.
-              L'import nécessite un redémarrage de la Freebox Server.
+              <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.freeboxBackupExportNote')}
             </p>
             {freeboxBackupUrl && isFreeboxRegistered ? (
               <div className="space-y-2">
@@ -1974,7 +1992,7 @@ const BackupSection: React.FC = () => {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
                 >
                   <ExternalLink size={16} />
-                  Ouvrir la page de backup Freebox
+                  {t('admin.openFreeboxBackupPage')}
                 </a>
  
               </div>
@@ -1982,8 +2000,8 @@ const BackupSection: React.FC = () => {
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <p className="text-xs text-amber-400">
                   {!isFreeboxRegistered 
-                    ? 'La Freebox n\'est pas enregistrée. Veuillez vous connecter d\'abord.'
-                    : 'URL Freebox non disponible.'}
+                    ? t('admin.freeboxNotRegistered')
+                    : t('admin.freeboxUrlUnavailable')}
                 </p>
               </div>
             )}
@@ -1991,17 +2009,14 @@ const BackupSection: React.FC = () => {
         </div>
       </Section>
 
-      {/* UniFi Backup Section */}
-      <Section title="Sauvegarde UniFi Controller" icon={Network} iconColor="purple">
+      <Section title={t('admin.unifiBackup')} icon={Network} iconColor="purple">
         <div className="space-y-4">
           <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
             <p className="text-sm text-gray-300 mb-3">
-              Le contrôleur UniFi permet de créer des sauvegardes de configuration via l'interface web.
-              Les sauvegardes incluent les paramètres du contrôleur, les sites, et les configurations réseau.
+              {t('admin.unifiBackupDesc')}
             </p>
             <p className="text-xs text-gray-400 mb-4">
-              <strong className="text-gray-300">Note :</strong> Accédez à la section "Maintenance" ou "Settings" de votre contrôleur UniFi
-              pour créer et télécharger des sauvegardes de configuration.
+              <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.unifiBackupNote')}
             </p>
             {unifiBackupUrl && unifiConfigured ? (
               <div className="space-y-2">
@@ -2015,7 +2030,7 @@ const BackupSection: React.FC = () => {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
                 >
                   <ExternalLink size={16} />
-                  Ouvrir la page de backup UniFi
+                  {t('admin.openUnifiBackupPage')}
                 </a>
 
               </div>
@@ -2023,8 +2038,8 @@ const BackupSection: React.FC = () => {
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <p className="text-xs text-amber-400">
                   {!unifiConfigured 
-                    ? 'Le plugin UniFi n\'est pas configuré. Configurez-le dans l\'onglet Plugins.'
-                    : 'URL du contrôleur UniFi non disponible.'}
+                    ? t('admin.unifiNotConfigured')
+                    : t('admin.unifiUrlUnavailable')}
                 </p>
               </div>
             )}
@@ -2032,16 +2047,13 @@ const BackupSection: React.FC = () => {
         </div>
       </Section>
 
-      {/* Information Section */}
-      <Section title="Informations" icon={Info} iconColor="teal">
+      <Section title={t('admin.info')} icon={Info} iconColor="teal">
         <div className="space-y-3 text-sm text-gray-400">
           <p>
-            <strong className="text-gray-300">Freebox :</strong> Les sauvegardes Freebox sont des fichiers <code className="text-xs bg-gray-800 px-1 py-0.5 rounded">.bin</code> qui contiennent
-            une partie de la configuration de votre Freebox Server. Stockez ces fichiers dans un endroit sûr.
+            <strong className="text-gray-300">Freebox :</strong> {t('admin.backupInfoFreeboxPrefix')} <code className="text-xs bg-gray-800 px-1 py-0.5 rounded">.bin</code> {t('admin.backupInfoFreeboxSuffix')}
           </p>
           <p>
-            <strong className="text-gray-300">UniFi :</strong> Les sauvegardes UniFi peuvent être créées depuis l'interface web du contrôleur.
-            Consultez la documentation UniFi pour plus d'informations sur la restauration de sauvegardes.
+            <strong className="text-gray-300">UniFi :</strong> {t('admin.backupInfoUnifi')}
           </p>
  
         </div>
@@ -2050,8 +2062,32 @@ const BackupSection: React.FC = () => {
   );
 };
 
+// Language selection section (Administration > General) - dropdown wired to i18n
+const LanguageSection: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const current = i18n.language?.startsWith('fr') ? 'fr' : 'en';
+  return (
+    <Section title={t('settings.interfaceLanguage')} icon={Globe} iconColor="cyan">
+      <SettingRow
+        label={t('settings.interfaceLanguage')}
+        description={t('settings.interfaceLanguageDescription')}
+      >
+        <select
+          value={current}
+          onChange={(e) => i18n.changeLanguage(e.target.value as 'en' | 'fr')}
+          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 min-w-[12rem]"
+        >
+          <option value="en">{t('settings.languageEn')}</option>
+          <option value="fr">{t('settings.languageFr')}</option>
+        </select>
+      </SettingRow>
+    </Section>
+  );
+};
+
 // General Network Configuration Section Component (for Administration > General tab)
 const GeneralNetworkSection: React.FC = () => {
+  const { t } = useTranslation();
   const [publicUrl, setPublicUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -2086,7 +2122,7 @@ const GeneralNetworkSection: React.FC = () => {
         publicUrl: publicUrl.trim() || ''
       });
       if (response.success) {
-        setMessage({ type: 'success', text: response.result?.message || 'Configuration sauvegardée avec succès' });
+        setMessage({ type: 'success', text: response.result?.message || t('admin.general.configSavedSuccess') });
         setTimeout(() => setMessage(null), 3000);
         // Update initial value after save
         setInitialPublicUrl(publicUrl.trim() || '');
@@ -2094,7 +2130,7 @@ const GeneralNetworkSection: React.FC = () => {
     } catch (error: any) {
       setMessage({ 
         type: 'error', 
-        text: error?.response?.data?.error?.message || 'Erreur lors de la sauvegarde' 
+        text: error?.response?.data?.error?.message || t('admin.general.saveError') 
       });
     } finally {
       setIsSaving(false);
@@ -2117,10 +2153,10 @@ const GeneralNetworkSection: React.FC = () => {
           <AlertCircle size={20} className="text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <h4 className="text-sm font-medium text-amber-400 mb-1">
-              Modifications non sauvegardées
+              {t('admin.general.unsavedChanges')}
             </h4>
             <p className="text-xs text-amber-300">
-              Vous avez modifié l'URL publique. N'oubliez pas de cliquer sur <strong>"Sauvegarder"</strong> pour enregistrer vos changements.
+              {t('admin.general.unsavedChangesHint')}
             </p>
           </div>
         </div>
@@ -2137,13 +2173,13 @@ const GeneralNetworkSection: React.FC = () => {
       )}
       
       <div className="py-3 border-b border-gray-800">
-        <h4 className="text-sm font-medium text-white mb-2">URL publique (Domaine)</h4>
+        <h4 className="text-sm font-medium text-white mb-2">{t('admin.general.publicUrlLabel')}</h4>
         <div className="flex items-center gap-2 w-full">
           <input
             type="url"
             value={publicUrl}
             onChange={(e) => setPublicUrl(e.target.value)}
-            placeholder="https://votre-domaine.com"
+            placeholder={t('admin.general.publicUrlPlaceholder')}
             className="flex-1 w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
           />
           <button
@@ -2154,12 +2190,12 @@ const GeneralNetworkSection: React.FC = () => {
             {isSaving ? (
               <>
                 <Loader2 className="animate-spin" size={16} />
-                <span>Sauvegarde...</span>
+                <span>{t('admin.general.saving')}</span>
               </>
             ) : (
               <>
                 <Save size={16} />
-                <span>Sauvegarder</span>
+                <span>{t('common.save')}</span>
               </>
             )}
           </button>
@@ -2167,10 +2203,10 @@ const GeneralNetworkSection: React.FC = () => {
       </div>
       
       <div className="text-xs text-gray-500 mt-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-        <p className="font-medium text-gray-400 mb-1">💡 Note :</p>
+        <p className="font-medium text-gray-400 mb-1">💡 {t('admin.general.noteTitle')} :</p>
         <ul className="list-disc list-inside space-y-1 ml-2">
-          <li>Format attendu : <code className="text-blue-400">https://votre-domaine.com</code> ou <code className="text-blue-400">http://votre-domaine.com</code></li>
-          <li>Laissez vide pour utiliser l'IP locale ou les valeurs par défaut</li>
+          <li>{t('admin.general.publicUrlFormatHint')}</li>
+          <li>{t('admin.general.publicUrlEmptyHint')}</li>
         </ul>
       </div>
     </div>
@@ -2179,6 +2215,7 @@ const GeneralNetworkSection: React.FC = () => {
 
 // User Profile Section Component (for Administration > General tab)
 const UserProfileSection: React.FC = () => {
+  const { t } = useTranslation();
   const { user: currentUser, checkAuth } = useUserAuthStore();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -2228,7 +2265,7 @@ const UserProfileSection: React.FC = () => {
     
     // Validate format only if email is provided
     if (!validateEmail(newEmail)) {
-      setEmailError('Format d\'email invalide');
+      setEmailError(t('admin.profile.invalidEmailFormat'));
     } else {
       setEmailError(null);
     }
@@ -2243,20 +2280,20 @@ const UserProfileSection: React.FC = () => {
     try {
       // Check if user is logged in
       if (!currentUser || !currentUser.id) {
-        setError('Vous devez être connecté pour modifier votre profil');
+        setError(t('admin.profile.mustBeLoggedIn'));
         setIsSaving(false);
         return;
       }
 
       // Validate username
       if (!username || username.trim().length === 0) {
-        setError('Le nom d\'utilisateur ne peut pas être vide');
+        setError(t('admin.profile.usernameRequired'));
         setIsSaving(false);
         return;
       }
 
       if (username.length < 3) {
-        setError('Le nom d\'utilisateur doit contenir au moins 3 caractères');
+        setError(t('admin.profile.usernameMinLength'));
         setIsSaving(false);
         return;
       }
@@ -2265,14 +2302,14 @@ const UserProfileSection: React.FC = () => {
       // If email is provided and different from current, it must be valid
       if (email !== currentUser?.email) {
         if (!email || email.trim().length === 0) {
-          setEmailError('L\'email ne peut pas être vide');
-          setError('Veuillez corriger les erreurs avant de sauvegarder');
+          setEmailError(t('admin.profile.emailRequired'));
+          setError(t('admin.profile.correctErrorsBeforeSave'));
           setIsSaving(false);
           return;
         }
         if (!validateEmail(email)) {
-          setEmailError('Format d\'email invalide');
-          setError('Veuillez corriger les erreurs avant de sauvegarder');
+          setEmailError(t('admin.profile.invalidEmailFormat'));
+          setError(t('admin.profile.correctErrorsBeforeSave'));
           setIsSaving(false);
           return;
         }
@@ -2281,17 +2318,17 @@ const UserProfileSection: React.FC = () => {
       // Validate password if changing
       if (showPasswordFields && newPassword) {
         if (newPassword.length < 8) {
-          setError('Le mot de passe doit contenir au moins 8 caractères');
+          setError(t('admin.profile.passwordMinLength'));
           setIsSaving(false);
           return;
         }
         if (newPassword !== confirmPassword) {
-          setError('Les mots de passe ne correspondent pas');
+          setError(t('admin.profile.passwordsDoNotMatch'));
           setIsSaving(false);
           return;
         }
         if (!oldPassword) {
-          setError('Veuillez entrer votre mot de passe actuel');
+          setError(t('admin.profile.enterCurrentPassword'));
           setIsSaving(false);
           return;
         }
@@ -2316,7 +2353,7 @@ const UserProfileSection: React.FC = () => {
       }
 
       if (Object.keys(updateData).length === 0) {
-        setError('Aucune modification à sauvegarder');
+        setError(t('admin.profile.noChangesToSave'));
         setIsSaving(false);
         return;
       }
@@ -2333,7 +2370,7 @@ const UserProfileSection: React.FC = () => {
       }
       
       if (response.success) {
-        setSuccessMessage('Profil mis à jour avec succès');
+        setSuccessMessage(t('admin.profile.profileUpdatedSuccess'));
         setOldPassword('');
         setNewPassword('');
         setConfirmPassword('');
@@ -2345,7 +2382,7 @@ const UserProfileSection: React.FC = () => {
         await checkAuth();
       } else {
         // Show detailed error message
-        const errorMsg = response.error?.message || 'Échec de la mise à jour';
+        const errorMsg = response.error?.message || t('admin.profile.updateFailed');
         setError(errorMsg);
         console.error('[UserProfile] Update failed:', response.error);
       }
@@ -2354,12 +2391,12 @@ const UserProfileSection: React.FC = () => {
       console.error('[UserProfile] Exception during save:', err);
       if (err instanceof Error) {
         if (err.message.includes('fetch') || err.message.includes('network')) {
-          setError('Impossible de contacter le serveur. Vérifiez que le serveur backend est démarré.');
+          setError(t('admin.profile.serverUnreachable'));
         } else {
           setError(err.message);
         }
       } else {
-        setError('Erreur lors de la mise à jour du profil');
+        setError(t('admin.profile.profileUpdateError'));
       }
     } finally {
       setIsSaving(false);
@@ -2383,8 +2420,8 @@ const UserProfileSection: React.FC = () => {
 
       {/* Avatar Section */}
       <SettingRow
-        label="Avatar"
-        description="Changer votre photo de profil"
+        label={t('admin.profile.avatar')}
+        description={t('admin.profile.changeAvatarDescription')}
       >
         <div className="flex items-center gap-4 w-full">
           <div className="relative">
@@ -2427,7 +2464,7 @@ const UserProfileSection: React.FC = () => {
                 className="hidden"
               />
               <span className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm cursor-pointer transition-colors">
-                Choisir une image
+                {t('admin.profile.chooseImage')}
               </span>
             </label>
             {avatarFile && (
@@ -2443,12 +2480,12 @@ const UserProfileSection: React.FC = () => {
                     // Convert file to base64 using Promise
                     const base64String = await new Promise<string>((resolve, reject) => {
                       const reader = new FileReader();
-                      reader.onerror = () => reject(new Error('Erreur lors de la lecture du fichier'));
+                      reader.onerror = () => reject(new Error(t('admin.profile.fileReadError')));
                       reader.onloadend = () => {
                         if (reader.result && typeof reader.result === 'string') {
                           resolve(reader.result);
                         } else {
-                          reject(new Error('Impossible de convertir le fichier en base64'));
+                          reject(new Error(t('admin.profile.fileConvertError')));
                         }
                       };
                       reader.readAsDataURL(avatarFile);
@@ -2456,7 +2493,7 @@ const UserProfileSection: React.FC = () => {
                     
                     // Check if base64 string is too large (should not happen with 5MB limit, but double-check)
                     if (base64String.length > 10 * 1024 * 1024) { // ~10MB base64
-                      setError('L\'image est trop volumineuse après conversion');
+                      setError(t('admin.profile.imageTooLarge'));
                       setIsUploadingAvatar(false);
                       return;
                     }
@@ -2467,25 +2504,25 @@ const UserProfileSection: React.FC = () => {
                     });
                     
                     if (response.success) {
-                      setSuccessMessage('Avatar mis à jour avec succès');
+                      setSuccessMessage(t('admin.profile.avatarUpdatedSuccess'));
                       setAvatarFile(null);
                       // Keep preview to show new avatar
                       await checkAuth();
                     } else {
                       // Handle API error
-                      const errorMessage = response.error?.message || 'Échec de la mise à jour de l\'avatar';
+                      const errorMessage = response.error?.message || t('admin.profile.avatarUpdateFailed');
                       setError(errorMessage);
                     }
                   } catch (err) {
                     // Handle conversion or network errors
                     if (err instanceof Error) {
                       if (err.message.includes('Network') || err.message.includes('fetch')) {
-                        setError('Impossible de contacter le serveur. Vérifiez votre connexion réseau.');
+                        setError(t('admin.profile.networkError'));
                       } else {
                         setError(err.message);
                       }
                     } else {
-                      setError('Erreur lors de la mise à jour de l\'avatar');
+                      setError(t('admin.profile.avatarUpdateError'));
                     }
                   } finally {
                     setIsUploadingAvatar(false);
@@ -2497,10 +2534,10 @@ const UserProfileSection: React.FC = () => {
                 {isUploadingAvatar ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>Enregistrement...</span>
+                    <span>{t('admin.profile.saving')}</span>
                   </>
                 ) : (
-                  <span>Enregistrer l'avatar</span>
+                  <span>{t('admin.profile.saveAvatar')}</span>
                 )}
               </button>
             )}
@@ -2509,8 +2546,8 @@ const UserProfileSection: React.FC = () => {
       </SettingRow>
 
       <SettingRow
-        label="Nom d'utilisateur"
-        description="Votre nom d'utilisateur (minimum 3 caractères)"
+        label={t('admin.profile.username')}
+        description={t('admin.profile.usernameDescription')}
       >
         <div className="flex items-center gap-3 w-full">
           <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 flex-shrink-0">
@@ -2521,14 +2558,14 @@ const UserProfileSection: React.FC = () => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none transition-colors"
-            placeholder="Nom d'utilisateur"
+            placeholder={t('admin.profile.usernamePlaceholder')}
           />
         </div>
       </SettingRow>
 
       <SettingRow
-        label="Email"
-        description="Votre adresse email"
+        label={t('admin.profile.email')}
+        description={t('admin.profile.emailDescription')}
       >
         <div className="flex flex-col gap-2 w-full">
           <div className="flex items-center gap-3 w-full">
@@ -2542,7 +2579,7 @@ const UserProfileSection: React.FC = () => {
               className={`flex-1 px-3 py-2 bg-[#1a1a1a] border rounded-lg text-white text-sm focus:outline-none transition-colors ${
                 emailError ? 'border-red-500 focus:border-red-500' : 'border-gray-700 focus:border-purple-500'
               }`}
-              placeholder="votre@email.com"
+              placeholder={t('admin.profile.emailPlaceholder')}
             />
           </div>
           {emailError && (
@@ -2552,8 +2589,8 @@ const UserProfileSection: React.FC = () => {
       </SettingRow>
 
       <SettingRow
-        label="Mot de passe"
-        description={showPasswordFields ? "Modifier votre mot de passe" : "Cliquez pour modifier votre mot de passe"}
+        label={t('admin.profile.password')}
+        description={showPasswordFields ? t('admin.profile.passwordDescription') : t('admin.profile.passwordDescriptionClick')}
       >
         <div className="flex flex-col gap-3 w-full">
           {!showPasswordFields ? (
@@ -2564,7 +2601,7 @@ const UserProfileSection: React.FC = () => {
               <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20 group-hover:bg-amber-500/20 transition-colors">
                 <Key size={18} className="text-amber-400" />
               </div>
-              <span className="flex-1 text-left">Modifier le mot de passe</span>
+              <span className="flex-1 text-left">{t('admin.profile.changePassword')}</span>
               <Edit2 size={16} className="text-gray-400 group-hover:text-amber-400 transition-colors" />
             </button>
           ) : (
@@ -2575,7 +2612,7 @@ const UserProfileSection: React.FC = () => {
                 </div>
                 <input
                   type={showOldPassword ? 'text' : 'password'}
-                  placeholder="Mot de passe actuel"
+                  placeholder={t('admin.profile.currentPasswordPlaceholder')}
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
                   className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
@@ -2584,7 +2621,7 @@ const UserProfileSection: React.FC = () => {
                   type="button"
                   onClick={() => setShowOldPassword(!showOldPassword)}
                   className="p-2 text-gray-400 hover:text-amber-400 transition-colors"
-                  title={showOldPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  title={showOldPassword ? t('admin.profile.hidePassword') : t('admin.profile.showPassword')}
                 >
                   {showOldPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -2595,7 +2632,7 @@ const UserProfileSection: React.FC = () => {
                 </div>
                 <input
                   type={showNewPassword ? 'text' : 'password'}
-                  placeholder="Nouveau mot de passe (min. 8 caractères)"
+                  placeholder={t('admin.profile.newPasswordPlaceholder')}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -2604,7 +2641,7 @@ const UserProfileSection: React.FC = () => {
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
                   className="p-2 text-gray-400 hover:text-emerald-400 transition-colors"
-                  title={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  title={showNewPassword ? t('admin.profile.hidePassword') : t('admin.profile.showPassword')}
                 >
                   {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -2615,7 +2652,7 @@ const UserProfileSection: React.FC = () => {
                 </div>
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="Confirmer le nouveau mot de passe"
+                  placeholder={t('admin.profile.confirmPasswordPlaceholder')}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -2624,7 +2661,7 @@ const UserProfileSection: React.FC = () => {
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="p-2 text-gray-400 hover:text-emerald-400 transition-colors"
-                  title={showConfirmPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  title={showConfirmPassword ? t('admin.profile.hidePassword') : t('admin.profile.showPassword')}
                 >
                   {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -2636,7 +2673,7 @@ const UserProfileSection: React.FC = () => {
                   className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors flex items-center justify-center gap-2"
                 >
                   <Save size={16} />
-                  {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+                  {isSaving ? t('admin.profile.saving') : t('common.save')}
                 </button>
                 <button
                   onClick={() => {
@@ -2648,7 +2685,7 @@ const UserProfileSection: React.FC = () => {
                   }}
                   className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white text-sm transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
               </div>
             </>
@@ -2664,7 +2701,7 @@ const UserProfileSection: React.FC = () => {
             className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20"
           >
             <Save size={18} />
-            {isSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}
+            {isSaving ? t('admin.profile.saving') : t('admin.profile.saveChanges')}
           </button>
         </div>
       )}
@@ -2672,51 +2709,172 @@ const UserProfileSection: React.FC = () => {
   );
 };
 
+// Badge image URLs from project README (GitHub shields.io)
+const GITHUB_README_BADGES = [
+  { src: 'https://img.shields.io/badge/MynetworK---help-111827?style=for-the-badge', alt: 'MynetworK' },
+  { src: 'https://img.shields.io/badge/Status-DEVELOPMENT-374151?style=for-the-badge', alt: 'Status' },
+  { src: 'https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'Docker' },
+  { src: 'https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'GHCR' },
+  { src: 'https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827', alt: 'Build' },
+  { src: 'https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8', alt: 'React' },
+  { src: 'https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa', alt: 'TypeScript' },
+  { src: 'https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&labelColor=111827&logoColor=white', alt: 'License' },
+];
+
+/** Parses CHANGELOG.md content into version blocks (## [version] - date). Returns array of { version, date, body }. */
+function parseChangelogVersions(content: string): Array<{ version: string; date: string; body: string }> {
+  const blocks = content.split(/\n## \[/).slice(1);
+  return blocks.map((block) => {
+    const idx = block.indexOf('\n');
+    const firstLine = idx >= 0 ? block.slice(0, idx) : block;
+    const body = (idx >= 0 ? block.slice(idx) : '').replace(/^\s*\n+/, '').trim();
+    const m = firstLine.match(/^(.+?)\]\s*-\s*(.*)$/);
+    const version = m ? m[1].trim() : firstLine.replace(/\]\s*$/, '').trim();
+    const date = m ? m[2].trim() : '';
+    return { version, date, body };
+  });
+}
+
 // Info Section Component (for Administration > Info tab)
+// Displays project badges, GitHub repo stats, and Changelog (latest version by default, optional version selector).
 const InfoSection: React.FC = () => {
+  const { t } = useTranslation();
+  const [changelogVersions, setChangelogVersions] = useState<Array<{ version: string; date: string; body: string }>>([]);
+  const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
+  const [repoStats, setRepoStats] = useState<{ stars: number; forks: number; watchers: number; open_issues: number } | null>(null);
+  const [changelogLoading, setChangelogLoading] = useState(true);
+  const [repoStatsLoading, setRepoStatsLoading] = useState(true);
+  const [changelogError, setChangelogError] = useState<string | null>(null);
+  const [repoStatsError, setRepoStatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchChangelog = async () => {
+      setChangelogLoading(true);
+      setChangelogError(null);
+      try {
+        const response = await api.get<{ content: string }>('/api/info/changelog');
+        if (response.success && response.result?.content) {
+          const versions = parseChangelogVersions(response.result.content);
+          setChangelogVersions(versions);
+          setSelectedVersionIndex(0);
+        } else {
+          setChangelogError((response as { error?: { message?: string } })?.error?.message || t('admin.changelogLoadError'));
+        }
+      } catch {
+        setChangelogError(t('admin.changelogLoadError'));
+      } finally {
+        setChangelogLoading(false);
+      }
+    };
+    const fetchRepoStats = async () => {
+      setRepoStatsLoading(true);
+      setRepoStatsError(null);
+      try {
+        const response = await api.get<{ stars: number; forks: number; watchers: number; open_issues: number }>('/api/info/repo-stats');
+        if (response.success && response.result) {
+          setRepoStats(response.result);
+        } else {
+          setRepoStatsError((response as { error?: { message?: string } })?.error?.message || t('admin.repoStatsLoadError'));
+        }
+      } catch {
+        setRepoStatsError(t('admin.repoStatsLoadError'));
+      } finally {
+        setRepoStatsLoading(false);
+      }
+    };
+    fetchChangelog();
+    fetchRepoStats();
+  }, [t]);
+
   return (
     <div className="space-y-6">
-      <Section title="Informations du projet" icon={Info} iconColor="teal">
+      <Section title={t('admin.projectInfo')} icon={Info} iconColor="teal">
         <div className="space-y-4">
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
-            <h3 className="text-lg font-semibold text-theme-primary mb-3">MynetworK</h3>
-            <p className="text-sm text-theme-secondary mb-4">
-              Dashboard multi-sources pour la gestion de votre réseau. Intégration avec Freebox, UniFi Controller et autres systèmes réseau.
-            </p>
-            
+          {/* Badges row (same as README) */}
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-teal-500">
+            <div className="flex flex-wrap gap-2 items-center">
+              {GITHUB_README_BADGES.map((badge) => (
+                <a key={badge.alt} href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="focus:outline-none"><img src={badge.src} alt={badge.alt} className="h-7 object-contain" /></a>
+              ))}
+            </div>
+          </div>
+
+          {/* Repository statistics from GitHub API */}
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-blue-500">
+            <h3 className="text-lg font-semibold text-blue-400 mb-3">{t('admin.repoStats')}</h3>
+            {repoStatsLoading && (
+              <div className="flex items-center gap-2 text-theme-secondary">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">{t('common.loading')}</span>
+              </div>
+            )}
+            {repoStatsError && (
+              <p className="text-sm text-amber-500">{repoStatsError}</p>
+            )}
+            {!repoStatsLoading && repoStats && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 bg-theme rounded-lg text-center border border-amber-500/30">
+                  <div className="text-xl font-bold text-amber-400">{repoStats.stars}</div>
+                  <div className="text-xs text-gray-400">{t('admin.stars')}</div>
+                </div>
+                <div className="p-3 bg-theme rounded-lg text-center border border-cyan-500/30">
+                  <div className="text-xl font-bold text-cyan-400">{repoStats.forks}</div>
+                  <div className="text-xs text-gray-400">{t('admin.forks')}</div>
+                </div>
+                <div className="p-3 bg-theme rounded-lg text-center border border-emerald-500/30">
+                  <div className="text-xl font-bold text-emerald-400">{repoStats.watchers}</div>
+                  <div className="text-xs text-gray-400">{t('admin.watchers')}</div>
+                </div>
+                <div className="p-3 bg-theme rounded-lg text-center border border-purple-500/30">
+                  <div className="text-xl font-bold text-purple-400">{repoStats.open_issues}</div>
+                  <div className="text-xs text-gray-400">{t('admin.openIssues')}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-teal-500">
+            <div className="flex items-center gap-4 mb-4">
+              <img src={logoMynetworK} alt="MynetworK" className="h-16 w-16 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-teal-400 mb-1">{t('admin.projectName')}</h3>
+                <p className="text-sm text-theme-secondary">
+                  {t('admin.projectDescription')}
+                </p>
+              </div>
+            </div>
             <div className="space-y-1">
               <div className="flex items-center justify-start gap-2 py-2 border-b border-gray-700">
-                <span className="text-sm text-gray-400">Version</span>
-                <span className="text-sm font-mono text-theme-primary">{getVersionString()}</span>
-                    
-                <span className="text-sm text-gray-400">Licence</span>
-                <span className="text-sm text-theme-primary">Privée</span>
+                <span className="text-sm text-gray-400">{t('admin.version')}</span>
+                <span className="text-sm font-mono text-teal-300">{getVersionString()}</span>
+                <span className="text-sm text-gray-400">{t('admin.licenseLabel')}</span>
+                <span className="text-sm text-theme-primary">{t('admin.licensePrivate')}</span>
               </div>
-              </div>
-              <br />
+            </div>
+            <br />
             <a
-              href="https://github.com/Erreur32/MynetworK"
+              href={GITHUB_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700/50 hover:bg-teal-600/50 text-teal-200 rounded-lg text-sm transition-colors border border-teal-500/50"
             >
               <Github size={16} />
-              <span>Voir sur GitHub</span>
+              <span>{t('admin.viewOnGitHub')}</span>
               <ExternalLink size={14} />
             </a>
           </div>
 
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
-            <h3 className="text-lg font-semibold text-theme-primary mb-3">Auteur</h3>
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-amber-500">
+            <h3 className="text-lg font-semibold text-amber-400 mb-3">{t('admin.authorTitle')}</h3>
             <div className="space-y-2">
               <p className="text-sm text-theme-secondary">
-                Développé par <span className="text-theme-primary font-medium">Erreur32</span>
+                {t('admin.authorBy', { name: 'Erreur32' })}
               </p>
             </div>
           </div>
 
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme">
-            <h3 className="text-lg font-semibold text-theme-primary mb-3">Technologies</h3>
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-purple-500">
+            <h3 className="text-lg font-semibold text-purple-400 mb-3">{t('admin.technologiesTitle')}</h3>
             <div className="flex flex-wrap gap-2">
               <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">React</span>
               <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">TypeScript</span>
@@ -2726,6 +2884,58 @@ const InfoSection: React.FC = () => {
               <span className="px-3 py-1 bg-yellow-900/30 border border-yellow-700 rounded text-xs text-yellow-400">Docker</span>
             </div>
           </div>
+
+          {/* Changelog (latest version by default, selector for other versions) */}
+          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-cyan-500">
+            <h3 className="text-lg font-semibold text-cyan-400 mb-3">{t('admin.changelogTitle')}</h3>
+            {changelogLoading && (
+              <div className="flex items-center gap-2 text-theme-secondary">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">{t('common.loading')}</span>
+              </div>
+            )}
+            {changelogError && (
+              <p className="text-sm text-amber-500">{changelogError}</p>
+            )}
+            {!changelogLoading && changelogVersions.length > 0 && (
+              <>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="text-sm text-theme-secondary">{t('admin.changelogVersionLabel')}:</span>
+                  <select
+                    value={selectedVersionIndex}
+                    onChange={(e) => setSelectedVersionIndex(Number(e.target.value))}
+                    className="px-3 py-1.5 bg-theme border border-gray-700 rounded-lg text-sm text-theme-primary focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+                    aria-label={t('admin.changelogShowOtherVersions')}
+                  >
+                    {changelogVersions.map((v, i) => (
+                      <option key={i} value={i}>
+                        {v.version}{v.date ? ` (${v.date})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="max-h-[480px] overflow-auto rounded border border-theme bg-gray-900/50 p-4">
+                  <div className="changelog-markdown text-sm text-theme-secondary [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-teal-400 [&_h1]:border-b [&_h1]:border-teal-500/30 [&_h1]:pb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-cyan-400 [&_h2]:border-b [&_h2]:border-cyan-500/30 [&_h2]:pb-1 [&_h3]:text-base [&_h3]:font-medium [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3]:text-amber-400 [&_h4]:text-sm [&_h4]:font-medium [&_h4]:mt-2 [&_h4]:mb-1 [&_h4]:text-emerald-400 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_p]:my-2 [&_code]:bg-gray-800 [&_code]:text-teal-300 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:border [&_code]:border-gray-700 [&_pre]:bg-gray-900 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:border [&_pre]:border-gray-700 [&_pre]:border-l-4 [&_pre]:border-l-teal-500 [&_pre]:my-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:border-0 [&_pre_code]:text-gray-200 [&_a]:text-blue-400 [&_a]:underline hover:[&_a]:text-blue-300 [&_strong]:font-semibold [&_strong]:text-amber-300">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children, ...props }) => {
+                          const resolved = href?.startsWith('http') ? href : href?.startsWith('#') ? `${GITHUB_REPO_URL}${href}` : `${GITHUB_REPO_URL}/blob/main/${href ?? ''}`;
+                          return (
+                            <a href={resolved} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300" {...props}>
+                              {children}
+                            </a>
+                          );
+                        }
+                      }}
+                    >
+                      {changelogVersions[selectedVersionIndex]?.body ?? ''}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </Section>
     </div>
@@ -2734,8 +2944,10 @@ const InfoSection: React.FC = () => {
 
 // Users Management Section Component (for Administration tab)
 const UsersManagementSection: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const { user: currentUser } = useUserAuthStore();
   const [users, setUsers] = useState<User[]>([]);
+  const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -2753,18 +2965,18 @@ const UsersManagementSection: React.FC = () => {
       if (response.success && response.result) {
         setUsers(response.result);
       } else {
-        const errorMsg = response.error?.message || 'Échec du chargement des utilisateurs';
+        const errorMsg = response.error?.message || t('admin.users.loadError');
         setError(errorMsg);
       }
     } catch (err: any) {
       // Handle network/socket errors
-      let errorMessage = 'Échec du chargement des utilisateurs';
+      let errorMessage = t('admin.users.loadError');
       
       if (err.message) {
         if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-          errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+          errorMessage = t('admin.users.connectionError');
         } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-          errorMessage = 'La requête a expiré. Veuillez réessayer.';
+          errorMessage = t('admin.users.timeoutError');
         } else if (err.error?.message) {
           errorMessage = err.error.message;
         } else {
@@ -2781,7 +2993,7 @@ const UsersManagementSection: React.FC = () => {
   };
 
   const handleDelete = async (userId: number) => {
-    if (!confirm(`Voulez-vous vraiment supprimer cet utilisateur ?`)) {
+    if (!confirm(t('admin.users.confirmDelete'))) {
       return;
     }
 
@@ -2790,18 +3002,18 @@ const UsersManagementSection: React.FC = () => {
       if (response.success) {
         await fetchUsers();
       } else {
-        const errorMsg = response.error?.message || 'Échec de la suppression';
+        const errorMsg = response.error?.message || t('admin.users.deleteError');
         alert(errorMsg);
       }
     } catch (err: any) {
       // Handle network/socket errors
-      let errorMessage = 'Échec de la suppression';
+      let errorMessage = t('admin.users.deleteError');
       
       if (err.message) {
         if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-          errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+          errorMessage = t('admin.users.connectionError');
         } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-          errorMessage = 'La requête a expiré. Veuillez réessayer.';
+          errorMessage = t('admin.users.timeoutError');
         } else if (err.error?.message) {
           errorMessage = err.error.message;
         } else {
@@ -2826,14 +3038,14 @@ const UsersManagementSection: React.FC = () => {
       {isLoading ? (
         <div className="text-center py-8 text-gray-500">
           <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
-          <p>Chargement des utilisateurs...</p>
+          <p>{t('admin.users.loadingUsers')}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {users.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Users size={32} className="mx-auto mb-2" />
-              <p>Aucun utilisateur trouvé</p>
+              <p>{t('admin.users.noUsersFound')}</p>
             </div>
           ) : (
             users.map((user) => {
@@ -2872,23 +3084,23 @@ const UsersManagementSection: React.FC = () => {
                       <span className="font-medium text-theme-primary">{user.username}</span>
                       {user.role === 'admin' && (
                         <span className="px-2 py-0.5 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400 whitespace-nowrap">
-                          Admin
+                          {t('admin.users.roleAdmin')}
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-theme-secondary truncate">{user.email}</p>
                     <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-theme-tertiary">
-                      <span>Créé le {new Date(user.createdAt).toLocaleDateString('fr-FR')}</span>
+                      <span>{t('admin.users.createdOn')} {new Date(user.createdAt).toLocaleDateString(dateLocale)}</span>
                       {user.lastLogin && (
                         <>
                           <span className="text-gray-600">•</span>
-                          <span>Dernière connexion: {new Date(user.lastLogin).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} {new Date(user.lastLogin).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{t('admin.users.lastLogin')}: {new Date(user.lastLogin).toLocaleDateString(dateLocale, { day: '2-digit', month: 'short', year: 'numeric' })} {new Date(user.lastLogin).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}</span>
                         </>
                       )}
                       {user.lastLoginIp && (
                         <>
                           <span className="text-gray-600">•</span>
-                          <span className="font-mono text-gray-400">IP: {user.lastLoginIp}</span>
+                          <span className="font-mono text-gray-400">{t('admin.users.ip')}: {user.lastLoginIp}</span>
                         </>
                       )}
                     </div>
@@ -2900,7 +3112,7 @@ const UsersManagementSection: React.FC = () => {
                       <button
                         onClick={() => handleDelete(user.id)}
                         className="p-2 hover:bg-red-900/20 rounded text-red-400 hover:text-red-300 transition-colors"
-                        title="Supprimer"
+                        title={t('admin.users.deleteTitle')}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -2916,8 +3128,8 @@ const UsersManagementSection: React.FC = () => {
   );
 };
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ 
-  onBack, 
+export const SettingsPage: React.FC<SettingsPageProps> = ({
+  onBack,
   mode = 'freebox',
   initialAdminTab = 'general',
   onNavigateToPage,
@@ -2927,6 +3139,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onProfileClick,
   onLogout
 }) => {
+  const { t } = useTranslation();
   const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
   // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
@@ -4323,16 +4536,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   }, []);
 
   const adminTabs: { id: AdminTab; label: string; icon: React.ElementType; color: string }[] = [
-    { id: 'general', label: 'Général', icon: Settings, color: 'blue' },
-    { id: 'plugins', label: 'Plugins', icon: Plug, color: 'emerald' },
-    { id: 'theme', label: 'Thème', icon: Lightbulb, color: 'yellow' },
-    { id: 'logs', label: 'Logs', icon: FileText, color: 'cyan' },
-    { id: 'security', label: 'Sécurité', icon: Shield, color: 'red' },
-    { id: 'exporter', label: 'Exporter', icon: Share2, color: 'amber' },
-    { id: 'database', label: 'Base de données', icon: Database, color: 'purple' },
-    { id: 'backup', label: 'Backup', icon: Download, color: 'orange' },
-    { id: 'debug', label: 'Debug', icon: Monitor, color: 'violet' },
-    { id: 'info', label: 'Info', icon: Info, color: 'teal' }
+    { id: 'general', label: t('admin.tabGeneral'), icon: Settings, color: 'blue' },
+    { id: 'plugins', label: t('admin.tabPlugins'), icon: Plug, color: 'emerald' },
+    { id: 'theme', label: t('admin.tabTheme'), icon: Lightbulb, color: 'yellow' },
+    { id: 'logs', label: t('admin.tabLogs'), icon: FileText, color: 'cyan' },
+    { id: 'security', label: t('admin.tabSecurity'), icon: Shield, color: 'red' },
+    { id: 'exporter', label: t('admin.tabExporter'), icon: Share2, color: 'amber' },
+    { id: 'database', label: t('admin.tabDatabase'), icon: Database, color: 'purple' },
+    { id: 'backup', label: t('admin.tabBackup'), icon: Download, color: 'orange' },
+    { id: 'debug', label: t('admin.tabDebug'), icon: Monitor, color: 'violet' },
+    { id: 'info', label: t('admin.tabInfo'), icon: Info, color: 'teal' }
   ];
 
   return (
@@ -4354,10 +4567,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-theme-primary">
-                    {mode === 'administration' ? 'Administration' : 'Paramètres'}
+                    {mode === 'administration' ? t('common.administration') : t('common.settings')}
                   </h1>
                   <p className="text-sm text-theme-secondary">
-                    {mode === 'administration' ? 'Gestion de l\'application' : 'Configuration de la Freebox'}
+                    {mode === 'administration' ? t('admin.subtitleApp') : t('admin.subtitleFreebox')}
                   </p>
                 </div>
               </div>
@@ -4412,7 +4625,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <button
                 onClick={fetchSettings}
                 className="p-2 hover:bg-theme-tertiary rounded-lg transition-colors"
-                title="Actualiser"
+                title={t('admin.refresh')}
               >
                 <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
               </button>
@@ -4570,73 +4783,59 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* Colonne 1 */}
                 <div className="space-y-6">
-                  <Section title="Mon Profil" icon={Users} iconColor="blue">
+                  <Section title={t('admin.myProfile')} icon={Users} iconColor="blue">
                     <UserProfileSection />
                   </Section>
-                  
-                  {/* Gestion des utilisateurs (Admin only) */}
                   {currentUser?.role === 'admin' && (
-                    <Section title="Gestion des utilisateurs" icon={Users} iconColor="purple">
+                    <Section title={t('admin.userManagement')} icon={Users} iconColor="purple">
                       <UsersManagementSection />
                     </Section>
                   )}
                 </div>
 
-                {/* Colonne 2 */}
                 <div className="space-y-6">
-                  <Section title="Configuration réseau" icon={Network} iconColor="blue">
+                  <Section title={t('admin.networkConfig')} icon={Network} iconColor="blue">
                     <GeneralNetworkSection />
                   </Section>
 
-                  <Section title="Localisation" icon={Globe} iconColor="cyan">
+                  <Section title={t('admin.localization')} icon={Globe} iconColor="cyan">
                     <SettingRow
-                      label="Fuseau horaire"
-                      description="Définit le fuseau horaire de l'application"
+                      label={t('admin.timezone')}
+                      description={t('admin.timezoneDescription')}
                     >
                       <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
-                        <option value="Europe/Paris">Europe/Paris (UTC+1)</option>
-                        <option value="UTC">UTC (UTC+0)</option>
-                        <option value="America/New_York">America/New_York (UTC-5)</option>
+                        <option value="Europe/Paris">{t('admin.timezoneParis')}</option>
+                        <option value="UTC">{t('admin.timezoneUtc')}</option>
+                        <option value="America/New_York">{t('admin.timezoneNewYork')}</option>
                       </select>
                     </SettingRow>
                   </Section>
 
-                  <Section title="Langue" icon={Globe} iconColor="cyan">
-                    <SettingRow
-                      label="Langue de l'interface"
-                      description="Sélectionnez la langue d'affichage"
-                    >
-                      <select className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm">
-                        <option value="fr">Français</option>
-                        <option value="en">English</option>
-                      </select>
-                    </SettingRow>
-                  </Section>
+                  <LanguageSection />
                 </div>
 
-                {/* Colonne 3 */}
                 <div className="space-y-6">
-                  <Section title="Mises à jour" icon={RefreshCw} iconColor="amber">
+                  <Section title={t('admin.updates')} icon={RefreshCw} iconColor="amber">
                     <UpdateCheckSection />
                   </Section>
 
-                  <Section title="Informations" icon={Key} iconColor="purple">
+                  <Section title={t('admin.info')} icon={Key} iconColor="purple">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Version</span>
+                          <span className="text-sm text-gray-400">{t('admin.version')}</span>
                           <span className="text-sm text-white font-mono">{getVersionString()}</span>
                         </div>
                       </div>
                       <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Base de données</span>
+                          <span className="text-sm text-gray-400">{t('admin.databaseLabel')}</span>
                           <span className="text-sm text-white">SQLite</span>
                         </div>
                       </div>
                       <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">Authentification</span>
+                          <span className="text-sm text-gray-400">{t('admin.authLabel')}</span>
                           <span className="text-sm text-white">JWT</span>
                         </div>
                       </div>
@@ -4687,40 +4886,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {activeAdminTab === 'debug' && (
               <div className="space-y-6">
-
-                <Section title="Logs de l'application" icon={FileText} iconColor="cyan">
+                <Section title={t('admin.appLogs')} icon={FileText} iconColor="cyan">
                   <AppLogsSection />
                 </Section>
-                <Section title="Niveaux de Log" icon={Monitor} iconColor="violet">
+                <Section title={t('admin.logLevels')} icon={Monitor} iconColor="violet">
                   <DebugLogSection />
                 </Section>
 
-                <Section title="Debug & Diagnostics" icon={Monitor} iconColor="violet">
+                <Section title={t('admin.debugDiagnostics')} icon={Monitor} iconColor="violet">
                   <div className="py-4 space-y-2 text-xs text-gray-400">
-                    <p>
-                      Cette section regroupe des informations utiles pour le debug de MynetworK&nbsp;:
-                      utilisation des logs, configuration externe et métriques techniques.
-                    </p>
+                    <p>{t('admin.debugIntro')}</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>
-                        <span className="text-gray-300 font-semibold">Logs applicatifs</span>&nbsp;: utilisables via l&apos;onglet&nbsp;
-                        <span className="text-gray-100">Logs</span> (recherches, filtres, export).
+                        <span className="text-gray-300 font-semibold">{t('admin.debugLogsApplicative')}</span>
+                        {' : '}{t('admin.debugLogsTab')}
                       </li>
                       <li>
-                        <span className="text-gray-300 font-semibold">Configuration externe</span>&nbsp;:
-                        fichier <code className="text-[11px] text-emerald-300">config/mynetwork.conf</code> si monté,
-                        import/export via la section <span className="text-gray-100">Exporter</span>.
+                        <span className="text-gray-300 font-semibold">{t('admin.debugConfigExternal')}</span>
+                        {' : '}{t('admin.debugConfigFile')}
                       </li>
                       <li>
-                        <span className="text-gray-300 font-semibold">Métriques Prometheus</span>&nbsp;:
-                        endpoint <code className="text-[11px] text-sky-300">/api/metrics/prometheus</code> sur le backend.
+                        <span className="text-gray-300 font-semibold">{t('admin.debugMetricsPrometheus')}</span>
+                        {' : '}{t('admin.debugMetricsEndpoint')}
                       </li>
                       <li>
-                        <span className="text-gray-300 font-semibold">Métriques InfluxDB</span>&nbsp;:
-                        endpoint <code className="text-[11px] text-sky-300">/api/metrics/influxdb</code> si activé.
+                        <span className="text-gray-300 font-semibold">{t('admin.debugMetricsInflux')}</span>
+                        {' : '}{t('admin.debugMetricsInfluxEndpoint')}
                       </li>
                     </ul>
- 
                   </div>
                 </Section>
               </div>

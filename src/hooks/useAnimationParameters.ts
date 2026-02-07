@@ -18,6 +18,8 @@ export interface AnimationParameter {
   min?: number;
   max?: number;
   step?: number;
+  /** Optional i18n key for label/description (e.g. theme.cycleAnimationsDesc). Used when rendering in ThemeSection. */
+  descriptionKey?: string;
   description?: string;
   enum?: string[];
 }
@@ -37,7 +39,7 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       name: 'cycleAnimations',
       type: 'array',
       default: [...CYCLEABLE_ANIMATION_IDS],
-      description: 'Animations à inclure dans le cycle (cocher celles à afficher)',
+      descriptionKey: 'theme.cycleAnimationsDesc',
     },
     {
       name: 'cycleDuration',
@@ -46,13 +48,13 @@ export const ANIMATION_PARAMETERS: Record<FullAnimationId, AnimationParameter[]>
       min: 5,
       max: 3600,
       step: 5,
-      description: 'Durée par animation (5 s à 1 h)',
+      descriptionKey: 'theme.cycleDurationDesc',
     },
     {
       name: 'cycleRandom',
       type: 'boolean',
       default: false,
-      description: 'Ordre aléatoire (sinon séquentiel)',
+      descriptionKey: 'theme.cycleRandomDesc',
     },
   ],
   /* Playstation 3 - RetroArch Menu Ribbon (Boris Šehovac / Codepen), port Canvas 2D */

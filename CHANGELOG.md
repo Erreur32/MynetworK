@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+
+
+## [0.7.2] - 2026-02-07
+
+### Added
+
+**Administration > Info tab**
+- Changelog rendered as visual markdown (react-markdown + remark-gfm): headings (h1–h4), lists, code blocks, links with proper styling
+- Colored markdown titles in changelog (teal, cyan, amber, emerald) and improved code blocks (border, background)
+- App logo (MynetworK) in project block; all GitHub links use central `GITHUB_REPO_URL` constant; changelog links resolve to repo (relative → blob/main, #anchor → repo#anchor)
+- i18n keys for Info page: projectName, projectDescription, licenseLabel, licensePrivate, authorTitle, authorBy, technologiesTitle, databaseLabel, authLabel
+- More color on Info page: colored left borders per block (teal, blue, amber, purple, cyan), colored section titles and repo stats boxes
+
+### Fixed
+
+- **General (Administration):** "key 'admin.database' returned an object instead of string" — added `admin.databaseLabel` and `admin.authLabel` so tab labels use string keys (admin.database is an object for the Database section)
+- **Vite:** `base: './'` moved to top-level of config; it was incorrectly inside `build` and ignored by Vite (assets used absolute paths and broke Ingress)
+- **Ingress:** `src/utils/ingress.ts` regex updated from `/api_ingress/` to `/api/hassio_ingress/` to match Home Assistant Ingress path
+
+### Modified
+
+- `src/utils/constants.ts`: added `GITHUB_REPO_URL` and `GITHUB_RAW_BASE` for centralised repo URLs
+- `vite.config.ts`: base at top-level; removed invalid `build.base`
+- `src/utils/ingress.ts`: path pattern and comment for hassio_ingress
+
+---
+
 ## [0.7.0] - 2026-02-07
 
 ### Added
@@ -34,11 +61,6 @@ All notable changes to this project will be documented in this file.
 - `package.json`: added dependencies for i18n
 - Server: banner and CORS conditional on Ingress env vars; new `/api/config` route
 
----
-
-## [Unreleased]
-
-- (none)
 
 ---
 

@@ -64,40 +64,32 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
             const apiMode = formData.apiMode || 'controller';
             
             if (apiMode === 'site-manager') {
-                // Site Manager API requires apiKey
                 if (!formData.apiKey || !formData.apiKey.trim()) {
-                    return { valid: false, error: 'La clé API (apiKey) est requise pour le mode Site Manager' };
+                    return { valid: false, error: t('plugins.apiKeyRequired') };
                 }
             } else {
-                // Controller API requires url, username, password, site
                 if (!formData.url || !formData.url.trim()) {
-                    return { valid: false, error: 'L\'URL est requise' };
+                    return { valid: false, error: t('plugins.urlRequired') };
                 }
-                
-                // Validate URL format
                 try {
                     const url = new URL(formData.url);
                     if (!['http:', 'https:'].includes(url.protocol)) {
-                        return { valid: false, error: 'L\'URL doit commencer par http:// ou https://' };
+                        return { valid: false, error: t('plugins.urlProtocol') };
                     }
                 } catch {
-                    return { valid: false, error: 'Format d\'URL invalide' };
+                    return { valid: false, error: t('plugins.urlInvalid') };
                 }
-
                 if (!formData.username || !formData.username.trim()) {
-                    return { valid: false, error: 'Le nom d\'utilisateur est requis' };
+                    return { valid: false, error: t('plugins.usernameRequired') };
                 }
-
                 if (!formData.password || !formData.password.trim()) {
-                    return { valid: false, error: 'Le mot de passe est requis' };
+                    return { valid: false, error: t('plugins.passwordRequired') };
                 }
-                
                 if (!formData.site || !formData.site.trim()) {
-                    return { valid: false, error: 'Le nom du site est requis' };
+                    return { valid: false, error: t('plugins.siteRequired') };
                 }
             }
         }
-
         return { valid: true };
     };
 
@@ -115,7 +107,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         if (!validation.valid) {
             setTestResult({
                 success: false,
-                message: validation.error || 'Veuillez remplir tous les champs requis'
+                message: validation.error || t('plugins.fillRequired')
             });
             setIsTesting(false);
             return;
@@ -146,12 +138,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     success: result.connected,
                     message: result.message || (result.connected
                         ? t('common.connectionSuccess')
-                        : 'Échec de la connexion. Vérifiez vos identifiants et l\'URL.')
+                        : t('plugins.connectionFailed'))
                 });
             } else {
                 setTestResult({
                     success: false,
-                    message: 'Test de connexion impossible (voir logs backend)'
+                    message: t('plugins.testImpossible')
                 });
             }
             // DO NOT refresh plugins here - it causes form reset and breaks plugin state
@@ -179,7 +171,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         if (!validation.valid) {
             setTestResult({
                 success: false,
-                message: validation.error || 'Veuillez remplir tous les champs requis'
+                message: validation.error || t('plugins.fillRequired')
             });
             setIsSaving(false);
             return;
@@ -260,7 +252,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             <Settings size={20} className={colorText} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white">Configuration {plugin.name}</h2>
+                            <h2 className="text-lg font-bold text-white">{t('plugins.configurationTitle', { name: plugin.name })}</h2>
                             <p className="text-xs text-gray-500">{t('common.connectionSettings')}</p>
                         </div>
                     </div>
@@ -295,7 +287,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     {pluginId === 'unifi' && (
                         <div>
                             <label htmlFor="api-mode" className="block text-sm font-medium text-gray-300 mb-2">
-                                Mode de connexion
+                                {t('plugins.connectionMode')}
                             </label>
                             <select
                                 id="api-mode"
@@ -304,13 +296,11 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                 onChange={(e) => handleInputChange('apiMode', e.target.value)}
                                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                             >
-                                <option value="controller">Controller Local (URL/User/Pass)</option>
-                                <option value="site-manager">Site Manager API (Clé API)</option>
+                                <option value="controller">{t('plugins.modeController')}</option>
+                                <option value="site-manager">{t('plugins.modeSiteManager')}</option>
                             </select>
                             <p className="text-xs text-gray-500 mt-1">
-                                {formData.apiMode === 'site-manager' 
-                                    ? 'Utilise l\'API cloud UniFi Site Manager (unifi.ui.com)'
-                                    : 'Utilise l\'API locale du Controller UniFi'}
+                                {formData.apiMode === 'site-manager' ? t('plugins.hintSiteManager') : t('plugins.hintController')}
                             </p>
                         </div>
                     )}
@@ -319,7 +309,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                     {pluginId === 'unifi' && formData.apiMode === 'site-manager' && (
                         <div>
                             <label htmlFor="api-key" className="block text-sm font-medium text-gray-300 mb-2">
-                                Clé API Site Manager <span className="text-red-500">*</span>
+                                {t('plugins.apiKeyLabel')} <span className="text-red-500">*</span>
                             </label>
                             <div className="relative">
                                 <input
@@ -347,12 +337,12 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                 <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
                                     <div className="flex items-center gap-2 text-red-400 text-xs">
                                         <AlertCircle size={14} />
-                                        <span>⚠️ La clé API est requise pour le mode Site Manager</span>
+                                        <span>⚠️ {t('plugins.apiKeyRequiredWarning')}</span>
                                     </div>
                                 </div>
                             )}
                             <p className="text-xs text-gray-500 mt-1">
-                                Obtenez votre clé API sur{' '}
+                                {t('plugins.getApiKeyHint')}{' '}
                                 <a 
                                     href="https://unifi.ui.com/api" 
                                     target="_blank" 
@@ -361,14 +351,14 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                 >
                                     unifi.ui.com/api
                                 </a>
-                                {' '}(Documentation:{' '}
+                                {' '}({t('plugins.docsPrefix')}:{' '}
                                 <a 
                                     href="https://developer.ui.com/site-manager-api/gettingstarted/" 
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     className="text-purple-400 hover:underline"
                                 >
-                                    Site Manager API
+                                    {t('plugins.docsSiteManagerApi')}
                                 </a>
                                 )
                             </p>
@@ -381,7 +371,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             {/* URL */}
                             <div>
                                 <label htmlFor="unifi-url" className="block text-sm font-medium text-gray-300 mb-2">
-                                    URL du Contrôleur UniFi <span className="text-red-500">*</span>
+                                    {t('plugins.controllerUrlLabel')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     id="unifi-url"
@@ -389,24 +379,22 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     type="url"
                                     value={formData.url}
                                     onChange={(e) => handleInputChange('url', e.target.value)}
-                                    placeholder="https://unifi.example.com:8443"
+                                    placeholder={t('plugins.controllerUrlPlaceholder')}
                                     className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                     required
                                     pattern="https?://.+"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Inclure le port (généralement 8443).{' '}
-                                    <span className="text-yellow-400">⚠️ Utilisez un compte administrateur LOCAL (pas un compte cloud) pour éviter les problèmes de 2FA.</span>
+                                    <span className="text-yellow-400">⚠️ </span>{t('plugins.controllerUrlHint')}
                                 </p>
                                 <p className="text-xs text-gray-400 mt-1">
-                                    Documentation:{' '}
                                     <a 
                                         href="https://help.ui.com/hc/en-us/articles/30076656117655-Getting-Started-with-the-Official-UniFi-API" 
                                         target="_blank" 
                                         rel="noopener noreferrer"
                                         className="text-blue-400 hover:underline"
                                     >
-                                        UniFi Controller API
+                                        {t('plugins.docsControllerApi')}
                                     </a>
                                 </p>
                             </div>
@@ -414,7 +402,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             {/* Username */}
                             <div>
                                 <label htmlFor="unifi-username" className="block text-sm font-medium text-gray-300 mb-2">
-                                    Nom d'utilisateur <span className="text-red-500">*</span>
+                                    {t('plugins.usernameLabel')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     id="unifi-username"
@@ -422,7 +410,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     type="text"
                                     value={formData.username}
                                     onChange={(e) => handleInputChange('username', e.target.value)}
-                                    placeholder="admin"
+                                    placeholder={t('plugins.usernamePlaceholder')}
                                     className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                     required
                                 />
@@ -431,7 +419,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             {/* Password */}
                             <div>
                                 <label htmlFor="unifi-password" className="block text-sm font-medium text-gray-300 mb-2">
-                                    Mot de passe <span className="text-red-500">*</span>
+                                    {t('plugins.passwordLabel')} <span className="text-red-500">*</span>
                                 </label>
                                 <div className="relative">
                                     <input
@@ -440,7 +428,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                         type={showPassword ? 'text' : 'password'}
                                         value={formData.password}
                                         onChange={(e) => handleInputChange('password', e.target.value)}
-                                        placeholder="••••••••"
+                                        placeholder={t('plugins.passwordPlaceholder')}
                                         className="w-full px-3 py-2 pr-10 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                         required
                                     />
@@ -457,7 +445,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             {/* Site */}
                             <div>
                                 <label htmlFor="unifi-site" className="block text-sm font-medium text-gray-300 mb-2">
-                                    Site UniFi
+                                    {t('plugins.siteLabel')}
                                 </label>
                                 <input
                                     id="unifi-site"
@@ -465,11 +453,11 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     type="text"
                                     value={formData.site}
                                     onChange={(e) => handleInputChange('site', e.target.value)}
-                                    placeholder="default"
+                                    placeholder={t('plugins.sitePlaceholder')}
                                     className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:outline-none transition-colors"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Nom du site UniFi (généralement "default")
+                                    {t('plugins.siteHint')}
                                 </p>
                             </div>
                         </>
@@ -481,10 +469,9 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             <div className="flex items-start gap-2">
                                 <AlertCircle size={20} className="text-blue-400 mt-0.5" />
                                 <div className="text-sm text-gray-300">
-                                    <p className="font-medium mb-1">Configuration Freebox</p>
+                                    <p className="font-medium mb-1">{t('plugins.freeboxConfigTitle')}</p>
                                     <p className="text-gray-400">
-                                        Le plugin Freebox utilise l'authentification Freebox existante.
-                                        {t('common.configureViaSettings')}
+                                        {t('plugins.freeboxConfigDesc')}. {t('common.configureViaSettings')}
                                     </p>
                                 </div>
                             </div>

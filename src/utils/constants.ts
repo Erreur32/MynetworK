@@ -1,3 +1,7 @@
+// GitHub repository (single source of truth for all repo links)
+export const GITHUB_REPO_URL = 'https://github.com/Erreur32/MynetworK';
+export const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/Erreur32/MynetworK/main';
+
 // Color palette (from Figma)
 export const COLORS = {
   // Backgrounds

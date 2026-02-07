@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Filter, RefreshCw, AlertCircle, Info, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useUserAuthStore } from '../stores/userAuthStore';
@@ -24,8 +25,10 @@ interface Log {
 }
 
 export const LogsManagementSection: React.FC = () => {
+    const { t, i18n } = useTranslation();
     const { user: currentUser } = useUserAuthStore();
     const [logs, setLogs] = useState<Log[]>([]);
+    const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     const [isLoading, setIsLoading] = useState(true);
     const [isDeleting, setIsDeleting] = useState(false);
     const [filter, setFilter] = useState<'all' | 'info' | 'warning' | 'error'>('all');
@@ -75,7 +78,7 @@ export const LogsManagementSection: React.FC = () => {
 
     const formatDate = (timestamp: string) => {
         const date = new Date(timestamp);
-        return date.toLocaleString('fr-FR', {
+        return date.toLocaleString(dateLocale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -85,7 +88,7 @@ export const LogsManagementSection: React.FC = () => {
     };
 
     const handleDeleteAll = async () => {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer tous les logs ? Cette action est irréversible.')) {
+        if (!confirm(t('admin.logs.confirmClearAll'))) {
             return;
         }
 
@@ -94,12 +97,12 @@ export const LogsManagementSection: React.FC = () => {
             const response = await api.delete<{ deletedCount: number }>('/api/logs');
             if (response.success && response.result) {
                 setLogs([]);
-                alert(`Tous les logs ont été supprimés (${response.result.deletedCount} entrées)`);
+                alert(t('admin.logs.clearSuccess', { count: response.result.deletedCount }));
             } else {
-                throw new Error(response.error?.message || 'Échec de la suppression');
+                throw new Error(response.error?.message || t('admin.logs.clearFailed'));
             }
         } catch (error) {
-            alert(error instanceof Error ? error.message : 'Erreur lors de la suppression des logs');
+            alert(error instanceof Error ? error.message : t('admin.logs.clearError'));
         } finally {
             setIsDeleting(false);
         }
@@ -107,17 +110,17 @@ export const LogsManagementSection: React.FC = () => {
 
     if (currentUser?.role !== 'admin') {
         return (
-            <Section title="Journal des événements" icon={Filter} iconColor="cyan">
+            <Section title={t('admin.logs.sectionTitle')} icon={Filter} iconColor="cyan">
                 <div className="text-center py-8 text-gray-500">
                     <AlertCircle size={32} className="mx-auto mb-2" />
-                    <p>Accès administrateur requis</p>
+                    <p>{t('admin.logs.adminRequired')}</p>
                 </div>
             </Section>
         );
     }
 
     return (
-        <Section title="Journal des événements" icon={Filter} iconColor="cyan">
+        <Section title={t('admin.logs.sectionTitle')} icon={Filter} iconColor="cyan">
             <div className="space-y-4">
                 {/* Filters */}
                 <div className="flex items-center gap-2 flex-wrap">
@@ -129,7 +132,7 @@ export const LogsManagementSection: React.FC = () => {
                                 : 'bg-[#1a1a1a] border-gray-700 text-gray-400 hover:border-gray-600'
                         }`}
                     >
-                        Tous
+                        {t('admin.logs.filterAll')}
                     </button>
                     <button
                         onClick={() => setFilter('info')}
@@ -140,7 +143,7 @@ export const LogsManagementSection: React.FC = () => {
                         }`}
                     >
                         <Info size={12} />
-                        Info
+                        {t('admin.logs.filterInfo')}
                     </button>
                     <button
                         onClick={() => setFilter('warning')}
@@ -151,7 +154,7 @@ export const LogsManagementSection: React.FC = () => {
                         }`}
                     >
                         <AlertTriangle size={12} />
-                        Avertissement
+                        {t('admin.logs.filterWarning')}
                     </button>
                     <button
                         onClick={() => setFilter('error')}
@@ -162,7 +165,7 @@ export const LogsManagementSection: React.FC = () => {
                         }`}
                     >
                         <AlertCircle size={12} />
-                        Erreur
+                        {t('admin.logs.filterError')}
                     </button>
                     <button
                         onClick={fetchLogs}
@@ -170,7 +173,7 @@ export const LogsManagementSection: React.FC = () => {
                         className="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition-colors disabled:opacity-50 flex items-center gap-1"
                     >
                         <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
-                        Actualiser
+                        {t('admin.logs.refresh')}
                     </button>
                     <button
                         onClick={handleDeleteAll}
@@ -182,7 +185,7 @@ export const LogsManagementSection: React.FC = () => {
                         ) : (
                             <Trash2 size={12} />
                         )}
-                        Effacer tous les logs
+                        {t('admin.logs.clearAll')}
                     </button>
                 </div>
 
@@ -194,7 +197,7 @@ export const LogsManagementSection: React.FC = () => {
                 ) : logs.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                         <Info size={32} className="mx-auto mb-2" />
-                        <p>Aucun log trouvé</p>
+                        <p>{t('admin.logs.noLogsFound')}</p>
                     </div>
                 ) : (
                     <div className="space-y-2 max-h-[600px] overflow-y-auto">
@@ -225,7 +228,7 @@ export const LogsManagementSection: React.FC = () => {
                                                 </span>
                                                 {log.username && (
                                                     <span className="text-xs text-gray-400">
-                                                        par {log.username}
+                                                        {t('admin.logs.byUser', { username: log.username })}
                                                     </span>
                                                 )}
                                                 {log.pluginId && (

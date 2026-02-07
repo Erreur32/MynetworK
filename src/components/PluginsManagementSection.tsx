@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Settings, Power, CheckCircle, XCircle, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
 import { usePluginStore, type Plugin } from '../stores/pluginStore';
 import { useAuthStore } from '../stores/authStore';
@@ -12,9 +13,10 @@ import { Section, SettingRow } from '../pages/SettingsPage';
 import { PluginConfigModal } from './modals/PluginConfigModal';
 import { LoginModal } from './modals/LoginModal';
 import { NetworkScanConfigModal } from './modals/NetworkScanConfigModal';
-import { getFreeboxSettingsUrl, PERMISSION_LABELS } from '../utils/permissions';
+import { getFreeboxSettingsUrl } from '../utils/permissions';
 
 export const PluginsManagementSection: React.FC = () => {
+    const { t } = useTranslation();
     const { plugins, pluginStats, isLoading, fetchPlugins, fetchAllStats, updatePluginConfig, testPluginConnection } = usePluginStore();
     // Get Freebox plugin once for reuse
     const freeboxPlugin = plugins.find(p => p.id === 'freebox');
@@ -109,7 +111,7 @@ export const PluginsManagementSection: React.FC = () => {
             await fetchAllStats(); // Also refresh stats to get updated API versions
         } else {
             setLastTestSuccess(false);
-            setLastTestMessage('Test de connexion impossible (voir logs backend)');
+            setLastTestMessage(t('admin.plugins.testImpossible'));
         }
         setTimeout(() => setTestingPlugin(null), 2000);
     };
@@ -140,13 +142,15 @@ export const PluginsManagementSection: React.FC = () => {
     const hasSettingsPermission = permissions.settings === true;
     const showFreeboxPermissionWarning = freeboxPlugin?.enabled && !hasSettingsPermission;
 
+    const permissionLabel = t('admin.plugins.permissionSettings');
+
     return (
         <>
-            <Section title="Gestion des plugins" icon={Settings} iconColor="emerald">
+            <Section title={t('admin.plugins.sectionTitle')} icon={Settings} iconColor="emerald">
                 {/* Discreet refresh indicator */}
                 {isRefreshing && (
                     <div className="absolute top-4 right-4 z-10">
-                        <RefreshCw size={14} className="text-gray-500 animate-spin" title="Actualisation en cours..." />
+                        <RefreshCw size={14} className="text-gray-500 animate-spin" title={t('admin.plugins.refreshing')} />
                     </div>
                 )}
                 {/* Freebox Permission Warning */}
@@ -156,19 +160,19 @@ export const PluginsManagementSection: React.FC = () => {
                             <AlertCircle size={20} className="text-orange-400 flex-shrink-0 mt-0.5" />
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm font-semibold text-orange-400 mb-1.5">
-                                    Permission manquante pour le plugin Freebox
+                                    {t('admin.plugins.freeboxPermissionMissing')}
                                 </div>
                                 <div className="text-xs text-orange-300/90 mb-3">
-                                    La permission <span className="font-medium text-orange-200">"{PERMISSION_LABELS.settings || 'settings'}"</span> est requise pour accéder à certaines fonctionnalités de la Freebox (historique RRD, statistiques étendues, etc.).
+                                    {t('admin.plugins.freeboxPermissionRequired', { permission: permissionLabel })}
                                 </div>
                                 <div className="text-xs text-orange-300/80 mb-2">
-                                    <strong>Pour activer cette permission :</strong>
+                                    <strong>{t('admin.plugins.toEnablePermission')}</strong>
                                 </div>
                                 <ol className="text-xs text-orange-300/80 list-decimal list-inside space-y-1 mb-3">
-                                    <li>Ouvrez l'interface Freebox OS</li>
-                                    <li>Allez dans <span className="font-medium">Paramètres → Gestion des accès → Applications</span></li>
-                                    <li>Sélectionnez <span className="font-medium">"MynetworK Dashboard"</span></li>
-                                    <li>Activez la permission <span className="font-medium">"{PERMISSION_LABELS.settings || 'settings'}"</span></li>
+                                    <li>{t('admin.plugins.stepOpenFreebox')}</li>
+                                    <li>{t('admin.plugins.stepGoToSettings')}</li>
+                                    <li>{t('admin.plugins.stepSelectApp')}</li>
+                                    <li>{t('admin.plugins.stepEnablePermission', { permission: permissionLabel })}</li>
                                 </ol>
                                 <a
                                     href={getFreeboxSettingsUrl(freeboxUrl)}
@@ -176,7 +180,7 @@ export const PluginsManagementSection: React.FC = () => {
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 rounded-lg text-xs text-orange-300 hover:text-orange-200 transition-colors"
                                 >
-                                    Ouvrir les paramètres Freebox OS
+                                    {t('admin.plugins.openFreeboxSettings')}
                                     <ExternalLink size={14} />
                                 </a>
                             </div>
@@ -198,7 +202,7 @@ export const PluginsManagementSection: React.FC = () => {
                         )}
                         <div className="flex-1">
                             <div className="font-semibold text-sm mb-0.5">
-                                {lastTestSuccess ? 'Test de connexion réussi' : 'Test de connexion échoué'}
+                                {lastTestSuccess ? t('admin.plugins.testSuccess') : t('admin.plugins.testFailed')}
                             </div>
                             <div className="text-xs opacity-90">{lastTestMessage}</div>
                         </div>
@@ -244,17 +248,17 @@ export const PluginsManagementSection: React.FC = () => {
                                     {plugin.connectionStatus ? (
                                         <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
                                             <CheckCircle size={11} />
-                                            <span>Connecté</span>
+                                            <span>{t('admin.plugins.statusConnected')}</span>
                                         </div>
                                     ) : plugin.enabled ? (
                                         <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-[10px] font-medium">
                                             <AlertCircle size={11} />
-                                            <span>Non connecté</span>
+                                            <span>{t('admin.plugins.statusNotConnected')}</span>
                                         </div>
                                     ) : (
                                         <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-gray-400 text-[10px] font-medium">
                                             <XCircle size={11} />
-                                            <span>Désactivé</span>
+                                            <span>{t('admin.plugins.statusDisabled')}</span>
                                         </div>
                                     )}
                                 </div>
@@ -274,19 +278,19 @@ export const PluginsManagementSection: React.FC = () => {
                                             <>
                                                 {firmware && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
-                                                        <span className="text-blue-300/70">Box:</span>
+                                                        <span className="text-blue-300/70">{t('admin.plugins.labelBox')}:</span>
                                                         <span className="font-mono">{firmware}</span>
                                                     </div>
                                                 )}
                                                 {playerFirmware && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/30 rounded text-purple-400 text-[10px] font-medium">
-                                                        <span className="text-purple-300/70">Player:</span>
+                                                        <span className="text-purple-300/70">{t('admin.plugins.labelPlayer')}:</span>
                                                         <span className="font-mono">{playerFirmware}</span>
                                                     </div>
                                                 )}
                                                 {apiVersion && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
-                                                        <span className="text-cyan-300/70">API:</span>
+                                                        <span className="text-cyan-300/70">{t('admin.plugins.labelApi')}:</span>
                                                         <span className="font-mono">{apiVersion}</span>
                                                     </div>
                                                 )}
@@ -306,16 +310,16 @@ export const PluginsManagementSection: React.FC = () => {
                                         let deploymentColor = 'purple';
                                         
                                         if (apiMode === 'site-manager') {
-                                            deploymentLabel = 'Site Manager (Cloud)';
+                                            deploymentLabel = t('admin.plugins.deploymentSiteManager');
                                             deploymentColor = 'indigo';
                                         } else if (deploymentType === 'unifios') {
-                                            deploymentLabel = 'UniFiOS Gateway';
+                                            deploymentLabel = t('admin.plugins.deploymentUniFiOS');
                                             deploymentColor = 'purple';
                                         } else if (deploymentType === 'controller') {
-                                            deploymentLabel = 'Network Controller';
+                                            deploymentLabel = t('admin.plugins.deploymentController');
                                             deploymentColor = 'blue';
                                         } else if (deploymentType === 'cloud') {
-                                            deploymentLabel = 'Cloud';
+                                            deploymentLabel = t('admin.plugins.deploymentCloud');
                                             deploymentColor = 'indigo';
                                         }
                                         
@@ -331,19 +335,19 @@ export const PluginsManagementSection: React.FC = () => {
                                                             deploymentColor === 'indigo' ? 'text-indigo-300/70' :
                                                             deploymentColor === 'purple' ? 'text-purple-300/70' :
                                                             'text-blue-300/70'
-                                                        }>Type:</span>
+                                                        }>{t('admin.plugins.labelType')}:</span>
                                                         <span>{deploymentLabel}</span>
                                                     </div>
                                                 )}
                                                 {controllerFirmware && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-blue-400 text-[10px] font-medium">
-                                                        <span className="text-blue-300/70">Firmware:</span>
+                                                        <span className="text-blue-300/70">{t('admin.plugins.labelFirmware')}:</span>
                                                         <span className="font-mono">{controllerFirmware}</span>
                                                     </div>
                                                 )}
                                                 {apiVersion && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
-                                                        <span className="text-cyan-300/70">API:</span>
+                                                        <span className="text-cyan-300/70">{t('admin.plugins.labelApi')}:</span>
                                                         <span className="font-mono">{apiVersion}</span>
                                                     </div>
                                                 )}
@@ -358,20 +362,20 @@ export const PluginsManagementSection: React.FC = () => {
                                             <>
                                                 {scannerVersion && (
                                                     <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/30 rounded text-cyan-400 text-[10px] font-medium">
-                                                        <span className="text-cyan-300/70">Version:</span>
+                                                        <span className="text-cyan-300/70">{t('admin.plugins.labelVersion')}:</span>
                                                         <span className="font-mono">{scannerVersion}</span>
                                                     </div>
                                                 )}
                                                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-500/20 border border-gray-500/30 rounded text-gray-300 text-[10px] font-medium">
-                                                    <span className="text-gray-400">Total:</span>
+                                                    <span className="text-gray-400">{t('admin.plugins.labelTotal')}:</span>
                                                     <span className="font-mono font-semibold">{stats.totalIps || 0}</span>
                                                 </div>
                                                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
-                                                    <span className="text-emerald-300/70">Online:</span>
+                                                    <span className="text-emerald-300/70">{t('admin.plugins.labelOnline')}:</span>
                                                     <span className="font-mono font-semibold">{stats.onlineIps || 0}</span>
                                                 </div>
                                                 <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-[10px] font-medium">
-                                                    <span className="text-red-300/70">Offline:</span>
+                                                    <span className="text-red-300/70">{t('admin.plugins.labelOffline')}:</span>
                                                     <span className="font-mono font-semibold">{stats.offlineIps || 0}</span>
                                                 </div>
                                             </>
@@ -383,7 +387,7 @@ export const PluginsManagementSection: React.FC = () => {
                             {/* Actions */}
                             <div className="flex items-center justify-between pt-2.5 mt-auto">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-theme-tertiary font-medium">Actif</span>
+                                    <span className="text-[10px] text-theme-tertiary font-medium">{t('admin.plugins.active')}</span>
                                     <button
                                         onClick={() => handleToggle(plugin.id, !plugin.enabled)}
                                         className={`relative w-9 h-5 rounded-full transition-all ${
@@ -402,7 +406,7 @@ export const PluginsManagementSection: React.FC = () => {
                                         <button
                                             onClick={() => setNetworkScanConfigModalOpen(true)}
                                             className="p-1.5 bg-theme-secondary border border-theme hover:bg-theme-primary hover:border-purple-500/50 rounded-lg text-theme-primary transition-all hover:shadow-lg hover:shadow-purple-500/10"
-                                            title="Configurer les scans automatiques"
+                                            title={t('admin.plugins.titleConfigureScans')}
                                         >
                                             <Settings size={12} />
                                         </button>
@@ -412,7 +416,7 @@ export const PluginsManagementSection: React.FC = () => {
                                         onClick={() => handleTest(plugin.id)}
                                         disabled={testingPlugin === plugin.id}
                                         className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-blue-500/30"
-                                        title="Tester la connexion"
+                                        title={t('admin.plugins.titleTestConnection')}
                                     >
                                         {testingPlugin === plugin.id ? (
                                             <RefreshCw size={12} className="animate-spin" />
@@ -423,7 +427,7 @@ export const PluginsManagementSection: React.FC = () => {
                                     <button
                                         onClick={() => handleConfigure(plugin.id)}
                                         className="p-1.5 bg-theme-secondary border border-theme hover:bg-theme-primary hover:border-emerald-500/50 rounded-lg text-theme-primary transition-all hover:shadow-lg hover:shadow-emerald-500/10"
-                                        title="Configurer"
+                                        title={t('admin.plugins.titleConfigure')}
                                     >
                                         <Settings size={12} />
                                     </button>
