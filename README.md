@@ -31,8 +31,7 @@
   <img src="img-capture/ubiquiti-networks.svg" alt="Ubiquiti Unifi" height="32" />
 </p>
 
-
-** A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
+**A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
 [Installation](#installation) | [Features](#-main-features) | [Configuration](#configuration) | [Documentation](#-documentation)
 
