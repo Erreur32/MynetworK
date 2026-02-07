@@ -44,6 +44,8 @@
 
 **MynetworK** is a unified dashboard to manage and monitor multiple local network data sources:
 
+![Capture Dashboard](https://github.com/Erreur32/MynetworK/blob/main/img-capture/dashboard.png?raw=true)
+
 - **Freebox** - Full management of your Freebox (Ultra, Delta, Pop)
 - **UniFi Controller** - Monitor and manage your UniFi infrastructure
 - **Network Scan** - Device discovery and analysis with automatic vendor detection
@@ -51,9 +53,15 @@
 <details>
 <summary>Click to view screenshot</summary>
 
-![Capture MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/mynetwork_scan.png?raw=true)
+![Search Ip](https://github.com/Erreur32/MynetworK/blob/main/img-capture/search_ip.png?raw=true)
+
+![MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/Scan_network.png?raw=true)
+
+![Unifi Tab](https://github.com/Erreur32/MynetworK/blob/main/img-capture/unifi_tab.png?raw=true)
 
 </details>
+
+ 
 
 
 ### ✨ Main features
