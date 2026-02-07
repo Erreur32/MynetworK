@@ -1,3 +1,4 @@
+import './i18n';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -8,7 +9,7 @@ import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.6.0';
+const APP_VERSION = '0.7.0';
 
 // Console log with colored background
 const logAppInfo = () => {

@@ -1,53 +1,53 @@
-# Logique de Connexion Freebox et Gestion des Sessions
+# Freebox Connection Logic and Session Management
 
-## 📋 Vue d'ensemble
+This document explains how the Freebox connection system works, why some stats appear without authentication, and why behaviour differs between development (npm) and production (Docker).
 
-Ce document explique comment fonctionne le système de connexion Freebox, pourquoi certaines stats s'affichent sans authentification, et pourquoi le comportement diffère entre le mode développement (npm) et la production (Docker).
+**📖 [Lire en français](CONNEXION_FREEBOX.fr.md)**
 
 ---
 
-## 🔐 Système de Session Freebox
+## 🔐 Freebox Session System
 
 ### Architecture
 
-Le système de session Freebox fonctionne en deux étapes :
+The Freebox session system works in two steps:
 
-1. **Enregistrement de l'application** (`app_token`)
-   - Une seule fois, via `/api/auth/register`
-   - Stocké dans `data/freebox_token.json`
-   - Persiste entre les redémarrages
+1. **Application registration** (`app_token`)
+   - Done once, via `/api/auth/register`
+   - Stored in `data/freebox_token.json`
+   - Persists across restarts
 
-2. **Ouverture de session** (`session_token`)
-   - À chaque connexion, via `/api/auth/login`
-   - Stocké en mémoire uniquement
-   - Expire après inactivité (environ 5-10 minutes selon la Freebox)
+2. **Session opening** (`session_token`)
+   - On each connection, via `/api/auth/login`
+   - Stored in memory only
+   - Expires after inactivity (about 5–10 minutes depending on the Freebox)
 
-### Flux de Connexion
+### Connection flow
 
 ```
-1. Plugin.start() appelé
+1. Plugin.start() called
    ↓
-2. Vérification si app_token existe (isRegistered())
+2. Check if app_token exists (isRegistered())
    ↓
-3. Vérification si session valide (checkSession())
+3. Check if session is valid (checkSession())
    ↓
-4. Si session invalide → login() pour obtenir nouveau session_token
+4. If session invalid → login() to get new session_token
    ↓
-5. Démarrage du keep-alive (toutes les 2 minutes)
+5. Start keep-alive (every 2 minutes)
 ```
 
 ---
 
-## 🔄 Keep-Alive (Maintien de Session)
+## 🔄 Keep-Alive (Session Maintenance)
 
-### Fonctionnement
+### How it works
 
-Le mécanisme de keep-alive a été ajouté pour maintenir la session active automatiquement :
+The keep-alive mechanism was added to keep the session active automatically:
 
-- **Intervalle** : Vérification toutes les 2 minutes
-- **Action** : 
-  - Si session valide → requête légère (`getSystemInfo()`) pour maintenir la session
-  - Si session expirée → reconnexion automatique (`login()`)
+- **Interval**: Check every 2 minutes
+- **Action**:
+  - If session valid → light request (`getSystemInfo()`) to keep the session
+  - If session expired → automatic reconnection (`login()`)
 
 ### Code
 
@@ -57,9 +57,9 @@ private startKeepAlive(): void {
     this.keepAliveInterval = setInterval(async () => {
         const isLoggedIn = await this.apiService.checkSession();
         if (!isLoggedIn) {
-            await this.apiService.login(); // Reconnexion automatique
+            await this.apiService.login(); // Automatic reconnection
         } else {
-            await this.apiService.getSystemInfo(); // Maintien de session
+            await this.apiService.getSystemInfo(); // Session keep-alive
         }
     }, 2 * 60 * 1000); // 2 minutes
 }
@@ -67,22 +67,22 @@ private startKeepAlive(): void {
 
 ---
 
-## 📊 Récupération des Stats
+## 📊 Stats Retrieval
 
-### Méthode `getStats()`
+### `getStats()` method
 
-La méthode `getStats()` dans `FreeboxPlugin` :
+The `getStats()` method in `FreeboxPlugin`:
 
-1. **Vérifie la session** avant chaque récupération
-2. **Reconnecte automatiquement** si la session a expiré
-3. **Utilise `Promise.allSettled`** pour récupérer toutes les stats en parallèle
+1. **Checks the session** before each retrieval
+2. **Reconnects automatically** if the session has expired
+3. **Uses `Promise.allSettled`** to fetch all stats in parallel
 
 ```typescript
 // Check if logged in, try to reconnect if needed
 const isLoggedIn = await this.apiService.checkSession();
 if (!isLoggedIn) {
     try {
-        await this.apiService.login(); // Reconnexion automatique
+        await this.apiService.login(); // Automatic reconnection
     } catch (error) {
         throw new Error(`Freebox plugin not connected: ${error.message}`);
     }
@@ -100,123 +100,122 @@ const [
 ] = await Promise.allSettled([...]);
 ```
 
-### Pourquoi certaines stats s'affichent sans session ?
+### Why do some stats show without a session?
 
-**Réponse** : Elles ne s'affichent **pas vraiment** sans session. Voici ce qui se passe :
+**Answer**: They do **not** actually show without a session. What happens:
 
-1. **Quand vous cliquez sur "Auth"** :
-   - Le bouton appelle `/api/auth/login` qui reconnecte la session
-   - Le plugin démarre le keep-alive
-   - Les stats sont récupérées avec succès
+1. **When you click "Auth"**:
+   - The button calls `/api/auth/login`, which reconnects the session
+   - The plugin starts keep-alive
+   - Stats are then fetched successfully
 
-2. **Quand la session expire** :
-   - Le keep-alive devrait la renouveler automatiquement
-   - Mais si le plugin n'est pas démarré, le keep-alive ne fonctionne pas
-   - Les stats peuvent encore s'afficher si elles sont mises en cache côté frontend
+2. **When the session expires**:
+   - Keep-alive should renew it automatically
+   - If the plugin is not started, keep-alive does not run
+   - Stats may still appear if they are cached on the frontend
 
-3. **Stats DHCP et Redirections** :
-   - Ces stats nécessitent **toutes** une session active
-   - Si elles s'affichent sans session, c'est probablement :
-     - Des données en cache côté frontend
-     - Ou une session qui vient d'expirer mais les données sont encore en mémoire
-
----
-
-## 🐛 Différence Dev vs Production
-
-### Mode Développement (npm run dev)
-
-**Problème** : Le plugin peut ne pas être démarré automatiquement au démarrage du serveur.
-
-**Pourquoi** :
-- Le plugin n'est démarré que si `enabled: true` dans la base de données
-- En dev, la base de données peut être vide ou le plugin désactivé
-- Le keep-alive ne démarre que si `plugin.start()` est appelé
-- **Si le plugin n'est pas activé dans la DB, le keep-alive ne démarre jamais automatiquement**
-
-**Comportement actuel** :
-- ✅ Cliquer sur "Auth" reconnecte la session et démarre le keep-alive
-- ❌ Mais si le plugin n'est pas activé dans la DB, le keep-alive s'arrête si le serveur redémarre
-- ❌ La session expire après ~5-10 minutes sans keep-alive
-
-**C'est normal** : Oui, c'est le comportement attendu si le plugin n'est pas activé dans la base de données.
-
-**Solution** :
-1. **Activer le plugin** dans la page Plugins (Settings → Plugins)
-2. Redémarrer le serveur dev
-3. Le plugin démarrera automatiquement avec le keep-alive
-
-### Mode Production (Docker)
-
-**Pourquoi ça marche mieux** :
-- La base de données est persistante (volume Docker)
-- Le plugin est probablement activé (`enabled: true`)
-- Au démarrage du conteneur, `initializeAllPlugins()` démarre automatiquement les plugins activés
-- Le keep-alive fonctionne dès le démarrage
+3. **DHCP and port-forwarding stats**:
+   - These stats **all** require an active session
+   - If they appear without a session, it is likely:
+     - Cached data on the frontend, or
+     - A session that just expired but data is still in memory
 
 ---
 
-## 🔍 Diagnostic
+## 🐛 Dev vs Production Difference
 
-### Vérifier si le plugin est démarré
+### Development mode (npm run dev)
+
+**Issue**: The plugin may not start automatically when the server starts.
+
+**Why**:
+- The plugin is only started if `enabled: true` in the database
+- In dev, the database may be empty or the plugin disabled
+- Keep-alive only starts when `plugin.start()` is called
+- **If the plugin is not enabled in the DB, keep-alive never starts automatically**
+
+**Current behaviour**:
+- ✅ Clicking "Auth" reconnects the session and starts keep-alive
+- ❌ If the plugin is not enabled in the DB, keep-alive stops when the server restarts
+- ❌ The session expires after ~5–10 minutes without keep-alive
+
+**Is this normal?** Yes, it is expected when the plugin is not enabled in the database.
+
+**Solution**:
+1. **Enable the plugin** on the Plugins page (Settings → Plugins)
+2. Restart the dev server
+3. The plugin will start automatically with keep-alive
+
+### Production mode (Docker)
+
+**Why it works better**:
+- The database is persistent (Docker volume)
+- The plugin is usually enabled (`enabled: true`)
+- On container start, `initializeAllPlugins()` starts all enabled plugins
+- Keep-alive runs from startup
+
+---
+
+## 🔍 Diagnostics
+
+### Check if the plugin is started
 
 ```bash
-# Vérifier les logs backend
-# Vous devriez voir :
+# Check backend logs
+# You should see:
 [FreeboxPlugin] Starting session keep-alive (checking every 2 minutes)
 ```
 
-### Vérifier si la session est active
+### Check if the session is active
 
 ```bash
-# Dans les logs, chercher :
+# In the logs, look for:
 [FreeboxPlugin] Session expired, renewing...
 [FreeboxPlugin] Session renewed successfully
 ```
 
-### Vérifier l'état du plugin
+### Check plugin state
 
 ```bash
-# Appel API
+# API call
 GET /api/plugins/freebox
-# Vérifier : enabled, connectionStatus
+# Check: enabled, connectionStatus
 ```
 
 ---
 
 ## 🛠️ Solutions
 
-### Solution 1 : S'assurer que le plugin est activé en dev
+### Solution 1: Ensure the plugin is enabled in dev
 
-1. Aller dans la page Plugins
-2. Activer le plugin Freebox
-3. Redémarrer le serveur dev
-4. Le plugin devrait démarrer automatiquement avec le keep-alive
+1. Go to the Plugins page
+2. Enable the Freebox plugin
+3. Restart the dev server
+4. The plugin should start automatically with keep-alive
 
-### Solution 2 : Améliorer le keep-alive pour qu'il démarre même si le plugin n'est pas démarré
+### Solution 2: Improve keep-alive so it starts even when the plugin is not started
 
-**Option A** : Démarrer le keep-alive dans `getStats()` si la session est valide
+**Option A**: Start keep-alive in `getStats()` when the session is valid
 
-**Option B** : Démarrer le keep-alive dès qu'une première connexion réussit
+**Option B**: Start keep-alive as soon as a first connection succeeds
 
-### Solution 3 : Reconnexion automatique dans `getStats()`
+### Solution 3: Automatic reconnection in `getStats()`
 
-Actuellement, `getStats()` reconnecte déjà automatiquement, mais le keep-alive ne démarre pas si le plugin n'est pas démarré.
-
----
-
-## 📝 Recommandations
-
-1. **En développement** : Toujours activer le plugin dans la page Plugins pour que le keep-alive fonctionne
-2. **En production** : Le plugin devrait être activé par défaut dans la base de données
-3. **Amélioration future** : Démarrer le keep-alive automatiquement dès qu'une session est établie, même si le plugin n'est pas formellement "démarré"
+Currently `getStats()` already reconnects automatically, but keep-alive does not start if the plugin is not started.
 
 ---
 
-## 🔗 Références
+## 📝 Recommendations
 
-- `server/plugins/freebox/FreeboxPlugin.ts` : Logique principale du plugin
-- `server/plugins/freebox/FreeboxApiService.ts` : Service API Freebox
-- `server/services/pluginManager.ts` : Gestionnaire de plugins
-- `server/routes/auth.ts` : Routes d'authentification Freebox
+1. **In development**: Always enable the plugin on the Plugins page so keep-alive works
+2. **In production**: The plugin should be enabled by default in the database
+3. **Future improvement**: Start keep-alive automatically as soon as a session is established, even if the plugin is not formally "started"
 
+---
+
+## 🔗 References
+
+- `server/plugins/freebox/FreeboxPlugin.ts`: Main plugin logic
+- `server/plugins/freebox/FreeboxApiService.ts`: Freebox API service
+- `server/services/pluginManager.ts`: Plugin manager
+- `server/routes/auth.ts`: Freebox auth routes

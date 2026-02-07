@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Cpu,
   HardDrive,
@@ -15,7 +16,7 @@ import {
 import logoUltra from '../../icons/logo_ultra.svg';
 import logoMynetworK from '../../icons/logo_mynetwork.svg';
 import logoUnifi from '../../icons/logo_unifi.svg';
-import { StatusBadge, UserMenu } from '../ui';
+import { StatusBadge, UserMenu, LanguageSwitcher } from '../ui';
 import { useAuthStore } from '../../stores/authStore';
 import { useConnectionStore } from '../../stores';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
@@ -124,7 +125,7 @@ const getFans = (info: SystemInfo | null | undefined): SystemFan[] => {
 
   // Legacy format: single fan_rpm field
   if (info.fan_rpm != null) {
-    return [{ id: 'fan_rpm', name: 'Ventilateur', value: info.fan_rpm }];
+    return [{ id: 'fan_rpm', name: 'Fan', value: info.fan_rpm }];
   }
 
   return [];
@@ -214,8 +215,8 @@ const Tooltip: React.FC<{
   return createPortal(tooltipContent, document.body);
 };
 
-export const Header: React.FC<HeaderProps> = ({ 
-  systemInfo, 
+export const Header: React.FC<HeaderProps> = ({
+  systemInfo,
   connectionStatus,
   pageType = 'dashboard',
   onHomeClick,
@@ -228,6 +229,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchClick,
   unifiStats
 }) => {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   // Get capabilities for model name (respects mock mode)
   const { getModel } = useCapabilitiesStore();
   
@@ -352,18 +355,18 @@ export const Header: React.FC<HeaderProps> = ({
   // Update page title based on page type and model
   useEffect(() => {
     if (pageType === 'dashboard') {
-      document.title = 'MynetworK - Dashboard Multi-Sources';
+      document.title = t('header.dashboardTitle');
     } else if (pageType === 'freebox') {
       const modelSuffix = model === 'unknown' ? '' : ` ${model.charAt(0).toUpperCase() + model.slice(1)}`;
       document.title = `Freebox OS${modelSuffix}`;
     } else if (pageType === 'unifi') {
       document.title = 'UniFi Controller - MynetworK';
     } else if (pageType === 'search') {
-      document.title = 'Recherche - MynetworK';
+      document.title = t('header.searchTitle');
     } else {
       document.title = 'MynetworK';
     }
-  }, [pageType, model]);
+  }, [pageType, model, t]);
 
   // Freebox session status (for visual indicator in header)
   const { isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
@@ -439,7 +442,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
                 {updateInfo?.updateAvailable && updateInfo.enabled && (
                   <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
-                    Nouvelle version disponible
+                    {t('header.newVersionAvailable')}
                   </span>
                 )}
               </div>
@@ -458,7 +461,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
                     {updateInfo?.updateAvailable && updateInfo.enabled && (
                       <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
-                        Nouvelle version disponible
+                        {t('header.newVersionAvailable')}
                       </span>
                     )}
                   </div>
@@ -511,7 +514,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onSearchClick}
               className="md:hidden flex items-center justify-center w-10 h-10 bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-primary transition-colors"
-              title="Recherche"
+              title={t('header.search')}
             >
               <Search size={20} className="text-theme-primary" />
             </button>
@@ -519,14 +522,14 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onSearchClick}
               className="hidden md:flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme hover:bg-theme-primary transition-colors text-left"
-              title="Recherche"
+              title={t('header.search')}
             >
               <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
                 <Search className="w-7 h-7 text-accent-primary" />
               </div>
               <div className="flex flex-col leading-tight">
-                <span className="font-semibold text-theme-primary">Recherche</span>
-                <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
+                <span className="font-semibold text-theme-primary">{t('header.search')}</span>
+                <span className="text-[10px] text-gray-400 font-normal">{t('header.globalSearch')}</span>
               </div>
             </button>
           </>
@@ -539,8 +542,8 @@ export const Header: React.FC<HeaderProps> = ({
               <Search className="w-7 h-7 text-accent-primary" />
             </div>
             <div className="flex flex-col leading-tight">
-              <span className="font-semibold text-theme-primary">Recherche</span>
-              <span className="text-[10px] text-gray-400 font-normal">Recherche globale</span>
+              <span className="font-semibold text-theme-primary">{t('header.search')}</span>
+              <span className="text-[10px] text-gray-400 font-normal">{t('header.search')}</span>
             </div>
           </div>
         )}
@@ -553,10 +556,10 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
             <div className="flex flex-col items-end">
               <div className="text-sm font-mono text-theme-primary font-semibold">
-                {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                {currentTime.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-xs text-theme-secondary">
-                {currentTime.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                {currentTime.toLocaleDateString(dateLocale, { weekday: 'short', day: '2-digit', month: 'short' })}
               </div>
             </div>
           </div>
@@ -637,7 +640,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <Tooltip
               show={showCpuTooltip}
-              title="Températures CPU"
+              title={t('header.cpuTemps')}
               items={cpuSensors}
               color="text-emerald-400"
               unit="°C"
@@ -660,7 +663,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <Tooltip
                   show={showHddTooltip}
-                  title="Températures Disques"
+                  title={t('header.diskTemps')}
                   items={hddSensors}
                   color="text-blue-400"
                   unit="°C"
@@ -704,7 +707,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <Tooltip
               show={showCpuTooltip}
-              title="Températures CPU"
+              title={t('header.cpuTemps')}
               items={cpuSensors}
               color="text-emerald-400"
               unit="°C"
@@ -729,7 +732,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
                 <Tooltip
                   show={showHddTooltip}
-                  title="Températures Disques"
+                  title={t('header.diskTemps')}
                   items={hddSensors}
                   color="text-blue-400"
                   unit="°C"
@@ -754,7 +757,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <Tooltip
               show={showFanTooltip}
-              title="Ventilateurs"
+              title={t('header.fans')}
               items={fans}
               color="text-orange-400"
               unit=" T/min"
@@ -857,7 +860,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {anyUpgradable && (
                   <StatusBadge
                     icon={<AlertTriangle size={16} />}
-                    value="MAJ dispo"
+                    value={t('header.updateAvailable')}
                     color="text-amber-300"
                   />
                 )}
@@ -914,16 +917,17 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
             <div className="flex flex-col items-end">
               <div className="text-sm font-mono text-theme-primary font-semibold">
-                {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                {currentTime.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-xs text-theme-secondary">
-                {currentTime.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                {currentTime.toLocaleDateString(dateLocale, { weekday: 'short', day: '2-digit', month: 'short' })}
               </div>
             </div>
           </div>
         )}
 
-        {/* User Menu */}
+        {/* Language switcher + User Menu */}
+        <LanguageSwitcher />
         {user && user.username && (
           <UserMenu
             user={user}

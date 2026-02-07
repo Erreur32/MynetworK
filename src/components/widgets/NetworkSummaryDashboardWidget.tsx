@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { Loader2, XCircle } from 'lucide-react';
 import { api } from '../../api/client';
@@ -68,6 +69,7 @@ interface NetworkSummaryResult {
 }
 
 export const NetworkSummaryDashboardWidget: React.FC = () => {
+  const { t } = useTranslation();
   const [data, setData] = useState<NetworkSummaryResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,10 +82,10 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
       if (res.success && res.result) {
         setData(res.result);
       } else {
-        setError('Données indisponibles');
+        setError(t('network.dataUnavailable'));
       }
     } catch (err) {
-      setError('Erreur lors du chargement des informations réseau');
+      setError(t('network.loadError'));
       console.error('Network summary error:', err);
     } finally {
       setIsLoading(false);
@@ -101,10 +103,10 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
 
   if (isLoading && !data) {
     return (
-      <Card title="Récapitulatif Réseau">
+      <Card title={t('network.summary')}>
         <div className="text-center py-8 text-gray-500">
           <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
-          <p className="text-sm">Chargement...</p>
+          <p className="text-sm">{t('common.loading')}</p>
         </div>
       </Card>
     );
@@ -112,7 +114,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
 
   if (error && !data) {
     return (
-      <Card title="Récapitulatif Réseau">
+      <Card title={t('network.summary')}>
         <div className="text-center py-8 text-red-500">
           <XCircle size={24} className="mx-auto mb-2" />
           <p className="text-sm">{error}</p>
@@ -131,19 +133,19 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
         : 'UniFi (Cloud Gateway)';
 
   return (
-    <Card title="Récapitulatif Réseau">
+    <Card title={t('network.summary')}>
       <div className="space-y-3">
         {/* Who manages the network */}
         <div className="flex justify-between items-center">
-          <span className="text-gray-400 text-sm">Réseau géré par:</span>
+          <span className="text-gray-400 text-sm">{t('network.managedBy')}</span>
           <span className="text-cyan-400 font-medium text-sm">{roleLabel}</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-gray-400 text-sm">Passerelle:</span>
+          <span className="text-gray-400 text-sm">{t('network.gateway')}</span>
           <span className="text-cyan-400 font-mono text-sm">{data.gateway}</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-gray-400 text-sm">Sous-réseau:</span>
+          <span className="text-gray-400 text-sm">{t('network.subnet')}</span>
           <span className="text-purple-400 font-mono text-sm">{data.subnet}</span>
         </div>
 
@@ -251,9 +253,9 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
               {data.freebox.natRules.map((r, i) => (
                 <li key={r.id ?? i} className="text-xs flex items-center gap-2">
                   {r.enabled ? (
-                    <span className="text-emerald-500" title="Activée">●</span>
+                    <span className="text-emerald-500" title={t('common.enabled')}>●</span>
                   ) : (
-                    <span className="text-gray-600" title="Désactivée">○</span>
+                    <span className="text-gray-600" title={t('common.disabled')}>○</span>
                   )}
                   <span className="text-gray-300 truncate">{r.comment || `Règle #${r.id ?? i + 1}`}</span>
                   <span className="text-gray-500 font-mono shrink-0">
@@ -281,7 +283,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           data.freebox.dhcp.usedIps != null && (
             <>
               <div className="pt-2 border-t border-gray-800 space-y-2">
-                <div className="text-gray-400 text-xs font-semibold mb-2">Gestionnaire d'IPs Réseau (Freebox)</div>
+                <div className="text-gray-400 text-xs font-semibold mb-2">{t('network.ipManagerFreebox')}</div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">IPv4 libres:</span>
                   <span className="text-emerald-400 font-mono text-sm font-semibold">

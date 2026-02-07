@@ -1,8 +1,8 @@
 /**
- * Scan Réseau Plugin
- * 
- * Plugin for network scanning functionality
- * Discovers and tracks IP addresses on the local network
+ * Network Scan Plugin
+ *
+ * Plugin for network scanning functionality.
+ * Discovers and tracks IP addresses on the local network.
  */
 
 import { BasePlugin } from '../base/BasePlugin.js';
@@ -13,7 +13,7 @@ import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.
 
 export class ScanReseauPlugin extends BasePlugin {
     constructor() {
-        super('scan-reseau', 'Scan Réseau', '0.6.0');
+        super('scan-reseau', 'Network scan', '0.6.0');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -46,7 +46,7 @@ export class ScanReseauPlugin extends BasePlugin {
      */
     async getStats(): Promise<PluginStats> {
         if (!this.isEnabled()) {
-            throw new Error('Scan Réseau plugin is not enabled');
+            throw new Error('Network scan plugin is not enabled');
         }
 
         try {

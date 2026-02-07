@@ -8,31 +8,31 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# 🔴 Outils de build OBLIGATOIRES pour compiler better-sqlite3 et autres modules natifs
-# Ces outils sont nécessaires pour npm ci qui compile better-sqlite3
-# curl: utile pour le debugging en dev (test des routes API)
-# iputils-ping: nécessaire pour le scan réseau (commande ping)
-# iproute2: nécessaire pour le scan réseau (commande ip neigh pour détection MAC)
-# samba-common: contient nmblookup pour NetBIOS/SMB hostname resolution
-# Note: getent n'est pas disponible dans Alpine (musl libc), on utilise la lecture directe de /etc/hosts
+# Required build tools to compile better-sqlite3 and other native modules.
+# These are needed for npm ci which compiles better-sqlite3.
+# curl: useful for dev debugging (API route tests).
+# iputils-ping: required for network scan (ping command).
+# iproute2: required for network scan (ip neigh for MAC detection).
+# samba-common: provides nmblookup for NetBIOS/SMB hostname resolution.
+# Note: getent is not available on Alpine (musl libc); we use direct /etc/hosts reading.
 RUN apk add --no-cache python3 make g++ curl iputils-ping iproute2 samba-common
 
-# Réduction du bruit npm en dev
+# Reduce npm noise in dev
 ENV NODE_ENV=development
 RUN npm config set fund false \
  && npm config set audit false
 
-# Dépendances (dev + prod)
+# Dependencies (dev + prod)
 COPY package*.json ./
 RUN npm ci
 
-# Le code source sera monté via volume (docker-compose)
-# => pas de COPY du code ici
+# Source code will be mounted via volume (docker-compose)
+# => no COPY of source here
 
-# Ports :
-# - Frontend (Vite) : 5173
-# - Backend API     : 3003
+# Ports:
+# - Frontend (Vite): 5173
+# - Backend API:    3003
 EXPOSE 5173 3003
 
-# Lancement dev (vite + api en watch)
+# Start dev (vite + API in watch mode)
 CMD ["npm", "run", "dev"]

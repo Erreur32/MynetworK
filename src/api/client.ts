@@ -1,6 +1,7 @@
 import type { ApiResponse } from '../types/api';
 import { useAuthStore } from '../stores/authStore';
 import { PERMISSION_LABELS } from '../utils/permissions';
+import { getBasePath } from '../utils/ingress';
 
 // Extended response type for Freebox API errors
 interface FreeboxErrorResponse {
@@ -22,7 +23,10 @@ class ApiClient {
     endpoint: string,
     body?: unknown
   ): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint}`;
+    const basePath = getBasePath();
+    const url = basePath
+      ? `${basePath}${this.baseUrl}${endpoint.startsWith('/') ? endpoint.slice(1) : endpoint}`
+      : `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
     
     // Get token from localStorage (JWT) or Freebox auth store
     // Use localStorage directly to avoid circular dependency

@@ -1,22 +1,26 @@
-# Configuration Nginx pour WebSocket
+# Nginx Configuration for WebSocket
 
-## Problème
+**📖 [Lire en français](NGINX_WEBSOCKET_CONFIG.fr.md)**
 
-En production avec nginx comme reverse proxy, les WebSockets peuvent échouer avec l'erreur :
+---
+
+## Problem
+
+When using nginx as a reverse proxy in production, WebSockets may fail with:
 ```
 WebSocket connection to 'wss://domain.com/ws/connection' failed: Invalid frame header
 ```
 
 ## Solution
 
-Nginx doit être configuré pour gérer l'upgrade WebSocket. Ajoutez cette configuration dans votre bloc `location` :
+Nginx must be configured to handle WebSocket upgrade. Add this configuration inside your `location` block:
 
 ```nginx
 location / {
     proxy_pass http://localhost:7505;
     proxy_http_version 1.1;
     
-    # Headers pour WebSocket
+    # WebSocket headers
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
@@ -24,12 +28,12 @@ location / {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     
-    # Timeouts pour WebSocket (important)
+    # WebSocket timeouts (important)
     proxy_read_timeout 86400;
     proxy_send_timeout 86400;
 }
 
-# Configuration spécifique pour les WebSockets
+# Dedicated WebSocket location
 location /ws/ {
     proxy_pass http://localhost:7505;
     proxy_http_version 1.1;
@@ -38,20 +42,20 @@ location /ws/ {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     
-    # Headers standards
+    # Standard headers
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     
-    # Timeouts longs pour WebSocket
+    # Long timeouts for WebSocket
     proxy_read_timeout 86400;
     proxy_send_timeout 86400;
     proxy_connect_timeout 60s;
 }
 ```
 
-## Configuration complète exemple
+## Complete example configuration
 
 ```nginx
 server {
@@ -59,7 +63,7 @@ server {
     listen [::]:80;
     server_name mwk.myoueb.fr;
 
-    # Redirection HTTPS
+    # HTTPS redirect
     return 301 https://$server_name$request_uri;
 }
 
@@ -68,11 +72,11 @@ server {
     listen [::]:443 ssl http2;
     server_name mwk.myoueb.fr;
 
-    # Certificats SSL
+    # SSL certificates
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    # Configuration WebSocket
+    # WebSocket configuration
     location / {
         proxy_pass http://localhost:7505;
         proxy_http_version 1.1;
@@ -88,7 +92,7 @@ server {
         proxy_send_timeout 86400;
     }
 
-    # WebSocket spécifique
+    # WebSocket-specific
     location /ws/ {
         proxy_pass http://localhost:7505;
         proxy_http_version 1.1;
@@ -107,15 +111,15 @@ server {
 }
 ```
 
-## Vérification
+## Verification
 
-1. Rechargez nginx : `sudo nginx -t && sudo systemctl reload nginx`
-2. Vérifiez les logs nginx : `sudo tail -f /var/log/nginx/error.log`
-3. Testez la connexion WebSocket depuis le navigateur
+1. Reload nginx: `sudo nginx -t && sudo systemctl reload nginx`
+2. Check nginx logs: `sudo tail -f /var/log/nginx/error.log`
+3. Test the WebSocket connection from the browser
 
-## Notes importantes
+## Important notes
 
-- Les headers `Upgrade` et `Connection` sont **essentiels** pour WebSocket
-- Les timeouts longs (86400s = 24h) permettent aux WebSockets de rester ouverts
-- Le port `7505` correspond à `DASHBOARD_PORT` dans votre `docker-compose.yml`
+- The `Upgrade` and `Connection` headers are **required** for WebSocket
+- Long timeouts (86400s = 24h) keep WebSocket connections open
+- Port `7505` is your `DASHBOARD_PORT` in `docker-compose.yml`
 

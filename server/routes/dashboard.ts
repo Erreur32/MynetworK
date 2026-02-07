@@ -161,7 +161,7 @@ router.get(
           }
         }
       } catch {
-        dhcpServers.push({ source: 'freebox', active: false, detail: 'Indisponible' });
+        dhcpServers.push({ source: 'freebox', active: false, detail: 'Unavailable' });
       }
 
       try {

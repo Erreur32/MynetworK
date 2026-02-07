@@ -174,7 +174,7 @@ router.post('/wps/start', asyncHandler(async (_req, res) => {
       success: false,
       error: {
         code: 'insufficient_rights',
-        message: 'Permission "Modification des réglages de la Freebox" requise. Supprimez freebox_token.json et réenregistrez l\'application en accordant tous les droits sur l\'écran LCD de la Freebox.'
+        message: 'Permission "Freebox settings modification" required. Delete freebox_token.json and re-register the application granting all rights on the Freebox LCD screen.'
       }
     });
     return;
@@ -191,17 +191,17 @@ router.post('/wps/start', asyncHandler(async (_req, res) => {
     if (errorMsg.includes('insuff') || result.error_code === 'insufficient_rights') {
       errorResponse = {
         code: 'insufficient_rights',
-        message: 'Permission insuffisante. Supprimez le fichier freebox_token.json et réenregistrez l\'application avec tous les droits.'
+        message: 'Insufficient permission. Delete freebox_token.json and re-register the application with all rights.'
       };
     } else if (errorMsg.includes('disabled') || result.error_code === 'wps_disabled') {
       errorResponse = {
         code: 'wps_disabled',
-        message: 'WPS est désactivé sur la Freebox. Activez-le dans les paramètres WiFi de Freebox OS.'
+        message: 'WPS is disabled on the Freebox. Enable it in Freebox OS WiFi settings.'
       };
     } else {
       errorResponse = {
         code: result.error_code || 'wps_error',
-        message: result.msg || 'Erreur lors du démarrage WPS'
+        message: result.msg || 'Error while starting WPS'
       };
     }
 

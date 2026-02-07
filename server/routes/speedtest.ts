@@ -111,7 +111,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
       success: false,
       error: {
         code: 'connection_closed',
-        message: 'Connexion fermée'
+        message: 'Connection closed'
       }
     });
   }
@@ -155,7 +155,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
     console.error('[Speedtest] Ping failed:', error);
     
     // Handle specific error types
-    const errorMessage = error.message || 'Impossible de mesurer la latence';
+    const errorMessage = error.message || 'Unable to measure latency';
     const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT');
     const isSocketError = errorMessage.includes('socket') || errorMessage.includes('ECONNRESET');
 
@@ -163,7 +163,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
       success: false,
       error: {
         code: isTimeout ? 'ping_timeout' : isSocketError ? 'connection_error' : 'ping_failed',
-        message: isTimeout ? 'Timeout lors du ping' : isSocketError ? 'Erreur de connexion' : 'Impossible de mesurer la latence'
+        message: isTimeout ? 'Ping timeout' : isSocketError ? 'Connection error' : 'Unable to measure latency'
       }
     });
   }
@@ -196,7 +196,7 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
         success: false,
         error: {
           code: 'connection_error',
-          message: 'Impossible de récupérer les informations de connexion'
+          message: 'Unable to retrieve connection information'
         }
       });
     }
@@ -206,7 +206,7 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
       success: false,
       error: {
         code: 'bandwidth_error',
-        message: 'Erreur lors de la récupération du débit'
+        message: 'Error while retrieving bandwidth'
       }
     });
   }
@@ -311,7 +311,7 @@ router.post('/run', asyncHandler(async (req, res) => {
       success: false,
       error: {
         code: 'test_failed',
-        message: 'Erreur lors du test de débit'
+        message: 'Error during speed test'
       }
     });
   }

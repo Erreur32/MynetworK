@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useConnectionStore } from '../stores/connectionStore';
 import { useSystemStore } from '../stores/systemStore';
 import type { ConnectionStatus } from '../types/api';
+import { getBasePath } from '../utils/ingress';
 
 interface SystemStatusData {
   temp_cpu0?: number;
@@ -108,30 +109,25 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     // Marquer qu'on est en train de se connecter
     isConnectingRef.current = true;
 
-    // Build WebSocket URL
+    // Build WebSocket URL (include base path when under Ingress so WS stays same-origin)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const basePath = getBasePath();
     let wsUrl: string;
-    
+
     // In dev mode, check if we're accessing via IP (Docker dev) or localhost (npm dev)
     // If accessing via IP (not localhost), connect directly to backend port 3668 to avoid Vite proxy issues
     if (import.meta.env.DEV) {
       const host = window.location.hostname;
-      const port = window.location.port;
       // If accessing via IP address (not localhost), connect directly to backend
-      // This handles both port 3666 (Docker) and port 5173 (Vite dev server)
       const isRemoteAccess = host !== 'localhost' && host !== '127.0.0.1';
-      
+
       if (isRemoteAccess) {
-        // Remote access (IP): connect directly to backend port (3668) to bypass Vite proxy
-        // Vite proxy doesn't handle WebSocket upgrades correctly for remote IPs
-        wsUrl = `${protocol}//${host}:3668/ws/connection`;
+        wsUrl = `${protocol}//${host}:3668${basePath}ws/connection`;
       } else {
-        // Localhost: use proxy via current host (Vite handles WebSocket upgrade correctly for localhost)
-        wsUrl = `${protocol}//${window.location.host}/ws/connection`;
+        wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
       }
     } else {
-      // Production: use current host
-      wsUrl = `${protocol}//${window.location.host}/ws/connection`;
+      wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
     }
 
     if (import.meta.env.DEV) {

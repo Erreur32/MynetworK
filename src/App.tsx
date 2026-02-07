@@ -1,4 +1,5 @@
 import React, { useEffect, useState, Suspense, lazy, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Header, Footer, type PageType } from './components/layout';
 import {
   Card,
@@ -70,17 +71,18 @@ import {
   ArrowDownWideNarrow
 } from 'lucide-react';
 
-// Loading component for lazy-loaded pages
-const PageLoader = () => (
+// Loading component for lazy-loaded pages (receives t from parent so it can be used outside hook scope in Suspense)
+const PageLoader = ({ t }: { t: (key: string) => string }) => (
   <div className="flex items-center justify-center min-h-[400px]">
     <div className="text-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-      <p className="text-gray-400 text-sm">Chargement...</p>
+      <p className="text-gray-400 text-sm">{t('common.loading')}</p>
     </div>
   </div>
 );
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
   // User authentication (JWT) - New system
   const { isAuthenticated: isUserAuthenticated, isLoading: userAuthLoading, checkAuth: checkUserAuth, logout: userLogout, user } = useUserAuthStore();
   
@@ -457,7 +459,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-theme-primary flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Chargement...</p>
+          <p className="text-gray-400">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -491,7 +493,7 @@ const App: React.FC = () => {
           animationParameters={animationParameters.parameters}
         />
         <div className="relative z-0 min-h-screen pb-20 bg-theme-primary/95 text-theme-primary font-sans selection:bg-accent-primary/30">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader t={t} />}>
             {pageContent}
           </Suspense>
           <Footer
@@ -624,7 +626,7 @@ const App: React.FC = () => {
           onSearchClick={() => setCurrentPage('search')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader t={t} />}>
           <SearchPage 
             onBack={() => setCurrentPage('dashboard')} 
           />
@@ -652,7 +654,7 @@ const App: React.FC = () => {
           unifiStats={pluginStats['unifi'] || null}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader t={t} />}>
       <UniFiPage 
         onBack={() => setCurrentPage('dashboard')} 
         onNavigateToSearch={(ip) => {
@@ -684,7 +686,7 @@ const App: React.FC = () => {
           onLogout={handleLogout}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader t={t} />}>
             <NetworkScanPage 
               onBack={() => setCurrentPage('dashboard')} 
               onNavigateToSearch={(ip) => {
@@ -726,7 +728,7 @@ const App: React.FC = () => {
           onSearchClick={() => setCurrentPage('search')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageLoader t={t} />}>
           <UnifiedDashboardPage 
             onNavigateToFreebox={() => setCurrentPage('freebox')}
             onNavigateToUniFi={() => setCurrentPage('unifi')}
@@ -777,7 +779,7 @@ const App: React.FC = () => {
             {/* Freebox Status (only if Freebox is connected) */}
             {isFreeboxLoggedIn && (
               <Card
-                title="État de la Freebox"
+                title={t('freebox.state')}
                 actions={
                   <div className="flex items-center gap-2">
                     <ActionButton
@@ -803,7 +805,7 @@ const App: React.FC = () => {
                     data={networkHistory || []}
                     dataKey="download"
                     color="#3b82f6"
-                    title="Descendant en temps réel"
+                    title={t('freebox.downloadRealtime')}
                     currentValue={currentDownload.split(' ')[0]}
                     unit={currentDownload.split(' ')[1] || 'kb/s'}
                     trend="down"
@@ -812,7 +814,7 @@ const App: React.FC = () => {
                     data={networkHistory || []}
                     dataKey="upload"
                     color="#10b981"
-                    title="Montant en temps réel"
+                    title={t('freebox.uploadRealtime')}
                     currentValue={currentUpload.split(' ')[0]}
                     unit={currentUpload.split(' ')[1] || 'kb/s'}
                     trend="up"
@@ -822,7 +824,7 @@ const App: React.FC = () => {
             )}
 
             {isFreeboxLoggedIn && (
-              <Card title="Test de débits">
+              <Card title={t('freebox.speedTest')}>
               <SpeedtestWidget
                 downloadSpeed={undefined}
                 uploadSpeed={undefined}
@@ -853,7 +855,7 @@ const App: React.FC = () => {
                 />
               ) : (
                 <div className="text-center text-gray-500 py-4">
-                  Chargement...
+                  {t('common.loading')}
                 </div>
               )}
             </Card>
@@ -866,19 +868,19 @@ const App: React.FC = () => {
               title="Wifi"
               actions={
                 <div className="flex flex-wrap gap-1 sm:gap-2">
-                  <ActionButton label="Filtrage" icon={Sliders} onClick={() => { setWifiModalTab('filter'); setIsWifiModalOpen(true); }} />
-                  <ActionButton label="Planif." icon={Calendar} onClick={() => { setWifiModalTab('planning'); setIsWifiModalOpen(true); }} />
-                  <ActionButton label="WPS" icon={WifiIcon} onClick={() => { setWifiModalTab('wps'); setIsWifiModalOpen(true); }} />
+                  <ActionButton label={t('dashboard.filter')} icon={Sliders} onClick={() => { setWifiModalTab('filter'); setIsWifiModalOpen(true); }} />
+                  <ActionButton label={t('dashboard.planning')} icon={Calendar} onClick={() => { setWifiModalTab('planning'); setIsWifiModalOpen(true); }} />
+                  <ActionButton label={t('dashboard.wps')} icon={WifiIcon} onClick={() => { setWifiModalTab('wps'); setIsWifiModalOpen(true); }} />
                 </div>
               }
             >
               {wifiLoading ? (
-                <div className="text-center text-gray-500 py-4">Chargement...</div>
+                <div className="text-center text-gray-500 py-4">{t('common.loading')}</div>
               ) : wifiNetworks.length > 0 ? (
                 <WifiPanel networks={wifiNetworks} onToggle={handleWifiToggle} />
               ) : (
                 <div className="text-center text-gray-500 py-4">
-                  Aucun réseau WiFi configuré
+                  {t('dashboard.noWifiConfigured')}
                 </div>
               )}
             </Card>
@@ -895,7 +897,7 @@ const App: React.FC = () => {
                         : 'bg-[#1a1a1a] border-gray-700 text-gray-400 hover:bg-[#252525]'
                     }`}
                   >
-                    <Filter size={12} /> Actifs
+                    <Filter size={12} /> {t('dashboard.active')}
                   </button>
                   <button
                     onClick={() => setDeviceFilter(deviceFilter === 'inactive' ? 'all' : 'inactive')}
@@ -905,7 +907,7 @@ const App: React.FC = () => {
                         : 'bg-[#1a1a1a] border-gray-700 text-gray-400 hover:bg-[#252525]'
                     }`}
                   >
-                    <Filter size={12} /> Hors-ligne
+                    <Filter size={12} /> {t('dashboard.offline')}
                   </button>
                 </div>
               }
@@ -917,7 +919,7 @@ const App: React.FC = () => {
                   onClick={() => setShowAllDevices(true)}
                   className="w-full mt-2 py-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
                 >
-                  Afficher tous les appareils ({filteredDevices.length})
+                  {t('dashboard.showAllDevices', { count: filteredDevices.length })}
                 </button>
               )}
               {showAllDevices && filteredDevices.length > 10 && (
@@ -925,7 +927,7 @@ const App: React.FC = () => {
                   onClick={() => setShowAllDevices(false)}
                   className="w-full mt-2 py-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                 >
-                  Réduire la liste
+                  {t('dashboard.reduceList')}
                 </button>
               )}
             </Card>
@@ -935,29 +937,29 @@ const App: React.FC = () => {
           <div className="flex flex-col gap-6">
             <Card
               title={hasLimitedVmSupport() ? `VMs (max ${getMaxVms()})` : "VMs"}
-              actions={supportsVm() && hasDisk && !vmError ? <ActionButton label="Créer" icon={Plus} onClick={() => setIsCreateVmModalOpen(true)} /> : undefined}
+              actions={supportsVm() && hasDisk && !vmError ? <ActionButton label={t('dashboard.create')} icon={Plus} onClick={() => setIsCreateVmModalOpen(true)} /> : undefined}
             >
               {!supportsVm() ? (
                 <UnsupportedFeature
-                  feature="Machines Virtuelles"
+                  feature={t('dashboard.virtualMachines')}
                   featureType="vm"
                 />
               ) : !hasDisk ? (
                 <div className="text-center py-8">
                   <Server size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucun disque détecté</p>
+                  <p className="text-gray-500 text-sm">{t('dashboard.noDiskDetected')}</p>
                   <p className="text-gray-600 text-xs mt-1">
-                    Connectez un disque dur pour utiliser les VMs
+                    {t('dashboard.connectDiskForVms')}
                   </p>
                 </div>
               ) : vmLoading ? (
-                <div className="text-center text-gray-500 py-4">Chargement...</div>
+                <div className="text-center text-gray-500 py-4">{t('common.loading')}</div>
               ) : vmError ? (
                 <div className="text-center py-8">
                   <Server size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">VMs non disponibles</p>
+                  <p className="text-gray-500 text-sm">{t('dashboard.vmsNotAvailable')}</p>
                   <p className="text-gray-600 text-xs mt-1">
-                    Cette fonctionnalité n'est pas supportée sur votre modèle
+                    {t('dashboard.vmsNotSupported')}
                   </p>
                 </div>
               ) : vms.length > 0 ? (
@@ -965,16 +967,16 @@ const App: React.FC = () => {
               ) : (
                 <div className="text-center py-8">
                   <Server size={32} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-sm">Aucune VM configurée</p>
+                  <p className="text-gray-500 text-sm">{t('dashboard.noVmConfigured')}</p>
                   <p className="text-gray-600 text-xs mt-1">
-                    Créez une VM pour commencer
+                    {t('dashboard.createVmToStart')}
                   </p>
                 </div>
               )}
             </Card>
 
             <Card
-              title="Téléchargements"
+              title={t('dashboard.downloads')}
               onTitleClick={() => {
                 setFilesPageInitialTab('downloads');
                 setFilesPageInitialDownloadId(undefined);
@@ -1017,7 +1019,7 @@ const App: React.FC = () => {
               {!hasDisk ? (
                 <div className="text-center py-4">
                   <HardDrive size={24} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-xs">Aucun disque détecté</p>
+                  <p className="text-gray-500 text-xs">{t('dashboard.noDiskDetected')}</p>
                 </div>
               ) : filteredDownloads.length > 0 ? (
                 <FilePanel
@@ -1031,12 +1033,12 @@ const App: React.FC = () => {
               ) : downloads.length > 0 ? (
                 <div className="text-center py-4">
                   <Download size={24} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-xs">Aucun téléchargement correspondant</p>
+                  <p className="text-gray-500 text-xs">{t('app.noDownloadMatching')}</p>
                 </div>
               ) : (
                 <div className="text-center py-4">
                   <Download size={24} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-xs">Aucun téléchargement</p>
+                  <p className="text-gray-500 text-xs">{t('app.noDownload')}</p>
                 </div>
               )}
             </Card>
@@ -1060,7 +1062,7 @@ const App: React.FC = () => {
                     }`}
                   >
                     <Filter size={12} />
-                    {historyFilter === 'all' ? 'Toutes' : historyFilter === 'connection' ? 'Connexion' : historyFilter === 'calls' ? 'Appels' : 'Notifs'}
+                    {historyFilter === 'all' ? t('app.historyAll') : historyFilter === 'connection' ? t('app.historyConnection') : historyFilter === 'calls' ? t('app.historyCalls') : t('app.historyNotifs')}
                   </button>
                   <button
                     onClick={() => {
@@ -1081,18 +1083,18 @@ const App: React.FC = () => {
               className={filteredHistoryLogs.length === 0 && historyLogs.length === 0 ? '' : 'h-full'}
             >
               {historyLoading ? (
-                <div className="text-center text-gray-500 py-4">Chargement...</div>
+                <div className="text-center text-gray-500 py-4">{t('common.loading')}</div>
               ) : filteredHistoryLogs.length > 0 ? (
                 <HistoryLog logs={filteredHistoryLogs} />
               ) : historyLogs.length > 0 ? (
                 <div className="text-center py-4">
                   <History size={24} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-xs">Aucun événement correspondant</p>
+                  <p className="text-gray-500 text-xs">{t('dashboard.noMatchingEvents')}</p>
                 </div>
               ) : (
                 <div className="text-center py-4">
                   <History size={24} className="mx-auto text-gray-600 mb-2" />
-                  <p className="text-gray-500 text-xs">Aucun événement récent</p>
+                  <p className="text-gray-500 text-xs">{t('dashboard.noRecentEvents')}</p>
                 </div>
               )}
             </Card>
@@ -1160,7 +1162,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
       />
       <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<PageLoader t={t} />}>
         <UnifiedDashboardPage 
           onNavigateToFreebox={() => setCurrentPage('freebox')}
           onNavigateToUniFi={() => setCurrentPage('unifi')}

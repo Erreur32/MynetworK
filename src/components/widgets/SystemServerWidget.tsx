@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { Cpu, MemoryStick, CheckCircle, XCircle, Activity, Loader2, Database } from 'lucide-react';
@@ -95,6 +96,7 @@ interface SystemInfo {
 }
 
 export const SystemServerWidget: React.FC = () => {
+    const { t } = useTranslation();
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
     const [networkData, setNetworkData] = useState<SystemNetworkData | null>(null);
     const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
@@ -179,10 +181,10 @@ export const SystemServerWidget: React.FC = () => {
 
     if (isLoading && !systemInfo) {
         return (
-            <Card title="Système Serveur">
+            <Card title={t('system.serverSystem')}>
                 <div className="text-center py-8 text-gray-500">
                     <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
-                    <p className="text-sm">Chargement...</p>
+                    <p className="text-sm">{t('common.loading')}</p>
                 </div>
             </Card>
         );
@@ -190,7 +192,7 @@ export const SystemServerWidget: React.FC = () => {
 
     if (error && !systemInfo) {
         return (
-            <Card title="Système Serveur">
+            <Card title={t('system.serverSystem')}>
                 <div className="text-center py-8 text-red-500">
                     <XCircle size={24} className="mx-auto mb-2" />
                     <p className="text-sm">{error}</p>
@@ -203,7 +205,7 @@ export const SystemServerWidget: React.FC = () => {
 
     return (
         <Card
-            title="Système Serveur"
+            title={t('system.serverSystem')}
         >
             <div className="space-y-4">
                 {/* CPU */}
@@ -317,7 +319,7 @@ export const SystemServerWidget: React.FC = () => {
                                 data={networkData.history || []}
                                 dataKey="download"
                                 color="#3b82f6"
-                                title="Descendant"
+                                title={t('system.download')}
                                 currentValue={networkData.current.download > 0 
                                     ? formatSpeed(networkData.current.download).split(' ')[0] 
                                     : '0'}
@@ -330,7 +332,7 @@ export const SystemServerWidget: React.FC = () => {
                                 data={networkData.history || []}
                                 dataKey="upload"
                                 color="#10b981"
-                                title="Montant"
+                                title={t('system.upload')}
                                 currentValue={networkData.current.upload > 0 
                                     ? formatSpeed(networkData.current.upload).split(' ')[0] 
                                     : '0'}

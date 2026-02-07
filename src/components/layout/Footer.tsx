@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Settings,
   Tv,
@@ -29,20 +30,20 @@ interface FooterProps {
   userRole?: 'admin' | 'user' | 'viewer';
 }
 
-// Internal pages (handled within the dashboard)
-const allTabs: { id: PageType; label: string; icon: React.ElementType; adminOnly?: boolean }[] = [
-  { id: 'dashboard', label: 'MynetworK', icon: Home },
-  { id: 'freebox', label: 'Freebox', icon: Server },
-  { id: 'unifi', label: 'UniFi', icon: BarChart2 },
-  { id: 'tv', label: 'Télévision', icon: Tv },
-  { id: 'phone', label: 'Téléphone', icon: Phone },
-  { id: 'files', label: 'Fichiers', icon: Folder },
-  { id: 'vms', label: 'VMs', icon: Server },
-  { id: 'analytics', label: 'Analytique', icon: BarChart2 },
-  { id: 'plugins', label: 'Plugins', icon: Plug },
-  { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: true },
-  { id: 'logs', label: 'Logs', icon: FileText, adminOnly: true },
-  { id: 'settings', label: 'Paramètres', icon: Settings }
+// Tab ids for which we need translated labels (labels resolved in component via t())
+const TAB_IDS: { id: PageType; labelKey: string; icon: React.ElementType; adminOnly?: boolean }[] = [
+  { id: 'dashboard', labelKey: 'nav.dashboard', icon: Home },
+  { id: 'freebox', labelKey: 'nav.freebox', icon: Server },
+  { id: 'unifi', labelKey: 'nav.unifi', icon: BarChart2 },
+  { id: 'tv', labelKey: 'nav.television', icon: Tv },
+  { id: 'phone', labelKey: 'nav.phone', icon: Phone },
+  { id: 'files', labelKey: 'nav.files', icon: Folder },
+  { id: 'vms', labelKey: 'nav.vms', icon: Server },
+  { id: 'analytics', labelKey: 'nav.analytics', icon: BarChart2 },
+  { id: 'plugins', labelKey: 'nav.plugins', icon: Plug },
+  { id: 'users', labelKey: 'nav.users', icon: Users, adminOnly: true },
+  { id: 'logs', labelKey: 'nav.logs', icon: FileText, adminOnly: true },
+  { id: 'settings', labelKey: 'nav.settings', icon: Settings }
 ];
 
 export const Footer: React.FC<FooterProps> = ({
@@ -53,18 +54,19 @@ export const Footer: React.FC<FooterProps> = ({
   onFreeboxOptions,
   userRole
 }) => {
+  const { t } = useTranslation();
   const { capabilities } = useCapabilitiesStore();
   const { plugins, pluginStats } = usePluginStore();
 
   // Filter tabs based on capabilities, user role, active plugins, and current page
   const visibleTabs = useMemo(() => {
-    return allTabs.filter(tab => {
-      // Onglet UniFi: jamais affiché à gauche, navigation via le bouton plugin à droite
+    return TAB_IDS.filter(tab => {
+      // UniFi tab: never shown on the left; navigation via plugin button on the right
       if (tab.id === 'unifi') {
         return false;
       }
-      // Sur le dashboard: masquer Freebox, Paramètres et les onglets Freebox (accès via les cartes/plugins)
-      // Le bouton "Administration" de l'app est géré séparément dans le footer du dashboard
+      // On dashboard: hide Freebox, Settings and Freebox tabs (access via cards/plugins)
+      // App "Administration" button is handled separately in the dashboard footer
       if (currentPage === 'dashboard') {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
@@ -73,7 +75,7 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Sur la page de recherche: afficher les mêmes onglets que le dashboard
+      // On search page: show the same tabs as on the dashboard
       if (currentPage === 'search') {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
@@ -82,7 +84,7 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Sur la page scan réseau: afficher les mêmes onglets que le dashboard
+      // On network-scan page: show the same tabs as on the dashboard
       if (currentPage === 'network-scan') {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
@@ -91,17 +93,17 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Sur les pages Freebox (freebox, tv, phone, files, vms, analytics):
-      // montrer les onglets liés Freebox + Dashboard, pour pouvoir revenir facilement au dashboard Freebox
+      // On Freebox pages (freebox, tv, phone, files, vms, analytics):
+      // show Freebox-related tabs + Dashboard so user can easily return to Freebox dashboard
       if (['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage)) {
         if (['tv', 'phone', 'files', 'vms', 'analytics', 'freebox', 'dashboard'].includes(tab.id)) {
-          // Continue avec les autres filtres (capabilities, rôle, etc.)
+          // Continue with other filters (capabilities, role, etc.)
         } else if (tab.id !== 'settings' && tab.id !== 'plugins' && tab.id !== 'users' && tab.id !== 'logs') {
           return false;
         }
       }
       
-      // Sur la page UniFi: cacher les onglets Freebox (ils restent accessibles via le bouton plugin)
+      // On UniFi page: hide Freebox tabs (they remain accessible via the plugin button)
       if (currentPage === 'unifi') {
         if (tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || tab.id === 'vms' || tab.id === 'analytics') {
           return false;
@@ -112,8 +114,8 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Sur les autres pages (plugins, users, settings, logs): cacher les onglets Freebox
-      // ainsi que plugins, users, logs, settings (accessibles via l'Administration)
+      // On other pages (plugins, users, settings, logs): hide Freebox tabs
+      // and plugins, users, logs, settings (accessible via Administration)
       if (['plugins', 'users', 'settings', 'logs'].includes(currentPage)) {
         if (tab.id === 'freebox' || 
             tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
@@ -122,7 +124,7 @@ export const Footer: React.FC<FooterProps> = ({
         }
       }
       
-      // Cacher plugins, users, logs, settings du footer - accessibles via l'Administration (page settings)
+      // Hide plugins, users, logs, settings from footer - accessible via Administration (settings page)
       if (tab.id === 'plugins' || tab.id === 'users' || tab.id === 'logs' || tab.id === 'settings') {
         return false;
       }
@@ -138,11 +140,11 @@ export const Footer: React.FC<FooterProps> = ({
       }
       
       // Freebox tab: visible only if plugin is enabled and connected AND we're on the Freebox page
-      // Ne jamais l'afficher sur le dashboard ou la page UniFi (bouton plugin à droite à la place)
+      // Never show it on dashboard or UniFi page (plugin button on the right instead)
       if (tab.id === 'freebox') {
         const freeboxPlugin = plugins.find(p => p.id === 'freebox');
         const isFreeboxActive = freeboxPlugin?.enabled && freeboxPlugin?.connectionStatus;
-        // Afficher comme onglet sur toutes les pages Freebox (freebox, tv, phone, files, vms, analytics)
+        // Show as tab on all Freebox pages (freebox, tv, phone, files, vms, analytics)
         if (!['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage)) {
           return false;
         }
@@ -154,23 +156,22 @@ export const Footer: React.FC<FooterProps> = ({
   }, [capabilities?.vmSupport, userRole, plugins, currentPage]);
 
   const handleTabClick = (tabId: PageType) => {
-    // Les paramètres de l'application (Administration) restent toujours la page "settings"
+    // App settings (Administration) always use the "settings" page
     onPageChange?.(tabId);
   };
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 bg-theme-footer backdrop-blur-md border-t border-theme p-3 z-50" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
       <div className="flex items-center justify-between max-w-[1920px] mx-auto px-2">
-        {/* Navigation tabs + Freebox actions (sur la gauche) */}
+        {/* Navigation tabs + Freebox actions (left) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentPage === tab.id;
 
             // Pour bien séparer :
-            // - Onglet "settings" (Administration globale) est géré via le bouton dédié sur le dashboard
-            // - Ici, on garde simplement le label défini dans allTabs
-            const displayLabel = tab.label;
+            // - Tab "settings" (global Administration) is handled via dedicated button on dashboard
+            const displayLabel = t(tab.labelKey);
 
             return (
               <button
@@ -188,7 +189,7 @@ export const Footer: React.FC<FooterProps> = ({
             );
           })}
           
-          {/* Show "Recherche" button on dashboard, search page, and network-scan page */}
+          {/* Show Search button on dashboard, search page, and network-scan page */}
           {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && (
             <button
               onClick={() => onPageChange?.('search')}
@@ -199,11 +200,11 @@ export const Footer: React.FC<FooterProps> = ({
               }`}
             >
               <Search size={18} />
-              <span className="text-sm font-medium whitespace-nowrap">Recherche</span>
+              <span className="text-sm font-medium whitespace-nowrap">{t('nav.search')}</span>
             </button>
           )}
           
-          {/* Show "Administration" button on dashboard, search page, and network-scan page if settings tab is hidden */}
+          {/* Show Administration button on dashboard, search page, and network-scan page if settings tab is hidden */}
           {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && !visibleTabs.find(t => t.id === 'settings') && (
             <button
               onClick={() => {
@@ -213,11 +214,11 @@ export const Footer: React.FC<FooterProps> = ({
               className="flex items-center gap-3 px-4 py-3 rounded-lg border transition-all btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary"
             >
               <Settings size={18} />
-              <span className="text-sm font-medium whitespace-nowrap">Administration</span>
+              <span className="text-sm font-medium whitespace-nowrap">{t('nav.administration')}</span>
             </button>
           )}
 
-          {/* Freebox actions - Only show on Freebox page, à droite des onglets (après Analytique) */}
+          {/* Freebox actions - Only show on Freebox page, to the right of tabs (after Analytics) */}
           {currentPage === 'freebox' && (
             <>
               <button
@@ -225,7 +226,7 @@ export const Footer: React.FC<FooterProps> = ({
                 className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-theme-tertiary text-theme-primary rounded-lg border-theme transition-colors"
               >
                 <Settings size={18} />
-                <span className="hidden sm:inline text-sm font-medium">Options</span>
+                <span className="hidden sm:inline text-sm font-medium">{t('nav.options')}</span>
               </button>
               <button
                 onClick={onReboot}
@@ -239,22 +240,22 @@ export const Footer: React.FC<FooterProps> = ({
                 className="flex items-center gap-2 px-4 py-2 border border-orange-500 text-orange-200 hover:bg-orange-900/30 rounded-lg transition-colors"
               >
                 <LogOut size={18} />
-                <span className="hidden sm:inline text-sm font-medium">Déconnexion</span>
+                <span className="hidden sm:inline text-sm font-medium">{t('common.disconnect')}</span>
               </button>
             </>
           )}
         </div>
 
-        {/* Actions (plugins rapides, résumé UniFi) */}
+        {/* Actions (quick plugins, UniFi summary) */}
         <div className="flex items-center gap-2 pl-4">
-          {/* Plugin buttons - toujours visibles à droite pour chaque plugin actif, avec icônes SVG custom */}
+          {/* Plugin buttons - always visible on the right for each active plugin, with custom SVG icons */}
           {(() => {
             const freeboxPlugin = plugins.find(p => p.id === 'freebox');
             const unifiPlugin = plugins.find(p => p.id === 'unifi');
             const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
             const isFreeboxActive = freeboxPlugin?.enabled && freeboxPlugin?.connectionStatus;
             const isUniFiActive = unifiPlugin?.enabled && unifiPlugin?.connectionStatus;
-            // Scan-réseau n'a pas besoin de connexion externe, donc on vérifie seulement si activé
+            // Scan-reseau does not require external connection, so we only check if enabled
             const isScanReseauActive = scanReseauPlugin?.enabled;
 
             const showFreeboxButton = !!isFreeboxActive;
@@ -272,7 +273,7 @@ export const Footer: React.FC<FooterProps> = ({
                     onClick={() => onPageChange?.('freebox')}
                     className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-accent-primary/20 text-theme-primary hover:text-accent-primary rounded-lg border-theme transition-colors"
                   >
-                    {/* Icône Freebox custom (version pleine) */}
+                    {/* Custom Freebox icon (full version) */}
                     <span className="w-6 h-4 flex items-center justify-center">
                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="25 23.39 180 203.23" className="w-5 h-4"><path fill="#cd1e25" d="m 187.24133,23.386327 c -14.98294,0.01847 -31.16732,4.917913 -41.74251,9.8272 l 0,-0.03081 c -17.70535,8.087262 -29.24956,16.441925 -37.86091,25.630825 -8.274459,8.82635 -13.79935,18.347312 -19.6236,28.9271 l -32.007722,0 c -0.927639,0 -1.76557,0.528637 -2.187247,1.355475 l -4.189654,8.194475 c -0.389391,0.763987 -0.354765,1.672163 0.09242,2.402888 0.447184,0.73072 1.268849,1.17064 2.125634,1.17064 l 30.313378,0 -56.930003,121.03787 c -0.434171,0.92135 -0.243567,2.03654 0.462094,2.77256 l 1.139832,1.17064 c 0.558802,0.58297 1.358434,0.86405 2.15644,0.73935 l 23.227934,-3.60434 c 0.772991,-0.11988 1.456644,-0.60023 1.81757,-1.29386 l 62.814004,-120.82222 39.95574,0 c 0.89584,0 1.71899,-0.48182 2.15644,-1.263065 l 4.55933,-8.194463 c 0.42512,-0.761537 0.41033,-1.682025 -0.0308,-2.4337 -0.44115,-0.752912 -1.2532,-1.23225 -2.12564,-1.23225 l -37.89172,0 11.58316,-23.844062 0.0308,-0.0308 c 2.64355,-5.680688 5.57101,-11.577 10.41252,-15.988463 2.42384,-2.211887 5.31224,-4.079988 8.99544,-5.421913 3.68196,-1.340687 8.17722,-2.155199 13.73959,-2.156437 3.99619,-0.0038 7.9776,0.940212 11.95284,1.9408 3.97524,0.988263 7.91475,2.054163 11.98364,2.064025 2.12317,0.0025 4.06766,-0.5422 5.69916,-1.386287 2.45711,-1.27415 4.25866,-3.180438 5.48352,-5.083038 0.61243,-0.956225 1.08562,-1.906287 1.41709,-2.834175 0.32901,-0.93405 0.51754,-1.834825 0.5237,-2.772562 0.002,-0.941438 -0.20331,-1.859475 -0.58531,-2.68015 -0.67527,-1.445425 -1.82004,-2.48545 -3.08062,-3.265463 -1.90753,-1.169412 -4.18351,-1.838525 -6.65417,-2.279662 -2.47066,-0.433763 -5.12,-0.6149 -7.73237,-0.616125 z"></path></svg>
                     </span>
@@ -284,7 +285,7 @@ export const Footer: React.FC<FooterProps> = ({
                     onClick={() => onPageChange?.('unifi')}
                     className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-accent-primary/20 text-theme-primary hover:text-accent-primary rounded-lg border-theme transition-colors"
                   >
-                    {/* Icône UniFi custom */}
+                    {/* Custom UniFi icon */}
                     <span className="w-5 h-5 flex items-center justify-center">
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -305,7 +306,7 @@ export const Footer: React.FC<FooterProps> = ({
                     onClick={() => onPageChange?.('network-scan')}
                     className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-accent-primary/20 text-theme-primary hover:text-accent-primary rounded-lg border-theme transition-colors"
                   >
-                    {/* Icône Scan Réseau custom */}
+                    {/* Custom Network Scan icon */}
                     <span className="w-5 h-5 flex items-center justify-center">
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 50 50" className="w-5 h-5">
                         <g fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2">
@@ -345,7 +346,7 @@ export const Footer: React.FC<FooterProps> = ({
                       {anyUpgradable && (
                         <span className="flex items-center gap-1 text-xs text-amber-300">
                           <AlertTriangle size={14} className="text-amber-400" />
-                          <span>Mise à jour dispo</span>
+                          <span>{t('nav.updateAvailable')}</span>
                         </span>
                       )}
                       <span className="flex items-center gap-1 text-xs text-sky-300">

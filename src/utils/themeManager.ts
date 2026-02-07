@@ -26,10 +26,10 @@ export const applyTheme = (theme: Theme): void => {
   // Retirer tous les thèmes existants
   html.removeAttribute('data-theme');
   
-  // Appliquer le nouveau thème
+  // Apply the new theme
   html.setAttribute('data-theme', theme);
   
-  // Sauvegarder dans localStorage
+  // Persist to localStorage
   try {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   } catch (error) {

@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { Settings, LogOut, Shield, ChevronDown, User, Users } from 'lucide-react';
 
 interface User {
@@ -36,6 +37,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     onUsersClick,
     onLogout
 }) => {
+    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
@@ -158,7 +160,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                                     <div className="text-sm text-gray-400 mt-1 truncate">{user.email}</div>
                                 )}
                                 <div className="text-xs text-gray-500 mt-1 uppercase">
-                                    {user.role === 'admin' ? 'Administrateur' : user.role === 'user' ? 'Utilisateur' : 'Lecteur'}
+                                    {user.role === 'admin' ? t('userMenu.roleAdmin') : user.role === 'user' ? t('userMenu.roleUser') : t('userMenu.roleViewer')}
                                 </div>
                             </div>
                         </div>
@@ -175,7 +177,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                             className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                         >
                             <User size={20} className="text-gray-400" />
-                            <span>Mon Profil</span>
+                            <span>{t('userMenu.myProfile')}</span>
                         </button>
 
                         {/* Administration (Admin only) */}
@@ -188,7 +190,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                                 className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3 bg-blue-900/20 border-l-2 border-blue-500"
                             >
                                 <Shield size={20} className="text-blue-400" />
-                                <span className="font-medium">Administration</span>
+                                <span className="font-medium">{t('userMenu.administration')}</span>
                             </button>
                         )}
 
@@ -202,7 +204,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                                 className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                             >
                                 <Users size={20} className="text-gray-400" />
-                                <span>Utilisateurs</span>
+                                <span>{t('userMenu.users')}</span>
                             </button>
                         )}
 
@@ -215,7 +217,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                             className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-[#252525] transition-colors flex items-center gap-3"
                         >
                             <LogOut size={20} className="text-gray-400" />
-                            <span>Déconnexion</span>
+                            <span>{t('userMenu.logout')}</span>
                         </button>
                     </div>
                 </div>,

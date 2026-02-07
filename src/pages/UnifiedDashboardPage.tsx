@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkScanWidget, NetworkSummaryDashboardWidget } from '../components/widgets';
 import { TrafficHistoryModal } from '../components/modals';
 import { usePluginStore } from '../stores/pluginStore';
@@ -18,12 +19,13 @@ interface UnifiedDashboardPageProps {
     onNavigateToNetworkScan?: () => void;
 }
 
-export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({ 
+export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
     onNavigateToFreebox,
     onNavigateToUniFi,
     onNavigateToPlugins,
     onNavigateToNetworkScan
 }) => {
+    const { t } = useTranslation();
     const { plugins, fetchPlugins, fetchAllStats } = usePluginStore();
 
     useEffect(() => {
@@ -69,9 +71,9 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                 {/* Message si aucun plugin configuré */}
                 {!hasAnyPlugin && (
                     <div className="bg-[#1a1a1a] rounded-lg p-8 border border-gray-800 text-center">
-                        <p className="text-gray-400 text-lg">Aucun plugin configuré</p>
+                        <p className="text-gray-400 text-lg">{t('dashboard.noPluginConfigured')}</p>
                         <p className="text-gray-500 text-sm mt-2">
-                            Configurez un plugin dans les paramètres pour afficher les données
+                            {t('dashboard.configurePluginInSettings')}
                         </p>
                     </div>
                 )}

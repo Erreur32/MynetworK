@@ -120,6 +120,10 @@ app.set('trust proxy', true);
 // Middleware - CORS Configuration
 // Get CORS config from database, fallback to defaults
 function getCorsConfig() {
+  // When running under Home Assistant Ingress, allow any origin (HA host) and credentials
+  if (process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1') {
+    return { origin: true, credentials: true };
+  }
   try {
     const corsConfigJson = AppConfigRepository.get('cors_config');
     if (corsConfigJson) {
@@ -265,6 +269,27 @@ app.use('/api/security', securityRoutes);
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Public config for frontend (no auth) - used when running under Home Assistant Ingress
+// Returns ingress flag, base path (from X-Ingress-Path), and whether to show port URLs in UI
+app.get('/api/config', (req, res) => {
+  const isIngress = process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1';
+  let basePath = '';
+  if (isIngress && req.headers['x-ingress-path']) {
+    basePath = String(req.headers['x-ingress-path']).trim();
+    if (basePath && !basePath.startsWith('/')) basePath = '/' + basePath;
+    if (basePath && !basePath.endsWith('/')) basePath = basePath + '/';
+  }
+  const showPorts = process.env.SHOW_PORTS !== 'false';
+  res.json({
+    success: true,
+    result: {
+      ingress: isIngress,
+      basePath,
+      showPorts
+    }
+  });
 });
 
 // Serve static files from dist folder (production build only)
@@ -507,7 +532,10 @@ server.listen(port, host, () => {
   const isNpmDev = !isProduction && !isDockerEnv;
   const isDockerDev = !isProduction && isDockerEnv;
   const isDockerProd = isProduction && isDockerEnv;
-  
+  const isIngress = process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1';
+  const showPorts = process.env.SHOW_PORTS !== 'false';
+  const hidePortUrls = isIngress || !showPorts;
+
   // Get container name - try multiple methods
   let containerName = 'MynetworK';
   if (isDockerEnv) {
@@ -673,14 +701,20 @@ server.listen(port, host, () => {
   const padLabel = (label: string): string => {
     return label.padEnd(maxLabelLength);
   };
-  
+
+  const urlBlockLines = hidePortUrls
+    ? (isIngress ? ['  UI: served via Ingress (use the Home Assistant sidebar)'] : [])
+    : [
+        `  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
+        `  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
+        `  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
+        `  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
+        `  📡 ${padLabel('Freebox')}: ${config.freebox.url}`
+      ];
+
   const contentLines = [
     containerLabel,
-    `  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
-    `  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
-    `  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
-    `  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
-    `  📡 ${padLabel('Freebox')}: ${config.freebox.url}`,
+    ...urlBlockLines,
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
@@ -717,7 +751,12 @@ server.listen(port, host, () => {
 
   // Calculate padding for container label
   const containerPadding = Math.max(Math.floor((width - visibleLength(containerLabel)) / 2), minPadding);
-  
+
+  const urlBlockConsole = urlBlockLines
+    .map((line) => `${colors.bright}${colors.cyan}║${colors.reset} ${colors.cyan}${line}${colors.reset}${colors.reset}`)
+    .join('\n');
+  const urlBlockHeader = urlBlockLines.map((line) => `║ ${line}`);
+
   // Display header in console (with colors)
   console.log(`
 ${colors.bright}${colors.cyan}╔${'═'.repeat(width)}${colors.reset}
@@ -727,11 +766,7 @@ ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isDockerProd ? colors.yellow : (isNpmDev || isDockerDev ? colors.bright : colors.bright)}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📦${colors.reset} ${colors.bright}Container:${colors.reset}           ${colors.cyan}${containerName}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.green}🌐${colors.reset} ${colors.bright}${padLabel('Frontend WEB')}:${colors.reset} ${colors.cyan}${frontendWebUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.blue}💻${colors.reset} ${colors.bright}${padLabel('Frontend Local')}:${colors.reset} ${colors.cyan}${frontendLocalUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.yellow}🔌${colors.reset} ${colors.bright}${padLabel('Backend API')}:${colors.reset} ${colors.cyan}${apiUrl}/api/health${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.magenta}🔗${colors.reset} ${colors.bright}${padLabel('WebSocket')}:${colors.reset} ${colors.cyan}${wsUrl}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📡${colors.reset} ${colors.bright}${padLabel('Freebox')}:${colors.reset} ${colors.cyan}${config.freebox.url}${colors.reset}${colors.reset}
+${urlBlockConsole}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
@@ -739,7 +774,7 @@ ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}�
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Activity Logging${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
   `);
-  
+
   // Add header to log buffer (without ANSI codes for cleaner display in logs)
   const headerLines = [
     `╔${'═'.repeat(width)}`,
@@ -749,11 +784,7 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
     `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
     `║  📦 Container:            ${containerName}`,
     `╠${'═'.repeat(width)}`,
-    `║  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
-    `║  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
-    `║  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
-    `║  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
-    `║  📡 ${padLabel('Freebox')}: ${config.freebox.url}`,
+    ...urlBlockHeader,
     `║`,
     `║  Features:`,
     `║  ✓ User Authentication (JWT)`,

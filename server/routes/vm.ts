@@ -261,7 +261,7 @@ router.post('/', asyncHandler(async (req, res) => {
         success: false,
         error: {
           code: 'no_disk',
-          message: 'Aucun disque disponible. Un disque est nécessaire pour créer une VM.'
+          message: 'No disk available. A disk is required to create a VM.'
         }
       });
       return;
@@ -271,7 +271,7 @@ router.post('/', asyncHandler(async (req, res) => {
       success: false,
       error: {
         code: 'disk_check_failed',
-        message: 'Impossible de vérifier la disponibilité du disque.'
+        message: 'Unable to check disk availability.'
       }
     });
     return;

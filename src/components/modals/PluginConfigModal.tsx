@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Settings, CheckCircle, XCircle, RefreshCw, AlertCircle, Save, Eye, EyeOff } from 'lucide-react';
 import { usePluginStore, type Plugin } from '../../stores/pluginStore';
 import { Button } from '../ui/Button';
@@ -17,6 +18,7 @@ interface PluginConfigModalProps {
 }
 
 export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, onClose, pluginId }) => {
+    const { t } = useTranslation();
     const { plugins, updatePluginConfig, testPluginConnection, fetchPlugins } = usePluginStore();
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
@@ -143,7 +145,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                 setTestResult({
                     success: result.connected,
                     message: result.message || (result.connected
-                        ? 'Connexion réussie ! Vous pouvez maintenant sauvegarder.'
+                        ? t('common.connectionSuccess')
                         : 'Échec de la connexion. Vérifiez vos identifiants et l\'URL.')
                 });
             } else {
@@ -156,7 +158,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
         } catch (error) {
             setTestResult({
                 success: false,
-                message: error instanceof Error ? error.message : 'Erreur lors du test de connexion'
+                message: error instanceof Error ? error.message : t('common.connectionTestError')
             });
         } finally {
             setIsTesting(false);
@@ -208,13 +210,13 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
             } else {
                 setTestResult({
                     success: false,
-                    message: 'Erreur lors de la sauvegarde de la configuration'
+                    message: t('common.saveConfigError')
                 });
             }
         } catch (error) {
             setTestResult({
                 success: false,
-                message: error instanceof Error ? error.message : 'Erreur lors de la sauvegarde'
+                message: error instanceof Error ? error.message : t('common.saveError')
             });
         } finally {
             setIsSaving(false);
@@ -259,7 +261,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-white">Configuration {plugin.name}</h2>
-                            <p className="text-xs text-gray-500">Paramètres de connexion</p>
+                            <p className="text-xs text-gray-500">{t('common.connectionSettings')}</p>
                         </div>
                     </div>
                     <button
@@ -279,10 +281,10 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                 <AlertCircle size={22} className="text-amber-400 flex-shrink-0 mt-0.5" />
                                 <div>
                                     <p className="text-sm font-semibold text-amber-400 mb-1">
-                                        Plugin désactivé
+                                        {t('plugins.pluginDisabled')}
                                     </p>
                                     <p className="text-xs text-amber-200/90">
-                                        Activez le plugin Freebox dans la liste des plugins (Administration) pour permettre la <strong>découverte automatique</strong> de votre Freebox et l&apos;accès au tableau de bord.
+                                        {t('plugins.enableForDiscovery')}
                                     </p>
                                 </div>
                             </div>
@@ -326,7 +328,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     type={showPassword ? 'text' : 'password'}
                                     value={formData.apiKey || ''}
                                     onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                                    placeholder="Votre clé API UniFi Site Manager"
+                                    placeholder={t('plugins.apiKeyPlaceholder')}
                                     className={`w-full px-3 py-2 bg-[#1a1a1a] border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 pr-10 ${
                                         !formData.apiKey || !formData.apiKey.trim() 
                                             ? 'border-red-600 focus:ring-red-500' 
@@ -482,7 +484,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                                     <p className="font-medium mb-1">Configuration Freebox</p>
                                     <p className="text-gray-400">
                                         Le plugin Freebox utilise l'authentification Freebox existante.
-                                        Configurez la connexion via l'onglet "Paramètres" ou utilisez l'API Freebox directement.
+                                        {t('common.configureViaSettings')}
                                     </p>
                                 </div>
                             </div>
@@ -516,7 +518,7 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                         <div className="p-3 bg-green-900/20 border border-green-700 rounded-lg">
                             <div className="flex items-center gap-2">
                                 <CheckCircle size={16} className="text-green-400" />
-                                <span className="text-sm text-green-400">Plugin connecté et opérationnel</span>
+                                <span className="text-sm text-green-400">{t('plugins.pluginConnected')}</span>
                             </div>
                         </div>
                     )}
@@ -529,17 +531,17 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             disabled={isTesting || isSaving}
                             variant="secondary"
                             className="flex-1"
-                            title={isSaving ? 'Veuillez attendre la fin de la sauvegarde' : 'Tester la connexion sans sauvegarder'}
+                            title={isSaving ? t('plugins.pleaseWaitSave') : t('plugins.testConnectionWithoutSave')}
                         >
                             {isTesting ? (
                                 <>
                                     <RefreshCw size={16} className="animate-spin" />
-                                    Test en cours...
+                                    {t('plugins.testInProgress')}
                                 </>
                             ) : (
                                 <>
                                     <RefreshCw size={16} />
-                                    Tester
+                                    {t('plugins.testButton')}
                                 </>
                             )}
                         </Button>
@@ -547,17 +549,17 @@ export const PluginConfigModal: React.FC<PluginConfigModalProps> = ({ isOpen, on
                             type="submit"
                             disabled={isSaving || isTesting}
                             className="flex-1"
-                            title={isTesting ? 'Veuillez attendre la fin du test' : 'Sauvegarder la configuration et tester la connexion'}
+                            title={isTesting ? t('common.pleaseWaitTest') : t('common.saveAndTest')}
                         >
                             {isSaving ? (
                                 <>
                                     <RefreshCw size={16} className="animate-spin" />
-                                    Sauvegarde...
+                                    {t('theme.saving')}
                                 </>
                             ) : (
                                 <>
                                     <Save size={16} />
-                                    Sauvegarder
+                                    {t('common.save')}
                                 </>
                             )}
                         </Button>

@@ -110,8 +110,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'login_failed',
             severity: attemptCount && attemptCount >= 3 ? 'warning' : 'info',
-            title: 'Échec de connexion',
-            message: `Tentative de connexion échouée pour l'utilisateur "${username}"${attemptCount ? ` (tentative #${attemptCount})` : ''}`,
+            title: 'Login failed',
+            message: `Login attempt failed for user "${username}"${attemptCount ? ` (attempt #${attemptCount})` : ''}`,
             username,
             ipAddress,
             metadata: { attemptCount }
@@ -125,8 +125,8 @@ class SecurityNotificationService {
         await this.notify({
             type: isNewIp ? 'new_ip_login' : 'login_success',
             severity: isNewIp ? 'warning' : 'info',
-            title: isNewIp ? 'Connexion depuis une nouvelle IP' : 'Connexion réussie',
-            message: `Connexion réussie pour l'utilisateur "${username}"${isNewIp ? ' depuis une nouvelle adresse IP' : ''}`,
+            title: isNewIp ? 'Connection from new IP' : 'Login successful',
+            message: `Login successful for user "${username}"${isNewIp ? ' from a new IP address' : ''}`,
             userId,
             username,
             ipAddress,
@@ -141,8 +141,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'login_blocked',
             severity: 'error',
-            title: 'Tentative de connexion bloquée',
-            message: `Tentative de connexion bloquée pour "${identifier}"${reason ? `: ${reason}` : ''}`,
+            title: 'Login attempt blocked',
+            message: `Login attempt blocked for "${identifier}"${reason ? `: ${reason}` : ''}`,
             username: identifier.includes('@') ? undefined : identifier,
             ipAddress,
             metadata: { reason }
@@ -156,8 +156,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'ip_blocked',
             severity: 'error',
-            title: 'Adresse IP bloquée',
-            message: `L'adresse IP ${ipAddress} a été bloquée${reason ? `: ${reason}` : ''}${duration ? ` pour ${duration} minutes` : ''}`,
+            title: 'IP address blocked',
+            message: `IP address ${ipAddress} has been blocked${reason ? `: ${reason}` : ''}${duration ? ` for ${duration} minutes` : ''}`,
             ipAddress,
             metadata: { reason, duration }
         });
@@ -170,8 +170,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'ip_unblocked',
             severity: 'info',
-            title: 'Adresse IP débloquée',
-            message: `L'adresse IP ${ipAddress} a été débloquée`,
+            title: 'IP address unblocked',
+            message: `IP address ${ipAddress} has been unblocked`,
             ipAddress
         });
     }
@@ -183,8 +183,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'password_changed',
             severity: 'info',
-            title: 'Mot de passe modifié',
-            message: `Le mot de passe de l'utilisateur "${username}" a été modifié`,
+            title: 'Password changed',
+            message: `Password for user "${username}" has been changed`,
             userId,
             username,
             ipAddress
@@ -198,8 +198,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'security_settings_changed',
             severity: 'warning',
-            title: 'Paramètres de sécurité modifiés',
-            message: `Les paramètres de sécurité ont été modifiés par "${username}"`,
+            title: 'Security settings changed',
+            message: `Security settings were changed by "${username}"`,
             userId,
             username,
             metadata: { changes }
@@ -213,8 +213,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'user_created',
             severity: 'info',
-            title: 'Utilisateur créé',
-            message: `L'utilisateur "${username}" a été créé par "${createdBy}"`,
+            title: 'User created',
+            message: `User "${username}" was created by "${createdBy}"`,
             userId,
             username,
             metadata: { createdBy }
@@ -228,8 +228,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'user_deleted',
             severity: 'warning',
-            title: 'Utilisateur supprimé',
-            message: `L'utilisateur "${username}" a été supprimé par "${deletedBy}"`,
+            title: 'User deleted',
+            message: `User "${username}" was deleted by "${deletedBy}"`,
             username,
             metadata: { deletedBy }
         });
@@ -242,8 +242,8 @@ class SecurityNotificationService {
         await this.notify({
             type: enabled ? 'user_enabled' : 'user_disabled',
             severity: 'warning',
-            title: enabled ? 'Utilisateur activé' : 'Utilisateur désactivé',
-            message: `L'utilisateur "${username}" a été ${enabled ? 'activé' : 'désactivé'} par "${changedBy}"`,
+            title: enabled ? 'User enabled' : 'User disabled',
+            message: `User "${username}" was ${enabled ? 'enabled' : 'disabled'} by "${changedBy}"`,
             userId,
             username,
             metadata: { enabled, changedBy }
@@ -257,8 +257,8 @@ class SecurityNotificationService {
         await this.notify({
             type: 'jwt_secret_warning',
             severity: 'critical',
-            title: 'Avertissement JWT Secret',
-            message: 'Le secret JWT par défaut est utilisé. Changez-le en production !'
+            title: 'JWT Secret warning',
+            message: 'Default JWT secret is in use. Change it in production!'
         });
     }
 

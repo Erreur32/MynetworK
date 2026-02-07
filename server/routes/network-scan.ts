@@ -1442,9 +1442,9 @@ router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), a
                     mac: scanResult.mac,
                     hostname: scanResult.hostname,
                     vendor: scanResult.vendor,
-                    message: pingResult.success 
-                        ? 'IP ajoutée et scannée avec succès' 
-                        : 'IP ajoutée mais hors ligne (ping échoué)'
+                    message: pingResult.success
+                        ? 'IP added and scanned successfully'
+                        : 'IP added but offline (ping failed)'
                 }
             });
         } else {
@@ -1541,9 +1541,9 @@ router.post('/:id/rescan', requireAuth, autoLog('network-scan', 'rescan'), async
                     hostname: scanResult.hostname,
                     vendor: scanResult.vendor,
                     additionalInfo: scanResult.additionalInfo,
-                    message: scanResult.status === 'online' 
-                        ? 'IP rescannée avec succès (scan complet + ports)' 
-                        : 'IP rescannée mais hors ligne'
+                    message: scanResult.status === 'online'
+                        ? 'IP rescanned successfully (full scan + ports)'
+                        : 'IP rescanned but offline'
                 }
             });
         } else {

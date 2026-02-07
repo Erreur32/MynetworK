@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Lightbulb, Palette, RefreshCw, Save, Eye, ChevronUp, ChevronDown, ChevronDown as ChevronDownIcon, Check } from 'lucide-react';
 import { applyTheme, getCurrentTheme, getAvailableThemes, type Theme } from '../utils/themeManager';
 import { api } from '../api/client';
@@ -372,6 +373,7 @@ const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, o
 };
 
 export const ThemeSection: React.FC = () => {
+    const { t } = useTranslation();
     // Initialize with the currently active theme (from DOM or localStorage)
     const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
         const htmlTheme = document.documentElement.getAttribute('data-theme');
@@ -419,7 +421,7 @@ export const ThemeSection: React.FC = () => {
             return 'Particle waves';
         }
         const option = FULL_ANIMATION_OPTIONS.find(opt => opt.value === fullAnimationId);
-        return option?.label || 'Aucune';
+        return option?.label || t('theme.none');
     };
     
     // Get animation name for a specific theme preview
@@ -698,7 +700,7 @@ export const ThemeSection: React.FC = () => {
             // Re-apply colors to ensure consistency after save
             applyCustomColors();
         } catch (error) {
-            alert(error instanceof Error ? error.message : 'Erreur lors de la sauvegarde');
+            alert(error instanceof Error ? error.message : t('common.saveError'));
         } finally {
             setIsSaving(false);
         }
@@ -736,7 +738,7 @@ export const ThemeSection: React.FC = () => {
     };
 
     return (
-        <Section title="Thème de l'interface" icon={Lightbulb} iconColor="yellow">
+        <Section title={t('theme.interfaceTheme')} icon={Lightbulb} iconColor="yellow">
             <div className="space-y-6">
                 {/* Card: Thème principal */}
                 <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm">
@@ -918,7 +920,7 @@ export const ThemeSection: React.FC = () => {
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                     style={{ backgroundColor: themeColors.accentSuccess }}
-                                                    title="Badge succès"
+                                                    title={t('theme.successBadge')}
                                                 />
                                                 <div 
                                                     className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
@@ -1061,7 +1063,7 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
                                                         style={{ backgroundColor: themeColors.accentSuccess }}
-                                                        title="Badge succès"
+                                                        title={t('theme.successBadge')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
@@ -1189,7 +1191,7 @@ export const ThemeSection: React.FC = () => {
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm elegant-icon-pulse"
                                                         style={{ backgroundColor: themeColors.accentSuccess }}
-                                                        title="Badge succès"
+                                                        title={t('theme.successBadge')}
                                                     />
                                                     <div 
                                                         className="w-4 h-4 rounded-full border-2 border-white/30 shadow-sm"
@@ -1228,7 +1230,7 @@ export const ThemeSection: React.FC = () => {
                 {/* Card: Opacité des blocs */}
                 <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm space-y-4">
                     <SettingRow
-                        label="Opacité des blocs du site"
+                        label={t('theme.blockOpacity')}
                         description={`Réglez l'opacité des cartes et blocs. Valeur actuelle: ${Math.round((cardOpacity[currentTheme] ?? 1.0) * 100)}%`}
                     >
                         <div className="flex items-center gap-3 w-full">
@@ -1288,7 +1290,7 @@ export const ThemeSection: React.FC = () => {
                                     className="px-4 py-2 bg-theme-secondary border border-theme hover:border-red-500/50 rounded-lg transition-all flex items-center gap-2 text-sm text-theme-primary hover:bg-theme-primary"
                                 >
                                     <RefreshCw size={14} />
-                                    Réinitialiser
+                                    {t('theme.reset')}
                                 </button>
                                 <button
                                     onClick={handleSave}
@@ -1298,12 +1300,12 @@ export const ThemeSection: React.FC = () => {
                                     {isSaving ? (
                                         <>
                                             <RefreshCw size={14} className="animate-spin" />
-                                            <span>Sauvegarde...</span>
+                                            <span>{t('theme.saving')}</span>
                                         </>
                                     ) : (
                                         <>
                                             <Save size={14} />
-                                            <span>Sauvegarder</span>
+                                            <span>{t('common.save')}</span>
                                         </>
                                     )}
                                 </button>
@@ -1384,7 +1386,7 @@ export const ThemeSection: React.FC = () => {
                                     <div>
                                         <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
                                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                            Succès
+                                            {t('common.success')}
                                         </label>
                                         <div className="flex items-center gap-1.5">
                                             <input
@@ -1436,7 +1438,7 @@ export const ThemeSection: React.FC = () => {
                                     <div>
                                         <label className="block text-[10px] font-medium text-theme-secondary mb-1.5 flex items-center gap-1.5">
                                             <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                                            Erreur
+                                            {t('common.error')}
                                         </label>
                                         <div className="flex items-center gap-1.5">
                                             <input
@@ -1906,12 +1908,12 @@ export const ThemeSection: React.FC = () => {
                     </SettingRow>
                     )}
                     
-                    {/* Options spécifiques à l'animation sélectionnée (chaque animation a sa propre liste dans useAnimationParameters) */}
+                    {/* Options specific to the selected animation (each animation has its own list in useAnimationParameters) */}
                     {parameterDefinitions.length > 0 && parameters && (
                         <div className="space-y-4 pt-4" key={currentAnimationId}>
                             <div className="flex items-center justify-between mb-4">
                                 <h4 className="text-base font-semibold text-theme-primary">
-                                    Paramètres — {getCurrentAnimationName()}
+                                    {t('theme.parametersAnimation', { name: getCurrentAnimationName() })}
                                 </h4>
                                 <button
                                     type="button"
@@ -1925,10 +1927,10 @@ export const ThemeSection: React.FC = () => {
                                         }
                                     }}
                                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-950 bg-amber-400/90 border border-amber-500/50 rounded-lg hover:bg-amber-400 hover:border-amber-400 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-theme-secondary"
-                                    title="Remettre les réglages de cette animation par défaut"
+                                    title={t('theme.resetAnimationDefaults')}
                                 >
                                     <RefreshCw size={16} className="text-amber-900" />
-                                    Réinitialiser
+                                    {t('theme.reset')}
                                 </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2143,7 +2145,7 @@ export const ThemeSection: React.FC = () => {
                                                             }}
                                                             className="text-xs px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-md transition-colors"
                                                         >
-                                                            Supprimer
+                                                            {t('theme.delete')}
                                                         </button>
                                                     </div>
                                                 ))}

@@ -485,22 +485,22 @@ export class UniFiApiService {
             
             logger.error('UniFi', `Fetch failed for login URL ${loginUrl}:`, fetchError);
             
-            // Provide more helpful error messages based on common issues
+            // Provide more helpful error messages based on common issues (English for API consistency / i18n)
             if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
-                const portHint = errorPort === 443 
-                    ? ' Le port 443 est utilisé par défaut. Les contrôleurs UniFi utilisent généralement le port 8443. Vérifiez que l\'URL inclut le bon port (ex: https://192.168.32.206:8443).'
-                    : errorPort 
-                        ? ` Le port ${errorPort} est inaccessible.`
+                const portHint = errorPort === 443
+                    ? ' Port 443 is used by default. UniFi controllers usually use port 8443. Ensure the URL includes the correct port (e.g. https://192.168.32.206:8443).'
+                    : errorPort
+                        ? ` Port ${errorPort} is not reachable.`
                         : '';
-                throw new Error(`Impossible de se connecter au contrôleur UniFi à ${baseUrl}${portHint} Vérifiez que l'URL est correcte, que le contrôleur est accessible, et que le port est correct (généralement 8443 pour HTTPS). Erreur: ${errorMessage}`);
+                throw new Error(`Unable to connect to UniFi controller at ${baseUrl}${portHint} Check that the URL is correct, the controller is reachable, and the port is correct (usually 8443 for HTTPS). Error: ${errorMessage}`);
             } else if (errorCode === 'ENOTFOUND' || errorMessage.includes('ENOTFOUND') || errorMessage.includes('getaddrinfo')) {
-                throw new Error(`Impossible de résoudre le nom d'hôte pour ${baseUrl}. Vérifiez que l'URL est correcte et que le contrôleur est accessible. Erreur: ${errorMessage}`);
+                throw new Error(`Unable to resolve hostname for ${baseUrl}. Check that the URL is correct and the controller is reachable. Error: ${errorMessage}`);
             } else if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS')) {
-                throw new Error(`Erreur de certificat SSL/TLS lors de la connexion à ${baseUrl}. Le contrôleur peut utiliser un certificat auto-signé. Erreur: ${errorMessage}`);
+                throw new Error(`SSL/TLS certificate error when connecting to ${baseUrl}. The controller may use a self-signed certificate. Error: ${errorMessage}`);
             } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
-                throw new Error(`Délai d'attente de connexion au contrôleur UniFi à ${baseUrl}. Vérifiez que le contrôleur est en cours d'exécution et accessible. Erreur: ${errorMessage}`);
+                throw new Error(`Connection timeout to UniFi controller at ${baseUrl}. Check that the controller is running and reachable. Error: ${errorMessage}`);
             } else {
-                throw new Error(`Erreur réseau lors de la connexion au contrôleur UniFi à ${baseUrl}: ${errorMessage}. Vérifiez l'URL, la connectivité réseau, et que le contrôleur est en cours d'exécution.`);
+                throw new Error(`Network error connecting to UniFi controller at ${baseUrl}: ${errorMessage}. Check the URL, network connectivity, and that the controller is running.`);
             }
         }
 

@@ -1,13 +1,52 @@
 # Changelog
 
-Toutes les modifications notables de ce projet seront documentées dans ce fichier.
+All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-02-07
+
+### Added
+
+**Home Assistant Ingress support**
+- App works when served via Home Assistant Ingress (no more white page)
+- Public `GET /api/config` (no auth): returns `ingress`, `basePath` (from `X-Ingress-Path`), `showPorts` for frontend
+- Frontend: `src/utils/ingress.ts` with `getBasePath()` to detect path prefix (e.g. `/api_ingress/<token>/`)
+- API client and WebSocket URL use base path when under Ingress so requests stay same-origin
+- Vite build `base: './'` so assets load correctly under a path prefix
+- Backend: CORS allows any origin when `INGRESS_MODE=1` or `ADDON_INGRESS=1`; startup banner hides port URLs and shows "UI: served via Ingress" when Ingress or `SHOW_PORTS=false`
+
+**Internationalization (i18n)**
+- Application fully internationalized with English as default and French as second language
+- Language switcher (EN/FR) in header; choice persisted in `localStorage` (`mynetwork_lang`)
+- Translation files: `src/locales/en.json`, `src/locales/fr.json` with namespaced keys
+- i18n stack: `i18next`, `react-i18next`, `i18next-browser-languagedetector`
+- UI strings in App, Footer, Header, UserMenu, ThemeSection, Network Summary widgets, and others use `useTranslation()` and `t()`
+- Documentation: `Docs/INTERNATIONALIZATION.md` (English)
+
+**Documentation**
+- README in English with link to French version; `README.fr.md` (full French README)
+- Main Docs translated to English; French versions (`.fr.md`) for CONFIGURATION_UNIFI, CONNEXION_FREEBOX, VARIABLES_ENVIRONNEMENT, TROUBLESHOOTING_PROD, RESET_DOCKER_PROD, NGINX_WEBSOCKET_CONFIG
+- `Docs/README.md` index listing docs with EN/FR links
+
+### Modified
+
+- `main.tsx`: import and init i18n before render
+- `tsconfig.json`: `resolveJsonModule: true` for locale JSON imports
+- `package.json`: added dependencies for i18n
+- Server: banner and CORS conditional on Ingress env vars; new `/api/config` route
+
+---
+
+## [Unreleased]
+
+- (none)
+
+---
 
 ## [0.6.0] - 2026-02-07
 
-### ✨ Ajouté
+### Added
 
-**Docker - Build multi-arch (GHCR / Home Assistant 2026)**
+**Docker - Multi-arch build (GHCR / Home Assistant 2026)**
 - ✅ Workflow GitHub Actions : build et push pour `linux/amd64`, `linux/arm64`, `linux/arm/v7` (manifest list)
 - ✅ Même tag d’image (`ghcr.io/.../mynetwork:0.6.0`) résolu automatiquement selon l’architecture (compatible Raspberry / HA add-on)
 - ✅ Dockerfile : ARG `TARGETPLATFORM` / `BUILDPLATFORM`, stage builder et runtime en `FROM --platform=$TARGETPLATFORM` pour une image finale cohérente par arch
