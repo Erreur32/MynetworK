@@ -33,9 +33,10 @@
 
 **A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
-[Installation](#installation) | [Features](#main-features) | [Configuration](#configuration) | [Documentation](#documentation)
+[Installation](#installation) | [Features](features) | [Configuration](#configuration) |  [Home Assistant](#home-assistant)
 
 </div>
+
 
 ---
 
@@ -51,6 +52,18 @@
 - **Network Scan** - Device discovery and analysis with automatic vendor detection
 
 
+
+
+## Features
+
+- 🔐 **User authentication** - JWT system with role management (admin, user, viewer)
+- 🔌 **Plugin system** - Modular architecture to easily add new data sources
+- 📊 **Unified dashboard** - Centralized view of all plugin data
+- 📝 **Full logging** - Traceability of all actions with advanced filters
+- 👥 **User management** - Administration interface to manage access
+- 🐳 **Docker ready** - Simplified deployment with Docker Compose
+- 🌐 **Internationalization (i18n)** - English (default) and French; language switcher in header. See [Docs/INTERNATIONALIZATION.md](Docs/INTERNATIONALIZATION.md).
+
 > [!TIP]
 >  
 > <details>
@@ -65,17 +78,10 @@
 > </details>
 
  
+> [!NOTE]
+> A dedicated and **fully functional** version for **Home Assistant** is available here:   [https://github.com/Erreur32/HA_mynetwork](https://github.com/Erreur32/HA_mynetwork)
+> 
 
-
-### ✨ Main features
-
-- 🔐 **User authentication** - JWT system with role management (admin, user, viewer)
-- 🔌 **Plugin system** - Modular architecture to easily add new data sources
-- 📊 **Unified dashboard** - Centralized view of all plugin data
-- 📝 **Full logging** - Traceability of all actions with advanced filters
-- 👥 **User management** - Administration interface to manage access
-- 🐳 **Docker ready** - Simplified deployment with Docker Compose
-- 🌐 **Internationalization (i18n)** - English (default) and French; language switcher in header. See [Docs/INTERNATIONALIZATION.md](Docs/INTERNATIONALIZATION.md).
 
 ## Installation
 
@@ -251,6 +257,8 @@ See `Docs/nginx.example.conf` for a complete HTTP/HTTPS setup.
 
 `JWT_SECRET` is loaded at server startup in `server/services/authService.ts` from `process.env.JWT_SECRET`. If unset, the default value is used and a warning is logged. The secret is used to sign tokens on login and verify them on authenticated requests.
 
+## Configuration 
+
 #### Configuration methods (recommended order)
 
 ##### 1. **`.env` file (recommended for production)**
@@ -421,6 +429,22 @@ See **[DEV/README-DEV.md](DEV/README-DEV.md)** for development documentation.
 **Docs folder ([Docs/](Docs/)):** Setup and production guides (UniFi, Freebox, env vars, Nginx, troubleshooting, reset). Key docs have **English** and **French** versions (see [Docs/README.md](Docs/README.md)).
 
 </details>
+
+## Home Assistant
+
+> [!IMPORTANT]
+> A dedicated **fully functional** version for **Home Assistant** is available:  
+> [![HA Repo](https://img.shields.io/badge/Home%20Assistant-Dedicated%20Version-41C483?style=for-the-badge&logo=homeassistant&logoColor=white)](https://github.com/Erreur32/HA_mynetwork)  
+> 
+> - **HACS integration** ready
+> - **Add-on** support
+> - **Optimized** for HA Supervisor/Docker
+> - **Auto-discovery** of Freebox/UniFi networks
+
+See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
+
+
+
 
 ## Security
 
