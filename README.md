@@ -50,16 +50,19 @@
 - **UniFi Controller** - Monitor and manage your UniFi infrastructure
 - **Network Scan** - Device discovery and analysis with automatic vendor detection
 
-<details>
-<summary>Click to view screenshot</summary>
 
-![Search Ip](https://github.com/Erreur32/MynetworK/blob/main/img-capture/search_ip.png?raw=true)
-
-![MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/Scan_network.png?raw=true)
-
-![Unifi Tab](https://github.com/Erreur32/MynetworK/blob/main/img-capture/unifi_tab.png?raw=true)
-
-</details>
+> [!TIP]
+>  
+> <details>
+> <summary> 🖼️ Click to view other screenshots</summary>
+> 
+> ![Search Ip](https://github.com/Erreur32/MynetworK/blob/main/img-capture/search_ip.png?raw=true)
+>
+> ![MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/Scan_network.png?raw=true)
+>
+> ![Unifi Tab](https://github.com/Erreur32/MynetworK/blob/main/img-capture/unifi_tab.png?raw=true)
+> 
+> </details>
 
  
 
