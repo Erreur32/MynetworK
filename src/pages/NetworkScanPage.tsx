@@ -15,6 +15,7 @@ import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
+import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
 const WELL_KNOWN_PORTS: Record<number, string> = {
@@ -35,28 +36,28 @@ function getPortIcon(port: number): LucideIcon {
     return PORT_ICONS[port] ?? Server;
 }
 
-/** Catégories de ports pour regroupement dans le tooltip */
+/** Port categories for tooltip grouping (keys are i18n identifiers) */
 const PORT_CATEGORIES: Record<string, number[]> = {
-    'Web': [80, 443, 8080, 8443, 9000],
-    'Bases de données': [3306, 5432, 6379, 1433],
-    'Mail': [25, 110, 143, 993, 995],
-    'Système': [20, 21, 22, 23, 53, 445],
-    'Accès distant': [3389, 5900],
-    'Docker': [2375, 2376] // Docker daemon (non-TLS / TLS), à prévoir pour détection
+    'web': [80, 443, 8080, 8443, 9000],
+    'databases': [3306, 5432, 6379, 1433],
+    'mail': [25, 110, 143, 993, 995],
+    'system': [20, 21, 22, 23, 53, 445],
+    'remoteAccess': [3389, 5900],
+    'docker': [2375, 2376]
 };
 const getPortCategory = (port: number): string => {
     for (const [cat, ports] of Object.entries(PORT_CATEGORIES)) {
         if (ports.includes(port)) return cat;
     }
-    return 'Autres';
+    return 'other';
 };
 
 /** Couleur par catégorie : Système = orange, Docker = indigo, reste = cyan */
 function getPortCategoryColor(cat: string): { label: string; cell: string; icon: string } {
     switch (cat) {
-        case 'Système':
+        case 'system':
             return { label: 'text-amber-400', cell: 'bg-amber-500/20 border-amber-500/40 text-amber-300', icon: 'text-amber-400/90' };
-        case 'Docker':
+        case 'docker':
             return { label: 'text-indigo-400', cell: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300', icon: 'text-indigo-400/90' };
         default:
             return { label: 'text-cyan-400', cell: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300', icon: 'text-cyan-400/90' };
@@ -147,6 +148,7 @@ const formatDuration = (durationMs: number): string => {
 };
 
 export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavigateToSearch }) => {
+    const { t, i18n } = useTranslation();
     const { plugins, fetchPlugins } = usePluginStore();
     const [scans, setScans] = useState<NetworkScan[]>([]);
     const [stats, setStats] = useState<ScanStats | null>(null);
@@ -496,11 +498,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     });
                 }
             } else {
-                alert(response.error?.message || 'Erreur lors de la modification du monitoring');
+                alert(response.error?.message || t('networkScan.errors.monitoringUpdate'));
             }
         } catch (error: any) {
             console.error('Failed to toggle monitoring:', error);
-            alert('Erreur lors de la modification du monitoring: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.monitoringUpdateWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
 
@@ -623,7 +625,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
 
         setIsScanning(true);
-        setCurrentScanRange(scanRange || (autoDetect ? 'Auto-détection' : '192.168.1.0/24'));
+        setCurrentScanRange(scanRange || (autoDetect ? t('networkScan.scanTypes.autoDetect') : '192.168.1.0/24'));
         setScanProgress(null);
         setLastScanSummary(null);
         
@@ -654,7 +656,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     if (result && result.status === 'completed') {
                         // Scan completed, store final results and stop polling
                         setLastScanSummary({
-                            range: result.range || scanRange || 'Auto-détection',
+                            range: result.range || scanRange || t('networkScan.scanTypes.autoDetect'),
                             scanned: result.scanned || 0,
                             found: result.found || 0,
                             updated: result.updated || 0,
@@ -724,7 +726,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 setScanProgress(null);
                 clearInterval(interval);
                 setScanPollingInterval(null);
-                alert(response.error?.message || 'Erreur lors du démarrage du scan');
+                alert(response.error?.message || t('networkScan.errors.scanStart'));
             }
         } catch (error: any) {
             console.error('Scan failed:', error);
@@ -733,20 +735,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setScanProgress(null);
             clearInterval(interval);
             setScanPollingInterval(null);
-            alert('Erreur lors du démarrage du scan: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.scanStartWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
 
     const handleAddManualIp = async () => {
         if (!manualIp.trim()) {
-            alert('Veuillez saisir une adresse IP');
+            alert(t('networkScan.errors.ipRequired'));
             return;
         }
 
         // Validate IP format
         const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
         if (!ipRegex.test(manualIp.trim())) {
-            alert('Format d\'adresse IP invalide');
+            alert(t('networkScan.errors.invalidIpFormat'));
             return;
         }
 
@@ -761,7 +763,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             if (response.success && response.result) {
                 const result = response.result as { message?: string; ip?: string; status?: string };
-                alert(result.message || 'IP ajoutée avec succès');
+                alert(result.message || t('networkScan.success.ipAdded'));
                 // Reset form
                 setManualIp('');
                 setManualMac('');
@@ -771,11 +773,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 await fetchHistory();
                 await fetchStats();
             } else {
-                alert(response.error?.message || 'Erreur lors de l\'ajout de l\'IP');
+                alert(response.error?.message || t('networkScan.errors.ipAdd'));
             }
         } catch (error: any) {
             console.error('Add manual IP failed:', error);
-            alert('Erreur lors de l\'ajout: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.ipAddWithError', { error: error.message || t('networkScan.errors.unknown') }));
         } finally {
             setIsAddingIp(false);
         }
@@ -788,7 +790,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
 
         setIsRefreshing(true);
-        setCurrentScanRange('Rafraîchissement des IPs existantes');
+        setCurrentScanRange(t('networkScan.scanInfo.refreshingExisting'));
         setScanProgress(null);
         setLastScanSummary(null);
         
@@ -831,7 +833,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     duration: number;
                 };
                 setLastScanSummary({
-                    range: 'IPs existantes',
+                    range: t('networkScan.scanInfo.existingIps'),
                     scanned: result.scanned || 0,
                     found: result.online || 0,
                     updated: result.offline || 0,
@@ -842,11 +844,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 await fetchStats();
                 await fetchHistory();
             } else {
-                alert(response.error?.message || 'Erreur lors du rafraîchissement');
+                alert(response.error?.message || t('networkScan.errors.refresh'));
             }
         } catch (error: any) {
             console.error('Refresh failed:', error);
-            alert('Erreur lors du rafraîchissement: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.refreshWithError', { error: error.message || t('networkScan.errors.unknown') }));
         } finally {
             setIsRefreshing(false);
             setCurrentScanRange('');
@@ -856,7 +858,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     };
 
     const handleDelete = async (ip: string) => {
-        const confirmed = window.confirm(`Êtes-vous sûr de vouloir supprimer l'IP ${ip} de l'historique ?\n\nCette action est irréversible.`);
+        const confirmed = window.confirm(t('networkScan.confirm.deleteIp', { ip }));
         if (!confirmed) return;
 
         try {
@@ -866,11 +868,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 await fetchHistory();
                 await fetchStats();
             } else {
-                alert(response.error?.message || 'Erreur lors de la suppression');
+                alert(response.error?.message || t('networkScan.errors.delete'));
             }
         } catch (error: any) {
             console.error('Delete failed:', error);
-            alert('Erreur lors de la suppression: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.deleteWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
 
@@ -887,18 +889,18 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 // Refresh port scan progress if available
                 await fetchPortScanProgress();
             } else {
-                alert(response.error?.message || 'Erreur lors du rescan');
+                alert(response.error?.message || t('networkScan.errors.rescan'));
             }
         } catch (error: any) {
             console.error('Rescan failed:', error);
-            alert('Erreur lors du rescan: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.rescanWithError', { error: error.message || t('networkScan.errors.unknown') }));
         } finally {
             setRescanningIp(null);
         }
     };
 
     const handleBan = async (ip: string) => {
-        const confirmed = window.confirm(`Êtes-vous sûr de vouloir bannir l'IP ${ip} ?\n\nCette IP sera exclue de tous les scans futurs et supprimée de la base de données.`);
+        const confirmed = window.confirm(t('networkScan.confirm.banIp', { ip }));
         if (!confirmed) return;
 
         try {
@@ -908,11 +910,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 await fetchHistory();
                 await fetchStats();
             } else {
-                alert(response.error?.message || 'Erreur lors du bannissement');
+                alert(response.error?.message || t('networkScan.errors.ban'));
             }
         } catch (error: any) {
             console.error('Ban failed:', error);
-            alert('Erreur lors du bannissement: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.banWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
 
@@ -935,11 +937,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         if (source === 'scanner') return null;
         
         const badges: Record<string, { label: string; color: string; bgColor: string }> = {
-            freebox: { label: 'Freebox', color: 'text-purple-300', bgColor: 'bg-purple-500/20' },
-            unifi: { label: 'UniFi', color: 'text-blue-300', bgColor: 'bg-blue-500/20' },
-            api: { label: 'API', color: 'text-yellow-300', bgColor: 'bg-yellow-500/20' },
-            system: { label: 'Système', color: 'text-gray-300', bgColor: 'bg-gray-500/20' },
-            manual: { label: 'Manuel', color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
+            freebox: { label: t('networkScan.badges.freebox'), color: 'text-purple-300', bgColor: 'bg-purple-500/20' },
+            unifi: { label: t('networkScan.badges.unifi'), color: 'text-blue-300', bgColor: 'bg-blue-500/20' },
+            api: { label: t('networkScan.badges.api'), color: 'text-yellow-300', bgColor: 'bg-yellow-500/20' },
+            system: { label: t('networkScan.badges.system'), color: 'text-gray-300', bgColor: 'bg-gray-500/20' },
+            manual: { label: t('networkScan.badges.manual'), color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
         };
         
         return badges[source] || null;
@@ -955,11 +957,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 setEditingHostname(null);
                 setEditedHostname('');
             } else {
-                alert(response.error?.message || 'Erreur lors de la sauvegarde du hostname');
+                alert(response.error?.message || t('networkScan.errors.hostnameSave'));
             }
         } catch (error: any) {
             console.error('Save hostname failed:', error);
-            alert('Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue'));
+            alert(t('networkScan.errors.hostnameSaveWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
 
@@ -1014,9 +1016,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
     // fetchHistory is now handled in the useEffect above that depends on defaultConfigLoaded
 
+    const currentLocale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+
     const formatDate = (dateStr: string): string => {
         const date = new Date(dateStr);
-        return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleString(currentLocale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
 
     const formatRelativeTime = (dateStr: string): string => {
@@ -1027,10 +1031,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
 
-        if (diffMins < 1) return 'À l\'instant';
-        if (diffMins < 60) return `Il y a ${diffMins}min`;
-        if (diffHours < 24) return `Il y a ${diffHours}h`;
-        if (diffDays < 7) return `Il y a ${diffDays}j`;
+        if (diffMins < 1) return t('networkScan.time.justNow');
+        if (diffMins < 60) return t('networkScan.time.minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('networkScan.time.hoursAgo', { count: diffHours });
+        if (diffDays < 7) return t('networkScan.time.daysAgo', { count: diffDays });
         return formatDate(dateStr);
     };
 
@@ -1048,36 +1052,42 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         
         const diffMs = nextDate.getTime() - now.getTime();
         
-        // Si le prochain scan est déjà passé (retard), afficher quand même la date précise
+        // If the next scan is overdue, show the exact planned date/time
         if (diffMs <= 0) {
-            // Le scan est en retard, afficher la date/heure exacte prévue
-            return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+            const dateStr = nextDate.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
+            const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+            return t('networkScan.time.nextExecutionLate', { date: dateStr, time: timeStr });
         }
         
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
         
-        // Pour les prochains scans très proches (< 1h), afficher les minutes précises
+        const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+        
+        // For very close scans (< 1h), show precise minutes
         if (diffMins < 60) {
             if (diffMins < 1) {
-                return `Dans moins d'1min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+                return t('networkScan.time.nextExecutionLessThan1Min', { time: timeStr });
             }
-            return `Dans ${diffMins}min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+            return t('networkScan.time.nextExecutionMinutes', { count: diffMins, time: timeStr });
         }
         
-        // Pour les prochains scans dans les prochaines heures, afficher l'heure précise
+        // For scans within next hours, show precise time
         if (diffHours < 24) {
-            return `Dans ${diffHours}h (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+            return t('networkScan.time.nextExecutionHours', { count: diffHours, time: timeStr });
         }
         
-        // Pour les prochains jours, afficher la date et l'heure
+        // For next days, show date and time
         if (diffDays < 7) {
-            return `Dans ${diffDays}j (${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+            const dateStr = nextDate.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
+            return t('networkScan.time.nextExecutionDays', { count: diffDays, date: dateStr, time: timeStr });
         }
         
-        // Pour les dates plus lointaines, afficher la date complète
-        return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        // For further dates, show full date
+        const fullDateStr = nextDate.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const fullTimeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+        return t('networkScan.time.nextExecutionDate', { date: fullDateStr, time: fullTimeStr });
     };
 
     // Note: Filtering is done server-side, but we keep client-side filtering as a fallback
@@ -1174,7 +1184,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const now = new Date();
                 const hoursAgo = displayData.length - i - 1;
                 const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
             });
         
         return { data: displayData, labels };
@@ -1210,7 +1220,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const now = new Date();
                 const hoursAgo = displayData.length - i - 1;
                 const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
             });
         
         return { data: displayData, labels };
@@ -1246,7 +1256,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const now = new Date();
                 const hoursAgo = displayData.length - i - 1;
                 const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
             });
         
         return { data: displayData, labels };
@@ -1260,29 +1270,29 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     <button
                         onClick={onBack}
                         className="p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors"
-                        title="Retour au dashboard"
+                        title={t('networkScan.tooltips.backToDashboard')}
                     >
                         <ArrowLeft size={20} className="text-gray-400" />
                     </button>
                     <div className="flex items-center gap-2">
                         <Network size={24} className="text-cyan-400" />
-                        <h1 className="text-2xl font-bold">Scan Réseau</h1>
+                        <h1 className="text-2xl font-bold">{t('networkScan.title')}</h1>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                 {isActive && (
                         <div className="flex items-center gap-1.5 text-green-400 text-sm">
                             <div className="w-2 h-2 rounded-full bg-green-400" />
-                            <span>Actif</span>
+                            <span>{t('networkScan.status.active')}</span>
                         </div>
                     )}
                     <button
                         onClick={() => setConfigModalOpen(true)}
                         className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 transition-colors flex items-center gap-2"
-                        title="Configuration du scan"
+                        title={t('networkScan.tooltips.config')}
                     >
                         <Settings size={16} />
-                        <span>Configuration</span>
+                        <span>{t('networkScan.buttons.config')}</span>
                     </button>
                     </div>
             </div>
@@ -1294,15 +1304,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     <Card 
                         title={
                             <div className="flex items-center gap-2">
-                                <span>Info Scans</span> 
+                                <span>{t('networkScan.stats.infoScans')}</span> 
                                 {autoStatus && !autoStatusLoading && (
-                                    <div className="flex items-center gap-1.5"><span className="text-xs text-gray-500">Auto</span>
+                                    <div className="flex items-center gap-1.5"><span className="text-xs text-gray-500">{t('networkScan.stats.auto')}</span>
                                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                             autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled)
                                                 ? 'bg-emerald-500/20 text-emerald-400'
                                                 : 'bg-gray-500/20 text-gray-400'
                                         }`}>
-                                            {autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? 'ON' : 'OFF'}
+                                            {autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? t('networkScan.status.on') : t('networkScan.status.off')}
                                         </span>
                                          
                                     </div>
@@ -1319,9 +1329,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     <div className="space-y-2 mb-2">
                                         {autoStatus.fullScan.config.enabled && (
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-gray-300 font-medium w-14">Full Scan</span>
+                                                <span className="text-gray-300 font-medium w-14">{t('networkScan.scanTypes.fullScan')}</span>
                                                 <span className="px-2 py-0.5 rounded text-xs font-medium w-16 text-center bg-purple-500/20 border border-purple-500/50 text-purple-400">
-                                                    Full
+                                                    {t('networkScan.scanTypes.full')}
                                                 </span>
                                                 <span className="text-gray-400">
                                                     {formatNextExecution(
@@ -1335,13 +1345,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                         {autoStatus.refresh.config.enabled && (
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-gray-300 font-medium w-14">Refresh</span>
+                                                <span className="text-gray-300 font-medium w-14">{t('networkScan.scanTypes.refresh')}</span>
                                                 <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
                                                     autoStatus.refresh.config.scanType === 'full'
                                                         ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
                                                         : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
                                                 }`}>
-                                                    {autoStatus.refresh.config.scanType === 'full' ? 'Complet' : 'Rapide'}
+                                                    {autoStatus.refresh.config.scanType === 'full' ? t('networkScan.scanTypes.complete') : t('networkScan.scanTypes.quick')}
                                                 </span>
                                                 <span className="text-gray-400">
                                                     {formatNextExecution(
@@ -1357,21 +1367,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 )}
                                 
                                 <div className="pt-2 border-t border-gray-800">
-                                    <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
+                                    <div className="font-medium text-gray-300 mb-2">{t('networkScan.stats.lastScan')}</div>
                             {/* Afficher le dernier scan avec son type et sa date exacte */}
                             {autoStatus?.lastScan ? (
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2 mb-1">
                                         {autoStatus.lastScan.isManual ? (
-                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
+                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.scanTypes.manual')}</span>
                                         ) : (
-                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">Auto</span>
+                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">{t('networkScan.scanTypes.auto')}</span>
                                         )}
                                         <span className="text-gray-400">
                                             {autoStatus.lastScan.type === 'full' ? (
-                                                        <>Full Scan <span className="text-gray-500">(Full)</span></>
+                                                        <>{t('networkScan.scanTypes.fullScan')} <span className="text-gray-500">({t('networkScan.scanTypes.full')})</span></>
                                             ) : (
-                                                        <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
+                                                        <>{t('networkScan.scanTypes.refresh')} <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? t('networkScan.scanTypes.complete') : t('networkScan.scanTypes.quick')})</span></>
                                             )}
                                         </span>
                                                 <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
@@ -1382,8 +1392,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                             ) : stats?.lastScan ? (
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
-                                        <span className="text-gray-300">Scan</span> <span className="text-gray-300 font-medium">{formatDate(stats.lastScan)}</span>
+                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.scanTypes.manual')}</span>
+                                        <span className="text-gray-300">{t('networkScan.scanTypes.scan')}</span> <span className="text-gray-300 font-medium">{formatDate(stats.lastScan)}</span>
                                     </div>
                     
                                     <div className="text-gray-500 text-xs mt-0.5">
@@ -1391,7 +1401,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-gray-500">Aucun scan effectué</div>
+                                <div className="text-gray-500">{t('networkScan.stats.noScan')}</div>
                             )}
                                             </div>
                                                     </div>
@@ -1407,16 +1417,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 onClick={handleRefresh}
                                                 disabled={isRefreshing}
                                                 className="flex-1 px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-l-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 transition-colors text-xs"
-                                                title={refreshType === 'quick' ? 'Rafraîchir (ping uniquement)' : 'Rafraîchir (ping + MAC + hostname)'}
+                                                title={refreshType === 'quick' ? t('networkScan.tooltips.refreshQuick') : t('networkScan.tooltips.refreshFull')}
                                             >
                                                 <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
-                                                <span className="truncate">Rafraîchir</span>
+                                                <span className="truncate">{t('networkScan.buttons.refresh')}</span>
                                             </button>
                                             <button
                                                 onClick={() => setShowRefreshDropdown(!showRefreshDropdown)}
                                                 disabled={isRefreshing}
                                                 className={`px-1.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-r-lg border border-l-0 border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors text-xs ${showRefreshDropdown ? 'bg-blue-500/20' : ''}`}
-                                                title="Choisir le type de rafraîchissement"
+                                                title={t('networkScan.tooltips.chooseRefreshType')}
                                             >
                                                 <ArrowDown size={10} className={`opacity-80 transition-transform duration-200 ${showRefreshDropdown ? 'rotate-180' : ''}`} />
                                             </button>
@@ -1434,7 +1444,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     className={`w-full px-3 py-2 text-xs text-left hover:bg-blue-500/10 transition-colors flex items-center gap-2 ${refreshType === 'quick' ? 'bg-blue-500/20 text-blue-400 font-medium' : 'text-gray-300'}`}
                                                 >
                                                     <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
-                                                    Rapide
+                                                    {t('networkScan.scanTypes.quick')}
                                                 </button>
                                                 <button
                                                     onClick={() => {
@@ -1446,7 +1456,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     className={`w-full px-3 py-2 text-xs text-left hover:bg-blue-500/10 transition-colors flex items-center gap-2 border-t border-gray-800 ${refreshType === 'full' ? 'bg-blue-500/20 text-blue-400 font-medium' : 'text-gray-300'}`}
                                                 >
                                                     <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60"></span>
-                                                    Complet
+                                                    {t('networkScan.scanTypes.complete')}
                                                 </button>
                                                 </div>
                                         )}
@@ -1455,19 +1465,19 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         onClick={handleScan}
                                         disabled={isScanning}
                                         className="w-full px-2 py-1 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
-                                        title="Scan complet du réseau (ping + MAC + vendor + hostname)"
+                                        title={t('networkScan.tooltips.fullScan')}
                                     >
                                         <Play size={12} className={isScanning ? 'animate-spin' : ''} />
-                                        Scanner
+                                        {t('networkScan.buttons.scan')}
                                     </button>
                                     <button
                                         onClick={() => setShowAddIpModal(true)}
                                         disabled={isScanning || isRefreshing}
                                         className="w-full px-2 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg border border-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
-                                        title="Ajouter une IP manuellement"
+                                        title={t('networkScan.tooltips.addIp')}
                                     >
                                         <Network size={12} />
-                                        Ajouter IP
+                                        {t('networkScan.buttons.addIp')}
                                     </button>
                                     
                                 </div>
@@ -1478,23 +1488,23 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     {wiresharkVendorStats && (
                                         <div className="space-y-2">
                                             <div className="flex items-center gap-2 text-xs">
-                                                <span className="text-gray-400 w-20">Base vendors:</span>
+                                                <span className="text-gray-400 w-20">{t('networkScan.stats.vendorBase')}</span>
                                                 {wiresharkVendorStats.totalVendors > 0 ? (
                                                     <>
                                                         <span className="text-emerald-400 font-medium">{wiresharkVendorStats.totalVendors.toLocaleString()}</span>
                                                         {wiresharkVendorStats.lastUpdate && (
                                                             <span className="text-gray-500">
-                                                            (mise à jour: {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })})
+                                                            ({t('networkScan.stats.update')} {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' })})
                                                         </span>
                                             )}
                                         </>
                                             ) : (
-                                                <span className="text-orange-400">Non chargée</span>
+                                                <span className="text-orange-400">{t('networkScan.stats.notLoaded')}</span>
                                             )}
                                             </div>
                                             {scanRange && (
                                                 <div className="flex items-center gap-2 text-xs">
-                                                    <span className="text-gray-400 w-20">Réseau:</span>
+                                                    <span className="text-gray-400 w-20">{t('networkScan.stats.network')}</span>
                                                     <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
                                                         {scanRange}
                                                     </span>
@@ -1506,18 +1516,18 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     {/* Scan auto actif ou pas */}
                                     {autoStatusLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span className="w-20">Scan auto:</span>
-                                            <span>Chargement...</span>
+                                            <span className="w-20">{t('networkScan.stats.autoScan')}</span>
+                                            <span>{t('networkScan.status.loading')}</span>
                                                 </div>
                                     ) : autoStatus ? (
                                         <div className="flex items-center gap-2 text-xs">
-                                            <span className="text-gray-400 w-20">Scan auto:</span>
+                                            <span className="text-gray-400 w-20">{t('networkScan.stats.autoScan')}</span>
                                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                                 autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled)
                                                     ? 'bg-emerald-500/20 text-emerald-400'
                                                     : 'bg-gray-500/20 text-gray-400'
                                             }`} style={{ transition: 'none' }}>
-                                                {autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? 'Actif' : 'Inactif'}
+                                                {autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? t('networkScan.status.active') : t('networkScan.status.inactive')}
                                             </span>
                                                 </div>
                                     ) : null}
@@ -1527,26 +1537,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     </Card>
                     
                     {/* Total IPs - 1 colonne */}
-                    <Card title="Total IPs">
+                    <Card title={t('networkScan.stats.totalIps')}>
                         <div className="text-3xl font-bold text-gray-200 text-center mb-1">{stats.total}</div>
                         <div className="h-16 mt-1">
-                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel="Total IPs" height={64} fadeFromBottom={true} />
+                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel={t('networkScan.stats.totalIps')} height={64} fadeFromBottom={true} />
                                 </div>
                     </Card>
                     
                     {/* Online - 1 colonne */}
-                    <Card title="Online">
+                    <Card title={t('networkScan.status.online')}>
                         <div className="text-3xl font-bold text-emerald-400 text-center mb-1">{stats.online}</div>
                         <div className="h-16 mt-1">
-                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel="Online" height={64} />
+                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel={t('networkScan.status.online')} height={64} />
                         </div>
                     </Card>
                     
                     {/* Offline - 1 colonne */}
-                    <Card title="Offline">
+                    <Card title={t('networkScan.status.offline')}>
                         <div className="text-3xl font-bold text-red-400 text-center mb-1">{stats.offline}</div>
                         <div className="h-16 mt-1">
-                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel="Offline" height={64} />
+                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel={t('networkScan.status.offline')} height={64} />
                         </div>
                     </Card>
                 </div>
@@ -1570,15 +1580,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-semibold animate-pulse">
                                 <RefreshCw size={12} className="animate-spin" />
                                     <span>
-                                        {isScanning ? 'Scan' : 
-                                         isRefreshing ? 'Refresh' : 
-                                         (autoStatus?.fullScan.scheduler.running) ? 'Auto Full Scan' :
-                                         (autoStatus?.refresh.scheduler.running) ? 'Auto Refresh' : 'Scan'}
+                                        {isScanning ? t('networkScan.status.scanning') : 
+                                         isRefreshing ? t('networkScan.status.refreshing') : 
+                                         (autoStatus?.fullScan.scheduler.running) ? t('networkScan.status.autoFullScan') :
+                                         (autoStatus?.refresh.scheduler.running) ? t('networkScan.status.autoRefresh') : t('networkScan.status.scanning')}
                                     </span>
                                 </div>
                                 {(currentScanRange || (autoStatus && autoStatus.lastScan?.range)) && (
                                     <div className="text-xs text-gray-400 px-2 py-0.5 bg-gray-800/50 rounded">
-                                        Range: <span className="text-gray-300 font-medium">{currentScanRange || autoStatus?.lastScan?.range || ''}</span>
+                                        {t('networkScan.scanInfo.range')} <span className="text-gray-300 font-medium">{currentScanRange || autoStatus?.lastScan?.range || ''}</span>
                                     </div>
                                 )}
                                 {scanProgress && scanProgress.total > 0 && (
@@ -1608,37 +1618,37 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         {lastScanSummary && !isScanning && !isRefreshing && (
                             <div className="flex items-center gap-2 flex-wrap text-xs">
                                 <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                    <span className="text-gray-400">Range:</span>
+                                    <span className="text-gray-400">{t('networkScan.scanInfo.range')}</span>
                                     <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.range}</span>
                                 </div>
                                 <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                    <span className="text-gray-400">Durée:</span>
+                                    <span className="text-gray-400">{t('networkScan.scanInfo.duration')}</span>
                                     <span className="text-gray-200 ml-1 font-medium">{formatDuration(lastScanSummary.duration)}</span>
                                 </div>
                                 <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                    <span className="text-gray-400">Scannés:</span>
+                                    <span className="text-gray-400">{t('networkScan.scanInfo.scanned')}</span>
                                     <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.scanned}</span>
                                 </div>
                                 <div className="px-2 py-0.5 bg-emerald-500/20 rounded border border-emerald-500/30">
-                                    <span className="text-gray-400">Trouvés:</span>
+                                    <span className="text-gray-400">{t('networkScan.scanInfo.found')}</span>
                                     <span className="text-emerald-400 ml-1 font-medium">{lastScanSummary.found}</span>
                                 </div>
                                 <div className="px-2 py-0.5 bg-blue-500/20 rounded border border-blue-500/30">
-                                    <span className="text-gray-400">Mis à jour:</span>
+                                    <span className="text-gray-400">{t('networkScan.scanInfo.updated')}</span>
                                     <span className="text-blue-400 ml-1 font-medium">{lastScanSummary.updated}</span>
                                 </div>
                                 {lastScanSummary.detectionSummary && (
                                     <>
                                         <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                            <span className="text-gray-400">MAC:</span>
+                                            <span className="text-gray-400">{t('networkScan.scanInfo.mac')}</span>
                                             <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.mac}</span>
                                         </div>
                                         <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                            <span className="text-gray-400">Vendor:</span>
+                                            <span className="text-gray-400">{t('networkScan.scanInfo.vendor')}</span>
                                             <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.vendor}</span>
                                         </div>
                                         <div className="px-2 py-0.5 bg-gray-800/50 rounded border border-gray-700">
-                                            <span className="text-gray-400">Hostname:</span>
+                                            <span className="text-gray-400">{t('networkScan.scanInfo.hostname')}</span>
                                             <span className="text-gray-200 ml-1 font-medium">{lastScanSummary.detectionSummary.hostname}</span>
                                         </div>
                                     </>
@@ -1658,14 +1668,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 type="text"
                                 value={searchFilter}
                                 onChange={(e) => setSearchFilter(e.target.value)}
-                                    placeholder="Rechercher par IP, MAC, hostname, vendor ou ports..."
+                                    placeholder={t('networkScan.placeholders.search')}
                                     className="w-full pl-12 pr-4 py-2.5 bg-[#1a1a1a] border-2 border-gray-700 rounded-xl text-base text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 hover:border-gray-600"
                             />
                                 {searchFilter && (
                                     <button
                                         onClick={() => setSearchFilter('')}
                                         className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-700 rounded-full transition-colors"
-                                        title="Effacer"
+                                        title={t('networkScan.tooltips.clear')}
                                     >
                                         <X size={16} className="text-gray-400 hover:text-gray-200" />
                                     </button>
@@ -1678,12 +1688,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                             onChange={(e) => setStatusFilter(e.target.value as any)}
                                 className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                         >
-                            <option value="all">Tous</option>
-                            <option value="online">Online</option>
-                            <option value="offline">Offline</option>
+                            <option value="all">{t('networkScan.filters.all')}</option>
+                            <option value="online">{t('networkScan.status.online')}</option>
+                            <option value="offline">{t('networkScan.status.offline')}</option>
                             </select>
                         <div className="flex items-center gap-2">
-                                <label htmlFor="results-per-page" className="text-sm text-gray-400 whitespace-nowrap">Résultats:</label>
+                                <label htmlFor="results-per-page" className="text-sm text-gray-400 whitespace-nowrap">{t('networkScan.filters.results')}</label>
                                 <select
                                     id="results-per-page"
                                     name="results-per-page"
@@ -1693,7 +1703,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 >
                                     <option value="20">20</option>
                                     <option value="50">50</option>
-                                    <option value="full">Full</option>
+                                    <option value="full">{t('networkScan.filters.full')}</option>
                         </select>
                             </div>
                     </div>
@@ -1711,7 +1721,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('ip'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>IP</span>
+                                        <span>{t('networkScan.table.headers.ip')}</span>
                                         {sortBy === 'ip' && (
                                             sortOrder === 'asc' ? <ArrowDown size={14} className="text-blue-400" /> : <ArrowUp size={14} className="text-blue-400" />
                                         )}
@@ -1722,7 +1732,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('hostname'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Hostname</span>
+                                        <span>{t('networkScan.table.headers.hostname')}</span>
                                         {sortBy === 'hostname' && (
                                             sortOrder === 'asc' ? <ArrowDown size={14} className="text-blue-400" /> : <ArrowUp size={14} className="text-blue-400" />
                                         )}
@@ -1733,7 +1743,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('vendor'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Vendor</span>
+                                        <span>{t('networkScan.table.headers.vendor')}</span>
                                         {sortBy === 'vendor' && (
                                             sortOrder === 'asc' ? <ArrowDown size={14} className="text-blue-400" /> : <ArrowUp size={14} className="text-blue-400" />
                                         )}
@@ -1744,7 +1754,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('mac'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-0.5">
-                                        <span>MAC</span>
+                                        <span>{t('networkScan.table.headers.mac')}</span>
                                         {sortBy === 'mac' && (
                                             sortOrder === 'asc' ? <ArrowDown size={12} className="text-blue-400" /> : <ArrowUp size={12} className="text-blue-400" />
                                         )}
@@ -1755,7 +1765,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('status'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Status</span>
+                                        <span>{t('networkScan.table.headers.status')}</span>
                                         {sortBy === 'status' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
@@ -1766,7 +1776,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('ping_latency'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Latence</span>
+                                        <span>{t('networkScan.table.headers.latency')}</span>
                                         {sortBy === 'ping_latency' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
@@ -1776,14 +1786,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     <div className="flex items-center gap-2">
                                         {portScanProgress?.active ? (
                                             <>
-                                                <span title="Scan des ports en cours"><Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" /></span>
-                                                <span>Ports ouverts</span>
+                                                <span title={t('networkScan.tooltips.portScanInProgress')}><Loader2 size={14} className="text-amber-400 animate-spin flex-shrink-0" /></span>
+                                                <span>{t('networkScan.table.headers.openPorts')}</span>
                                                 <span className="text-amber-400/90 text-xs font-normal" title={`${portScanProgress.current}/${portScanProgress.total} IP(s)`}>
                                                     ({portScanProgress.current}/{portScanProgress.total})
                                                 </span>
                                             </>
                                         ) : (
-                                            <span>Ports ouverts</span>
+                                            <span>{t('networkScan.table.headers.openPorts')}</span>
                                         )}
                                     </div>
                                 </th>
@@ -1792,7 +1802,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('avg1h'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Avg1h</span>
+                                        <span>{t('networkScan.table.headers.avg1h')}</span>
                                         {sortBy === 'avg1h' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
@@ -1803,35 +1813,35 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     else { setSortBy('max'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-2">
-                                        <span>Max</span>
+                                        <span>{t('networkScan.table.headers.max')}</span>
                                         {sortBy === 'max' && (
                                             sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title="Monitoring latence" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.latencyMonitoring')} onClick={() => {
                                     if (sortBy === 'monitoring') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('monitoring'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-0.5">
-                                        <span>Monit.</span>
+                                        <span>{t('networkScan.table.headers.monitoring')}</span>
                                         {sortBy === 'monitoring' && (
                                             sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title="Dernière vue" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.lastSeen')} onClick={() => {
                                     if (sortBy === 'last_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('last_seen'); setSortOrder('asc'); }
                                 }}>
                                     <div className="flex items-center gap-0.5">
-                                        <span>Dern. vue</span>
+                                        <span>{t('networkScan.table.headers.lastSeen')}</span>
                                         {sortBy === 'last_seen' && (
                                             sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-right py-3 pr-2 pl-0 text-sm text-gray-400 w-1 whitespace-nowrap">Actions</th>
+                                <th className="text-right py-3 pr-2 pl-0 text-sm text-gray-400 w-1 whitespace-nowrap">{t('networkScan.table.headers.actions')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1841,10 +1851,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         {isScanning || isRefreshing ? (
                                             <div className="flex items-center justify-center gap-2">
                                                 <RefreshCw size={16} className="animate-spin text-blue-400" />
-                                                <span>Scan en cours...</span>
+                                                <span>{t('networkScan.status.scanInProgress')}</span>
                                             </div>
                                         ) : (
-                                            'Aucun résultat'
+                                            t('networkScan.table.noResults')
                                         )}
                                     </td>
                                 </tr>
@@ -1878,7 +1888,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     }}
                                                     className="text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5"
                                                     style={scan.status !== 'offline' ? { color: 'rgb(152, 181, 238)' } : {}}
-                                                    title={`Rechercher ${scan.ip} dans la page de recherche`}
+                                                    title={t('networkScan.tooltips.searchIp', { ip: scan.ip })}
                                                 >
                                                     <span>{scan.ip}</span>
                                                     <Link2 size={9} className="opacity-50 relative top-[-2px]" />
@@ -1908,14 +1918,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     <button
                                                         onClick={() => handleSaveHostname(scan.ip)}
                                                         className="p-1 hover:bg-emerald-500/10 text-emerald-400 rounded transition-colors flex-shrink-0"
-                                                        title="Sauvegarder"
+                                                        title={t('networkScan.tooltips.save')}
                                                     >
                                                         <Save size={14} />
                                                     </button>
                                                     <button
                                                         onClick={handleCancelEditHostname}
                                                         className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors flex-shrink-0"
-                                                        title="Annuler"
+                                                        title={t('networkScan.tooltips.cancel')}
                                                     >
                                                         <XIcon size={14} />
                                                     </button>
@@ -1926,7 +1936,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     {scan.hostnameSource && (() => {
                                                         const badge = getSourceBadge(scan.hostnameSource, 'hostname');
                                                         return badge ? (
-                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={`Source: ${badge.label}`}>
+                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={t('networkScan.tooltips.source', { source: badge.label })}>
                                                                 {badge.label}
                                                             </span>
                                                         ) : null;
@@ -1934,7 +1944,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     <button
                                                         onClick={() => handleStartEditHostname(scan.ip, scan.hostname || '')}
                                                         className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-500/10 text-blue-400 rounded transition-all flex-shrink-0"
-                                                        title="Renommer"
+                                                        title={t('networkScan.tooltips.rename')}
                                                     >
                                                         <Edit2 size={12} />
                                                     </button>
@@ -1947,7 +1957,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 {scan.vendorSource && (() => {
                                                     const badge = getSourceBadge(scan.vendorSource, 'vendor');
                                                     return badge ? (
-                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={`Source: ${badge.label}`}>
+                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={t('networkScan.tooltips.source', { source: badge.label })}>
                                                             {badge.label}
                                                         </span>
                                                     ) : null;
@@ -1974,11 +1984,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         </td>
                                         <td className="py-3 px-2 w-16">
                                             {scan.status === 'online' ? (
-                                                <span title="Online - Appareil en ligne"><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
+                                                <span title={t('networkScan.tooltips.online')}><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
                                             ) : scan.status === 'offline' ? (
-                                                <span title="Offline - Appareil hors ligne"><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
+                                                <span title={t('networkScan.tooltips.offline')}><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
                                             ) : (
-                                                <span title="Unknown - Statut inconnu"><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
+                                                <span title={t('networkScan.tooltips.unknown')}><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
                                             )}
                                         </td>
                                         <td className="py-3 px-4">
@@ -2013,10 +2023,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 const hasPorts = Array.isArray(openPorts) && openPorts.length > 0;
                                                 if (portScanProgress?.active) {
                                                     if (portScanProgress.currentIp === scan.ip) {
-                                                        return <span className="text-amber-400">En cours...</span>;
+                                                        return <span className="text-amber-400">{t('networkScan.status.inProgress')}</span>;
                                                     }
                                                     if (scan.status === 'online' && !lastPortScan) {
-                                                        return <span className="text-gray-500">En attente</span>;
+                                                        return <span className="text-gray-500">{t('networkScan.status.pending')}</span>;
                                                     }
                                                 }
                                                 if (hasPorts) {
@@ -2026,9 +2036,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                         .join(', ');
                                                 }
                                                 if (lastPortScan) {
-                                                    return <span className="text-gray-500">Aucun</span>;
+                                                    return <span className="text-gray-500">{t('networkScan.status.none')}</span>;
                                                 }
-                                                return <span className="text-gray-500">Non scanné</span>;
+                                                return <span className="text-gray-500">{t('networkScan.status.notScanned')}</span>;
                                             })()}
                                         </td>
                                         <td className="py-3 px-4">
@@ -2046,7 +2056,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 <button
                                                     onClick={() => handleToggleMonitoring(scan.ip, !monitoringStatus[scan.ip])}
                                                     className="p-0.5 hover:bg-blue-500/10 rounded transition-colors"
-                                                    title={monitoringStatus[scan.ip] ? 'Désactiver le monitoring' : 'Activer le monitoring'}
+                                                    title={monitoringStatus[scan.ip] ? t('networkScan.tooltips.disableMonitoring') : t('networkScan.tooltips.enableMonitoring')}
                                                 >
                                                     {monitoringStatus[scan.ip] ? (
                                                         <ToggleRight size={16} className="text-blue-400" />
@@ -2058,7 +2068,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     <button
                                                         onClick={() => handleOpenLatencyGraph(scan.ip)}
                                                         className="p-0.5 hover:bg-green-500/10 text-green-400 rounded transition-colors"
-                                                        title="Voir le graphique de latence"
+                                                        title={t('networkScan.tooltips.viewLatencyGraph')}
                                                     >
                                                         <BarChart2 size={14} />
                                                     </button>
@@ -2074,7 +2084,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     onClick={() => handleRescan(scan.ip)}
                                                     disabled={rescanningIp === scan.ip}
                                                     className="p-1 hover:bg-yellow-500/10 text-yellow-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    title="Rescanner (scan complet + ports)"
+                                                    title={t('networkScan.tooltips.rescan')}
                                                 >
                                                     {rescanningIp === scan.ip ? (
                                                         <Loader2 size={16} className="animate-spin" />
@@ -2085,14 +2095,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 <button
                                                     onClick={() => handleBan(scan.ip)}
                                                     className="p-1 hover:bg-orange-500/10 text-orange-400 rounded transition-colors"
-                                                    title="Bannir cette IP (exclure des scans futurs)"
+                                                    title={t('networkScan.tooltips.banIp')}
                                                 >
                                                     <ShieldX size={16} />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(scan.ip)}
                                                     className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"
-                                                    title="Supprimer"
+                                                    title={t('networkScan.tooltips.delete')}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -2116,7 +2126,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     onMouseEnter={cancelTooltipHide}
                     onMouseLeave={hideAllTooltips}
                     >
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Adresse MAC</div>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{t('networkScan.tooltips.macAddress')}</div>
                         <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
                     </div>
                 );
@@ -2132,7 +2142,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     acc[cat].push(p);
                     return acc;
                 }, {});
-                const categoryOrder = ['Web', 'Bases de données', 'Mail', 'Système', 'Accès distant', 'Docker', 'Autres'];
+                const categoryOrder = ['web', 'databases', 'mail', 'system', 'remoteAccess', 'docker', 'other'];
                 const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
                 return (
                     <div
@@ -2148,7 +2158,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     const colors = getPortCategoryColor(cat);
                                     return (
                                         <div key={cat}>
-                                            <div className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${colors.label}`}>{cat}</div>
+                                            <div className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${colors.label}`}>{t(`networkScan.portCategories.${cat}`)}</div>
                                             <div className="grid grid-cols-3 gap-x-3 gap-y-1">
                                                 {byCategory[cat].map((p) => {
                                                     const Icon = getPortIcon(p.port);
@@ -2166,11 +2176,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 })}
                             </div>
                         ) : (
-                            <div className="text-sm text-gray-500 py-1">Aucun port ouvert</div>
+                            <div className="text-sm text-gray-500 py-1">{t('networkScan.ports.noOpenPorts')}</div>
                         )}
                         {portsTooltip.lastPortScan && (
                             <div className="mt-3 pt-3 border-t border-gray-700/80 text-xs text-gray-500">
-                                Scan : {new Date(portsTooltip.lastPortScan).toLocaleString('fr-FR')}
+                                Scan : {new Date(portsTooltip.lastPortScan).toLocaleString(currentLocale)}
                             </div>
                         )}
                     </div>

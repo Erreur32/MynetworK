@@ -2712,7 +2712,7 @@ const UserProfileSection: React.FC = () => {
 // Badge image URLs from project README (GitHub shields.io)
 const GITHUB_README_BADGES = [
   { src: 'https://img.shields.io/badge/MynetworK---help-111827?style=for-the-badge', alt: 'MynetworK' },
-  { src: 'https://img.shields.io/badge/Status-DEVELOPMENT-374151?style=for-the-badge', alt: 'Status' },
+  { src: 'https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge', alt: 'Status' },
   { src: 'https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'Docker' },
   { src: 'https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'GHCR' },
   { src: 'https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827', alt: 'Build' },
@@ -2848,7 +2848,7 @@ const InfoSection: React.FC = () => {
                 <span className="text-sm text-gray-400">{t('admin.version')}</span>
                 <span className="text-sm font-mono text-teal-300">{getVersionString()}</span>
                 <span className="text-sm text-gray-400">{t('admin.licenseLabel')}</span>
-                <span className="text-sm text-theme-primary">{t('admin.licensePrivate')}</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/30">{t('admin.licensePublic')}</span>
               </div>
             </div>
             <br />

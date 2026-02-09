@@ -1,0 +1,12 @@
+{
+  "userMenu": {
+    "myProfile": "Mon Profil",
+    "administration": "Administration",
+    "users": "Utilisateurs",
+    "logout": "Déconnexion",
+    "roleAdmin": "Administrateur",
+    "roleUser": "Utilisateur",
+    "roleViewer": "Lecteur",
+    "language": "Langue"
+  }
+}

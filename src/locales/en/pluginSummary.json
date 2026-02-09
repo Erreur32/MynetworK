@@ -1,0 +1,11 @@
+{
+  "pluginSummary": {
+    "viewDetails": "Access",
+    "connectionIssue": "Connection issue",
+    "checkPluginConfig": "Check the plugin configuration.",
+    "seeBackendLogs": "See backend logs for more details.",
+    "throughputPlugin": "Throughput (plugin)",
+    "configRequiredForStats": "Configuration required to view stats",
+    "enablePluginForStats": "Enable the plugin to view stats"
+  }
+}

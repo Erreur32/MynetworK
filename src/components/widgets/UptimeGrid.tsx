@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clock, RefreshCw, HelpCircle } from 'lucide-react';
 import { useUptimeStore } from '../../stores';
 
@@ -34,6 +35,7 @@ const formatDate = (dateStr: string): string => {
 export const UptimeGrid: React.FC<UptimeGridProps> = ({
   uptimeSeconds
 }) => {
+  const { t } = useTranslation();
   const { recordUptime, getHistoryForDisplay } = useUptimeStore();
 
   // Record uptime when it changes
@@ -80,7 +82,7 @@ export const UptimeGrid: React.FC<UptimeGridProps> = ({
         <div className="flex items-center gap-3">
           <span className="text-3xl font-bold text-gray-200">{uptimePercentage}%</span>
           {daysWithData < 30 && (
-            <span className="text-xs text-gray-500">({daysWithData}j de données)</span>
+            <span className="text-xs text-gray-500">({t('system.uptimeDaysData', { count: daysWithData })})</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -123,7 +125,7 @@ export const UptimeGrid: React.FC<UptimeGridProps> = ({
       {/* Labels */}
       <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
         <span>30 jours</span>
-        <span>Aujourd'hui</span>
+        <span>{t('system.uptimeNow')}</span>
       </div>
 
       {/* Current uptime */}

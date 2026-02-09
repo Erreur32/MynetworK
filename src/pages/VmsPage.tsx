@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Server,
   ChevronLeft,
@@ -35,18 +36,19 @@ const formatBytes = (bytes: number): string => {
 
 // VM Status badge
 const VmStatusBadge: React.FC<{ status: VM['status'] }> = ({ status }) => {
-  const statusConfig: Record<VM['status'], { label: string; color: string }> = {
-    running: { label: 'Active', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' },
-    stopped: { label: 'Arrêtée', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50' },
-    starting: { label: 'Démarrage', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' },
-    stopping: { label: 'Arrêt', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50' }
+  const { t } = useTranslation();
+  const statusConfig: Record<VM['status'], { labelKey: string; color: string }> = {
+    running: { labelKey: 'vms.statusRunning', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' },
+    stopped: { labelKey: 'vms.statusStopped', color: 'bg-gray-500/20 text-gray-400 border-gray-500/50' },
+    starting: { labelKey: 'vms.statusStarting', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' },
+    stopping: { labelKey: 'vms.statusStopping', color: 'bg-orange-500/20 text-orange-400 border-orange-500/50' }
   };
 
   const config = statusConfig[status] || statusConfig.stopped;
 
   return (
     <span className={`px-2 py-0.5 text-xs rounded-full border ${config.color}`}>
-      {config.label}
+      {t(config.labelKey)}
     </span>
   );
 };
@@ -87,6 +89,7 @@ const VmCard: React.FC<{
   onSettings: () => void;
   onDelete: () => void;
 }> = ({ vm, onStart, onStop, onRestart, onConsole, onSettings, onDelete }) => {
+  const { t } = useTranslation();
   const isRunning = vm.status === 'running';
   const isTransitioning = vm.status === 'starting' || vm.status === 'stopping';
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -123,7 +126,7 @@ const VmCard: React.FC<{
               <button
                 onClick={onConsole}
                 className="p-2 text-blue-400 hover:bg-blue-900/20 rounded-lg transition-colors"
-                title="Console"
+                title={t('vms.console')}
               >
                 <Terminal size={18} />
               </button>
@@ -131,7 +134,7 @@ const VmCard: React.FC<{
             <button
               onClick={onSettings}
               className="p-2 text-gray-400 hover:bg-gray-700 hover:text-white rounded-lg transition-colors"
-              title="Paramètres"
+              title={t('vms.settings')}
             >
               <Settings size={18} />
             </button>
@@ -169,7 +172,7 @@ const VmCard: React.FC<{
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 rounded-lg transition-colors text-sm"
             >
               <Square size={16} />
-              Arrêter
+              {t('vms.stop')}
             </button>
             <button
               onClick={onRestart}
@@ -177,7 +180,7 @@ const VmCard: React.FC<{
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-orange-600/20 hover:bg-orange-600/30 disabled:opacity-50 disabled:cursor-not-allowed text-orange-400 rounded-lg transition-colors text-sm"
             >
               <RefreshCw size={16} />
-              Redémarrer
+              {t('vms.restart')}
             </button>
           </>
         ) : (
@@ -188,7 +191,7 @@ const VmCard: React.FC<{
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
             >
               <Play size={16} />
-              Démarrer
+              {t('vms.start')}
             </button>
             <button
               onClick={handleDelete}
@@ -198,7 +201,7 @@ const VmCard: React.FC<{
                   ? 'bg-red-600 text-white'
                   : 'bg-red-600/20 hover:bg-red-600/30 text-red-400'
               }`}
-              title={showDeleteConfirm ? 'Confirmer la suppression' : 'Supprimer'}
+              title={showDeleteConfirm ? t('vms.confirmDelete') : t('vms.delete')}
             >
               <Trash2 size={16} />
             </button>
@@ -215,6 +218,7 @@ const CreateVmModal: React.FC<{
   onClose: () => void;
   onCreate: (name: string, os: string, vcpus: number, memory: number, diskSize: number) => void;
 }> = ({ isOpen, onClose, onCreate }) => {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [os, setOs] = useState('debian');
   const [vcpus, setVcpus] = useState(2);
@@ -241,23 +245,23 @@ const CreateVmModal: React.FC<{
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-lg">
-        <h2 className="text-xl font-bold text-white mb-6">Créer une VM</h2>
+        <h2 className="text-xl font-bold text-white mb-6">{t('vms.createVm')}</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Nom de la VM</label>
+            <label className="block text-sm text-gray-400 mb-2">{t('vms.vmName')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ma VM"
+              placeholder={t('vms.vmNamePlaceholder')}
               className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white placeholder:text-gray-500 focus:outline-none focus:outline-none"
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Système d'exploitation</label>
+            <label className="block text-sm text-gray-400 mb-2">{t('vms.os')}</label>
             <select
               value={os}
               onChange={(e) => setOs(e.target.value)}
@@ -268,13 +272,13 @@ const CreateVmModal: React.FC<{
               <option value="alpine">Alpine Linux</option>
               <option value="centos">CentOS</option>
               <option value="windows">Windows</option>
-              <option value="other">Autre</option>
+              <option value="other">{t('vms.osOther')}</option>
             </select>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-2">vCPUs</label>
+              <label className="block text-sm text-gray-400 mb-2">{t('vms.vpus')}</label>
               <div className="flex items-center gap-2">
                 <Cpu size={16} className="text-gray-500" />
                 <select
@@ -290,7 +294,7 @@ const CreateVmModal: React.FC<{
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-2">RAM (Go)</label>
+              <label className="block text-sm text-gray-400 mb-2">{t('vms.memoryGb')}</label>
               <div className="flex items-center gap-2">
                 <MemoryStick size={16} className="text-gray-500" />
                 <select
@@ -306,7 +310,7 @@ const CreateVmModal: React.FC<{
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-2">Disque (Go)</label>
+              <label className="block text-sm text-gray-400 mb-2">{t('vms.diskGb')}</label>
               <div className="flex items-center gap-2">
                 <HardDrive size={16} className="text-gray-500" />
                 <select
@@ -328,14 +332,14 @@ const CreateVmModal: React.FC<{
               onClick={onClose}
               className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
             >
-              Annuler
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={!name.trim()}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              Créer la VM
+              {t('vms.createVm')}
             </button>
           </div>
         </form>
@@ -349,6 +353,7 @@ interface VmsPageProps {
 }
 
 export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
+  const { t } = useTranslation();
   const {
     vms,
     systemInfo,
@@ -434,8 +439,8 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
                   <Server size={24} className="text-purple-400" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Machines Virtuelles</h1>
-                  <p className="text-sm text-gray-500">Non disponible</p>
+                  <h1 className="text-xl font-bold text-white">{t('vms.pageTitle')}</h1>
+                  <p className="text-sm text-gray-500">{t('vms.notAvailable')}</p>
                 </div>
               </div>
             </div>
@@ -447,19 +452,19 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
             <div className="w-20 h-20 rounded-full bg-amber-500/10 flex items-center justify-center mb-6">
               <Server size={40} className="text-amber-500" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">VMs non disponibles</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{t('vms.vmsNotAvailable')}</h2>
             <p className="text-gray-500 text-center max-w-md mb-4">
-              Les machines virtuelles ne sont pas supportees sur votre modele de Freebox.
+              {t('vms.vmsNotSupportedDesc')}
             </p>
             <p className="text-sm text-gray-600 mb-6">
-              Modele detecte : <span className="text-gray-400">{getModelName()}</span>
+              {t('vms.modelDetected')} : <span className="text-gray-400">{getModelName()}</span>
             </p>
             <button
               onClick={onBack}
               className="flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
               <ChevronLeft size={20} />
-              Retour au dashboard
+              {t('vms.backToDashboard')}
             </button>
           </div>
         </main>
@@ -486,7 +491,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-white">
-                    Machines Virtuelles
+                    {t('vms.pageTitle')}
                     {hasLimitedVmSupport() && <span className="text-sm font-normal text-gray-500 ml-2">(max {getMaxVms()})</span>}
                   </h1>
                   <p className="text-sm text-gray-500">
@@ -501,7 +506,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             >
               <Plus size={18} />
-              Créer une VM
+              {t('vms.createVm')}
             </button>
           </div>
         </div>
@@ -531,13 +536,13 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
         {/* Global VM System Stats */}
         {systemInfo && (
           <div className="mb-6 p-4 bg-[#121212] rounded-xl border border-gray-800">
-            <h3 className="text-sm font-medium text-gray-400 mb-4">Ressources VM globales</h3>
+            <h3 className="text-sm font-medium text-gray-400 mb-4">{t('vms.globalResources')}</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {/* Memory */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <MemoryStick size={16} className="text-emerald-400" />
-                  <span>Mémoire</span>
+                  <span>{t('vms.memory')}</span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -554,7 +559,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Cpu size={16} className="text-blue-400" />
-                  <span>vCPUs</span>
+                  <span>{t('vms.vpus')}</span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -563,7 +568,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
                   />
                 </div>
                 <div className="text-xs text-gray-400">
-                  {systemInfo.used_cpus} / {systemInfo.total_cpus} alloués
+                  {systemInfo.used_cpus} / {systemInfo.total_cpus} {t('vms.allocated')}
                 </div>
               </div>
 
@@ -571,14 +576,14 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Power size={16} className="text-purple-400" />
-                  <span>USB Passthrough</span>
+                  <span>{t('vms.usbPassthrough')}</span>
                 </div>
                 <div className={`text-sm ${systemInfo.usb_used ? 'text-amber-400' : 'text-gray-400'}`}>
-                  {systemInfo.usb_used ? 'En cours d\'utilisation' : 'Disponible'}
+                  {systemInfo.usb_used ? t('vms.usbInUse') : t('vms.usbAvailable')}
                 </div>
                 {systemInfo.usb_ports?.length > 0 && (
                   <div className="text-xs text-gray-500">
-                    {systemInfo.usb_ports.length} port(s) USB
+                    {systemInfo.usb_ports.length} {t('vms.usbPorts')}
                   </div>
                 )}
               </div>
@@ -594,7 +599,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
                   <span className="text-sm font-normal text-gray-500 ml-1">/ {vms.length}</span>
                 </div>
                 <div className="text-xs text-gray-400">
-                  actives
+                  {t('vms.active')}
                 </div>
               </div>
             </div>
@@ -620,16 +625,16 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
         ) : !isLoading && (
           <div className="flex flex-col items-center justify-center py-16">
             <Server size={64} className="text-gray-600 mb-6" />
-            <h2 className="text-2xl font-bold text-white mb-2">Aucune VM</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{t('vms.noVms')}</h2>
             <p className="text-gray-500 text-center max-w-md mb-6">
-              Vous n'avez pas encore de machine virtuelle. Créez-en une pour commencer à virtualiser vos serveurs.
+              {t('vms.noVmsDesc')}
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             >
               <Plus size={20} />
-              Créer ma première VM
+              {t('vms.createFirst')}
             </button>
           </div>
         )}
@@ -637,10 +642,9 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
         {/* Info card */}
         {vms.length > 0 && (
           <div className="mt-8 p-6 bg-[#121212] rounded-xl border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Gestion avancée</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">{t('vms.advancedManagement')}</h3>
             <p className="text-sm text-gray-400 mb-4">
-              Pour des fonctionnalités avancées comme la console VNC, la création d'images ISO,
-              ou la configuration réseau détaillée, utilisez l'interface Freebox OS.
+              {t('vms.advancedManagementDesc')}
             </p>
             <a
               href="https://mafreebox.freebox.fr/#Fbx.os.app.vm.app"
@@ -648,7 +652,7 @@ export const VmsPage: React.FC<VmsPageProps> = ({ onBack }) => {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors"
             >
-              Ouvrir Freebox OS
+              {t('vms.openFreeboxOs')}
               <ExternalLink size={14} />
             </a>
           </div>

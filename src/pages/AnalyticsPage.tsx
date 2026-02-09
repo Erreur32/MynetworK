@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   Thermometer,
@@ -61,6 +62,7 @@ interface AnalyticsPageProps {
 }
 
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
+  const { t } = useTranslation();
   const { status, history, extendedHistory, temperatureHistory, rrdPermissionDenied, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
   const { info, temperatureHistory: systemTempHistory } = useSystemStore();
   const { networks } = useWifiStore();
@@ -338,10 +340,10 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
   };
 
   const tabs = [
-    { id: 'bandwidth' as const, label: 'Bande passante', icon: Activity },
-    { id: 'temperature' as const, label: 'Température', icon: Thermometer },
-    { id: 'wifi' as const, label: 'WiFi', icon: Wifi },
-    { id: 'system' as const, label: 'Système', icon: Server }
+    { id: 'bandwidth' as const, labelKey: 'analytics.bandwidth', icon: Activity },
+    { id: 'temperature' as const, labelKey: 'analytics.temperature', icon: Thermometer },
+    { id: 'wifi' as const, labelKey: 'analytics.wifi', icon: Wifi },
+    { id: 'system' as const, labelKey: 'analytics.system', icon: Server }
   ];
 
   return (
@@ -362,8 +364,8 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   <BarChart2 size={24} className="text-purple-400" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Analytique</h1>
-                  <p className="text-sm text-gray-500">Statistiques et graphiques détaillés</p>
+                  <h1 className="text-xl font-bold text-white">{t('analytics.pageTitle')}</h1>
+                  <p className="text-sm text-gray-500">{t('analytics.subtitle')}</p>
                 </div>
               </div>
             </div>
@@ -402,7 +404,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             }`}
           >
             <tab.icon className="w-4 h-4" />
-            <span>{tab.label}</span>
+            <span>{t(tab.labelKey)}</span>
           </button>
         ))}
       </div>
@@ -415,13 +417,12 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-orange-500 font-semibold">Permission insuffisante</h4>
+                <h4 className="text-orange-500 font-semibold">{t('analytics.permissionInsufficient')}</h4>
                 <p className="text-gray-400 text-sm mt-1">
-                  La permission <span className="text-white font-medium">"Modification des réglages de la Freebox"</span> est
-                  nécessaire pour afficher les statistiques moyennes et maximales des débits.
+                  {t('analytics.permissionMessage')}
                 </p>
                 <p className="text-gray-500 text-xs mt-2">
-                  Allez dans Freebox OS → Paramètres → Gestion des accès → Applications → Sélectionnez cette application et activez la permission.
+                  {t('analytics.permissionHint')}
                 </p>
               </div>
             </div>
@@ -432,7 +433,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Download className="w-4 h-4 text-blue-500" />
-                Débit moyen ↓
+                {t('analytics.avgRateDown')}
               </div>
               <div className="text-2xl font-bold text-white">
                 {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.avgDown * 1024)}
@@ -441,7 +442,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Upload className="w-4 h-4 text-green-500" />
-                Débit moyen ↑
+                {t('analytics.avgRateUp')}
               </div>
               <div className="text-2xl font-bold text-white">
                 {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.avgUp * 1024)}
@@ -450,7 +451,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-blue-500" />
-                Débit max ↓
+                {t('analytics.maxRateDown')}
               </div>
               <div className="text-2xl font-bold text-white">
                 {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.maxDown * 1024)}
@@ -459,7 +460,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className={`bg-[#121212] rounded-xl p-4 border border-gray-800 ${rrdPermissionDenied ? 'opacity-50' : ''}`}>
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Zap className="w-4 h-4 text-green-500" />
-                Débit max ↑
+                {t('analytics.maxRateUp')}
               </div>
               <div className="text-2xl font-bold text-white">
                 {rrdPermissionDenied ? 'N/A' : formatSpeed(bandwidthStats.maxUp * 1024)}
@@ -471,26 +472,26 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-400">Débit actuel descendant</span>
+                <span className="text-gray-400">{t('analytics.currentRateDown')}</span>
                 <Download className="w-5 h-5 text-blue-500" />
               </div>
               <div className="text-4xl font-bold text-blue-500">
                 {status ? formatSpeed(status.rate_down) : '0 bps'}
               </div>
               <div className="text-sm text-gray-500 mt-2">
-                Bande passante: {status ? formatBitrate(status.bandwidth_down) : 'N/A'}
+                {t('analytics.bandwidthLabel')}: {status ? formatBitrate(status.bandwidth_down) : 'N/A'}
               </div>
             </div>
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-gray-400">Débit actuel montant</span>
+                <span className="text-gray-400">{t('analytics.currentRateUp')}</span>
                 <Upload className="w-5 h-5 text-green-500" />
               </div>
               <div className="text-4xl font-bold text-green-500">
                 {status ? formatSpeed(status.rate_up) : '0 bps'}
               </div>
               <div className="text-sm text-gray-500 mt-2">
-                Bande passante: {status ? formatBitrate(status.bandwidth_up) : 'N/A'}
+                {t('analytics.bandwidthLabel')}: {status ? formatBitrate(status.bandwidth_up) : 'N/A'}
               </div>
             </div>
           </div>
@@ -499,12 +500,12 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">
-                {extendedHistory.length > 0 ? 'Historique bande passante' : 'Bande passante temps réel'}
+                {extendedHistory.length > 0 ? t('analytics.historyBandwidth') : t('analytics.realtimeBandwidth')}
               </h3>
               <span className="text-xs text-gray-500">
                 {extendedHistory.length > 0
-                  ? `${extendedHistory.length} points (RRD)`
-                  : `${history.length} points (live)`}
+                  ? `${extendedHistory.length} ${t('analytics.pointsRrd')}`
+                  : `${history.length} ${t('analytics.pointsLive')}`}
               </span>
             </div>
             <div className="h-80">
@@ -527,7 +528,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                       contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                       labelStyle={{ color: '#9ca3af' }}
                       formatter={((value: number, _name: string, props: { dataKey: string }) => {
-                        const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
+                        const label = props.dataKey === 'download' ? t('analytics.download') : t('analytics.upload');
                         const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
                         return [
                             <span key="value" style={{ color }}>{formatKBSpeed(value)}</span>,
@@ -543,7 +544,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                       stroke={COLORS.blue}
                       fill={COLORS.blue}
                       fillOpacity={0.3}
-                      name="Descendant"
+                      name={t('analytics.download')}
                     />
                     <Area
                       type="monotone"
@@ -552,15 +553,15 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                       stroke={COLORS.green}
                       fill={COLORS.green}
                       fillOpacity={0.3}
-                      name="Montant"
+                      name={t('analytics.upload')}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
                   <Activity className="w-12 h-12 mb-3 opacity-50" />
-                  <p className="text-sm">Collecte des données en cours...</p>
-                  <p className="text-xs mt-1">Le graphique se remplira automatiquement</p>
+                  <p className="text-sm">{t('analytics.collectingData')}</p>
+                  <p className="text-xs mt-1">{t('analytics.chartWillFill')}</p>
                 </div>
               )}
             </div>
@@ -577,14 +578,14 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Cpu className="w-4 h-4 text-orange-500" />
-                CPU {cpuSensors.length > 1 ? '(Moyenne)' : ''}
+                {t('analytics.cpu')} {cpuSensors.length > 1 ? t('analytics.cpuAverage') : ''}
               </div>
               <div className="text-2xl font-bold text-white">
                 {cpuAvgTemp != null ? `${cpuAvgTemp}°C` : 'N/A'}
               </div>
               {cpuSensors.length > 1 && (
                 <div className="text-xs text-gray-500 mt-1">
-                  {cpuSensors.length} capteurs
+                  {cpuSensors.length} {t('analytics.sensors')}
                 </div>
               )}
             </div>
@@ -593,13 +594,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Thermometer className="w-4 h-4 text-red-500" />
-                CPU Max
+                {t('analytics.cpuMax')}
               </div>
               <div className="text-2xl font-bold text-white">
                 {cpuSensors.length > 0 ? `${Math.max(...cpuSensors.map(s => s.value))}°C` : 'N/A'}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                Pic actuel
+                {t('analytics.currentPeak')}
               </div>
             </div>
 
@@ -607,14 +608,14 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Fan className="w-4 h-4 text-cyan-500" />
-                Ventilateur {fans.length > 1 ? '(Moyenne)' : ''}
+                {t('analytics.fanAverage')} {fans.length > 1 ? t('analytics.cpuAverage') : ''}
               </div>
               <div className="text-2xl font-bold text-white">
                 {fanAvgRpm != null ? `${fanAvgRpm} T/min` : 'N/A'}
               </div>
               {fans.length > 1 && (
                 <div className="text-xs text-gray-500 mt-1">
-                  {fans.length} ventilateurs
+                  {fans.length} {t('analytics.fansCount')}
                 </div>
               )}
             </div>
@@ -624,14 +625,14 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
                 <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                   <HardDrive className="w-4 h-4 text-blue-500" />
-                  Disque {hddSensors.length > 1 ? '(Moyenne)' : ''}
+                  {t('analytics.diskAverage')} {hddSensors.length > 1 ? t('analytics.cpuAverage') : ''}
                 </div>
                 <div className="text-2xl font-bold text-white">
                   {hddAvgTemp != null ? `${hddAvgTemp}°C` : 'N/A'}
                 </div>
                 {hddSensors.length > 1 && (
                   <div className="text-xs text-gray-500 mt-1">
-                    {hddSensors.length} disques
+                    {hddSensors.length} {t('analytics.disksCount')}
                   </div>
                 )}
               </div>
@@ -639,13 +640,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
                 <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                   <Thermometer className="w-4 h-4 text-purple-500" />
-                  T° Max historique
+                  {t('analytics.tempMaxHist')}
                 </div>
                 <div className="text-2xl font-bold text-white">
                   {tempStats.maxCpu > 0 ? `${tempStats.maxCpu}°C` : 'N/A'}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  Sur la période
+                  {t('analytics.overPeriod')}
                 </div>
               </div>
             )}
@@ -658,7 +659,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Cpu className="w-5 h-5 text-orange-500" />
-                  Températures CPU
+                  {t('analytics.tempCpu')}
                 </h3>
                 <div className="space-y-3">
                   {cpuSensors.map((sensor) => (
@@ -673,7 +674,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   ))}
                   <div className="pt-2 border-t border-gray-700">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-500 text-sm">Moyenne</span>
+                      <span className="text-gray-500 text-sm">{t('analytics.average')}</span>
                       <span className="text-white font-semibold">{cpuAvgTemp}°C</span>
                     </div>
                   </div>
@@ -694,7 +695,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Fan className="w-5 h-5 text-cyan-500" />
-                  Ventilateurs
+                  {t('analytics.fansTitle')}
                 </h3>
                 <div className="space-y-3">
                   {fans.map((fan) => (
@@ -706,7 +707,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   {fans.length > 1 && (
                     <div className="pt-2 border-t border-gray-700">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Moyenne</span>
+                        <span className="text-gray-500 text-sm">{t('analytics.average')}</span>
                         <span className="text-white font-semibold">{fanAvgRpm} T/min</span>
                       </div>
                     </div>
@@ -724,7 +725,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <HardDrive className="w-5 h-5 text-blue-500" />
-                  Températures Disques
+                  {t('analytics.tempDisks')}
                 </h3>
                 <div className="space-y-3">
                   {hddSensors.map((sensor) => (
@@ -740,7 +741,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   {hddSensors.length > 1 && (
                     <div className="pt-2 border-t border-gray-700">
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-500 text-sm">Moyenne</span>
+                        <span className="text-gray-500 text-sm">{t('analytics.average')}</span>
                         <span className="text-white font-semibold">{hddAvgTemp}°C</span>
                       </div>
                     </div>
@@ -760,7 +761,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Thermometer className="w-5 h-5 text-purple-500" />
-                  Autres capteurs
+                  {t('analytics.otherSensors')}
                 </h3>
                 <div className="space-y-3">
                   {otherSensors.map((sensor) => (
@@ -776,7 +777,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
 
           {/* Temperature Chart */}
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Historique température</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.tempHistory')}</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={temperatureHistory.length ? temperatureHistory : systemTempHistory}>
@@ -822,7 +823,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Wifi className="w-5 h-5 text-blue-500" />
-              Appareils par bande WiFi
+              {t('analytics.devicesByBandWifi')}
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {/* Always show 2.4GHz (all models support it) */}
@@ -834,7 +835,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 <div className="text-3xl font-bold text-white">
                   {networks.find(n => n.band === '2.4GHz')?.connectedDevices || 0}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">appareils</div>
+                <div className="text-xs text-gray-500 mt-1">{t('analytics.devicesCount')}</div>
               </div>
 
               <div className="bg-[#0a0a0a] rounded-lg p-4 border border-gray-700">
@@ -845,7 +846,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                 <div className="text-3xl font-bold text-white">
                   {networks.find(n => n.band === '5GHz')?.connectedDevices || 0}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">appareils</div>
+                <div className="text-xs text-gray-500 mt-1">{t('analytics.devicesCount')}</div>
               </div>
 
               {/* Show 6GHz only if supported (Ultra v9, Delta v7) */}
@@ -858,7 +859,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   <div className="text-3xl font-bold text-white">
                     {networks.find(n => n.band === '6GHz')?.connectedDevices || 0}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">appareils</div>
+                  <div className="text-xs text-gray-500 mt-1">{t('analytics.devicesCount')}</div>
                 </div>
               )}
             </div>
@@ -889,24 +890,24 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                   <div className={`px-2 py-1 rounded text-xs ${
                     network.active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
                   }`}>
-                    {network.active ? 'Actif' : 'Inactif'}
+                    {network.active ? t('analytics.active') : t('analytics.inactive')}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Canal</span>
+                    <span className="text-gray-500">{t('analytics.channel')}</span>
                     <div className="text-white font-medium">{network.channel || 'Auto'}</div>
                   </div>
                   <div>
-                    <span className="text-gray-500">Largeur</span>
+                    <span className="text-gray-500">{t('analytics.width')}</span>
                     <div className="text-white font-medium">{network.channelWidth} MHz</div>
                   </div>
                   <div>
-                    <span className="text-gray-500">Appareils</span>
+                    <span className="text-gray-500">{t('analytics.devices')}</span>
                     <div className="text-white font-medium">{network.connectedDevices}</div>
                   </div>
                   <div>
-                    <span className="text-gray-500">Charge</span>
+                    <span className="text-gray-500">{t('analytics.load')}</span>
                     <div className="text-white font-medium">{network.load || 0}%</div>
                   </div>
                 </div>
@@ -917,7 +918,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           {/* WiFi Distribution Chart */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">Appareils par bande</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.devicesByBand')}</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -943,7 +944,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
               </div>
             </div>
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">Types d'appareils</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.deviceTypes')}</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={deviceDistribution.slice(0, 6)} layout="vertical">
@@ -976,7 +977,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Server className="w-4 h-4 text-blue-500" />
-                Modèle
+                {t('analytics.model')}
               </div>
               <div className="text-lg font-bold text-white truncate">
                 {info?.board_name || 'Freebox'}
@@ -985,7 +986,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <HardDrive className="w-4 h-4 text-green-500" />
-                Firmware
+                {t('analytics.firmware')}
               </div>
               <div className="text-lg font-bold text-white">
                 {info?.firmware_version || 'N/A'}
@@ -994,7 +995,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Clock className="w-4 h-4 text-cyan-500" />
-                Uptime
+                {t('analytics.uptimeLabel')}
               </div>
               <div className="text-lg font-bold text-white">
                 {info?.uptime || 'N/A'}
@@ -1003,7 +1004,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             <div className="bg-[#121212] rounded-xl p-4 border border-gray-800">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Activity className="w-4 h-4 text-orange-500" />
-                Disponibilité
+                {t('analytics.uptime')}
               </div>
               <div className="text-lg font-bold text-white">
                 {uptimePercentage}%
@@ -1014,41 +1015,41 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           {/* System Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">Informations système</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.systemInfo')}</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Numéro de série</span>
+                  <span className="text-gray-500">{t('analytics.serialNumber')}</span>
                   <span className="text-white font-mono">{info?.serial || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Adresse MAC</span>
+                  <span className="text-gray-500">{t('analytics.macAddress')}</span>
                   <span className="text-white font-mono">{info?.mac || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Disques</span>
+                  <span className="text-gray-500">{t('analytics.disks')}</span>
                   <span className="text-white">{info?.disk_status || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Authentifié</span>
+                  <span className="text-gray-500">{t('analytics.authenticated')}</span>
                   <span className={info?.box_authenticated ? 'text-green-500' : 'text-red-500'}>
-                    {info?.box_authenticated ? 'Oui' : 'Non'}
+                    {info?.box_authenticated ? t('analytics.yes') : t('analytics.no')}
                   </span>
                 </div>
               </div>
             </div>
             <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-              <h3 className="text-lg font-semibold text-white mb-4">État du réseau</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.networkState')}</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">État connexion</span>
+                  <span className="text-gray-500">{t('analytics.connectionState')}</span>
                   <span className={`font-semibold ${
                     status?.state === 'up' ? 'text-green-500' : 'text-red-500'
                   }`}>
-                    {status?.state === 'up' ? 'Connecté' : status?.state || 'N/A'}
+                    {status?.state === 'up' ? t('analytics.connected') : status?.state || 'N/A'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Type</span>
+                  <span className="text-gray-500">{t('analytics.type')}</span>
                   <span className="text-white">{status?.type || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
@@ -1067,7 +1068,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
 
           {/* Uptime Chart */}
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Historique disponibilité (30 jours)</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.uptimeHistory')}</h3>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={uptimeData}>
@@ -1092,7 +1093,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                     }}
                     labelStyle={{ color: '#9ca3af' }}
                     itemStyle={{ color: '#ffffff' }}
-                    formatter={(value: number) => [`${value}%`, 'Disponibilité']}
+                    formatter={(value: number) => [`${value}%`, t('analytics.uptime')]}
                   />
                   <Bar
                     dataKey="uptime"
@@ -1112,29 +1113,29 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
 
           {/* Connected Devices Summary */}
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Appareils connectés</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.connectedDevices')}</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-[#1a1a1a] rounded-lg">
                 <div className="text-3xl font-bold text-white">{devices.length}</div>
-                <div className="text-sm text-gray-500">Total</div>
+                <div className="text-sm text-gray-500">{t('analytics.total')}</div>
               </div>
               <div className="text-center p-4 bg-[#1a1a1a] rounded-lg">
                 <div className="text-3xl font-bold text-green-500">
                   {devices.filter(d => d.active).length}
                 </div>
-                <div className="text-sm text-gray-500">En ligne</div>
+                <div className="text-sm text-gray-500">{t('analytics.online')}</div>
               </div>
               <div className="text-center p-4 bg-[#1a1a1a] rounded-lg">
                 <div className="text-3xl font-bold text-gray-500">
                   {devices.filter(d => !d.active).length}
                 </div>
-                <div className="text-sm text-gray-500">Hors ligne</div>
+                <div className="text-sm text-gray-500">{t('analytics.offline')}</div>
               </div>
               <div className="text-center p-4 bg-[#1a1a1a] rounded-lg">
                 <div className="text-3xl font-bold text-blue-500">
                   {networks.reduce((sum, n) => sum + n.connectedDevices, 0)}
                 </div>
-                <div className="text-sm text-gray-500">WiFi</div>
+                <div className="text-sm text-gray-500">{t('analytics.wifiLabel')}</div>
               </div>
             </div>
           </div>

@@ -1,0 +1,14 @@
+{
+  "freebox": {
+    "page": {
+      "options": "Options",
+      "seeMore": "Voir plus",
+      "speedTestApiMessage": "L'API Freebox ne permet pas de lancer des tests de débit via l'API. Utilisez l'interface Freebox OS pour effectuer un test.",
+      "period30d": "30J",
+      "period7d": "7J",
+      "period24h": "24H",
+      "wifi": "Wifi",
+      "local": "Local"
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { usePluginStore } from '../stores/pluginStore';
 import { SearchOptionsInfoModal } from '../components/modals/SearchOptionsInfoModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 import { SearchHistoryModal, type SearchHistoryEntry } from '../components/modals/SearchHistoryModal';
+import { useTranslation } from 'react-i18next';
 import logoFreebox from '../icons/logo_ultra.svg';
 import logoUnifi from '../icons/logo_unifi.svg';
 
@@ -180,6 +181,7 @@ interface SearchPageProps {
 }
 
 export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
+    const { t } = useTranslation();
     const { plugins } = usePluginStore();
     
     // Wrapper for onBack that cleans up URL parameter 's' before navigating away
@@ -489,7 +491,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const pingIp = async (target: string, forceExternal: boolean = false): Promise<{ success: boolean; time?: number; error?: string }> => {
         // Check if target is valid
         if (!isValidIpOrDomain(target)) {
-            return { success: false, error: 'Adresse IP ou domaine invalide' };
+            return { success: false, error: t('search.invalidIpOrDomain') };
         }
 
         // For automatic ping, only ping local IPs (for security)
@@ -497,7 +499,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         const isLocal = isLocalIPv4(target);
         if (!isLocal && !forceExternal) {
             // In automatic ping mode, skip external IPs for security
-            return { success: false, error: 'Ping exterieur ignoré en mode automatique. Utilisez le bouton "Ping direct" pour pinger des IP externes.' };
+            return { success: false, error: t('search.pingExternalIgnored') };
         }
 
         try {
@@ -508,13 +510,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 const latency = Math.round(response.result.latency);
                 return { success: true, time: latency > 0 ? latency : 1 };
             } else {
-                return { success: false, error: 'Ping échoué' };
+                return { success: false, error: t('search.pingFailed') };
             }
         } catch (err: any) {
             // Handle socket errors gracefully
-            const errorMessage = err.message || 'Erreur lors du ping';
+            const errorMessage = err.message || t('search.pingError');
             if (errorMessage.includes('socket') || errorMessage.includes('ended') || errorMessage.includes('ECONNRESET')) {
-                return { success: false, error: 'Connexion interrompue' };
+                return { success: false, error: t('search.connectionInterrupted') };
             }
             return { success: false, error: errorMessage };
         }
@@ -534,7 +536,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             const result = await pingIp(target, !isLocal);
             setPingResults(prev => ({ ...prev, [target]: result }));
         } catch (err) {
-            setPingResults(prev => ({ ...prev, [target]: { success: false, error: 'Erreur' } }));
+            setPingResults(prev => ({ ...prev, [target]: { success: false, error: t('common.error') } }));
         } finally {
             setPingingIps(prev => {
                 const newSet = new Set(prev);
@@ -570,11 +572,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     }
                 }
             } else {
-                alert(response.error?.message || 'Erreur lors du rescan');
+                alert(response.error?.message || t('search.rescanError'));
             }
         } catch (error: any) {
             console.error('Rescan failed:', error);
-            alert('Erreur lors du rescan: ' + (error.message || 'Erreur inconnue'));
+            alert(t('search.rescanError') + ': ' + (error.message || t('networkScan.errors.unknown')));
         } finally {
             setRescanningIp(null);
         }
@@ -607,7 +609,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 setPingResults(prev => ({ ...prev, [ip]: result }));
             } catch (err) {
                 // Handle errors silently for individual pings
-                setPingResults(prev => ({ ...prev, [ip]: { success: false, error: 'Erreur' } }));
+                setPingResults(prev => ({ ...prev, [ip]: { success: false, error: t('common.error') } }));
             }
 
             // Remove from pinging set once done
@@ -739,7 +741,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         const result = await pingIp(ip, true);
                         setPingResults(prev => ({ ...prev, [ip]: result }));
                     } catch (err) {
-                        setPingResults(prev => ({ ...prev, [ip]: { success: false, error: 'Erreur' } }));
+                        setPingResults(prev => ({ ...prev, [ip]: { success: false, error: t('common.error') } }));
                     }
                     // Small delay between pings
                     await new Promise(resolve => setTimeout(resolve, 200));
@@ -829,7 +831,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             setResults(response.result.results);
                             addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
                         } else {
-                            const errorMsg = response.error?.message || 'Erreur lors de la recherche';
+                            const errorMsg = response.error?.message || t('search.searchError');
                             setError(errorMsg);
                             setResults([]);
                         }
@@ -846,7 +848,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         setResults(response.result.results);
                         addToSearchHistory(trimmedQuery, { caseSensitive: useCase, showOnlyActive: useActive });
                     } else {
-                        const errorMsg = response.error?.message || 'Erreur lors de la recherche';
+                        const errorMsg = response.error?.message || t('search.searchError');
                         setError(errorMsg);
                         setResults([]);
                     }
@@ -865,22 +867,22 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         pingAllResults(response.result.results);
                     }
                 } else {
-                    const errorMsg = response.error?.message || 'Erreur lors de la recherche';
+                    const errorMsg = response.error?.message || t('search.searchError');
                     setError(errorMsg);
                     setResults([]);
                 }
             }
         } catch (err: any) {
             // Handle network/socket errors
-            let errorMessage = 'Erreur lors de la recherche';
+            let errorMessage = t('search.searchError');
             
             if (err.message) {
                 if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-                    errorMessage = 'Connexion interrompue. Veuillez réessayer.';
+                    errorMessage = t('search.searchInterrupted');
                 } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-                    errorMessage = 'La recherche a expiré. Veuillez réessayer.';
+                    errorMessage = t('search.searchTimeout');
                 } else if (err.message.includes('aborted') || err.message.includes('ABORTED')) {
-                    errorMessage = 'Recherche annulée.';
+                    errorMessage = t('search.searchCancelled');
                 } else {
                     errorMessage = err.message;
                 }
@@ -1173,12 +1175,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         }
                                                     }
                                                 }}
-                                                placeholder="IP, MAC, 192.168.32.*, 192.168.32.1-32, ou texte (hostname, vendor…)"
+                                                placeholder={t('search.placeholder')}
                                                 className="w-full pl-11 pr-3 py-2.5 text-sm bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-tertiary focus:outline-none transition-all"
                                             />
                                         </div>
                                         <p className="text-[10px] text-theme-tertiary mt-1 ml-1">
-                                            * = plusieurs IP/MAC ; 1-32 = plage. Sinon recherche dans hostname, vendor, commentaire.
+                                            {t('search.placeholderHint')}
                                         </p>
                                     </div>
                                     {!pingEnabled && (
@@ -1190,12 +1192,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         {isLoading ? (
                                             <>
                                                 <Loader2 size={16} className="animate-spin" />
-                                                Recherche...
+                                                {t('search.searchInProgress')}
                                             </>
                                         ) : (
                                             <>
                                                 <Search size={16} />
-                                                Rechercher
+                                                {t('search.searchButton')}
                                             </>
                                         )}
                                     </button>
@@ -1211,17 +1213,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                     ? 'bg-theme-tertiary text-theme-secondary cursor-not-allowed'
                                                     : 'bg-cyan-500 text-white hover:bg-cyan-600 shadow-lg shadow-cyan-500/20'
                                             }`}
-                                            title={`Pinger directement ${searchQuery.trim()} (sans recherche dans les résultats)`}
+                                            title={t('search.pingDirectTitle', { ip: searchQuery.trim() })}
                                         >
                                             {pingingIps.has(searchQuery.trim()) ? (
                                                 <>
                                                     <Loader2 size={18} className="animate-spin" />
-                                                    Ping...
+                                                    {t('search.pingInProgress')}
                                                 </>
                                             ) : (
                                                 <>
                                                     <Network size={18} />
-                                                    Ping direct
+                                                    {t('search.pingDirect')}
                                                 </>
                                             )}
                                         </button>
@@ -1231,7 +1233,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <div className="flex flex-wrap items-center gap-2 justify-between">
                                     {topSearchTerms.length > 0 && (
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs text-theme-tertiary">Recherches fréquentes :</span>
+                                            <span className="text-xs text-theme-tertiary">{t('common.frequentSearches')}</span>
                                             {topSearchTerms.map((term) => (
                                                 <button
                                                     key={term}
@@ -1250,10 +1252,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                     <button
                                         onClick={() => setShowHistoryModal(true)}
                                         className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-amber-400/90 hover:text-amber-400 flex items-center gap-1.5"
-                                        title="Historique des recherches"
+                                        title={t('search.historyTitle')}
                                     >
                                         <History size={18} />
-                                        <span className="text-sm">Historique</span>
+                                        <span className="text-sm">{t('search.history')}</span>
                                     </button>
                                 </div>
                                 {/* Display ping result for search query if it's an IP/domain */}
@@ -1268,7 +1270,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <>
                                                     <CheckCircle size={24} className="text-emerald-400" />
                                                     <div>
-                                                        <div className="text-2xl font-bold text-emerald-400">UP</div>
+                                                        <div className="text-2xl font-bold text-emerald-400">{t('search.up')}</div>
                                                         <div className="text-xs text-theme-tertiary mt-0.5">{searchQuery.trim()}</div>
                                                     </div>
                                                 </>
@@ -1276,7 +1278,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <>
                                                     <X size={24} className="text-red-400" />
                                                     <div className="flex-1">
-                                                        <div className="text-2xl font-bold text-red-400">DOWN</div>
+                                                        <div className="text-2xl font-bold text-red-400">{t('search.down')}</div>
                                                         <div className="text-xs text-theme-tertiary mt-0.5">{searchQuery.trim()}</div>
                                                         {pingResults[searchQuery.trim()].error && (
                                                             <div className="text-xs text-red-400/80 mt-1">{pingResults[searchQuery.trim()].error}</div>
@@ -1295,13 +1297,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     {/* Right column: Search options and filters */}
                     <div className="flex">
                         <Card 
-                            title="Filtres"
+                            title={t('search.filters')}
                             className="!p-3 sm:!p-4 flex-1"
                             actions={
                                 <button
                                     onClick={() => setShowOptionsInfoModal(true)}
                                     className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors text-cyan-400/90 hover:text-cyan-400"
-                                    title="Aide sur les options de recherche"
+                                    title={t('search.optionsHelpTitle')}
                                 >
                                     <Info size={18} />
                                 </button>
@@ -1332,7 +1334,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         showOnlyActive ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>IP Actif</span>
+                                <span>{t('search.activeIp')}</span>
                                 <CheckCircle size={12} className={showOnlyActive ? 'text-emerald-400' : 'text-theme-tertiary'} />
                             </button>
                             {false && (
@@ -1382,7 +1384,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         caseSensitive ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Case sensitive </span>
+                                <span>{t('search.caseSensitive')} </span>
                             </button>
                             
                             <button
@@ -1420,7 +1422,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         pingEnabled ? 'translate-x-5' : 'translate-x-0'
                                     }`} />
                                 </div>
-                                <span>Ping</span>
+                                <span>{t('search.ping')}</span>
                             </button>
                         </div>
 
@@ -1430,13 +1432,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <div className="flex items-start gap-2">
                                     <Info size={16} className="text-cyan-400 mt-0.5 flex-shrink-0" />
                                     <div className="flex-1 text-xs text-theme-secondary">
-                                        <p className="font-medium text-cyan-400 mb-1">Mode Ping activé</p>
+                                        <p className="font-medium text-cyan-400 mb-1">{t('search.pingModeActive')}</p>
                                         <div className="space-y-1">
-                                            <p>• Ping de ranges d'IP autorisé</p>
-                                            <p>• Formats supportés :</p>
-                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.0/24 (notation CIDR)</p>
-                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-254 (plage simple)</p>
-                                            <p className="ml-2 text-cyan-400 font-mono">• 192.168.1.1-192.168.1.254 (plage complète)</p>
+                                            <p>• {t('search.pingRangeAllowed')}</p>
+                                            <p>• {t('search.formatsSupported')}</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• {t('search.cidrExample')}</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• {t('search.rangeExampleShort')}</p>
+                                            <p className="ml-2 text-cyan-400 font-mono">• {t('search.rangeExampleFull')}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1453,7 +1455,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     <Card title="">
                         <div className="flex items-center justify-center py-12">
                             <Loader2 size={32} className="animate-spin text-accent-primary" />
-                            <span className="ml-3 text-theme-secondary">Recherche en cours...</span>
+                            <span className="ml-3 text-theme-secondary">{t('search.searchInProgress')}</span>
                         </div>
                     </Card>
                 ) : error ? (
@@ -1468,13 +1470,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                         <div className="flex items-center justify-center py-12 text-theme-secondary">
                             <AlertCircle size={24} className="mr-2" />
                             <div className="text-center space-y-2">
-                                <span className="block">Aucun résultat trouvé pour "{searchQuery}"</span>
+                                <span className="block">{t('search.noResultFor', { query: searchQuery })}</span>
                                 <span className="block text-sm text-theme-tertiary">
-                                    La recherche fonctionne uniquement dans les données locales des plugins (appareils, clients, DHCP, etc.)
+                                    {t('search.searchOnlyLocal')}
                                 </span>
                                 {isValidIpOrDomain(searchQuery) && !isLocalIPv4(searchQuery) && (
                                     <span className="block text-sm text-cyan-400 mt-2">
-                                        💡 Astuce : Utilisez le bouton de ping pour tester la connectivité de "{searchQuery}"
+                                        💡 {t('search.tipUsePing', { ip: searchQuery })}
                                     </span>
                                 )}
                             </div>
@@ -1483,7 +1485,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                 ) : filteredResults.length === 0 && hasSearched && !isLoading ? (
                     <Card title="">
                         <div className="flex items-center justify-center py-12 text-theme-secondary">
-                            <span>Aucun résultat ne correspond aux filtres sélectionnés</span>
+                            <span>{t('search.noResultFilters')}</span>
                         </div>
                     </Card>
                 ) : isExactIpSearch && ipDetails ? (
@@ -1511,12 +1513,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 {ipDetails.scanner.status === 'online' ? (
                                                     <>
                                                         <CheckCircle size={14} />
-                                                        En ligne
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <AlertCircle size={14} />
-                                                        Hors ligne
+{t('search.online')}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <AlertCircle size={14} />
+                                                    {t('search.offline')}
                                                     </>
                                                 )}
                                             </span>
@@ -2257,10 +2259,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     </Card>
                 ) : (
                     <Card 
-                        title={`Résultats (${filteredResults.length})`}
+                        title={t('search.resultsCount', { count: filteredResults.length })}
                         actions={
                             <div className="flex items-center gap-2 text-sm text-theme-secondary">
-                                <span>Page {currentPage} sur {totalPages}</span>
+                                <span>{t('search.pageOf', { current: currentPage, total: totalPages })}</span>
                             </div>
                         }
                     >
@@ -2274,7 +2276,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 onClick={() => handleSort('plugin')}
                                                 className="flex items-center gap-1.5 hover:text-accent-primary transition-colors group"
                                             >
-                                                <span>Plugin</span>
+                                                <span>{t('search.plugin')}</span>
                                                 <ArrowUpDown size={14} className={sortField === 'plugin' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
@@ -2292,11 +2294,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 onClick={() => handleSort('name')}
                                                 className="flex items-center gap-1.5 hover:text-accent-primary transition-colors group"
                                             >
-                                                <span>Nom</span>
+                                                <span>{t('search.name')}</span>
                                                 <ArrowUpDown size={14} className={sortField === 'name' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
-                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">AP / Switch</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">{t('search.apSwitch')}</th>
                                         <th className="text-left py-3 px-4 font-semibold text-theme-primary">
                                             <button
                                                 onClick={() => handleSort('mac')}
@@ -2306,10 +2308,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 <ArrowUpDown size={14} className={sortField === 'mac' ? 'text-accent-primary' : 'text-theme-tertiary group-hover:text-theme-secondary'} />
                                             </button>
                                         </th>
-                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">Ports</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">Statut</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">Dernière vue</th>
-                                        <th className="text-right py-3 px-4 font-semibold text-theme-primary">Actions</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">{t('search.ports')}</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">{t('search.status')}</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-theme-primary">{t('search.lastSeen')}</th>
+                                        <th className="text-right py-3 px-4 font-semibold text-theme-primary">{t('search.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2375,7 +2377,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                                 }}
                                                                 className={`text-left font-mono hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${result.active === false ? 'text-gray-500' : ''}`}
                                                                 style={result.active !== false ? { color: 'rgb(152, 181, 238)' } : undefined}
-                                                                title={`Rechercher ${result.ip} dans la page de recherche`}
+                                                                title={t('search.searchInPage', { ip: result.ip })}
                                                             >
                                                                 <span>{result.ip}</span>
                                                                 <Link2 size={9} className="opacity-50 relative top-[-2px]" />

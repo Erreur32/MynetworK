@@ -113,10 +113,10 @@ export const SystemServerWidget: React.FC = () => {
             if (response.success && response.result) {
                 setSystemInfo(response.result);
             } else {
-                setError('Failed to fetch system info');
+                setError(t('system.fetchError'));
             }
         } catch (err) {
-            setError('Error fetching system info');
+            setError(t('system.fetchErrorShort'));
             console.error('System info error:', err);
         } finally {
             setIsLoading(false);
@@ -215,7 +215,7 @@ export const SystemServerWidget: React.FC = () => {
                             <Cpu size={16} /> CPU
                         </span>
                         <span className="text-white">
-                            {systemInfo.cpu.cores} cores
+                            {systemInfo.cpu.cores} {t('system.cores')}
                         </span>
                     </div>
                     <div className="w-full bg-[#1a1a1a] rounded-full h-2">
@@ -247,7 +247,7 @@ export const SystemServerWidget: React.FC = () => {
                         />
                     </div>
                     <div className="flex justify-between text-xs text-gray-500">
-                        <span>Libre: {formatBytes(systemInfo.memory.free)}</span>
+                        <span>{t('system.free')} {formatBytes(systemInfo.memory.free)}</span>
                         <span>{(systemInfo.memory.percentage ?? 0).toFixed(1)}%</span>
                     </div>
                 </div>
@@ -259,7 +259,7 @@ export const SystemServerWidget: React.FC = () => {
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-purple-400">
                                 <Database size={14} />
-                                <span className="font-semibold text-sm">Base de Données</span>
+                                <span className="font-semibold text-sm">{t('system.database')}</span>
                             </div>
                             <div className="text-xs text-purple-300">
                                 {dbStats.journalMode}
@@ -267,19 +267,19 @@ export const SystemServerWidget: React.FC = () => {
                         </div>
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-400">Taille</span>
+                                <span className="text-gray-400">{t('system.size')}</span>
                                 <span className="text-gray-300 font-medium">
                                     {formatBytes(dbStats.dbSize)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-400">Cache</span>
+                                <span className="text-gray-400">{t('system.cache')}</span>
                                 <span className="text-gray-300">
                                     {formatBytes(Math.abs(dbStats.cacheSize) * 1024)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-400">Mode</span>
+                                <span className="text-gray-400">{t('system.mode')}</span>
                                 <span className="text-gray-300">
                                     {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
                                 </span>
@@ -291,14 +291,13 @@ export const SystemServerWidget: React.FC = () => {
                 {/* System Info */}
                 <div className="pt-4 border-t border-gray-700 space-y-2 text-xs">
                     <div className="flex justify-between">
-                        <span className="text-gray-500">Hostname</span>
+                        <span className="text-gray-500">{t('system.hostname')}</span>
                         <span className="text-gray-300">{systemInfo.hostname}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-gray-500">Platform</span>
+                        <span className="text-gray-500">{t('system.platform')}</span>
                         <span className="text-gray-300">{systemInfo.platform} ({systemInfo.arch})</span>
                     </div>
-                    {/* Show Node.js version only in development mode */}
                     {import.meta.env.DEV && (
                         <div className="flex justify-between">
                             <span className="text-gray-500">Node.js</span>
@@ -312,7 +311,7 @@ export const SystemServerWidget: React.FC = () => {
                     <div className="pt-4 border-t border-gray-700 space-y-4">
                         <div className="flex items-center gap-2 text-sm text-gray-400">
                             <Activity size={16} />
-                            <span>Trafic Réseau</span>
+                            <span>{t('system.networkTraffic')}</span>
                         </div>
                         <div className="flex flex-col gap-3">
                             <BarChart
@@ -348,7 +347,7 @@ export const SystemServerWidget: React.FC = () => {
                 {/* Uptime en pied de carte (même format que les autres cartes) */}
                 {systemInfo.uptime && (
                     <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
-                        <span>Uptime</span>
+                        <span>{t('system.uptime')}</span>
                         <span className="text-gray-300 font-medium">
                             {(() => {
                                 const uptimeSeconds = systemInfo.uptime;

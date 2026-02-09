@@ -783,12 +783,12 @@ const App: React.FC = () => {
                 actions={
                   <div className="flex items-center gap-2">
                     <ActionButton
-                      label="Options"
+                      label={t('freebox.page.options')}
                       icon={Settings}
                       onClick={handleFreeboxOptionsClick}
                     />
                     <ActionButton
-                      label="Voir plus"
+                      label={t('freebox.page.seeMore')}
                       icon={MoreHorizontal}
                       onClick={() => setIsTrafficModalOpen(true)}
                     />
@@ -834,18 +834,17 @@ const App: React.FC = () => {
                 uploadHistory={[]}
               />
               <p className="text-xs text-gray-500 mt-2 text-center">
-                L'API Freebox ne permet pas de lancer des tests de débit via l'API.
-                Utilisez l'interface Freebox OS pour effectuer un test.
+                {t('freebox.page.speedTestApiMessage')}
               </p>
               </Card>
             )}
 
             {isFreeboxLoggedIn && systemInfo && (
               <Card
-                title="Uptime"
+                title={t('system.uptime')}
                 actions={
                   <button className="text-xs bg-[#1a1a1a] border border-gray-700 px-2 py-1 rounded flex items-center gap-1 text-gray-400">
-                    <Calendar size={12} /> <span>30J</span>
+                    <Calendar size={12} /> <span>{t('freebox.page.period30d')}</span>
                   </button>
                 }
               >
@@ -865,7 +864,7 @@ const App: React.FC = () => {
           {/* Column 2 - WiFi & Local */}
           <div className="flex flex-col gap-6">
             <Card
-              title="Wifi"
+              title={t('freebox.page.wifi')}
               actions={
                 <div className="flex flex-wrap gap-1 sm:gap-2">
                   <ActionButton label={t('dashboard.filter')} icon={Sliders} onClick={() => { setWifiModalTab('filter'); setIsWifiModalOpen(true); }} />
@@ -886,7 +885,7 @@ const App: React.FC = () => {
             </Card>
 
             <Card
-              title="Local"
+              title={t('freebox.page.local')}
               actions={
                 <div className="flex gap-2">
                   <button
@@ -1076,7 +1075,7 @@ const App: React.FC = () => {
                     }`}
                   >
                     <Clock size={12} />
-                    {historyPeriod === '30d' ? '30J' : historyPeriod === '7d' ? '7J' : '24H'}
+                    {historyPeriod === '30d' ? t('freebox.page.period30d') : historyPeriod === '7d' ? t('freebox.page.period7d') : t('freebox.page.period24h')}
                   </button>
                 </div>
               }

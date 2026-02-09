@@ -1,0 +1,9 @@
+{
+  "settings": {
+    "openFreebox": "Open Freebox settings",
+    "interfaceLanguage": "Interface language",
+    "interfaceLanguageDescription": "Display language of the application",
+    "languageEn": "English",
+    "languageFr": "French"
+  }
+}

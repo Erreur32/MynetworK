@@ -127,10 +127,10 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
 
   const roleLabel =
     data.role === 'freebox'
-      ? 'Freebox'
+      ? t('network.roleFreebox')
       : data.role === 'unifi_via_dmz'
-        ? 'UniFi (via DMZ Freebox)'
-        : 'UniFi (Cloud Gateway)';
+        ? t('network.roleUnifiDmz')
+        : t('network.roleUnifiCloud');
 
   return (
     <Card title={t('network.summary')}>
@@ -154,24 +154,24 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           <>
             <div className="pt-2 border-t border-gray-800" />
             <div className="flex justify-between items-center">
-              <span className="text-gray-400 text-sm">Freebox:</span>
+              <span className="text-gray-400 text-sm">{t('network.freeboxLabel')}</span>
               <span className="text-blue-400 font-mono text-sm">{data.freebox.ip || 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400 text-sm">Mode:</span>
+              <span className="text-gray-400 text-sm">{t('network.modeLabel')}</span>
               <span className="text-gray-300 text-sm">
-                {data.freebox.mode === 'bridge' ? 'Bridge' : 'Routeur'}
+                {data.freebox.mode === 'bridge' ? t('network.bridge') : t('network.router')}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400 text-sm">DMZ:</span>
+              <span className="text-gray-400 text-sm">{t('network.dmz')}:</span>
               <span className="text-sm">
                 {data.freebox.dmz?.enabled ? (
                   <span className="text-amber-400" title={`DMZ → ${data.freebox.dmz.ip || ''}`}>
-                    Actif → {data.freebox.dmz.ip || '?'}
+                    {t('network.dmzActive')} {data.freebox.dmz.ip || '?'}
                   </span>
                 ) : (
-                  <span className="text-gray-500">Inactif</span>
+                  <span className="text-gray-500">{t('network.inactive')}</span>
                 )}
               </span>
             </div>
@@ -183,12 +183,12 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           <>
             <div className="pt-2 border-t border-gray-800" />
             <div className="flex justify-between items-center">
-              <span className="text-gray-400 text-sm">UniFi Gateway:</span>
+              <span className="text-gray-400 text-sm">{t('network.unifiGateway')}</span>
               <span className="text-indigo-400 font-mono text-sm">{data.unifi.gatewayIp}</span>
             </div>
             {data.unifi.gatewayName && data.unifi.gatewayName !== data.unifi.gatewayIp && (
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Nom:</span>
+                <span className="text-gray-400 text-sm">{t('network.nameLabel')}</span>
                 <span className="text-gray-300 text-sm">{data.unifi.gatewayName}</span>
               </div>
             )}
@@ -197,7 +197,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
 
         {/* DHCP servers - Detailed section */}
         <div className="pt-2 border-t border-gray-800" />
-        <div className="text-gray-400 text-xs font-semibold mb-1">DHCP</div>
+        <div className="text-gray-400 text-xs font-semibold mb-1">{t('network.dhcpLabel')}</div>
         {data.dhcpServers.map((entry) => (
           <div key={entry.source} className="flex justify-between items-center">
             <span className="text-gray-400 text-sm capitalize">{entry.source}:</span>
@@ -205,7 +205,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
               className={`text-sm font-medium ${entry.active ? 'text-green-400' : 'text-gray-500'}`}
               title={entry.detail}
             >
-              {entry.active ? 'Actif' : 'Inactif'}
+              {entry.active ? t('network.active') : t('network.inactive')}
               {entry.detail && entry.detail !== 'Actif' && entry.detail !== 'Inactif' && (
                 <span className="text-gray-500 font-normal ml-1">({entry.detail})</span>
               )}
@@ -217,26 +217,26 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
         {data.unifi?.gatewayIp && data.unifi?.dhcpEnabled && (
           <>
             <div className="pt-2 border-t border-gray-800 space-y-2">
-              <div className="text-gray-400 text-xs font-semibold mb-2">DHCP UniFi</div>
+              <div className="text-gray-400 text-xs font-semibold mb-2">{t('network.dhcpUnifi')}</div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Statut:</span>
-                <span className="text-green-400 font-medium text-sm">Actif</span>
+                <span className="text-gray-400 text-sm">{t('network.statusLabel')}</span>
+                <span className="text-green-400 font-medium text-sm">{t('network.active')}</span>
               </div>
               {data.unifi.clientsCount != null && (
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Clients connectés:</span>
+                  <span className="text-gray-400 text-sm">{t('network.clientsConnected')}</span>
                   <span className="text-orange-400 font-mono text-sm font-semibold">{data.unifi.clientsCount}</span>
                 </div>
               )}
               {data.unifi.dhcpRange && (
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Plage IP:</span>
+                  <span className="text-gray-400 text-sm">{t('network.ipRange')}</span>
                   <span className="text-gray-300 font-mono text-sm">{data.unifi.dhcpRange}</span>
                 </div>
               )}
               {data.unifi.gatewayIp && (
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Gateway:</span>
+                  <span className="text-gray-400 text-sm">{t('network.gateway')}</span>
                   <span className="text-indigo-400 font-mono text-sm">{data.unifi.gatewayIp}</span>
                 </div>
               )}
@@ -248,7 +248,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
         {data.freebox?.natRules && data.freebox.natRules.length > 0 && (
           <>
             <div className="pt-2 border-t border-gray-800" />
-            <div className="text-gray-400 text-xs font-semibold mb-1">NAT Freebox</div>
+            <div className="text-gray-400 text-xs font-semibold mb-1">{t('network.natFreebox')}</div>
             <ul className="space-y-1 max-h-32 overflow-y-auto">
               {data.freebox.natRules.map((r, i) => (
                 <li key={r.id ?? i} className="text-xs flex items-center gap-2">
@@ -257,7 +257,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
                   ) : (
                     <span className="text-gray-600" title={t('common.disabled')}>○</span>
                   )}
-                  <span className="text-gray-300 truncate">{r.comment || `Règle #${r.id ?? i + 1}`}</span>
+                  <span className="text-gray-300 truncate">{r.comment || t('network.ruleLabel', { id: r.id ?? i + 1 })}</span>
                   <span className="text-gray-500 font-mono shrink-0">
                     {r.proto}/{r.wanPort} → {r.lanIp}:{r.lanPort}
                   </span>
@@ -272,7 +272,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           <>
             <div className="pt-2 border-t border-gray-800" />
             <div className="text-gray-400 text-xs font-semibold mb-1">NAT</div>
-            <p className="text-gray-500 text-xs">NAT géré par UniFi (gateway)</p>
+            <p className="text-gray-500 text-xs">{t('network.natManagedUnifi')}</p>
           </>
         )}
 
@@ -285,19 +285,19 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
               <div className="pt-2 border-t border-gray-800 space-y-2">
                 <div className="text-gray-400 text-xs font-semibold mb-2">{t('network.ipManagerFreebox')}</div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">IPv4 libres:</span>
+                  <span className="text-gray-400 text-sm">{t('network.ipv4Free')}</span>
                   <span className="text-emerald-400 font-mono text-sm font-semibold">
                     {data.freebox.dhcp.freeIps ?? '-'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">IPv4 utilisées:</span>
+                  <span className="text-gray-400 text-sm">{t('network.ipv4Used')}</span>
                   <span className="text-orange-400 font-mono text-sm font-semibold">
                     {data.freebox.dhcp.usedIps}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">Utilisation:</span>
+                  <span className="text-gray-400 text-sm">{t('network.usage')}</span>
                   <span className="text-yellow-400 font-mono text-sm font-semibold">
                     {data.freebox.dhcp.usagePercentage ?? 0}%
                   </span>

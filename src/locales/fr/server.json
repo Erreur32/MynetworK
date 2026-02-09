@@ -1,0 +1,22 @@
+{
+  "server": {
+    "connection_closed": "Connexion fermée",
+    "ping_timeout": "Timeout lors du ping",
+    "connection_error": "Erreur de connexion",
+    "ping_failed": "Impossible de mesurer la latence",
+    "bandwidth_error": "Erreur lors de la récupération du débit",
+    "test_failed": "Erreur lors du test de débit",
+    "unable_connection_info": "Impossible de récupérer les informations de connexion",
+    "insufficient_rights": "Permission « Modification des réglages de la Freebox » requise. Supprimez freebox_token.json et réenregistrez l'application en accordant tous les droits sur l'écran LCD de la Freebox.",
+    "insufficient_rights_short": "Permission insuffisante. Supprimez freebox_token.json et réenregistrez l'application avec tous les droits.",
+    "wps_disabled": "WPS est désactivé sur la Freebox. Activez-le dans les paramètres WiFi de Freebox OS.",
+    "wps_error": "Erreur lors du démarrage WPS",
+    "no_disk": "Aucun disque disponible. Un disque est nécessaire pour créer une VM.",
+    "disk_check_failed": "Impossible de vérifier la disponibilité du disque.",
+    "ip_added_ok": "IP ajoutée et scannée avec succès",
+    "ip_added_offline": "IP ajoutée mais hors ligne (ping échoué)",
+    "ip_rescanned_ok": "IP rescannée avec succès (scan complet + ports)",
+    "ip_rescanned_offline": "IP rescannée mais hors ligne",
+    "unavailable": "Indisponible"
+  }
+}

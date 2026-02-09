@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
@@ -23,6 +24,7 @@ interface UniFiPageProps {
 type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
+    const { t } = useTranslation();
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -85,9 +87,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         fetchPlugins();
     }, [fetchPlugins]);
 
-    // Migrate old tab values to new combined tab
+    // Migrate old tab values to new combined tab (e.g. from URL or saved state)
+    const legacyTabIds = ['sites', 'accesspoints', 'sites-aps', 'sites-aps-switches'] as const;
     useEffect(() => {
-        if (activeTab === 'sites' || activeTab === 'accesspoints' || activeTab === 'sites-aps' || activeTab === 'sites-aps-switches') {
+        if (legacyTabIds.includes(activeTab as (typeof legacyTabIds)[number])) {
             setActiveTab('overview');
         }
     }, [activeTab]);
@@ -169,14 +172,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     };
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
-        { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
-        { id: 'nat', label: 'NAT', icon: Router },
-        { id: 'clients', label: 'Clients', icon: Users },
-        { id: 'switches', label: 'Switch', icon: Network },
-        { id: 'analyse', label: 'Analyse', icon: Activity },
-        { id: 'traffic', label: 'Trafic', icon: TrendingUp },
-        { id: 'events', label: 'Événements', icon: AlertCircle },
-        { id: 'debug', label: 'Debug', icon: AlertCircle }
+        { id: 'overview', label: t('unifi.tabs.overview'), icon: Activity },
+        { id: 'nat', label: t('unifi.tabs.nat'), icon: Router },
+        { id: 'clients', label: t('unifi.tabs.clients'), icon: Users },
+        { id: 'switches', label: t('unifi.tabs.switches'), icon: Network },
+        { id: 'analyse', label: t('unifi.tabs.analyse'), icon: Activity },
+        { id: 'traffic', label: t('unifi.tabs.traffic'), icon: TrendingUp },
+        { id: 'events', label: t('unifi.tabs.events'), icon: AlertCircle },
+        { id: 'debug', label: t('unifi.tabs.debug'), icon: AlertCircle }
     ];
 
     if (!unifiPlugin) {
@@ -190,12 +193,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <h1 className="text-2xl font-semibold">UniFi Controller</h1>
+                        <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
                     </div>
-                    <Card title="Plugin UniFi non disponible" className="bg-unifi-card border border-gray-800 rounded-xl">
+                    <Card title={t('unifi.pluginUnavailable')} className="bg-unifi-card border border-gray-800 rounded-xl">
                         <div className="text-center py-8 text-gray-500">
                             <AlertCircle size={32} className="mx-auto mb-2" />
-                            <p>Le plugin UniFi n'est pas installé ou configuré.</p>
+                            <p>{t('unifi.pluginNotInstalled')}</p>
                         </div>
                     </Card>
                 </div>
@@ -214,14 +217,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         >
                             <ArrowLeft size={20} />
                         </button>
-                        <h1 className="text-2xl font-semibold">UniFi Controller</h1>
+                        <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
                     </div>
-                    <Card title="Plugin UniFi non connecté" className="bg-unifi-card border border-gray-800 rounded-xl">
+                    <Card title={t('unifi.pluginNotConnected')} className="bg-unifi-card border border-gray-800 rounded-xl">
                         <div className="text-center py-8 text-gray-500">
                             <XCircle size={32} className="mx-auto mb-2 text-yellow-400" />
-                            <p className="mb-2">Le plugin UniFi n'est pas activé ou connecté.</p>
+                            <p className="mb-2">{t('unifi.pluginNotConnectedDescription')}</p>
                             <p className="text-sm text-gray-600">
-                                Activez et configurez le plugin depuis la page "Plugins".
+                                {t('unifi.configureFromPlugins')}
                             </p>
                         </div>
                     </Card>
@@ -254,7 +257,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         d="M5.343 4.222h1.099v1.1H5.343zm7.438 14.435a7.2 7.2 0 0 1-3.51-.988a6.5 6.5 0 0 0 2.947 3.936l.66.364c5.052-.337 8.009-3.6 8.009-7.863v-.924c-1.201 3.918-3.995 5.66-8.106 5.475m-4.107-2.291V8.355H7.562v4.1H6.448V10h-1.11v1.1H4.225V5.042H3.113v9.063c0 4.508 3.3 7.9 8.888 7.9a6.82 6.82 0 0 1-3.327-5.639M7.562 4.772h1.112v1.1H7.562zM3.113 2h1.112v1.111H3.113zm2.231 5.805h1.1v1.1h-1.1zm1.111-1.649h1.1v1.1h-1.1zm-.006-3.045h1.113V4.21H6.449zm8.876 2.677v10.577a9 9 0 0 1-.164 1.7c2.671-.486 4.414-2.137 5.3-5.014l.431-1.407V2.012c-5.042 0-5.567 1.931-5.567 3.776"
                                     />
                                 </svg>
-                                <span className="truncate">UniFi</span>
+                                <span className="truncate">{t('unifi.pageTitle')}</span>
                             </h1>
                             <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
                                 {(() => {
@@ -287,7 +290,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             );
                                         }
                                     }
-                                    return 'Non configuré';
+                                    return t('unifi.notConfigured');
                                 })()}
                             </p>
                         </div>
@@ -313,7 +316,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             : 'text-red-400'
                                     }
                                 >
-                                    Connexion
+                                    {t('unifi.connection')}
                                 </span>
                             </div>
                             <span className="text-gray-500 hidden sm:inline">•</span>
@@ -335,7 +338,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             : 'text-red-400'
                                     }
                                 >
-                                    Site
+                                    {t('unifi.stepSite')}
                                 </span>
                             </div>
                             <span className="text-gray-500 hidden sm:inline">•</span>
@@ -357,7 +360,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             : 'text-red-400'
                                     }
                                 >
-                                    Données
+                                    {t('unifi.stepData')}
                                 </span>
                             </div>
                         </div>
@@ -456,14 +459,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 {/* Ligne 1 : Info Système / Alertes Réseau */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                     <Card
-                                        title="InfoSystème"
+                                        title={t('unifi.infoSystem')}
                                         className="bg-unifi-card border border-gray-800 rounded-xl"
                                     >
                                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-300">
                                             {/* Colonne 1 - Système */}
                                             <div className="space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">Uptime contrôleur:</span>
+                                                    <span className="text-gray-400">{t('unifi.uptimeController')}</span>
                                                     <span>
                                                         {(() => {
                                                             const uptime = (overviewComputed as any).controller?.uptime as number | undefined;
@@ -476,11 +479,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">Équipements:</span>
+                                                    <span className="text-gray-400">{t('unifi.equipments')}</span>
                                                     <span>{(overviewComputed as any).totalEquipments ?? 0}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">Clients:</span>
+                                                    <span className="text-gray-400">{t('unifi.clientsLabel')}</span>
                                                     <span>{(unifiStats?.devices || []).filter((d: any) => (d.type || '').toLowerCase() === 'client').length}</span>
                                                 </div>
                                             </div>
@@ -490,12 +493,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">DHCP:</span>
                                                     <span className={systemInfo?.dhcpEnabled ? 'text-green-400' : 'text-gray-500'}>
-                                                        {systemInfo?.dhcpEnabled ? 'Actif' : 'Inactif'}
+                                                        {systemInfo?.dhcpEnabled ? t('unifi.active') : t('unifi.inactive')}
                                                     </span>
                                                 </div>
                                                 {systemInfo?.dhcpEnabled && systemInfo?.dhcpRange && (
                                                     <div className="flex justify-between">
-                                                        <span className="text-gray-400">Plage IP:</span>
+                                                        <span className="text-gray-400">{t('unifi.dhcpRangeLabel')}</span>
                                                         <span className="text-white font-mono text-xs">{systemInfo.dhcpRange}</span>
                                                     </div>
                                                 )}
@@ -505,7 +508,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     ).length;
                                                     return clientsCount > 0 ? (
                                                         <div className="flex justify-between">
-                                                            <span className="text-gray-400">IP utilisées:</span>
+                                                            <span className="text-gray-400">{t('unifi.ipsUsed')}</span>
                                                             <span className="text-orange-400">{clientsCount}</span>
                                                         </div>
                                                     ) : null;
@@ -574,7 +577,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                             )}
                                                             {natActive && (
                                                                 <div className="flex justify-between mt-0.5 pt-0.5 border-t border-gray-700/50">
-                                                                    <span className="text-gray-400 text-[11px]">Règles NAT:</span>
+                                                                    <span className="text-gray-400 text-[11px]">{t('unifi.natRulesLabel')}</span>
                                                                     <span className="text-purple-300 text-xs font-mono">{natRulesCount}</span>
                                                                 </div>
                                                             )}
@@ -629,7 +632,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">Site:</span>
+                                                    <span className="text-gray-400">{t('unifi.siteLabel')}</span>
                                                     <span className="text-white text-xs">
                                                         {(() => {
                                                             const statsName =
@@ -646,19 +649,19 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         </div>
                                     </Card>
                                     <Card
-                                        title="Alertes Réseau"
+                                        title={t('unifi.alertsNetwork')}
                                         className="bg-unifi-card border border-gray-800 rounded-xl"
                                     >
                                         <div className="flex flex-col justify-center text-sm text-gray-300 space-y-3">
                                             {/* Filtres de niveau */}
                                             <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-400">Niveau:</span>
+                                                <span className="text-xs text-gray-400">{t('unifi.filterLevel')}</span>
                                                 <div className="flex gap-1">
                                                     {([
-                                                        { id: 'all', label: 'Tous' },
-                                                        { id: 'info', label: 'Infos' },
-                                                        { id: 'warning', label: 'Avertissements' },
-                                                        { id: 'critical', label: 'Critiques' }
+                                                        { id: 'all', labelKey: 'unifi.filterAll' as const },
+                                                        { id: 'info', labelKey: 'unifi.filterInfo' as const },
+                                                        { id: 'warning', labelKey: 'unifi.filterWarning' as const },
+                                                        { id: 'critical', labelKey: 'unifi.filterCritical' as const }
                                                     ] as const).map(btn => {
                                                         const active = alertsFilter === btn.id;
                                                         let activeClasses = 'bg-sky-500/20 border-sky-400 text-sky-200';
@@ -680,7 +683,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                         : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
                                                                 }`}
                                                             >
-                                                                {btn.label}
+                                                                {t(btn.labelKey)}
                                                             </button>
                                                         );
                                                     })}
@@ -695,21 +698,21 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                                                 if (offlineDevices && offlineDevices.length > 0) {
                                                     alerts.push({
-                                                        label: 'Équipements hors ligne',
+                                                        label: t('unifi.offlineDevices'),
                                                         value: offlineDevices.length,
                                                         level: 'warning'
                                                     });
                                                 }
                                                 if (updateAvailableCount > 0) {
                                                     alerts.push({
-                                                        label: 'Mises à jour disponibles',
+                                                        label: t('unifi.updatesAvailableLabel'),
                                                         value: updateAvailableCount,
                                                         level: 'warning'
                                                     });
                                                 }
                                                 if (criticalCount > 0) {
                                                     alerts.push({
-                                                        label: 'Mises à jour critiques / appareils non supportés',
+                                                        label: t('unifi.updatesCriticalLabel'),
                                                         value: criticalCount,
                                                         level: 'critical'
                                                     });
@@ -723,7 +726,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 if (alerts.length === 0) {
                                                     return (
                                                         <span className="text-xs text-gray-500">
-                                                            Aucune alerte active détectée.
+                                                            {t('unifi.noActiveAlert')}
                                                         </span>
                                                     );
                                                 }
@@ -731,7 +734,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 if (visibleAlerts.length === 0) {
                                                     return (
                                                         <span className="text-xs text-gray-500">
-                                                            Aucune alerte pour ce niveau de filtrage.
+                                                            {t('unifi.noAlertForFilter')}
                                                         </span>
                                                     );
                                                 }
@@ -777,7 +780,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                                 {/* Ligne 2 : Statistiques synthétiques (À jour / MAJ dispo / MAJ critique / Total équipements) */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                                    <Card className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <Card title="" className="bg-unifi-card border border-gray-800 rounded-xl">
                                         <div className="flex flex-col items-center justify-center py-4 gap-2">
                                             <div className="w-8 h-8 rounded-full bg-emerald-900/40 border border-emerald-500 flex items-center justify-center text-emerald-400">
                                                 <CheckCircle size={18} />
@@ -785,10 +788,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     <div className="text-2xl font-semibold text-white">
                                                 {(overviewComputed as any).upToDateCount ?? 0}
                                     </div>
-                                            <div className="text-xs text-gray-400">À jour</div>
+                                            <div className="text-xs text-gray-400">{t('unifi.upToDate')}</div>
                                         </div>
                                     </Card>
-                                    <Card className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <Card title="" className="bg-unifi-card border border-gray-800 rounded-xl">
                                         <div className="flex flex-col items-center justify-center py-4 gap-2">
                                             <div className="w-8 h-8 rounded-full bg-amber-900/40 border border-amber-500 flex items-center justify-center text-amber-400">
                                                 <span className="text-lg leading-none">🕒</span>
@@ -796,10 +799,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             <div className="text-2xl font-semibold text-white">
                                                 {(overviewComputed as any).updateAvailableCount ?? 0}
                                             </div>
-                                            <div className="text-xs text-gray-400">Mise à jour disponible</div>
+                                            <div className="text-xs text-gray-400">{t('unifi.updateAvailable')}</div>
                                     </div>
                                 </Card>
-                                    <Card className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <Card title="" className="bg-unifi-card border border-gray-800 rounded-xl">
                                         <div className="flex flex-col items-center justify-center py-4 gap-2">
                                             <div className="w-8 h-8 rounded-full bg-red-900/40 border border-red-500 flex items-center justify-center text-red-400">
                                                 <AlertCircle size={18} />
@@ -807,10 +810,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             <div className="text-2xl font-semibold text-white">
                                                 {(overviewComputed as any).criticalCount ?? 0}
                                             </div>
-                                            <div className="text-xs text-gray-400">Mise à jour critique</div>
+                                            <div className="text-xs text-gray-400">{t('unifi.updateCritical')}</div>
                                         </div>
                                     </Card>
-                                    <Card className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <Card title="" className="bg-unifi-card border border-gray-800 rounded-xl">
                                         <div className="flex flex-col items-center justify-center py-4 gap-2">
                                             <div className="w-8 h-8 rounded-full bg-sky-900/40 border border-sky-500 flex items-center justify-center text-sky-400">
                                                 <span className="text-lg leading-none">i</span>
@@ -818,7 +821,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             <div className="text-2xl font-semibold text-white">
                                                 {(overviewComputed as any).totalEquipments ?? (unifiStats?.devices ? unifiStats.devices.length : 0)}
                                             </div>
-                                            <div className="text-xs text-gray-400">Total équipements</div>
+                                            <div className="text-xs text-gray-400">{t('unifi.totalEquipments')}</div>
                                         </div>
                                     </Card>
                                 </div>
@@ -826,14 +829,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 {/* Sites, Access Points & Switches Section */}
                         <div className="col-span-full space-y-6">
                             {/* Sites Section */}
-                            <Card title="Sites UniFi">
+                            <Card title={t('unifi.sitesTitle')}>
                                 {(() => {
                                     const sites = (unifiStats as any)?.sites as Array<any> | undefined;
                                     if (!sites || sites.length === 0) {
                                         return (
                                 <div className="text-center py-8 text-gray-500">
                                     <Server size={32} className="mx-auto mb-2" />
-                                                <p>Aucun site détecté pour l'instant</p>
+                                                <p>{t('unifi.noSiteDetected')}</p>
                                 </div>
                                         );
                                     }
@@ -849,7 +852,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                         <div className="flex items-center gap-2">
                                                             <span className="w-2 h-2 rounded-full bg-gray-300" />
                                                             <span className="text-sm font-semibold text-white truncate">
-                                                                {site.name || site.id || 'Site UniFi'}
+                                                                {site.name || site.id || t('unifi.siteFallback')}
                                                             </span>
                                                         </div>
                                                         <span
@@ -869,7 +872,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                         )}
                                                         {site.devices && (
                                                                 <div>
-                                                                    <span className="text-gray-500">Équipements:&nbsp;</span>
+                                                                    <span className="text-gray-500">{t('unifi.equipments')}&nbsp;</span>
                                                                     <span className="text-gray-300">
                                                                         {site.devices.total ?? 0}
                                                                     </span>
@@ -881,7 +884,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                         <div className="flex items-center justify-end gap-2 mt-auto pt-2">
                                                             {site.devices.clients !== undefined && (
                                                                 <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 font-semibold text-sm">
-                                                                    {site.devices.clients ?? 0} Clients
+                                                                    {site.devices.clients ?? 0} {t('unifi.clients')}
                                                                     </span>
                                                             )}
                                                             {site.devices.aps !== undefined && (
@@ -904,7 +907,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             </Card>
 
                             {/* Access Points Section */}
-                            <Card title="Points d'Accès" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.pointsAccess')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const accessPoints = unifiStats.devices.filter((d: any) => {
@@ -926,7 +929,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Wifi size={32} className="mx-auto mb-2" />
-                                                    <p>Aucun point d'accès détecté</p>
+                                                    <p>{t('unifi.noApDetected')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
                                                         Total devices: {unifiStats.devices.length}
                                                         {unifiStats.devices.length > 0 && (
@@ -1037,7 +1040,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                                 : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
                                                                         }`}
                                                                     >
-                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
+                                                                        {device.active === false ? t('unifi.offlineStatus') : t('unifi.onlineStatus')}
                                                                     </span>
                                                                     <span
                                                                         className={`w-2 h-2 rounded-full ${
@@ -1045,8 +1048,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                         }`}
                                                                         title={
                                                                             device.active !== false
-                                                                                ? "Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
-                                                                                : "Point d'accès hors ligne"
+                                                                                ? t('unifi.apOnline')
+                                                                                : t('unifi.apOffline')
                                                                         }
                                                                     />
                                                                 </div>
@@ -1106,7 +1109,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     </div>
                                                                 </div>
                                                                     <div className="flex items-center justify-between">
-                                                                        <span className="text-gray-500">Clients</span>
+                                                                        <span className="text-gray-500">{t('unifi.clients')}</span>
                                                                         <span className="text-gray-300 font-semibold">{clientsCount}</span>
                                                                 </div>
                                                                     </div>
@@ -1120,13 +1123,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <Wifi size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée disponible</p>
+                                        <p>{t('unifi.noDataAvailable')}</p>
                                     </div>
                                 )}
                             </Card>
 
                             {/* Switches Section */}
-                            <Card title="Switches" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.switches')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const switches = unifiStats.devices.filter((d: any) => {
@@ -1138,7 +1141,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Server size={32} className="mx-auto mb-2" />
-                                                    <p>Aucun switch détecté</p>
+                                                    <p>{t('unifi.noSwitchDetected')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
                                                         Total devices: {unifiStats.devices.length}
                                                     </p>
@@ -1227,7 +1230,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                                 : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
                                                                         }`}
                                                                     >
-                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
+                                                                        {device.active === false ? t('unifi.offlineStatus') : t('unifi.onlineStatus')}
                                                                     </span>
                                                                     <span
                                                                         className={`w-2 h-2 rounded-full ${
@@ -1235,7 +1238,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                         }`}
                                                                         title={
                                                                             device.active !== false
-                                                                                ? "Switch en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
+                                                                                ? t('unifi.switchOnline')
                                                                                 : 'Switch hors ligne'
                                                                         }
                                                                     />
@@ -1285,7 +1288,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                         </span>
                                                                     </div>
                                                                     <div className="flex items-center justify-between">
-                                                                        <span className="text-gray-500">Clients</span>
+                                                                        <span className="text-gray-500">{t('unifi.clients')}</span>
                                                                         <span className="text-gray-300 font-semibold">{clientsCount}</span>
                                                                     </div>
                                                                 </div>
@@ -1299,7 +1302,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <Server size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée disponible</p>
+                                        <p>{t('unifi.noDataAvailable')}</p>
                                     </div>
                                 )}
                             </Card>
@@ -1311,7 +1314,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* Switches Tab - REMOVED (now combined with Sites & APs) */}
                     {false && activeTab === 'switches' && (
                         <div className="col-span-full">
-                            <Card title="Points d'Accès" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.pointsAccess')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const accessPoints = unifiStats.devices.filter((d: any) => {
@@ -1333,7 +1336,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Wifi size={32} className="mx-auto mb-2" />
-                                                    <p>Aucun point d'accès détecté</p>
+                                                    <p>{t('unifi.noApDetected')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
                                                         Total devices: {unifiStats.devices.length}
                                                         {unifiStats.devices.length > 0 && (
@@ -1431,7 +1434,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                                 : 'bg-emerald-900/60 text-emerald-300 border-emerald-600/70'
                                                                         }`}
                                                                     >
-                                                                        {device.active === false ? 'OFFLINE' : 'ONLINE'}
+                                                                        {device.active === false ? t('unifi.offlineStatus') : t('unifi.onlineStatus')}
                                                                     </span>
                                                                     <span
                                                                         className={`w-2 h-2 rounded-full ${
@@ -1439,8 +1442,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                         }`}
                                                                         title={
                                                                             device.active !== false
-                                                                                ? "Point d'accès en ligne (état de mise à jour détaillé visible dans Vue d'ensemble)"
-                                                                                : "Point d'accès hors ligne"
+                                                                                ? t('unifi.apOnline')
+                                                                                : t('unifi.apOffline')
                                                                         }
                                                                     />
                                                                 </div>
@@ -1470,7 +1473,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     </div>
                                                                 </div>
                                                                 <div>
-                                                                    <span className="text-gray-500">Clients connectés:&nbsp;</span>
+                                                                    <span className="text-gray-500">{t('unifi.clientsLabel')}&nbsp;</span>
                                                                     <span className="text-gray-300">{clientsCount}</span>
                                                                 </div>
                                                                 {firmware && (
@@ -1489,7 +1492,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <Wifi size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée disponible</p>
+                                        <p>{t('unifi.noDataAvailable')}</p>
                                     </div>
                                 )}
                             </Card>
@@ -1499,7 +1502,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* Switch Tab */}
                     {activeTab === 'switches' && (
                         <div className="col-span-full space-y-6">
-                            <Card title="Ports des Switches UniFi" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.switchPortsTitle')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         // Filter switches (type starts with 'usw' or model contains 'switch')
@@ -1517,7 +1520,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Network size={32} className="mx-auto mb-2" />
-                                                    <p>Aucun switch détecté</p>
+                                                    <p>{t('unifi.noSwitchDetected')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
                                                         Total devices: {devicesArr.length}
                                                         {devicesArr.length > 0 && (
@@ -1648,7 +1651,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     speed: null,
                                                     poe: 'N/A',
                                                     errors: 'N/A',
-                                                    portName: 'Données non disponibles'
+                                                    portName: t('unifi.portNameUnavailable')
                                                 });
                                             }
                                         });
@@ -1666,13 +1669,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Network size={32} className="mx-auto mb-2" />
-                                                    <p>Aucune donnée de ports disponible</p>
+                                                    <p>{t('unifi.noPortData')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
-                                                        {switches.length} switch(es) détecté(s) mais aucune information de ports trouvée.
+                                                        {t('unifi.switchesDetectedNoPortsCount', { count: switches.length })}
                                                     </p>
                                                     {import.meta.env.DEV && (
                                                         <p className="text-xs mt-1 text-gray-500">
-                                                            Vérifiez la console pour les détails de debug.
+                                                            {t('unifi.debugCheckConsoleDetails')}
                                                         </p>
                                                     )}
                                                 </div>
@@ -1794,7 +1797,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <Network size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée disponible</p>
+                                        <p>{t('unifi.noDataAvailable')}</p>
                                     </div>
                                 )}
                             </Card>
@@ -1823,7 +1826,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* Clients Tab */}
                     {activeTab === 'clients' && (
                         <div className="col-span-full">
-                            <Card title="Clients" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.clients')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const clients = unifiStats.devices.filter((d: any) => {
@@ -1835,7 +1838,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             return (
                                                 <div className="text-center py-8 text-gray-500">
                                                     <Users size={32} className="mx-auto mb-2" />
-                                                    <p>Aucun client détecté</p>
+                                                    <p>{t('unifi.noClientDetected')}</p>
                                                     <p className="text-xs mt-2 text-gray-600">
                                                         Total devices: {unifiStats.devices.length}
                                                     </p>
@@ -1881,11 +1884,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             if (raw == null || Number.isNaN(raw)) return {};
 
                                             let quality: string;
-                                            if (raw >= -50) quality = 'Excellent';
-                                            else if (raw >= -60) quality = 'Très bon';
-                                            else if (raw >= -70) quality = 'Bon';
-                                            else if (raw >= -80) quality = 'Moyen';
-                                            else quality = 'Faible';
+                                            if (raw >= -50) quality = t('unifi.excellent');
+                                            else if (raw >= -60) quality = t('unifi.veryGood');
+                                            else if (raw >= -70) quality = t('unifi.good');
+                                            else if (raw >= -80) quality = t('unifi.average');
+                                            else quality = t('unifi.weak');
 
                                             return { rssi: raw, quality };
                                         };
@@ -2063,11 +2066,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             <div className="overflow-auto">
                                                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-xs">
                                                     <span className="text-gray-500">
-                                                        {filteredClients.length} client(s) affiché(s) sur {clients.length}
+                                                        {t('unifi.clientsShownCount', { count: filteredClients.length, total: clients.length })}
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <div className="flex items-center gap-1">
-                                                            <span className="text-[11px] text-gray-500 mr-1">Connexion:</span>
+                                                            <span className="text-[11px] text-gray-500 mr-1">{t('unifi.connectionFilterLabel')}</span>
                                                             {(['wireless', 'wired', 'all'] as const).map((mode) => (
                                                                 <button
                                                                     key={mode}
@@ -2080,22 +2083,22 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     }`}
                                                                     title={
                                                                         mode === 'wireless'
-                                                                            ? 'Afficher uniquement les clients sans fil'
+                                                                            ? t('unifi.showWirelessOnly')
                                                                             : mode === 'wired'
-                                                                            ? 'Afficher uniquement les clients filaires'
-                                                                            : 'Afficher tous les clients'
+                                                                            ? t('unifi.showWiredOnly')
+                                                                            : t('unifi.showAllClientsFilter')
                                                                     }
                                                                 >
                                                                     {mode === 'wireless'
-                                                                        ? 'Sans fil'
+                                                                        ? t('unifi.wireless')
                                                                         : mode === 'wired'
-                                                                        ? 'Filaire'
-                                                                        : 'Tous'}
+                                                                        ? t('unifi.wired')
+                                                                        : t('unifi.filterAll')}
                                                                 </button>
                                                             ))}
                                                         </div>
                                                         <div className="flex items-center gap-1">
-                                                            <span className="text-[11px] text-gray-500 mr-1">État:</span>
+                                                            <span className="text-[11px] text-gray-500 mr-1">{t('unifi.statusFilterLabel')}</span>
                                                             {(['active', 'inactive', 'all'] as const).map((mode) => (
                                                                 <button
                                                                     key={mode}
@@ -2108,17 +2111,17 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     }`}
                                                                     title={
                                                                         mode === 'active'
-                                                                            ? 'Afficher uniquement les clients considérés comme actifs'
+                                                                            ? t('unifi.showActiveOnly')
                                                                             : mode === 'inactive'
-                                                                            ? 'Afficher uniquement les clients considérés comme inactifs'
-                                                                            : 'Afficher tous les clients'
+                                                                            ? t('unifi.showInactiveOnly')
+                                                                            : t('unifi.showAllClientsFilter')
                                                                     }
                                                                 >
                                                                     {mode === 'active'
-                                                                        ? 'Actifs'
+                                                                        ? t('unifi.activeCount')
                                                                         : mode === 'inactive'
-                                                                        ? 'Inactifs'
-                                                                        : 'Tous'}
+                                                                        ? t('unifi.inactiveFilter')
+                                                                        : t('unifi.filterAll')}
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -2127,7 +2130,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                         type="text"
                                                         value={clientSearch}
                                                         onChange={(e) => setClientSearch(e.target.value)}
-                                                        placeholder="Rechercher par nom, IP, MAC, SSID, AP..."
+                                                        placeholder={t('unifi.searchPlaceholderClients')}
                                                         className="bg-theme-card border border-gray-700 rounded px-2 py-1 text-[12px] text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 w-64"
                                                     />
                                                     </div>
@@ -2135,7 +2138,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                 <thead className="bg-theme-card text-gray-200 text-sm">
                                                         <tr>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                                {renderSortHeader('Nom', 'name', 'left')}
+                                                                {renderSortHeader(t('unifi.tableName'), 'name', 'left')}
                                                             </th>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
                                                                 {renderSortHeader('IP', 'ip', 'left')}
@@ -2147,19 +2150,19 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                 {renderSortHeader('Switch', 'switch', 'left')}
                                                             </th>
                                                             <th className="px-3 py-2 text-right sticky top-0 bg-theme-card">
-                                                                {renderSortHeader('Vitesse', 'speed', 'right')}
+                                                                {renderSortHeader(t('unifi.speed'), 'speed', 'right')}
                                                             </th>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
                                                                 {renderSortHeader('AP', 'ap', 'left')}
                                                             </th>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                                {renderSortHeader('SSID / Ports', 'ssid', 'left')}
+                                                                {renderSortHeader(t('unifi.ssidPorts'), 'ssid', 'left')}
                                                             </th>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                                {renderSortHeader('Type', 'type', 'left')}
+                                                                {renderSortHeader(t('unifi.typeLabel').replace(/\s*:\s*$/, ''), 'type', 'left')}
                                                             </th>
                                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                                <span className="text-xs text-gray-300">Signal / Port</span>
+                                                                <span className="text-xs text-gray-300">{t('unifi.signalPort')}</span>
                                                             </th>
                                                         </tr>
                                                     </thead>
@@ -2255,11 +2258,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                             const s = getSpeed(c);
                                                                             const speedLabel = formatSpeedDisplay(c);
                                                                             if (!s || s <= 0) {
-                                                                                return <span className="text-[11px] text-gray-500">Vitesse port: -</span>;
+                                                                                return <span className="text-[11px] text-gray-500">{t('unifi.speedPort')} -</span>;
                                                                             }
                                                                             return (
                                                                                 <span className="text-[11px] text-gray-400">
-                                                                                    Vitesse port:&nbsp;
+                                                                                    {t('unifi.speedPort')}&nbsp;
                                                                                     <span className="text-gray-200">{speedLabel}</span>
                                                                                 </span>
                                                                             );
@@ -2307,7 +2310,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <Users size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée disponible</p>
+                                        <p>{t('unifi.noDataAvailable')}</p>
                                     </div>
                                 )}
                             </Card>
@@ -2317,7 +2320,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* Traffic Tab */}
                     {activeTab === 'traffic' && (
                         <div className="col-span-full">
-                            <Card title="Trafic Réseau (UniFi)" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.trafficNetwork')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const devices = unifiStats.devices as any[];
@@ -2370,11 +2373,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             if (raw == null || Number.isNaN(raw)) return {};
 
                                             let quality: string;
-                                            if (raw >= -50) quality = 'Excellent';
-                                            else if (raw >= -60) quality = 'Très bon';
-                                            else if (raw >= -70) quality = 'Bon';
-                                            else if (raw >= -80) quality = 'Moyen';
-                                            else quality = 'Faible';
+                                            if (raw >= -50) quality = t('unifi.excellent');
+                                            else if (raw >= -60) quality = t('unifi.veryGood');
+                                            else if (raw >= -70) quality = t('unifi.good');
+                                            else if (raw >= -80) quality = t('unifi.average');
+                                            else quality = t('unifi.weak');
 
                                             return { rssi: raw, quality };
                                         };
@@ -2413,7 +2416,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                 <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-gray-400">Débit WAN actuel</span>
+                                                            <span className="text-xs text-gray-400">{t('unifi.currentWanRate')}</span>
                                                             <Activity size={16} className="text-sky-400" />
                                                         </div>
                                                         <div className="mt-1 space-y-1 text-sm">
@@ -2430,44 +2433,42 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                 </span>
                                                             </div>
                                                             <p className="text-[11px] text-gray-500 mt-1">
-                                                                Estimation basée sur les compteurs WAN cumulés UniFi (pas encore
-                                                                historique Prometheus / Influx).
+                                                                {t('unifi.wanRateDescription')}
                                                             </p>
                                                         </div>
                                                     </div>
                                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-gray-400">Clients actifs (UniFi)</span>
+                                                            <span className="text-xs text-gray-400">{t('unifi.activeClientsUniFi')}</span>
                                                             <Users size={16} className="text-purple-400" />
                                                         </div>
                                                         <div className="mt-1 text-3xl font-semibold text-white">
                                                             {activeClientsCount}
                                                         </div>
                                                         <p className="text-[11px] text-gray-500">
-                                                            Nombre de clients vus comme &quot;clients&quot; par le contrôleur UniFi
-                                                            (type <code className="text-[10px]">client</code>).
+                                                            {t('unifi.clientsCountDescription')}
                                                         </p>
                                                     </div>
                                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-gray-400">Sources principales</span>
+                                                            <span className="text-xs text-gray-400">{t('unifi.mainSources')}</span>
                                                             <Server size={16} className="text-amber-400" />
                                                         </div>
                                                         <div className="mt-1 space-y-1 text-sm">
                                                             <div className="flex justify-between">
-                                                                <span className="text-gray-400">AP / Switch suivis:</span>
+                                                                <span className="text-gray-400">{t('unifi.apSwitchTracked')}</span>
                                                                 <span className="text-gray-200 font-semibold">
                                                                     {topDevices.length}
                                                                 </span>
                                                             </div>
                                                             <div className="flex justify-between">
-                                                                <span className="text-gray-400">Top clients listés:</span>
+                                                                <span className="text-gray-400">{t('unifi.topClientsListed')}</span>
                                                                 <span className="text-gray-200 font-semibold">
                                                                     {topClients.length}
                                                                 </span>
                                                             </div>
                                                             <p className="text-[11px] text-gray-500 mt-1">
-                                                                Basé sur les vitesses instantanées des clients (tx/rx_rate).
+                                                                {t('unifi.basedOnInstantSpeed')}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2479,10 +2480,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex flex-col">
                                                                 <h3 className="text-sm font-semibold text-white">
-                                                                    Clients par débit
+                                                                    {t('unifi.clientsByThroughput')}
                                                                 </h3>
                                                                 <span className="text-[11px] text-gray-500">
-                                                                    Triés par vitesse instantanée
+                                                                    {t('unifi.sortedByInstantSpeed')}
                                                                 </span>
                                                             </div>
                                                             <button
@@ -2491,23 +2492,23 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                 className="px-3 py-1 rounded-full border border-gray-700 text-[11px] text-gray-200 hover:bg-gray-800 transition-colors"
                                                             >
                                                                 {showAllTrafficClients
-                                                                    ? 'Afficher top 16'
-                                                                    : 'Voir tous les clients'}
+                                                                    ? t('unifi.showTop16')
+                                                                    : t('unifi.seeAllClients')}
                                                             </button>
                                                         </div>
                                                         {topClients.length === 0 ? (
                                                             <p className="text-xs text-gray-500">
-                                                                Aucun client avec débit mesurable pour le moment.
+                                                                {t('unifi.noClientWithThroughput')}
                                                             </p>
                                                         ) : (
                                                             <table className="min-w-full text-[12px] text-gray-200">
                                                                 <thead className="bg-theme-card text-gray-300 text-xs">
                                                                     <tr>
-                                                                        <th className="px-2 py-1 text-left">Nom</th>
+                                                                        <th className="px-2 py-1 text-left">{t('unifi.tableName')}</th>
                                                                         <th className="px-2 py-1 text-left">IP</th>
                                                                         <th className="px-2 py-1 text-left">AP</th>
-                                                                        <th className="px-2 py-1 text-right">Vitesse</th>
-                                                                        <th className="px-2 py-1 text-left">Signal</th>
+                                                                        <th className="px-2 py-1 text-right">{t('unifi.speed')}</th>
+                                                                        <th className="px-2 py-1 text-left">{t('unifi.signalPort').split(' / ')[0]}</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -2580,22 +2581,22 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800">
                                                         <div className="flex items-center justify-between mb-2">
                                                             <h3 className="text-sm font-semibold text-white">
-                                                                Trafic par AP / Switch
+                                                                {t('unifi.trafficByAp')}
                                                             </h3>
                                                             <span className="text-[11px] text-gray-500">
-                                                                Agrégé à partir des clients
+                                                                {t('unifi.aggregatedFromClients')}
                                                             </span>
                                                         </div>
                                                         {topDevices.length === 0 ? (
                                                             <p className="text-xs text-gray-500">
-                                                                Aucun trafic client mesurable pour le moment.
+                                                                {t('unifi.noMeasurableTraffic')}
                                                             </p>
                                                         ) : (
                                                             <table className="min-w-full text-[12px] text-gray-200">
                                                                 <thead className="bg-theme-card text-gray-300 text-xs">
                                                                     <tr>
-                                                                        <th className="px-2 py-1 text-left">AP / Switch</th>
-                                                                        <th className="px-2 py-1 text-right">Débit total</th>
+                                                                        <th className="px-2 py-1 text-left">{t('unifi.apSwitchCol')}</th>
+                                                                        <th className="px-2 py-1 text-right">{t('unifi.totalThroughput')}</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -2623,7 +2624,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                 <div className="text-center py-8 text-gray-500">
                                     <Activity size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée de trafic disponible</p>
+                                        <p>{t('unifi.noTrafficData')}</p>
                                 </div>
                                 )}
                             </Card>
@@ -2633,7 +2634,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* Events Tab */}
                     {activeTab === 'events' && (
                         <div className="col-span-full">
-                            <Card title="Événements UniFi" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.events')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
                                         const devices = unifiStats.devices as any[];
@@ -2663,8 +2664,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 id: 'offline-devices',
                                                 category: 'alert',
                                                 level: 'warning',
-                                                title: 'Équipements hors ligne',
-                                                message: `${offlineDevices.length} équipement(s) UniFi sont signalés comme hors ligne.`,
+                                                title: t('unifi.offlineDevices'),
+                                                message: t('unifi.offlineDevicesMessage', { count: offlineDevices.length }),
                                                 time: now
                                             });
                                         }
@@ -2675,7 +2676,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 id: 'controller-update',
                                                 category: 'alert',
                                                 level: 'warning',
-                                                title: 'Mise à jour du contrôleur disponible',
+                                                title: t('unifi.controllerUpdateTitle'),
                                                 message: `Version actuelle: ${system.version || 'inconnue'}. Une nouvelle version est disponible.`,
                                                 time: now
                                             });
@@ -2687,8 +2688,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 id: 'unsupported-devices',
                                                 category: 'alert',
                                                 level: 'critical',
-                                                title: 'Appareils non supportés détectés',
-                                                message: `${system.unsupportedDeviceCount} appareil(s) UniFi signalé(s) comme non supportés.`,
+                                                title: t('unifi.unsupportedDevicesTitle'),
+                                                message: t('unifi.unsupportedDevicesMessage', { count: system.unsupportedDeviceCount }),
                                                 time: now
                                             });
                                         }
@@ -2698,10 +2699,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             id: 'controller-ok',
                                             category: 'system',
                                             level: 'info',
-                                            title: 'Contrôleur UniFi opérationnel',
-                                            message: `Contrôleur ${system.name || 'UniFi'} en ligne (hostname: ${
-                                                system.hostname || 'inconnu'
-                                            }).`,
+                                            title: t('unifi.controllerOperational'),
+                                            message: t('unifi.controllerOnlineMessage', { name: system.name || 'UniFi', hostname: system.hostname || t('unifi.unknown') }),
                                             time: now
                                         });
 
@@ -2711,8 +2710,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 id: 'clients-count',
                                                 category: 'connection',
                                                 level: 'info',
-                                                title: 'Clients connectés',
-                                                message: `${clients.length} client(s) UniFi sont actuellement suivis comme "clients".`,
+                                                title: t('unifi.clientsConnectedEvent'),
+                                                message: t('unifi.clientsFollowedMessage', { count: clients.length }),
                                                 time: now
                                             });
                                         }
@@ -2743,9 +2742,9 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         };
 
                                         const categoryLabel = (category: 'alert' | 'system' | 'connection') => {
-                                            if (category === 'alert') return 'Alerte';
-                                            if (category === 'system') return 'Système';
-                                            return 'Connexion';
+                                            if (category === 'alert') return t('unifi.alertLabel');
+                                            if (category === 'system') return t('unifi.systemLabel');
+                                            return t('unifi.connection');
                                         };
 
                                         return (
@@ -2753,10 +2752,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 {/* Filtres */}
                                                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs mb-2">
                                                     <span className="text-gray-500">
-                                                        {filteredEvents.length} événement(s) affiché(s) sur {events.length}
+                                                        {t('unifi.eventsShownCount', { count: filteredEvents.length, total: events.length })}
                                                     </span>
                                                     <div className="flex items-center gap-1">
-                                                        <span className="text-[11px] text-gray-500 mr-1">Type:</span>
+                                                        <span className="text-[11px] text-gray-500 mr-1">{t('unifi.typeLabel')}</span>
                                                         {(['alerts', 'system', 'connections', 'all'] as const).map((mode) => {
                                                             const active = eventFilter === mode;
                                                             let activeClasses = 'bg-sky-500/20 border-sky-400 text-sky-200';
@@ -2781,12 +2780,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                                     }`}
                                                                 >
                                                                     {mode === 'alerts'
-                                                                        ? 'Alertes'
+                                                                        ? t('unifi.alerts')
                                                                         : mode === 'system'
-                                                                        ? 'Système'
+                                                                        ? t('unifi.systemLabel')
                                                                         : mode === 'connections'
-                                                                        ? 'Connexions'
-                                                                        : 'Tous'}
+                                                                        ? t('unifi.connectionsLabel')
+                                                                        : t('unifi.filterAll')}
                                                                 </button>
                                                             );
                                                         })}
@@ -2796,12 +2795,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 {events.length === 0 ? (
                                 <div className="text-center py-8 text-gray-500">
                                     <AlertCircle size={32} className="mx-auto mb-2" />
-                                                        <p>Aucun événement n’a été détecté pour l’instant.</p>
+                                                        <p>{t('unifi.noEventDetected')} n’a été détecté pour l’instant.</p>
                                 </div>
                                                 ) : filteredEvents.length === 0 ? (
                                                     <div className="text-center py-8 text-gray-500 text-xs">
-                                                        Aucun événement pour ce filtre. Essayez un autre type (Alertes, Système,
-                                                        Connexions ou Tous).
+                                                        {t('unifi.noEventForFilter')}
                                                     </div>
                                                 ) : (
                                                     <div className="divide-y divide-gray-800 border border-gray-800 rounded-lg bg-theme-card">
@@ -2844,7 +2842,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <AlertCircle size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée UniFi disponible pour générer des événements.</p>
+                                        <p>{t('unifi.noUnifiDataForEvents')}</p>
                                     </div>
                                 )}
                             </Card>
@@ -2860,7 +2858,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {activeTab === 'debug' && (
                         <div className="col-span-full space-y-6">
                             {/* Plugin Info */}
-                            <Card title="Informations du Plugin" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.pluginInfo')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-400">Plugin ID:</span>
@@ -2875,13 +2873,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         <span className="text-sm text-white">{unifiPlugin.version}</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-400">Activé:</span>
+                                        <span className="text-sm text-gray-400">{t('unifi.enabledLabel')}</span>
                                         <span className={`text-sm ${unifiPlugin.enabled ? 'text-green-400' : 'text-red-400'}`}>
                                             {unifiPlugin.enabled ? 'Oui' : 'Non'}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-400">Connecté:</span>
+                                        <span className="text-sm text-gray-400">{t('unifi.connectedLabel')}</span>
                                         <span className={`text-sm ${unifiPlugin.connectionStatus ? 'text-green-400' : 'text-red-400'}`}>
                                             {unifiPlugin.connectionStatus ? 'Oui' : 'Non'}
                                         </span>
@@ -2896,14 +2894,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             </Card>
 
                             {/* Settings */}
-                            <Card title="Configuration" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.configuration')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-96 text-gray-300">
                                     {JSON.stringify(unifiPlugin.settings, null, 2)}
                                 </pre>
                             </Card>
 
                             {/* Stats Raw Data */}
-                            <Card title="Stats Brutes (pluginStats['unifi'])" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.rawStatsDebug')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats ? (
                                     <pre className="text-xs bg-[#050505] p-4 rounded-lg overflow-auto max-h-96 text-gray-300">
                                         {JSON.stringify(unifiStats, null, 2)}
@@ -2911,15 +2909,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 ) : (
                                     <div className="text-center py-8 text-gray-500">
                                         <AlertCircle size={32} className="mx-auto mb-2" />
-                                        <p>Aucune donnée de stats disponible</p>
+                                        <p>{t('unifi.noStatsData')}</p>
                                         <p className="text-xs mt-2 text-gray-600">
-                                            Les stats sont récupérées automatiquement toutes les 30 secondes si le plugin est actif.
+                                            {t('unifi.statsFetchedDescription')}
                                         </p>
                                         <div className="mt-4 text-left text-xs bg-[#050505] p-3 rounded-lg">
-                                            <p className="text-gray-400 mb-2">Debug Info:</p>
-                                            <p className="text-gray-500">Plugin enabled: {unifiPlugin?.enabled ? 'Oui' : 'Non'}</p>
-                                            <p className="text-gray-500">Connection status: {unifiPlugin?.connectionStatus ? 'Oui' : 'Non'}</p>
-                                            <p className="text-gray-500">isActive: {isActive ? 'Oui' : 'Non'}</p>
+                                            <p className="text-gray-400 mb-2">{t('unifi.debugInfo')}</p>
+                                            <p className="text-gray-500">Plugin enabled: {unifiPlugin?.enabled ? t('unifi.yes') : t('unifi.no')}</p>
+                                            <p className="text-gray-500">Connection status: {unifiPlugin?.connectionStatus ? t('unifi.yes') : t('unifi.no')}</p>
+                                            <p className="text-gray-500">isActive: {isActive ? t('unifi.yes') : t('unifi.no')}</p>
                                             <p className="text-gray-500">pluginStats keys: {Object.keys(pluginStats).join(', ')}</p>
                                             <p className="text-gray-500">unifiStats type: {typeof unifiStats}</p>
                                         </div>
@@ -2929,7 +2927,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                             {/* Devices Analysis */}
                             {unifiStats?.devices && (
-                                <Card title="Analyse des Devices" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                <Card title={t('unifi.deviceAnalysis')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                     <div className="space-y-4">
                                         <div>
                                             <span className="text-sm text-gray-400">Nombre total de devices:</span>
@@ -2946,7 +2944,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             </div>
                                         </div>
                                         <div>
-                                            <span className="text-sm text-gray-400">Modèles uniques:</span>
+                                            <span className="text-sm text-gray-400">{t('unifi.uniqueModels')}</span>
                                             <div className="mt-2 flex flex-wrap gap-2">
                                                 {Array.from(new Set(unifiStats.devices.map((d: any) => d.model || 'unknown').filter((m: string) => m !== 'unknown'))).map((model: string) => (
                                                     <span key={model} className="px-2 py-1 bg-[#050505] rounded text-xs text-gray-300">
@@ -2962,7 +2960,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                             </span>
                                         </div>
                                         <div>
-                                            <span className="text-sm text-gray-400">Résumé Firmware (par version):</span>
+                                            <span className="text-sm text-gray-400">{t('unifi.firmwareSummary')}</span>
                                             <div className="mt-2 flex flex-wrap gap-2">
                                                 {(() => {
                                                     const firmwareCounts = new Map<string, number>();
@@ -2983,7 +2981,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                     if (entries.length === 0) {
                                                         return (
                                                             <span className="text-xs text-gray-500">
-                                                                Aucune information de firmware détectée dans les devices (vérifiez les champs
+                                                                {t('unifi.noFirmwareInfo')}
                                                                 <code className="ml-1">version</code>, <code>firmware</code> ou <code>firmware_version</code> dans les stats brutes).
                                                             </span>
                                                         );
@@ -3013,7 +3011,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                             {/* Network Stats Analysis */}
                             {unifiStats?.network && (
-                                <Card title="Analyse des Stats Réseau" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                <Card title={t('unifi.statsAnalysis')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                     <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
                                         {JSON.stringify(unifiStats.network, null, 2)}
                                     </pre>
@@ -3022,7 +3020,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
                             {/* System Stats Analysis */}
                             {unifiStats?.system && (
-                                <Card title="Analyse des Stats Système" className="bg-unifi-card border border-gray-800 rounded-xl">
+                                <Card title={t('unifi.systemStatsAnalysis')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                     <pre className="text-xs bg-unifi-card/50 p-4 rounded-lg overflow-auto max-h-64 text-gray-300">
                                         {JSON.stringify(unifiStats.system, null, 2)}
                                     </pre>
@@ -3030,7 +3028,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             )}
 
                             {/* Actions */}
-                            <Card title="Actions de Debug" className="bg-unifi-card border border-gray-800 rounded-xl">
+                            <Card title={t('unifi.debugActions')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 <div className="space-y-3">
                                     <button
                                         onClick={handleRefresh}
@@ -3038,12 +3036,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
                                     >
                                         <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                                        Forcer le rafraîchissement des stats
+                                        {t('unifi.forceRefreshStats')}
                                     </button>
                                     <div className="text-xs text-gray-500 space-y-1">
                                         <p>• Le polling automatique se fait toutes les 30 secondes si le plugin est actif</p>
-                                        <p>• Vérifiez la console du navigateur (F12) pour les erreurs réseau</p>
-                                        <p>• Vérifiez les logs du serveur backend pour les erreurs API</p>
+                                        <p>• {t('unifi.debugCheckConsole')}</p>
+                                        <p>• {t('unifi.debugCheckBackend')}</p>
                                     </div>
                                 </div>
                             </Card>
@@ -3071,18 +3069,21 @@ interface NatTabContentProps {
     };
 }
 
+type NatRuleItem = {
+    id: string;
+    name?: string;
+    enabled: boolean;
+    protocol: string;
+    dst_port?: string;
+    fwd_port?: string;
+    fwd_host?: string;
+    src?: string;
+    comment?: string;
+};
+
 const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) => {
-    const [natRules, setNatRules] = useState<Array<{
-        id: string;
-        name?: string;
-        enabled: boolean;
-        protocol: string;
-        dst_port?: string;
-        fwd_port?: string;
-        fwd_host?: string;
-        src?: string;
-        comment?: string;
-    }>>([]);
+    const { t } = useTranslation();
+    const [natRules, setNatRules] = useState<NatRuleItem[]>([]);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -3096,14 +3097,14 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                 setIsInitialLoading(true);
             }
             setError(null);
-            const res = await api.get<{ success: boolean; result: Array<any> }>('/api/plugins/unifi/nat');
+            const res = await api.get<NatRuleItem[]>('/api/plugins/unifi/nat');
             if (res.success && res.result) {
                 setNatRules(res.result);
             } else {
-                setError('Impossible de charger les règles NAT');
+                setError(t('unifi.natRulesLoadError'));
             }
         } catch (err) {
-            setError('Erreur lors du chargement des règles NAT');
+            setError(t('unifi.natRulesFetchError'));
             console.error('NAT rules error:', err);
         } finally {
             setIsInitialLoading(false);
@@ -3138,12 +3139,12 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
         <div className="col-span-full space-y-6">
             {/* Gateway & WAN/LAN ports summary */}
             {hasGatewaySummary && (
-                <Card title="Gateway & Ports" className="bg-unifi-card border border-gray-800 rounded-xl">
+                <Card title={t('unifi.gatewayAndPorts')} className="bg-unifi-card border border-gray-800 rounded-xl">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium">
                                 <Network size={16} />
-                                WAN
+                                {t('unifi.wan')}
                             </div>
                             {gSummary.wanPorts && gSummary.wanPorts.length > 0 ? (
                                 <ul className="space-y-1.5">
@@ -3151,19 +3152,19 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                                         <li key={i} className="flex items-center justify-between text-xs bg-gray-800/50 rounded px-2 py-1.5">
                                             <span className="text-gray-300">{p.name}</span>
                                             <span className="font-mono text-cyan-300 truncate max-w-[140px]" title={p.ip || ''}>
-                                                {p.ip || (p.up ? 'Connecté' : '—')}
+                                                {p.ip || (p.up ? t('network.connected') : '—')}
                                             </span>
                                         </li>
                                     ))}
                                 </ul>
                             ) : (
-                                <p className="text-xs text-gray-500">Aucune info WAN (network_table non disponible)</p>
+                                <p className="text-xs text-gray-500">{t('unifi.noWanInfo')}</p>
                             )}
                         </div>
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
                                 <Link2 size={16} />
-                                LAN
+                                {t('unifi.lan')}
                             </div>
                             {gSummary.lanPorts && gSummary.lanPorts.length > 0 ? (
                                 <ul className="space-y-1.5">
@@ -3175,28 +3176,28 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                                     ))}
                                 </ul>
                             ) : gSummary.portCount != null ? (
-                                <p className="text-xs text-gray-300">{gSummary.portCount} port(s) Ethernet</p>
+                                <p className="text-xs text-gray-300">{t('unifi.portCountEthernet', { count: gSummary.portCount })}</p>
                             ) : gSummary.ip ? (
                                 <p className="text-xs text-gray-300 font-mono">{gSummary.ip} (gateway)</p>
                             ) : (
-                                <p className="text-xs text-gray-500">Aucune info LAN</p>
+                                <p className="text-xs text-gray-500">{t('unifi.noLanInfo')}</p>
                             )}
                         </div>
                     </div>
                     <div className="mt-4 pt-3 border-t border-gray-800 flex flex-wrap items-center gap-4 text-xs">
                         {gSummary.ip && (
                             <span className="text-gray-400">
-                                Gateway: <span className="text-white font-mono">{gSummary.ip}</span>
+                                {t('unifi.gatewayLabel')} <span className="text-white font-mono">{gSummary.ip}</span>
                             </span>
                         )}
                         {gSummary.name && gSummary.name !== gSummary.ip && (
                             <span className="text-gray-400">
-                                Nom: <span className="text-white">{gSummary.name}</span>
+                                {t('unifi.tableName')} : <span className="text-white">{gSummary.name}</span>
                             </span>
                         )}
                         {natRulesCount != null && (
                             <span className="text-gray-400">
-                                Règles NAT: <span className="text-purple-300 font-mono">{natRulesCount}</span>
+                                {t('unifi.natRules')}: <span className="text-purple-300 font-mono">{natRulesCount}</span>
                             </span>
                         )}
                     </div>
@@ -3204,7 +3205,7 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
             )}
 
             <Card 
-                title="Règles NAT"
+                title={t('unifi.natRules')}
                 actions={
                     isRefreshing && !isInitialLoading ? (
                         <RefreshCw size={14} className="text-gray-400 animate-spin" />
@@ -3215,7 +3216,7 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                 {isInitialLoading ? (
                     <div className="text-center py-8 text-gray-500">
                         <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
-                        <p className="text-sm">Chargement des règles NAT...</p>
+                        <p className="text-sm">{t('unifi.natRulesLoading')}</p>
                     </div>
                 ) : error ? (
                     <div className="text-center py-8 text-red-500">
@@ -3225,18 +3226,18 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                 ) : natRules.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                         <Router size={32} className="mx-auto mb-2" />
-                        <p className="text-sm">Aucune règle NAT configurée</p>
-                        <p className="text-xs text-gray-600 mt-1">Les règles NAT sont gérées par le gateway UniFi</p>
+                        <p className="text-sm">{t('unifi.noNatRuleConfigured')}</p>
+                        <p className="text-xs text-gray-600 mt-1">{t('unifi.natRulesManagedByGateway')}</p>
                     </div>
                 ) : (
                     <>
                         {/* Filtres */}
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs mb-4 pb-3 border-b border-gray-800">
                             <span className="text-gray-500">
-                                {filteredRules.length} règle(s) affichée(s) sur {natRules.length}
+                                {t('unifi.rulesShownCount', { shown: filteredRules.length, total: natRules.length })}
                             </span>
                             <div className="flex items-center gap-1">
-                                <span className="text-[11px] text-gray-500 mr-1">Statut:</span>
+                                <span className="text-[11px] text-gray-500 mr-1">{t('network.status')}:</span>
                                 {(['all', 'active'] as const).map((mode) => {
                                     const active = filterStatus === mode;
                                     const activeClasses = mode === 'all' 
@@ -3253,7 +3254,7 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                                                     : 'bg-transparent border-gray-700 text-gray-400 hover:bg-gray-800'
                                             }`}
                                         >
-                                            {mode === 'all' ? 'Tous' : 'Actifs'}
+                                            {mode === 'all' ? t('unifi.filterAll') : t('unifi.activeRules')}
                                         </button>
                                     );
                                 })}
@@ -3261,7 +3262,7 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                         </div>
                         {filteredRules.length === 0 ? (
                             <div className="text-center py-8 text-gray-500 text-xs">
-                                Aucune règle pour ce filtre. Essayez "Tous" pour voir toutes les règles.
+                                {t('unifi.noRuleForFilter')}
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-800">
@@ -3281,7 +3282,7 @@ const NatTabContent: React.FC<NatTabContentProps> = ({ isActive, systemStats }) 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-sm font-semibold text-white">
-                                                {rule.name || rule.comment || `Règle ${rule.id.substring(0, 8)}`}
+                                                {rule.name || rule.comment || t('unifi.ruleFallback', { id: rule.id.substring(0, 8) })}
                                             </span>
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full ${
                                                 rule.enabled 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { Activity, ArrowDown, ArrowUp } from 'lucide-react';
 import { Card } from './Card';
@@ -15,6 +16,7 @@ const COLORS = {
 type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800; // 0 = temps réel (live)
 
 export const BandwidthHistoryWidget: React.FC = () => {
+    const { t } = useTranslation();
     const {
         history,
         extendedHistory,
@@ -54,7 +56,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
 
     return (
         <Card
-            title="Bande passante Freebox"
+            title={t('dashboard.bandwidth.title')}
             actions={
                 status && (
                     <span className="flex items-center gap-3 text-xs text-gray-500">
@@ -73,9 +75,9 @@ export const BandwidthHistoryWidget: React.FC = () => {
             <div className="flex items-center justify-between mb-3 text-xs text-gray-500">
                 <span className="flex items-center gap-3">
                     <span>
-                        Période:&nbsp;
+                        {t('dashboard.bandwidth.period')}&nbsp;
                         <span className="text-gray-300">
-                            {selectedRange === 0 && 'Temps réel'}
+                            {selectedRange === 0 && t('dashboard.bandwidth.realtime')}
                             {selectedRange === 3600 && '1h'}
                             {selectedRange === 21600 && '6h'}
                             {selectedRange === 86400 && '24h'}
@@ -83,11 +85,11 @@ export const BandwidthHistoryWidget: React.FC = () => {
                         </span>
                     </span>
                     <span className="hidden sm:inline text-[11px] text-gray-500">
-                        Échelle:&nbsp;
+                        {t('dashboard.bandwidth.scale')}&nbsp;
                         <span className="text-gray-300">
                             {selectedRange === 0
-                                ? 'temps réel (live)'
-                                : (extendedHistory.length > 0 ? 'historique (RRD)' : 'temps réel (live)')}
+                                ? t('dashboard.bandwidth.scaleRealtime')
+                                : (extendedHistory.length > 0 ? t('dashboard.bandwidth.scaleHistory') : t('dashboard.bandwidth.scaleRealtime'))}
                         </span>
                     </span>
                 </span>
@@ -100,7 +102,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
                             }`}
                             onClick={() => setSelectedRange(0)}
                         >
-                            Live
+                            {t('dashboard.bandwidth.live')}
                         </button>
                         <button
                             type="button"
@@ -154,14 +156,14 @@ export const BandwidthHistoryWidget: React.FC = () => {
                                 }
                             });
                         }}
-                        title={isLoggedIn ? 'Rafraîchir l’historique via Freebox' : 'Tenter de se reconnecter à la Freebox'}
+                        title={isLoggedIn ? t('dashboard.bandwidth.refreshHistory') : t('dashboard.bandwidth.reconnectFreebox')}
                     >
                         <span
                             className={`w-2 h-2 rounded-full ${
                                 isLoggedIn ? 'bg-emerald-400' : 'bg-red-500'
                             }`}
                         />
-                        <span>Auth</span>
+                        <span>{t('dashboard.bandwidth.auth')}</span>
                     </button>
                 </div>
             </div>
@@ -185,7 +187,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
                                 contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                                 labelStyle={{ color: '#9ca3af' }}
                                 formatter={((value: number, _name: string, props: { dataKey: string }) => {
-                                    const label = props.dataKey === 'download' ? 'Descendant' : 'Montant';
+                                    const label = props.dataKey === 'download' ? t('system.download') : t('system.upload');
                                     const color = props.dataKey === 'download' ? COLORS.blue : COLORS.green;
                                     return [
                                         <span key="value" style={{ color }}>{formatSpeed(value * 1024)}</span>,
@@ -201,7 +203,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
                                 stroke={COLORS.blue}
                                 fill={COLORS.blue}
                                 fillOpacity={0.3}
-                                name="Descendant"
+                                name={t('system.download')}
                                 isAnimationActive={selectedRange !== 0}
                             />
                             <Area
@@ -211,7 +213,7 @@ export const BandwidthHistoryWidget: React.FC = () => {
                                 stroke={COLORS.green}
                                 fill={COLORS.green}
                                 fillOpacity={0.3}
-                                name="Montant"
+                                name={t('system.upload')}
                                 isAnimationActive={selectedRange !== 0}
                             />
                         </AreaChart>
@@ -219,8 +221,8 @@ export const BandwidthHistoryWidget: React.FC = () => {
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-500">
                         <Activity className="w-10 h-10 mb-3 opacity-50" />
-                        <p className="text-sm">Collecte des données en cours...</p>
-                        <p className="text-xs mt-1">Le graphique se remplira automatiquement.</p>
+                        <p className="text-sm">{t('dashboard.bandwidth.collectingData')}</p>
+                        <p className="text-xs mt-1">{t('dashboard.bandwidth.chartWillFill')}</p>
                     </div>
                 )}
             </div>

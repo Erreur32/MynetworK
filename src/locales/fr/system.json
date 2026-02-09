@@ -1,0 +1,21 @@
+{
+  "system": {
+    "serverSystem": "Système Serveur",
+    "download": "Descendant",
+    "upload": "Montant",
+    "fetchError": "Erreur lors du chargement des informations système",
+    "fetchErrorShort": "Erreur chargement système",
+    "cores": "cores",
+    "free": "Libre:",
+    "database": "Base de Données",
+    "size": "Taille",
+    "cache": "Cache",
+    "mode": "Mode",
+    "hostname": "Hostname",
+    "platform": "Platform",
+    "networkTraffic": "Trafic Réseau",
+    "uptime": "Uptime",
+    "uptimeNow": "Maintenant",
+    "uptimeDaysData": "{{count}}j de données"
+  }
+}

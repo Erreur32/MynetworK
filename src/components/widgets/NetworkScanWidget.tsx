@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { Network, ArrowRight, Activity, CheckCircle } from 'lucide-react';
 import { usePluginStore } from '../../stores/pluginStore';
@@ -54,6 +55,8 @@ interface AutoStatus {
 }
 
 export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDetails }) => {
+    const { t, i18n } = useTranslation();
+    const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     const { pluginStats } = usePluginStore();
     const stats = pluginStats['scan-reseau'];
     
@@ -181,9 +184,9 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     // Format date helper
     const formatDate = (dateStr: string): string => {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('fr-FR', { 
-            day: '2-digit', 
-            month: '2-digit', 
+        return date.toLocaleDateString(dateLocale, {
+            day: '2-digit',
+            month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
@@ -207,34 +210,23 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
         
         // Si le prochain scan est déjà passé (retard), afficher quand même la date précise
         if (diffMs <= 0) {
-            // Le scan est en retard, afficher la date/heure exacte prévue
-            return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+            const d = nextDate.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' });
+            const tm = nextDate.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
+            return t('networkScan.time.nextExecutionDate', { date: d, time: tm });
         }
-        
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-        
-        // Pour les prochains scans très proches (< 1h), afficher les minutes précises
+        const tm = nextDate.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
+        const d = nextDate.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' });
+        const dFull = nextDate.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
         if (diffMins < 60) {
-            if (diffMins < 1) {
-                return `Dans moins d'1min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
-            }
-            return `Dans ${diffMins}min (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
+            if (diffMins < 1) return t('networkScan.time.nextExecutionLessThan1Min', { time: tm });
+            return t('networkScan.time.nextExecutionMinutes', { count: diffMins, time: tm });
         }
-        
-        // Pour les prochains scans dans les prochaines heures, afficher l'heure précise
-        if (diffHours < 24) {
-            return `Dans ${diffHours}h (${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
-        }
-        
-        // Pour les prochains jours, afficher la date et l'heure
-        if (diffDays < 7) {
-            return `Dans ${diffDays}j (${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`;
-        }
-        
-        // Pour les dates plus lointaines, afficher la date complète
-        return `Le ${nextDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })} à ${nextDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        if (diffHours < 24) return t('networkScan.time.nextExecutionHours', { count: diffHours, time: tm });
+        if (diffDays < 7) return t('networkScan.time.nextExecutionDays', { count: diffDays, date: d, time: tm });
+        return t('networkScan.time.nextExecutionDate', { date: dFull, time: tm });
     };
 
     const formatRelativeTime = (dateStr: string): string => {
@@ -244,11 +236,10 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 1) return 'À l\'instant';
-        if (diffMins < 60) return `Il y a ${diffMins}min`;
-        if (diffHours < 24) return `Il y a ${diffHours}h`;
-        if (diffDays < 7) return `Il y a ${diffDays}j`;
+        if (diffMins < 1) return t('networkScan.time.justNow');
+        if (diffMins < 60) return t('networkScan.time.minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('networkScan.time.hoursAgo', { count: diffHours });
+        if (diffDays < 7) return t('networkScan.time.daysAgo', { count: diffDays });
         return formatDate(dateStr);
     };
 
@@ -266,7 +257,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
             title={
                 <div className="flex items-center gap-2">
                     <Network size={18} className="text-cyan-400" />
-                    <span>Scan Réseau</span>
+                    <span>{t('networkScan.title')}</span>
                 </div>
             }
             actions={
@@ -275,7 +266,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                         onClick={onViewDetails}
                         className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 rounded border border-blue-500/30"
                     >
-                        Voir détails
+                        {t('networkScan.widget.viewDetails')}
                         <ArrowRight size={14} />
                     </button>
                 ) : undefined
@@ -284,9 +275,9 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
             {totalIps === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                     <Activity size={32} className="text-gray-500 mb-2" />
-                    <p className="text-sm text-gray-400">Aucun scan effectué</p>
+                    <p className="text-sm text-gray-400">{t('networkScan.widget.noScanDone')}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                        Lancez un scan pour découvrir les IPs du réseau
+                        {t('networkScan.widget.launchScanHint')}
                     </p>
                 </div>
             ) : (
@@ -295,35 +286,35 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                             <div className="text-2xl font-bold text-gray-200">{totalIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">Total IPs</div>
+                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.totalIps')}</div>
                         </div>
                         <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                             <div className="text-2xl font-bold text-emerald-400">{onlineIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">Online</div>
+                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.online')}</div>
                         </div>
                         <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
                             <div className="text-2xl font-bold text-red-400">{offlineIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">Offline</div>
+                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.offline')}</div>
                         </div>
                     </div>
 
                     {/* Last scan - Same format as Info Scans */}
                     <div className="pt-2 border-t border-gray-800">
                         <div className="text-xs space-y-2">
-                            <div className="font-medium text-gray-300 mb-2">Dernier Scan:</div>
+                            <div className="font-medium text-gray-300 mb-2">{t('networkScan.widget.lastScan')}</div>
                             {autoStatus?.lastScan ? (
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2 mb-1">
                                         {autoStatus.lastScan.isManual ? (
-                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
+                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.widget.manual')}</span>
                                         ) : (
-                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">Auto</span>
+                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">{t('networkScan.widget.auto')}</span>
                                         )}
                                         <span className="text-gray-400">
                                             {autoStatus.lastScan.type === 'full' ? (
-                                                <>Full Scan <span className="text-gray-500">(Complet)</span></>
+                                                <>{t('networkScan.widget.fullScan')} <span className="text-gray-500">({t('networkScan.widget.complete')})</span></>
                                             ) : (
-                                                <>Refresh <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? 'Complet' : 'Rapide'})</span></>
+                                                <>{t('networkScan.widget.refresh')} <span className="text-gray-500">({autoStatus.lastScan.scanType === 'full' ? t('networkScan.widget.complete') : t('networkScan.widget.quick')})</span></>
                                             )}
                                         </span>
                                         {autoStatus.lastScan.range && (
@@ -340,8 +331,8 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             ) : lastScan ? (
                                 <div className="mb-2">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">Manuel</span>
-                                        <span className="text-gray-300">Scan</span>
+                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.widget.manual')}</span>
+                                        <span className="text-gray-300">{t('networkScan.scanTypes.scan')}</span>
                                         <span className="text-gray-300 font-medium">{formatDate(lastScan.toISOString())}</span>
                                     </div>
                                     <div className="text-gray-500 text-xs mt-0.5">
@@ -349,7 +340,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-gray-500">Aucun scan effectué</div>
+                                <div className="text-gray-500">{t('networkScan.widget.noScanDone')}</div>
                             )}
                             
                             {/* Prochains scans automatiques - Même style que Info Scans */}
@@ -357,9 +348,9 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                 <div className="pt-2 border-t border-gray-800 space-y-2">
                                     {autoStatus.fullScan.config.enabled && (
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-gray-300 font-medium w-14">Full Scan</span>
+                                            <span className="text-gray-300 font-medium w-14">{t('networkScan.widget.fullScan')}</span>
                                             <span className="px-2 py-0.5 rounded text-xs font-medium w-16 text-center bg-purple-500/20 border border-purple-500/50 text-purple-400">
-                                                Complet
+                                                {t('networkScan.widget.complete')}
                                             </span>
                                             <span className="text-gray-400">
                                                 {formatNextExecution(
@@ -378,13 +369,13 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     )}
                                     {autoStatus.refresh.config.enabled && (
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-gray-300 font-medium w-14">Refresh</span>
+                                            <span className="text-gray-300 font-medium w-14">{t('networkScan.widget.refresh')}</span>
                                             <span className={`px-2 py-0.5 rounded text-xs font-medium w-16 text-center ${
                                                 (autoStatus.refresh.config.scanType || 'quick') === 'full'
                                                     ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
                                                     : 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
                                             }`}>
-                                                {(autoStatus.refresh.config.scanType || 'quick') === 'full' ? 'Complet' : 'Rapide'}
+                                                {(autoStatus.refresh.config.scanType || 'quick') === 'full' ? t('networkScan.widget.complete') : t('networkScan.widget.quick')}
                                             </span>
                                             <span className="text-gray-400">
                                                 {formatNextExecution(
@@ -405,10 +396,10 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     {offlineIps > 0 && (
                         <div className="pt-2 border-t border-gray-800">
                             <div className="text-xs text-gray-400 mb-2 font-medium">
-                                IPs Offline ({offlineIpsList.length > 0 ? offlineIpsList.length : offlineIps})
+                                {t('networkScan.widget.offlineIps')} ({offlineIpsList.length > 0 ? offlineIpsList.length : offlineIps})
                             </div>
                             {loading && offlineIpsList.length === 0 ? (
-                                <div className="text-[11px] text-gray-500 py-2">Chargement...</div>
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
                             ) : offlineIpsList.length > 0 ? (
                                 <div className="space-y-1 max-h-80 overflow-y-auto">
                                     {offlineIpsList.map((item) => (
@@ -430,7 +421,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-[11px] text-gray-500 py-2">Aucune IP offline récente</div>
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noOfflineRecent')}</div>
                             )}
                         </div>
                     )}
@@ -439,10 +430,10 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     {onlineIps > 0 && (
                         <div className="pt-2 border-t border-gray-800">
                             <div className="text-xs text-gray-400 mb-2 font-medium">
-                                Top Pire Latence ({worstLatencyIps.length > 0 ? worstLatencyIps.length : '--'})
+                                {t('networkScan.widget.topWorstLatency')} ({worstLatencyIps.length > 0 ? worstLatencyIps.length : '--'})
                             </div>
                             {loading && worstLatencyIps.length === 0 ? (
-                                <div className="text-[11px] text-gray-500 py-2">Chargement...</div>
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
                             ) : worstLatencyIps.length > 0 ? (
                                 <div className="space-y-1">
                                     {worstLatencyIps.map((item) => (
@@ -466,7 +457,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-[11px] text-gray-500 py-2">Aucune latence mesurée</div>
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noLatencyMeasured')}</div>
                             )}
                         </div>
                     )}

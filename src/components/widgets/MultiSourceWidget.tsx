@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle, AlertCircle, ExternalLink, Activity } from 'lucide-react';
 import { usePluginStore, type PluginStats } from '../../stores/pluginStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -23,8 +24,10 @@ interface MultiSourceWidgetProps {
 }
 
 export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className = '', onPluginClick }) => {
+    const { t, i18n } = useTranslation();
     const { plugins, pluginStats } = usePluginStore();
     const { permissions, freeboxUrl } = useAuthStore();
+    const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
 
     const activePlugins = plugins.filter((plugin) => plugin.enabled && plugin.connectionStatus);
     
@@ -35,10 +38,10 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
 
     return (
         <Card
-            title="État des plugins"
+            title={t('dashboard.pluginsState.title')}
             actions={
                 <div className="text-xs text-gray-500">
-                    Plugins actifs :{' '}
+                    {t('dashboard.pluginsState.activeCount')}{' '}
                     <span className="text-gray-200 font-medium">
                         {activePlugins.length} / {plugins.length}
                     </span>
@@ -49,9 +52,9 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
             {plugins.length === 0 ? (
                 <div className="text-center py-8">
                     <AlertCircle size={32} className="mx-auto text-gray-600 mb-2" />
-                    <p className="text-gray-500 text-sm">Aucun plugin détecté</p>
+                    <p className="text-gray-500 text-sm">{t('dashboard.pluginsState.noPlugin')}</p>
                     <p className="text-gray-600 text-xs mt-1">
-                        Activez et configurez des plugins dans la page Plugins.
+                        {t('dashboard.pluginsState.noPluginHint')}
                     </p>
                 </div>
             ) : (
@@ -63,10 +66,10 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                 <AlertCircle size={16} className="text-orange-400 flex-shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                     <div className="text-xs font-semibold text-orange-400 mb-1">
-                                        Permission manquante pour Freebox
+                                        {t('dashboard.pluginsState.freeboxPermissionTitle')}
                                     </div>
                                     <div className="text-[11px] text-orange-300/90 mb-2">
-                                        La permission <span className="font-medium text-orange-200">"{PERMISSION_LABELS.settings || 'settings'}"</span> est requise pour accéder à certaines fonctionnalités.
+                                        {t('dashboard.pluginsState.freeboxPermissionDesc', { label: PERMISSION_LABELS.settings || 'settings' })}
                                     </div>
                                     <a
                                         href={getFreeboxSettingsUrl(freeboxUrl)}
@@ -74,7 +77,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-1.5 text-[11px] text-orange-400 hover:text-orange-300 underline"
                                     >
-                                        Configurer les permissions dans Freebox OS
+                                        {t('dashboard.pluginsState.freeboxPermissionLink')}
                                         <ExternalLink size={12} />
                                     </a>
                                 </div>
@@ -156,7 +159,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                     onPluginClick ? 'cursor-pointer' : ''
                                                 }`}
                                                 onClick={() => onPluginClick?.()}
-                                                title={onPluginClick ? `Aller à l'administration pour configurer ${plugin.name}` : undefined}
+                                                title={onPluginClick ? `${t('dashboard.pluginsState.goToAdmin')} ${plugin.name}` : undefined}
                                     >
                                         {/* Header: plugin name, version and status */}
                                         <div className="flex items-center justify-between gap-2">
@@ -177,12 +180,11 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                         const unifiFirmware = plugin.controllerFirmware || systemStats?.controllerFirmware || systemStats?.version;
                                                         
                                                         if (plugin.id === 'freebox' && freeboxFirmware) {
-                                                            return `Firmware ${freeboxFirmware}`;
+                                                            return t('dashboard.pluginsState.firmware', { version: freeboxFirmware });
                                                         } else if (plugin.id === 'unifi' && unifiFirmware) {
-                                                            return `Firmware ${unifiFirmware}`;
+                                                            return t('dashboard.pluginsState.firmware', { version: unifiFirmware });
                                                         }
-                                                        // Fallback to plugin version if no firmware available
-                                                        return `Version ${plugin.version || 'n/a'}`;
+                                                        return t('dashboard.pluginsState.version', { version: plugin.version || 'n/a' });
                                                     })()}
                                                 </span>
                                                     </div>
@@ -192,29 +194,29 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                     <>
                                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-900/30 border border-emerald-700 text-emerald-400">
                                                             <CheckCircle size={10} />
-                                                            Actif
+                                                            {t('dashboard.pluginsState.statusActive')}
                                                         </span>
                                                         {hasStats ? (
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-900/30 border border-blue-700 text-blue-400">
                                                                 <CheckCircle size={10} />
-                                                                OK
+                                                                {t('dashboard.pluginsState.statusOk')}
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700 text-yellow-400">
                                                                 <AlertCircle size={10} />
-                                                                Indispo
+                                                                {t('dashboard.pluginsState.statusUnavailable')}
                                                             </span>
                                                         )}
                                                     </>
                                                 ) : plugin.enabled ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700 text-yellow-400">
                                                         <AlertCircle size={10} />
-                                                        Config requise
+                                                        {t('dashboard.pluginsState.configRequired')}
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-800/50 border border-gray-700 text-gray-500">
                                                         <XCircle size={10} />
-                                                        Désactivé
+                                                        {t('dashboard.pluginsState.disabled')}
                                                     </span>
                                                 )}
                                             </div>
@@ -229,7 +231,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                         <>
                                                     {(apiVersion || systemStats?.apiVersion) && (
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-gray-500">Version API&nbsp;:</span>
+                                                            <span className="text-gray-500">{t('dashboard.pluginsState.apiVersion')}</span>
                                                             <span className="text-cyan-400 font-mono font-medium text-xs">
                                                                 {systemStats?.apiVersion || apiVersion}
                                                             </span>
@@ -237,7 +239,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                     )}
                                                             {firmware && (
                                                                 <div className="flex items-center justify-between">
-                                                                    <span className="text-gray-500">Firmware Box&nbsp;:</span>
+                                                                    <span className="text-gray-500">{t('dashboard.pluginsState.firmwareBox')}</span>
                                                                     <span className="text-gray-200 font-mono font-medium text-xs">
                                                                         {firmware}
                                                                     </span>
@@ -245,7 +247,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                             )}
                                                             {playerFirmware && (
                                                                 <div className="flex items-center justify-between">
-                                                                    <span className="text-gray-500">Firmware Player&nbsp;:</span>
+                                                                    <span className="text-gray-500">{t('dashboard.pluginsState.firmwarePlayer')}</span>
                                                                     <span className="text-gray-200 font-mono font-medium text-xs">
                                                                         {playerFirmware}
                                                                     </span>
@@ -257,7 +259,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                         <>
                                                             {apiMode && (
                                                                 <div className="flex items-center justify-between">
-                                                                    <span className="text-gray-500">Mode API&nbsp;:</span>
+                                                                    <span className="text-gray-500">{t('dashboard.pluginsState.apiMode')}</span>
                                                                     <span className="text-purple-400 font-mono font-medium text-xs">
                                                                         {apiMode}
                                                                     </span>
@@ -265,7 +267,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                             )}
                                                             {controllerFirmware && (
                                                                 <div className="flex items-center justify-between">
-                                                                    <span className="text-gray-500">Version Firmware&nbsp;:</span>
+                                                                    <span className="text-gray-500">{t('dashboard.pluginsState.firmwareVersion')}</span>
                                                                     <span className="text-gray-200 font-mono font-medium text-xs">
                                                                         {controllerFirmware}
                                                                     </span>
@@ -278,25 +280,21 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                         const lastScan = scanStats?.lastScan ? new Date(scanStats.lastScan) : null;
                                                         
                                                         const formatLastScan = (date: Date | null): string => {
-                                                            if (!date) return 'scan en attente...';
-                                                            
+                                                            if (!date) return t('dashboard.pluginsState.scanPending');
                                                             const now = new Date();
                                                             const diffMs = now.getTime() - date.getTime();
                                                             const diffMins = Math.floor(diffMs / 60000);
                                                             const diffHours = Math.floor(diffMs / 3600000);
                                                             const diffDays = Math.floor(diffMs / 86400000);
-                                                            
-                                                            if (diffMins < 1) return 'À l\'instant';
-                                                            if (diffMins < 60) return `Il y a ${diffMins}min`;
-                                                            if (diffHours < 24) return `Il y a ${diffHours}h`;
-                                                            if (diffDays < 7) return `Il y a ${diffDays}j`;
-                                                            
-                                                            return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                                                            if (diffMins < 1) return t('dashboard.pluginsState.justNow');
+                                                            if (diffMins < 60) return t('dashboard.pluginsState.agoMins', { count: diffMins });
+                                                            if (diffHours < 24) return t('dashboard.pluginsState.agoHours', { count: diffHours });
+                                                            if (diffDays < 7) return t('dashboard.pluginsState.agoDays', { count: diffDays });
+                                                            return date.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
                                                         };
-                                                        
                                                         return (
                                                             <div className="flex items-center justify-between">
-                                                                <span className="text-gray-500">Dernier scan&nbsp;:</span>
+                                                                <span className="text-gray-500">{t('dashboard.pluginsState.lastScan')}</span>
                                                                 <span className={`font-mono font-medium text-xs ${lastScan ? 'text-gray-200' : 'text-yellow-400'}`}>
                                                                     {formatLastScan(lastScan)}
                                                                 </span>
@@ -311,12 +309,12 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                 <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-gray-800">
                                                     {source && (
                                                         <span className="truncate max-w-[60%]">
-                                                            Source: <span className="text-gray-300">{source}</span>
+                                                            {t('dashboard.pluginsState.source')} <span className="text-gray-300">{source}</span>
                                                         </span>
                                                     )}
                                                     {executionMs !== undefined && (
                                                         <span>
-                                                            Temps: <span className="text-gray-300">{executionMs} ms</span>
+                                                            {t('dashboard.pluginsState.time')} <span className="text-gray-300">{executionMs} ms</span>
                                                         </span>
                                                     )}
                                                 </div>
@@ -324,7 +322,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
 
                                             {!hasStats && plugin.enabled && (
                                                 <span className="text-[10px] text-yellow-500">
-                                                    Statistiques non disponibles (voir logs backend).
+                                                    {t('dashboard.pluginsState.statsUnavailable')}
                                                 </span>
                                             )}
                                         </div>

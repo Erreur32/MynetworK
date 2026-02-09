@@ -1,0 +1,28 @@
+{
+  "freebox": {
+    "label": "Freebox",
+    "state": "État de la Freebox",
+    "downloadRealtime": "Descendant en temps réel",
+    "uploadRealtime": "Montant en temps réel",
+    "speedTest": "Test de débits",
+    "refreshSession": "Rafraîchir la session Freebox",
+    "reconnect": "Se reconnecter à la Freebox",
+    "checkApiConnection": "Vérifiez la connexion à l'API Freebox.",
+    "systemState": "État système",
+    "sessionOk": "Session OK",
+    "sessionExpired": "Session expirée",
+    "wifiStations": "Bornes Wi‑Fi Freebox",
+    "accessPointsCount": "{{count}} point(s) d'accès",
+    "devicesCount": "{{count}} appareils",
+    "load": "Charge",
+    "channel": "Canal",
+    "fan": "Ventilateur",
+    "temperature": "Température",
+    "firmware": "Firmware",
+    "activeCount": "Actifs",
+    "total": "Total",
+    "nat": "NAT",
+    "activeRules": "Actives",
+    "lanNetwork": "Réseau LAN"
+  }
+}

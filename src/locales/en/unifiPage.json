@@ -1,0 +1,39 @@
+{
+  "unifi": {
+    "pageTitle": "UniFi Controller",
+    "tabs": {
+      "overview": "Overview",
+      "nat": "NAT",
+      "clients": "Clients",
+      "switches": "Switch",
+      "analyse": "Analysis",
+      "traffic": "Traffic",
+      "events": "Events",
+      "debug": "Debug"
+    },
+    "pluginNotInstalled": "UniFi plugin is not installed or configured.",
+    "pluginNotConnectedDescription": "UniFi plugin is not enabled or connected.",
+    "configureFromPlugins": "Enable and configure the plugin from the \"Plugins\" page.",
+    "sitesTitle": "UniFi Sites",
+    "siteFallback": "UniFi Site",
+    "switchPortsTitle": "UniFi Switch Ports",
+    "trafficNetwork": "Network Traffic (UniFi)",
+    "pluginInfo": "Plugin Information",
+    "configuration": "Configuration",
+    "rawStatsDebug": "Raw Stats (pluginStats['unifi'])",
+    "deviceAnalysis": "Device Analysis",
+    "debugActions": "Debug Actions",
+    "gatewayAndPorts": "Gateway & Ports",
+    "natRulesLoading": "Loading NAT rules...",
+    "natRulesLoadError": "Unable to load NAT rules",
+    "natRulesFetchError": "Error loading NAT rules",
+    "natRulesManagedByGateway": "NAT rules are managed by the UniFi gateway",
+    "rulesShownCount": "{{shown}} rule(s) shown of {{total}}",
+    "filterAll": "All",
+    "gatewayLabel": "Gateway:",
+    "wan": "WAN",
+    "lan": "LAN",
+    "portCountEthernet": "{{count}} Ethernet port(s)",
+    "debugInfo": "Debug Info:"
+  }
+}

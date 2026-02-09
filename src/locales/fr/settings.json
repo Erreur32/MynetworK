@@ -1,0 +1,9 @@
+{
+  "settings": {
+    "openFreebox": "Ouvrir les paramètres Freebox",
+    "interfaceLanguage": "Langue de l'interface",
+    "interfaceLanguageDescription": "Langue d'affichage de l'application",
+    "languageEn": "English",
+    "languageFr": "Français"
+  }
+}

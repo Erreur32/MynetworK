@@ -1261,6 +1261,19 @@ export const ThemeSection: React.FC = () => {
                         description={`Réglez l'opacité des cartes et blocs. Valeur actuelle: ${Math.round((cardOpacity[currentTheme] ?? 1.0) * 100)}%`}
                     >
                         <div className="flex items-center gap-3 w-full">
+                            {/* Decrement button for fine-tuning opacity value */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const current = cardOpacity[currentTheme] ?? 1.0;
+                                    const newVal = Math.max(0.1, parseFloat((current - 0.01).toFixed(2)));
+                                    handleCardOpacityChange(newVal);
+                                }}
+                                className="w-7 h-7 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-sm font-bold flex-shrink-0"
+                                title="−"
+                            >
+                                −
+                            </button>
                             <input
                                 type="range"
                                 min={0.1}
@@ -1273,6 +1286,19 @@ export const ThemeSection: React.FC = () => {
                                     background: `linear-gradient(to right, rgba(251, 191, 36, 0.3) 0%, rgba(251, 191, 36, 0.3) ${((cardOpacity[currentTheme] ?? 1.0) - 0.1) / 0.9 * 100}%, rgba(255, 255, 255, 0.1) ${((cardOpacity[currentTheme] ?? 1.0) - 0.1) / 0.9 * 100}%, rgba(255, 255, 255, 0.1) 100%)`
                                 }}
                             />
+                            {/* Increment button for fine-tuning opacity value */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const current = cardOpacity[currentTheme] ?? 1.0;
+                                    const newVal = Math.min(1.0, parseFloat((current + 0.01).toFixed(2)));
+                                    handleCardOpacityChange(newVal);
+                                }}
+                                className="w-7 h-7 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-sm font-bold flex-shrink-0"
+                                title="+"
+                            >
+                                +
+                            </button>
                             <span className="text-sm text-theme-secondary font-mono min-w-[3rem] text-right">
                                 {Math.round((cardOpacity[currentTheme] ?? 1.0) * 100)}%
                             </span>
@@ -1916,6 +1942,19 @@ export const ThemeSection: React.FC = () => {
                         description={`${animationSpeed.toFixed(2)} (${animationSpeed >= 1.2 ? t('theme.speedSlow') : animationSpeed >= 0.75 ? t('theme.speedNormal') : animationSpeed >= 0.4 ? t('theme.speedFast') : t('theme.speedVeryFast')})`}
                     >
                         <div className="flex items-center gap-3 w-full">
+                            {/* Decrement button for fine-tuning animation speed (moves slider left = slower) */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const currentSliderVal = maxSpeed - animationSpeed;
+                                    const newSliderVal = Math.max(minSpeed, parseFloat((currentSliderVal - 0.1).toFixed(1)));
+                                    setAnimationSpeed(maxSpeed - newSliderVal);
+                                }}
+                                className="w-7 h-7 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-sm font-bold flex-shrink-0"
+                                title="−"
+                            >
+                                −
+                            </button>
                             <input
                                 type="range"
                                 min={minSpeed}
@@ -1928,6 +1967,19 @@ export const ThemeSection: React.FC = () => {
                                     background: `linear-gradient(to right, rgba(251, 191, 36, 0.3) 0%, rgba(251, 191, 36, 0.3) ${((maxSpeed - animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) ${((maxSpeed - animationSpeed - minSpeed) / (maxSpeed - minSpeed)) * 100}%, rgba(255, 255, 255, 0.1) 100%)`
                                 }}
                             />
+                            {/* Increment button for fine-tuning animation speed (moves slider right = faster) */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const currentSliderVal = maxSpeed - animationSpeed;
+                                    const newSliderVal = Math.min(maxSpeed, parseFloat((currentSliderVal + 0.1).toFixed(1)));
+                                    setAnimationSpeed(maxSpeed - newSliderVal);
+                                }}
+                                className="w-7 h-7 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-sm font-bold flex-shrink-0"
+                                title="+"
+                            >
+                                +
+                            </button>
                             <span className="text-sm text-theme-secondary font-mono min-w-[3rem] text-right">
                                 {animationSpeed.toFixed(1)}x
                             </span>
@@ -2053,6 +2105,19 @@ export const ThemeSection: React.FC = () => {
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-3 w-full">
+                                                {/* Decrement button for fine-tuning animation parameter value */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const step = param.step || 1;
+                                                        const newVal = Math.max(param.min, parseFloat((rangeValue - step).toFixed(10)));
+                                                        handleRangeChange(newVal);
+                                                    }}
+                                                    className="w-6 h-6 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-xs font-bold flex-shrink-0"
+                                                    title="−"
+                                                >
+                                                    −
+                                                </button>
                                                 <input
                                                     type="range"
                                                     min={param.min}
@@ -2062,6 +2127,19 @@ export const ThemeSection: React.FC = () => {
                                                     onChange={(e) => handleRangeChange(parseFloat(e.target.value))}
                                                     className="flex-1 h-1.5 bg-theme-secondary rounded-full appearance-none cursor-pointer accent-yellow-500 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-yellow-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-yellow-500"
                                                 />
+                                                {/* Increment button for fine-tuning animation parameter value */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const step = param.step || 1;
+                                                        const newVal = Math.min(param.max, parseFloat((rangeValue + step).toFixed(10)));
+                                                        handleRangeChange(newVal);
+                                                    }}
+                                                    className="w-6 h-6 flex items-center justify-center rounded-full bg-theme-secondary hover:bg-yellow-500/20 text-theme-secondary hover:text-yellow-400 border border-theme transition-colors text-xs font-bold flex-shrink-0"
+                                                    title="+"
+                                                >
+                                                    +
+                                                </button>
                                                 <span className="text-lg font-semibold text-theme-primary tabular-nums min-w-[4rem] text-right">
                                                     {displayValue}
                                                 </span>

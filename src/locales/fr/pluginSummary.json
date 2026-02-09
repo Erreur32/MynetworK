@@ -1,0 +1,11 @@
+{
+  "pluginSummary": {
+    "viewDetails": "Accéder",
+    "connectionIssue": "Problème de connexion",
+    "checkPluginConfig": "Vérifiez la configuration du plugin.",
+    "seeBackendLogs": "Consultez les logs backend pour plus de détails.",
+    "throughputPlugin": "Débit (plugin)",
+    "configRequiredForStats": "Configuration requise pour voir les stats",
+    "enablePluginForStats": "Activez le plugin pour voir les stats"
+  }
+}

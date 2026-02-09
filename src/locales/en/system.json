@@ -1,0 +1,21 @@
+{
+  "system": {
+    "serverSystem": "Server system",
+    "download": "Download",
+    "upload": "Upload",
+    "fetchError": "Failed to fetch system info",
+    "fetchErrorShort": "Error fetching system info",
+    "cores": "cores",
+    "free": "Free:",
+    "database": "Database",
+    "size": "Size",
+    "cache": "Cache",
+    "mode": "Mode",
+    "hostname": "Hostname",
+    "platform": "Platform",
+    "networkTraffic": "Network traffic",
+    "uptime": "Uptime",
+    "uptimeNow": "Now",
+    "uptimeDaysData": "{{count}}d of data"
+  }
+}

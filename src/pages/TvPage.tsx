@@ -1,4 +1,5 @@
 import React, {useEffect, useState, useRef, useCallback} from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     Tv,
     Video,
@@ -75,6 +76,7 @@ const RecordingCard: React.FC<{
     recording: PvrRecording;
     onDelete: (id: number) => void;
 }> = ({recording, onDelete}) => {
+    const { t } = useTranslation();
     const [showConfirm, setShowConfirm] = useState(false);
 
     const handleDelete = () => {
@@ -107,7 +109,7 @@ const RecordingCard: React.FC<{
                         <span
                             className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-red-500/20 text-red-400">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
-              En cours
+              {t('tv.inProgress')}
             </span>
                     )}
                     <button
@@ -117,7 +119,7 @@ const RecordingCard: React.FC<{
                                 ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                                 : 'hover:bg-gray-700 text-gray-400 hover:text-white'
                         }`}
-                        title={showConfirm ? 'Confirmer la suppression' : 'Supprimer'}
+                        title={showConfirm ? t('tv.confirmDelete') : t('tv.delete')}
                     >
                         <Trash2 size={16}/>
                     </button>
@@ -150,7 +152,7 @@ const RecordingCard: React.FC<{
                 <button
                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors">
                     <Play size={12}/>
-                    Lire
+                    {t('tv.play')}
                 </button>
             </div>
         </div>
@@ -162,6 +164,7 @@ const ProgrammedCard: React.FC<{
     programmed: PvrProgrammed;
     onDelete: (id: number) => void;
 }> = ({programmed, onDelete}) => {
+    const { t } = useTranslation();
     const [showConfirm, setShowConfirm] = useState(false);
 
     const handleDelete = () => {
@@ -179,13 +182,13 @@ const ProgrammedCard: React.FC<{
 
     // Check repeat days
     const repeatDays: string[] = [];
-    if (programmed.repeat_monday) repeatDays.push('Lun');
-    if (programmed.repeat_tuesday) repeatDays.push('Mar');
-    if (programmed.repeat_wednesday) repeatDays.push('Mer');
-    if (programmed.repeat_thursday) repeatDays.push('Jeu');
-    if (programmed.repeat_friday) repeatDays.push('Ven');
-    if (programmed.repeat_saturday) repeatDays.push('Sam');
-    if (programmed.repeat_sunday) repeatDays.push('Dim');
+    if (programmed.repeat_monday) repeatDays.push(t('tv.dayMon'));
+    if (programmed.repeat_tuesday) repeatDays.push(t('tv.dayTue'));
+    if (programmed.repeat_wednesday) repeatDays.push(t('tv.dayWed'));
+    if (programmed.repeat_thursday) repeatDays.push(t('tv.dayThu'));
+    if (programmed.repeat_friday) repeatDays.push(t('tv.dayFri'));
+    if (programmed.repeat_saturday) repeatDays.push(t('tv.daySat'));
+    if (programmed.repeat_sunday) repeatDays.push(t('tv.daySun'));
 
     return (
         <div className={`bg-[#1a1a1a] rounded-xl border p-4 transition-colors ${
@@ -218,7 +221,7 @@ const ProgrammedCard: React.FC<{
                                 ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                                 : 'hover:bg-gray-700 text-gray-400 hover:text-white'
                         }`}
-                        title={showConfirm ? 'Confirmer la suppression' : 'Supprimer'}
+                        title={showConfirm ? t('tv.confirmDelete') : t('tv.delete')}
                     >
                         <Trash2 size={16}/>
                     </button>
@@ -290,7 +293,7 @@ const ProgramTooltip: React.FC<{
             {program.desc && (
                 <p className="text-xs text-gray-400 mt-2 line-clamp-3">{program.desc}</p>
             )}
-            <div className="text-[10px] text-gray-600 mt-2">Cliquer pour enregistrer</div>
+            <div className="text-[10px] text-gray-600 mt-2">{t('tv.clickToRecord')}</div>
         </div>
     );
 };
@@ -305,6 +308,7 @@ const EpgTimeline: React.FC<{
     timelineStartTimestamp: number;
     onTimelineStartChange: (timestamp: number) => void;
 }> = ({programs, onRecord, freeboxUrl, onLoadMore, onDateChange, timelineStartTimestamp, onTimelineStartChange}) => {
+    const { t } = useTranslation();
     const [visibleChannels, setVisibleChannels] = useState(15);
     const [tooltip, setTooltip] = useState<{ program: EpgEntry; x: number; y: number } | null>(null);
     const [timelineHours, setTimelineHours] = useState(12); // Start with 12 hours
@@ -503,7 +507,7 @@ const EpgTimeline: React.FC<{
             if (!channelsMap.has(program.channelUuid)) {
                 channelsMap.set(program.channelUuid, {
                     uuid: program.channelUuid,
-                    name: program.channelName || 'Chaîne',
+                    name: program.channelName || t('tv.channel'),
                     logo: program.channelLogo,
                     number: program.channelNumber,
                     programs: []
@@ -703,12 +707,12 @@ const EpgTimeline: React.FC<{
                         type="text"
                         value={channelFilter}
                         onChange={(e) => setChannelFilter(e.target.value)}
-                        placeholder="Filtrer les chaînes..."
+                        placeholder={t('tv.filterChannels')}
                         className="w-full px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500"
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Date:</label>
+                    <label className="text-xs text-gray-500">{t('tv.date')}:</label>
                     <input
                         type="date"
                         value={selectedDate}
@@ -717,7 +721,7 @@ const EpgTimeline: React.FC<{
                     />
                 </div>
                 <span className="text-xs text-gray-500">
-          {channels.length} chaîne{channels.length > 1 ? 's' : ''}
+          {t('tv.channelsCountShort', { count: channels.length })}
         </span>
             </div>
 
@@ -727,7 +731,7 @@ const EpgTimeline: React.FC<{
                     {/* Channel header */}
                     <div
                         className="h-12 bg-[#151515] p-2 flex items-end text-xs text-gray-500 font-medium border-b border-r border-gray-800">
-                        Chaîne
+                        {t('tv.channel')}
                     </div>
                     {/* Channel list - scrolls vertically only */}
                     <div ref={channelListRef} className="max-h-[60vh] overflow-y-auto overflow-x-hidden">
@@ -868,7 +872,7 @@ const EpgTimeline: React.FC<{
                     >
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 size={24} className="text-purple-400 animate-spin"/>
-                            <span className="text-[10px] text-gray-400 font-medium">Chargement...</span>
+                            <span className="text-[10px] text-gray-400 font-medium">{t('tv.loading')}</span>
                         </div>
                     </div>
                 )}
@@ -943,7 +947,7 @@ const EpgProgramCard: React.FC<{
                         <button
                             onClick={() => onRecord(program)}
                             className="flex-shrink-0 p-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors"
-                            title="Programmer l'enregistrement"
+                            title={t('tv.programRecordTitle')}
                         >
                             <Circle size={14} className="fill-current"/>
                         </button>
@@ -985,6 +989,7 @@ const PvrConfigModal: React.FC<{
     currentConfig: { margin_before: number; margin_after: number } | null;
     onSave: (config: { margin_before: number; margin_after: number }) => Promise<boolean>;
 }> = ({isOpen, onClose, currentConfig, onSave}) => {
+    const { t } = useTranslation();
     const [marginBefore, setMarginBefore] = useState(0);
     const [marginAfter, setMarginAfter] = useState(0);
     const [saving, setSaving] = useState(false);
@@ -1019,7 +1024,7 @@ const PvrConfigModal: React.FC<{
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
             <div className="bg-[#151515] w-full max-w-md rounded-2xl border border-gray-800 shadow-2xl">
                 <div className="flex items-center justify-between p-4 border-b border-gray-800">
-                    <h2 className="text-lg font-bold text-white">Configuration PVR</h2>
+                    <h2 className="text-lg font-bold text-white">{t('tv.pvrConfigTitle')}</h2>
                     <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-lg">
                         <X size={20}/>
                     </button>
@@ -1027,13 +1032,12 @@ const PvrConfigModal: React.FC<{
 
                 <div className="p-4 space-y-4">
                     <p className="text-sm text-gray-400">
-                        Configurez les marges par défaut pour les enregistrements. Ces marges permettent de commencer
-                        l'enregistrement avant l'heure prévue et de le terminer après.
+                        {t('tv.pvrConfigDesc')}
                     </p>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs text-gray-500 mb-2">Marge avant (minutes)</label>
+                            <label className="block text-xs text-gray-500 mb-2">{t('tv.marginBefore')}</label>
                             <div className="flex items-center gap-2">
                                 <input
                                     type="range"
@@ -1045,11 +1049,11 @@ const PvrConfigModal: React.FC<{
                                 />
                                 <span className="w-12 text-center text-white font-medium">{marginBefore}</span>
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">Démarre {marginBefore} min avant</p>
+                            <p className="text-xs text-gray-600 mt-1">{t('tv.startsBefore', { n: marginBefore })}</p>
                         </div>
 
                         <div>
-                            <label className="block text-xs text-gray-500 mb-2">Marge après (minutes)</label>
+                            <label className="block text-xs text-gray-500 mb-2">{t('tv.marginAfter')}</label>
                             <div className="flex items-center gap-2">
                                 <input
                                     type="range"
@@ -1061,7 +1065,7 @@ const PvrConfigModal: React.FC<{
                                 />
                                 <span className="w-12 text-center text-white font-medium">{marginAfter}</span>
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">Termine {marginAfter} min après</p>
+                            <p className="text-xs text-gray-600 mt-1">{t('tv.endsAfter', { n: marginAfter })}</p>
                         </div>
                     </div>
                 </div>
@@ -1071,7 +1075,7 @@ const PvrConfigModal: React.FC<{
                         onClick={onClose}
                         className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                     >
-                        Annuler
+                        {t('common.cancel')}
                     </button>
                     <button
                         onClick={handleSave}
@@ -1079,7 +1083,7 @@ const PvrConfigModal: React.FC<{
                         className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {saving && <Loader2 size={16} className="animate-spin"/>}
-                        Enregistrer
+                        {t('common.save')}
                     </button>
                 </div>
             </div>
@@ -1095,6 +1099,7 @@ const RecordingFormModal: React.FC<{
     channels: { uuid: string; name: string; number: number }[];
     prefillProgram?: EpgEntry | null;
 }> = ({isOpen, onClose, onSave, channels, prefillProgram}) => {
+    const { t } = useTranslation();
     const [formData, setFormData] = useState({
         name: '',
         channel_uuid: channels[0]?.uuid || '',
@@ -1211,7 +1216,7 @@ const RecordingFormModal: React.FC<{
                 className="bg-[#151515] w-full max-w-lg rounded-2xl border border-gray-800 shadow-2xl max-h-[90vh] overflow-y-auto">
                 <div
                     className="flex items-center justify-between p-4 border-b border-gray-800 sticky top-0 bg-[#151515]">
-                    <h2 className="text-lg font-bold text-white">Programmer un enregistrement</h2>
+                    <h2 className="text-lg font-bold text-white">{t('tv.programRecordingTitle')}</h2>
                     <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-lg">
                         <X size={20}/>
                     </button>
@@ -1220,19 +1225,19 @@ const RecordingFormModal: React.FC<{
                 <div className="p-4 space-y-4">
                     {/* Name */}
                     <div>
-                        <label className="block text-xs text-gray-500 mb-1">Nom de l'enregistrement</label>
+                        <label className="block text-xs text-gray-500 mb-1">{t('tv.recordingNameLabel')}</label>
                         <input
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({...formData, name: e.target.value})}
                             className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
-                            placeholder="Mon émission"
+                            placeholder={t('tv.recordingNamePlaceholder')}
                         />
                     </div>
 
                     {/* Channel */}
                     <div>
-                        <label className="block text-xs text-gray-500 mb-1">Chaîne</label>
+                        <label className="block text-xs text-gray-500 mb-1">{t('tv.channel')}</label>
                         <select
                             value={formData.channel_uuid}
                             onChange={(e) => setFormData({...formData, channel_uuid: e.target.value})}
@@ -1246,7 +1251,7 @@ const RecordingFormModal: React.FC<{
                         </select>
                         {selectedChannel && (
                             <p className="text-xs text-gray-500 mt-1">
-                                Chaîne sélectionnée: {selectedChannel.name}
+                                {t('tv.channelSelected')}: {selectedChannel.name}
                             </p>
                         )}
                     </div>
@@ -1254,7 +1259,7 @@ const RecordingFormModal: React.FC<{
                     {/* Date and time */}
                     <div className="grid grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Date</label>
+                            <label className="block text-xs text-gray-500 mb-1">{t('tv.date')}</label>
                             <input
                                 type="date"
                                 value={formData.start_date}
@@ -1263,7 +1268,7 @@ const RecordingFormModal: React.FC<{
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Début</label>
+                            <label className="block text-xs text-gray-500 mb-1">{t('tv.start')}</label>
                             <input
                                 type="time"
                                 value={formData.start_time}
@@ -1272,7 +1277,7 @@ const RecordingFormModal: React.FC<{
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Fin</label>
+                            <label className="block text-xs text-gray-500 mb-1">{t('tv.end')}</label>
                             <input
                                 type="time"
                                 value={formData.end_time}
@@ -1285,7 +1290,7 @@ const RecordingFormModal: React.FC<{
                     {/* Margins */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Marge avant (min)</label>
+                            <label className="block text-xs text-gray-500 mb-1">{t('tv.marginBeforeShort')}</label>
                             <input
                                 type="number"
                                 value={formData.margin_before}
@@ -1299,7 +1304,7 @@ const RecordingFormModal: React.FC<{
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-gray-500 mb-1">Marge après (min)</label>
+                            <label className="block text-xs text-gray-500 mb-1">{t('tv.marginAfterShort')}</label>
                             <input
                                 type="number"
                                 value={formData.margin_after}
@@ -1316,18 +1321,18 @@ const RecordingFormModal: React.FC<{
 
                     {/* Repeat days */}
                     <div>
-                        <label className="block text-xs text-gray-500 mb-2">Répétition</label>
+                        <label className="block text-xs text-gray-500 mb-2">{t('tv.repeat')}</label>
                         <div className="flex flex-wrap gap-2">
                             {[
-                                {key: 'repeat_monday', label: 'Lun'},
-                                {key: 'repeat_tuesday', label: 'Mar'},
-                                {key: 'repeat_wednesday', label: 'Mer'},
-                                {key: 'repeat_thursday', label: 'Jeu'},
-                                {key: 'repeat_friday', label: 'Ven'},
-                                {key: 'repeat_saturday', label: 'Sam'},
-                                {key: 'repeat_sunday', label: 'Dim'}
-                            ].map(({key, label}) => (
-                                <button
+                                {key: 'repeat_monday', labelKey: 'tv.dayMon'},
+                                {key: 'repeat_tuesday', labelKey: 'tv.dayTue'},
+                                {key: 'repeat_wednesday', labelKey: 'tv.dayWed'},
+                                {key: 'repeat_thursday', labelKey: 'tv.dayThu'},
+                                {key: 'repeat_friday', labelKey: 'tv.dayFri'},
+                                {key: 'repeat_saturday', labelKey: 'tv.daySat'},
+                                {key: 'repeat_sunday', labelKey: 'tv.daySun'}
+].map(({key, labelKey}) => (
+                                    <button
                                     key={key}
                                     type="button"
                                     onClick={() => setFormData({
@@ -1340,7 +1345,7 @@ const RecordingFormModal: React.FC<{
                                             : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                                     }`}
                                 >
-                                    {label}
+                                    {t(labelKey)}
                                 </button>
                             ))}
                         </div>
@@ -1352,7 +1357,7 @@ const RecordingFormModal: React.FC<{
                         onClick={onClose}
                         className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                     >
-                        Annuler
+                        {t('common.cancel')}
                     </button>
                     <button
                         onClick={handleSubmit}
@@ -1360,7 +1365,7 @@ const RecordingFormModal: React.FC<{
                         className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {saving && <Loader2 size={16} className="animate-spin"/>}
-                        Programmer
+                        {t('tv.program')}
                     </button>
                 </div>
             </div>
@@ -1369,6 +1374,7 @@ const RecordingFormModal: React.FC<{
 };
 
 export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
+    const { t } = useTranslation();
     const {info: systemInfo} = useSystemStore();
     const {
         channels,
@@ -1510,8 +1516,8 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                     <Tv size={24} className="text-purple-400"/>
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold text-white">Télévision</h1>
-                                    <p className="text-sm text-gray-500">Enregistrements PVR</p>
+                                    <h1 className="text-xl font-bold text-white">{t('tv.pageTitle')}</h1>
+                                    <p className="text-sm text-gray-500">{t('tv.subtitle')}</p>
                                 </div>
                             </div>
                         </div>
@@ -1548,10 +1554,9 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                 {!hasDisk && (
                     <div className="flex flex-col items-center justify-center py-16">
                         <HardDrive size={64} className="text-gray-600 mb-4"/>
-                        <h2 className="text-xl font-semibold text-white mb-2">Aucun disque détecté</h2>
+                        <h2 className="text-xl font-semibold text-white mb-2">{t('tv.noDisk')}</h2>
                         <p className="text-gray-500 text-center max-w-md">
-                            Connectez un disque dur à votre Freebox pour utiliser la fonctionnalité d'enregistrement TV
-                            (PVR).
+                            {t('tv.noDiskDesc')}
                         </p>
                     </div>
                 )}
@@ -1564,22 +1569,22 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                 <button
                                     onClick={() => setShowConfigModal(true)}
                                     className="p-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 transition-colors"
-                                    title="Configurer les marges"
+                                    title={t('tv.configureMargins')}
                                 >
                                     <Settings size={20} className="text-emerald-400"/>
                                 </button>
                                 <div>
-                                    <h3 className="font-medium text-white">Enregistreur PVR</h3>
+                                    <h3 className="font-medium text-white">{t('tv.pvrRecorder')}</h3>
                                     {pvrConfig ? (
                                         <button
                                             onClick={() => setShowConfigModal(true)}
                                             className="text-xs text-gray-500 hover:text-gray-400 transition-colors"
                                         >
-                                            Marges: -{Math.floor(pvrConfig.margin_before / 60)}min /
+                                            {t('tv.margins')}: -{Math.floor(pvrConfig.margin_before / 60)}min /
                                             +{Math.floor(pvrConfig.margin_after / 60)}min
                                         </button>
                                     ) : (
-                                        <p className="text-xs text-gray-500">Chargement...</p>
+                                        <p className="text-xs text-gray-500">{t('tv.loading')}</p>
                                     )}
                                 </div>
                             </div>
@@ -1590,7 +1595,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                         className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition-colors"
                                     >
                                         <Plus size={14}/>
-                                        Programmer
+                                        {t('tv.program')}
                                     </button>
                                 )}
                             </div>
@@ -1610,7 +1615,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                     >
             <span className="flex items-center gap-2">
               <Radio size={16}/>
-              Guide TV
+              {t('tv.guideTv')}
             </span>
                     </button>
                     {hasDisk && (
@@ -1625,7 +1630,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                             >
                 <span className="flex items-center gap-2">
                   <Video size={16}/>
-                  Enregistrements ({recordings.length})
+                  {t('tv.recordings')} ({recordings.length})
                 </span>
                             </button>
                             <button
@@ -1638,7 +1643,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                             >
                 <span className="flex items-center gap-2">
                   <Calendar size={16}/>
-                  Programmés ({programmed.length})
+                  {t('tv.programmed')} ({programmed.length})
                 </span>
                             </button>
                         </>
@@ -1655,13 +1660,10 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                 <div className="flex items-center gap-3">
                                     <AlertCircle className="text-orange-400 flex-shrink-0" size={20}/>
                                     <div>
-                                        <p className="text-orange-400 font-medium text-sm">Limite de requêtes
-                                            atteinte</p>
+                                        <p className="text-orange-400 font-medium text-sm">{t('tv.rateLimitReached')}</p>
                                         <p className="text-orange-400/70 text-xs">
-
-                                            Veuillez patienter quelques secondes avant de rafraîchir. <br/>
-                                            (L'API de récupération du guide TV (EPG) limite les requêtes de façon
-                                            drastique).
+                                            {t('tv.rateLimitWait')} <br/>
+                                            {t('tv.rateLimitApi')}
                                         </p>
                                     </div>
                                 </div>
@@ -1669,7 +1671,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                     onClick={clearRateLimit}
                                     className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-medium rounded-lg transition-colors"
                                 >
-                                    Réessayer
+                                    {t('tv.retry')}
                                 </button>
                             </div>
                         )}
@@ -1677,8 +1679,8 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                         {/* Refresh button */}
                         <div className="flex items-center justify-between mb-4">
                             <p className="text-sm text-gray-500">
-                                {epgPrograms.length} programmes
-                                sur {new Set(epgPrograms.map(p => p.channelUuid)).size} chaînes
+                                {t('tv.programmesCount', { count: epgPrograms.length })}{' '}
+                                {t('tv.channelsCount', { channels: new Set(epgPrograms.map(p => p.channelUuid)).size })}
                             </p>
                             <button
                                 onClick={handleRefreshEpg}
@@ -1686,7 +1688,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                 className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
                             >
                                 <RefreshCw size={14} className={epgLoading ? 'animate-spin' : ''}/>
-                                Actualiser
+                                {t('tv.refresh')}
                             </button>
                         </div>
 
@@ -1707,9 +1709,9 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                         ) : (
                             <div className="flex flex-col items-center justify-center py-16">
                                 <Radio size={48} className="text-gray-600 mb-4"/>
-                                <h3 className="text-lg font-medium text-white mb-2">Aucun programme disponible</h3>
+                                <h3 className="text-lg font-medium text-white mb-2">{t('tv.noProgramme')}</h3>
                                 <p className="text-gray-500 text-center max-w-md">
-                                    Le guide des programmes n'est pas disponible pour le moment.
+                                    {t('tv.noProgrammeDesc')}
                                 </p>
                             </div>
                         )}
@@ -1754,10 +1756,9 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                 ) : (
                                     <div className="flex flex-col items-center justify-center py-16">
                                         <Video size={48} className="text-gray-600 mb-4"/>
-                                        <h3 className="text-lg font-medium text-white mb-2">Aucun enregistrement</h3>
+                                        <h3 className="text-lg font-medium text-white mb-2">{t('tv.noRecording')}</h3>
                                         <p className="text-gray-500 text-center max-w-md">
-                                            Vos enregistrements TV apparaîtront ici. Programmez un enregistrement depuis
-                                            le guide TV.
+                                            {t('tv.noRecordingDesc')}
                                         </p>
                                     </div>
                                 )}
@@ -1788,10 +1789,9 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
                                 ) : (
                                     <div className="flex flex-col items-center justify-center py-16">
                                         <Calendar size={48} className="text-gray-600 mb-4"/>
-                                        <h3 className="text-lg font-medium text-white mb-2">Aucune programmation</h3>
+                                        <h3 className="text-lg font-medium text-white mb-2">{t('tv.noProgrammed')}</h3>
                                         <p className="text-gray-500 text-center max-w-md">
-                                            Programmez des enregistrements depuis le guide des programmes dans Freebox
-                                            OS.
+                                            {t('tv.noProgrammedDesc')}
                                         </p>
                                     </div>
                                 )}

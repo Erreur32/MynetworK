@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.5] - 2026-02-09
+
+### Fixed
+
+- **UniFi (Events):** Doublon de texte supprimé sur le message « Aucun événement » (ligne avec apostrophe typographique `’` U+2019) — affichage uniquement via `t('unifi.noEventDetected')`.
+
+### Modified
+
+- **UniFi i18n – terminologie :** Alignement sur « Appareil(s) » en français : clés `equipments`, `totalEquipments`, `offlineDevices`, `offlineDevicesMessage` en FR (au lieu de « Équipements ») ; EN inchangé (Devices).
+- **PluginSummaryCard (onglet Analyse UniFi):** Libellé « Équipements » en dur remplacé par `t('unifi.equipments')` pour cohérence i18n.
+- **UniFi – Clients:** Qualité du signal (Excellent, Bon, Moyen, Faible) passée en clés i18n (`unifi.excellent`, `unifi.good`, `unifi.average`, `unifi.weak`).
+- **Versions:** Toutes les références de version mises à jour à 0.7.5 (package.json, version.ts, main.tsx, plugins Freebox, UniFi, Scan Réseau).
+
+---
+
+## [0.7.4] - 2026-02-09
+
+---
+
 ## [0.7.3] - 2026-02-07
 
 ### Fixed
@@ -28,7 +47,7 @@ All notable changes to this project will be documented in this file.
 - Changelog rendered as visual markdown (react-markdown + remark-gfm): headings (h1–h4), lists, code blocks, links with proper styling
 - Colored markdown titles in changelog (teal, cyan, amber, emerald) and improved code blocks (border, background)
 - App logo (MynetworK) in project block; all GitHub links use central `GITHUB_REPO_URL` constant; changelog links resolve to repo (relative → blob/main, #anchor → repo#anchor)
-- i18n keys for Info page: projectName, projectDescription, licenseLabel, licensePrivate, authorTitle, authorBy, technologiesTitle, databaseLabel, authLabel
+- i18n keys for Info page: projectName, projectDescription, licenseLabel, licensePublic, authorTitle, authorBy, technologiesTitle, databaseLabel, authLabel
 - More color on Info page: colored left borders per block (teal, blue, amber, purple, cyan), colored section titles and repo stats boxes
 
 ### Fixed

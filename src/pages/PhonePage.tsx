@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Phone,
   PhoneIncoming,
@@ -20,15 +21,15 @@ import { useAuthStore } from '../stores/authStore';
 import { PermissionBanner } from '../components/ui/PermissionBanner';
 import type { CallEntry, Contact } from '../types/api';
 
-// Format timestamp to relative time
-const formatRelativeTime = (timestamp: number): string => {
+// Format timestamp to relative time (t from useTranslation)
+const formatRelativeTime = (t: (k: string, o?: object) => string, timestamp: number): string => {
   const now = Date.now() / 1000;
   const diff = now - timestamp;
 
-  if (diff < 60) return 'À l\'instant';
-  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)}min`;
-  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
-  if (diff < 604800) return `Il y a ${Math.floor(diff / 86400)}j`;
+  if (diff < 60) return t('phone.justNow');
+  if (diff < 3600) return t('phone.agoMin', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t('phone.agoHour', { n: Math.floor(diff / 3600) });
+  if (diff < 604800) return t('phone.agoDay', { n: Math.floor(diff / 86400) });
 
   const date = new Date(timestamp * 1000);
   return date.toLocaleDateString('fr-FR', {
@@ -69,16 +70,16 @@ const getCallIcon = (type: CallEntry['type']) => {
   }
 };
 
-// Get call type label
-const getCallTypeLabel = (type: CallEntry['type']): string => {
+// Get call type label (t from useTranslation)
+const getCallTypeLabel = (t: (k: string) => string, type: CallEntry['type']): string => {
   switch (type) {
     case 'incoming':
     case 'accepted':
-      return 'Entrant';
+      return t('phone.incoming');
     case 'outgoing':
-      return 'Sortant';
+      return t('phone.outgoing');
     case 'missed':
-      return 'Manqué';
+      return t('phone.missed');
     default:
       return type;
   }
@@ -89,6 +90,7 @@ const CallEntryCard: React.FC<{
   call: CallEntry;
   onDelete: (id: number) => void;
 }> = ({ call, onDelete }) => {
+  const { t } = useTranslation();
   const [showConfirm, setShowConfirm] = useState(false);
   const Icon = getCallIcon(call.type);
   const isMissed = call.type === 'missed';
@@ -120,12 +122,12 @@ const CallEntryCard: React.FC<{
             </span>
             {call.new && (
               <span className="px-1.5 py-0.5 text-[10px] bg-blue-500 text-white rounded-full">
-                Nouveau
+                {t('phone.new')}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>{getCallTypeLabel(call.type)}</span>
+            <span>{getCallTypeLabel(t, call.type)}</span>
             {call.duration > 0 && (
               <>
                 <span>•</span>
@@ -133,7 +135,7 @@ const CallEntryCard: React.FC<{
               </>
             )}
             <span>•</span>
-            <span>{formatRelativeTime(call.datetime)}</span>
+            <span>{formatRelativeTime(t, call.datetime)}</span>
           </div>
         </div>
       </div>
@@ -144,7 +146,7 @@ const CallEntryCard: React.FC<{
             ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
             : 'text-gray-500 hover:bg-gray-700 hover:text-white'
         }`}
-        title={showConfirm ? 'Confirmer la suppression' : 'Supprimer'}
+        title={showConfirm ? t('phone.confirmDelete') : t('phone.delete')}
       >
         <Trash2 size={16} />
       </button>
@@ -158,6 +160,7 @@ const ContactCard: React.FC<{
   onDelete: (id: number) => void;
   onEdit: (contact: Contact) => void;
 }> = ({ contact, onDelete, onEdit }) => {
+  const { t } = useTranslation();
   const [showConfirm, setShowConfirm] = useState(false);
 
   const handleDelete = () => {
@@ -197,7 +200,7 @@ const ContactCard: React.FC<{
               ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
               : 'text-gray-500 hover:bg-gray-700 hover:text-white'
           }`}
-          title={showConfirm ? 'Confirmer la suppression' : 'Supprimer'}
+          title={showConfirm ? t('phone.confirmDelete') : t('phone.delete')}
         >
           <Trash2 size={16} />
         </button>
@@ -226,6 +229,7 @@ const ContactFormModal: React.FC<{
   onSave: (contact: Partial<Contact>) => Promise<void>;
   contact?: Contact;
 }> = ({ isOpen, onClose, onSave, contact }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     first_name: contact?.first_name || '',
     last_name: contact?.last_name || '',
@@ -270,7 +274,7 @@ const ContactFormModal: React.FC<{
       await onSave({
         first_name: formData.first_name,
         last_name: formData.last_name,
-        display_name: `${formData.first_name} ${formData.last_name}`.trim() || 'Sans nom',
+        display_name: `${formData.first_name} ${formData.last_name}`.trim() || t('phone.noName'),
         company: formData.company || undefined,
         numbers: formData.numbers.filter(n => n.number.trim())
       });
@@ -287,7 +291,7 @@ const ContactFormModal: React.FC<{
       <div className="bg-[#151515] w-full max-w-md rounded-2xl border border-gray-800 shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h2 className="text-lg font-bold text-white">
-            {contact ? 'Modifier le contact' : 'Nouveau contact'}
+            {contact ? t('phone.editContact') : t('phone.newContact')}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-lg">
             <ChevronLeft size={20} className="rotate-180" />
@@ -297,46 +301,46 @@ const ContactFormModal: React.FC<{
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Prénom</label>
+              <label className="block text-xs text-gray-500 mb-1">{t('phone.firstName')}</label>
               <input
                 type="text"
                 value={formData.first_name}
                 onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-                placeholder="Jean"
+                placeholder={t('phone.firstName')}
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Nom</label>
+              <label className="block text-xs text-gray-500 mb-1">{t('phone.lastName')}</label>
               <input
                 type="text"
                 value={formData.last_name}
                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                 className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-                placeholder="Dupont"
+                placeholder={t('phone.lastName')}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Entreprise</label>
+            <label className="block text-xs text-gray-500 mb-1">{t('phone.company')}</label>
             <input
               type="text"
               value={formData.company}
               onChange={(e) => setFormData({ ...formData, company: e.target.value })}
               className="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-              placeholder="Optionnel"
+              placeholder={t('phone.optional')}
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-500">Numéros de téléphone</label>
+              <label className="text-xs text-gray-500">{t('phone.phoneNumbers')}</label>
               <button
                 onClick={handleAddNumber}
                 className="text-xs text-blue-400 hover:text-blue-300"
               >
-                + Ajouter
+                {t('phone.addNumber')}
               </button>
             </div>
             <div className="space-y-2">
@@ -354,10 +358,10 @@ const ContactFormModal: React.FC<{
                     onChange={(e) => handleNumberChange(i, 'type', e.target.value)}
                     className="px-2 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
                   >
-                    <option value="mobile">Mobile</option>
-                    <option value="home">Domicile</option>
-                    <option value="work">Travail</option>
-                    <option value="fax">Fax</option>
+                    <option value="mobile">{t('phone.mobile')}</option>
+                    <option value="home">{t('phone.home')}</option>
+                    <option value="work">{t('phone.work')}</option>
+                    <option value="fax">{t('phone.fax')}</option>
                   </select>
                   {formData.numbers.length > 1 && (
                     <button
@@ -378,7 +382,7 @@ const ContactFormModal: React.FC<{
             onClick={onClose}
             className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
           >
-            Annuler
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -386,7 +390,7 @@ const ContactFormModal: React.FC<{
             className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saving && <Loader2 size={16} className="animate-spin" />}
-            {contact ? 'Modifier' : 'Créer'}
+            {contact ? t('phone.edit') : t('phone.create')}
           </button>
         </div>
       </div>
@@ -399,6 +403,7 @@ interface PhonePageProps {
 }
 
 export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
+  const { t } = useTranslation();
   const {
     calls,
     contacts,
@@ -471,7 +476,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
   };
 
   const handleDeleteAllCalls = async () => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer tout l\'historique des appels ?')) {
+    if (confirm(t('phone.confirmClearHistory'))) {
       await deleteAllCalls();
     }
   };
@@ -494,8 +499,8 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
                   <Phone size={24} className="text-emerald-400" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Téléphone</h1>
-                  <p className="text-sm text-gray-500">Contacts & Journal d'appels</p>
+                  <h1 className="text-xl font-bold text-white">{t('phone.pageTitle')}</h1>
+                  <p className="text-sm text-gray-500">{t('phone.subtitle')}</p>
                 </div>
               </div>
             </div>
@@ -506,7 +511,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Rechercher..."
+                  placeholder={t('phone.search')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 pr-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-emerald-500 w-64"
@@ -531,7 +536,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
             >
               <span className="flex items-center gap-2">
                 <Clock size={16} />
-                Journal ({calls.length})
+                {t('phone.journal')} ({calls.length})
                 {newCallsCount > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] bg-blue-500 text-white rounded-full">
                     {newCallsCount}
@@ -549,7 +554,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
             >
               <span className="flex items-center gap-2">
                 <Users size={16} />
-                Contacts ({contacts.length})
+                {t('phone.contacts')} ({contacts.length})
               </span>
             </button>
           </div>
@@ -563,7 +568,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
                   className="flex items-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
                 >
                   <CheckCheck size={14} />
-                  Tout marquer lu
+                  {t('phone.markAllRead')}
                 </button>
               )}
               <button
@@ -571,7 +576,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
                 className="flex items-center gap-2 px-3 py-1.5 text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors"
               >
                 <Trash2 size={14} />
-                Effacer l'historique
+                {t('phone.clearHistory')}
               </button>
             </div>
           )}
@@ -585,7 +590,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
               className="flex items-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             >
               <Plus size={14} />
-              Ajouter
+              {t('phone.add')}
             </button>
           )}
         </div>
@@ -603,10 +608,10 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
                     : 'bg-[#1a1a1a] border-gray-700 text-gray-400 hover:bg-[#252525]'
                 }`}
               >
-                {filter === 'all' && 'Tous'}
-                {filter === 'missed' && `Manqués (${missedCallsCount})`}
-                {filter === 'incoming' && 'Entrants'}
-                {filter === 'outgoing' && 'Sortants'}
+                {filter === 'all' && t('phone.filterAll')}
+                {filter === 'missed' && `${t('phone.filterMissed')} (${missedCallsCount})`}
+                {filter === 'incoming' && t('phone.filterIncoming')}
+                {filter === 'outgoing' && t('phone.filterOutgoing')}
               </button>
             ))}
           </div>
@@ -648,17 +653,17 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
             ) : calls.length > 0 ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <Phone size={48} className="text-gray-600 mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">Aucun résultat</h3>
+                <h3 className="text-lg font-medium text-white mb-2">{t('phone.noResults')}</h3>
                 <p className="text-gray-500 text-center max-w-md">
-                  Aucun appel ne correspond à votre recherche ou filtre.
+                  {t('phone.noResultsCalls')}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16">
                 <Phone size={48} className="text-gray-600 mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">Aucun appel</h3>
+                <h3 className="text-lg font-medium text-white mb-2">{t('phone.noCalls')}</h3>
                 <p className="text-gray-500 text-center max-w-md">
-                  Votre journal d'appels est vide. Les appels entrants et sortants apparaîtront ici.
+                  {t('phone.noCallsDesc')}
                 </p>
               </div>
             )}
@@ -690,17 +695,17 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
             ) : contacts.length > 0 ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <Users size={48} className="text-gray-600 mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">Aucun résultat</h3>
+                <h3 className="text-lg font-medium text-white mb-2">{t('phone.noResults')}</h3>
                 <p className="text-gray-500 text-center max-w-md">
-                  Aucun contact ne correspond à votre recherche.
+                  {t('phone.noResultsContacts')}
                 </p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16">
                 <Users size={48} className="text-gray-600 mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">Aucun contact</h3>
+                <h3 className="text-lg font-medium text-white mb-2">{t('phone.noContacts')}</h3>
                 <p className="text-gray-500 text-center max-w-md">
-                  Vous n'avez pas encore de contacts. Ajoutez-en un pour commencer.
+                  {t('phone.noContactsDesc')}
                 </p>
               </div>
             )}

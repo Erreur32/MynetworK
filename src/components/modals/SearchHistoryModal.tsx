@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, History, Search, Trash2 } from 'lucide-react';
 
 export interface SearchHistoryEntry {
@@ -32,16 +33,18 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
     onDelete,
     onClearAll
 }) => {
+    const { t, i18n } = useTranslation();
     if (!isOpen) return null;
 
+    const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     const formatDate = (ts: number) => {
         const d = new Date(ts);
         const now = new Date();
         const sameDay = d.toDateString() === now.toDateString();
         if (sameDay) {
-            return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
         }
-        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
     };
 
     const displayed = history.slice(0, MAX_VISIBLE);
@@ -55,8 +58,8 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                             <History size={22} className="text-blue-400" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-white">Historique des recherches</h2>
-                            <p className="text-xs text-gray-400 mt-0.5">Cliquez pour relancer avec les mêmes options</p>
+                            <h2 className="text-lg font-semibold text-white">{t('search.historyTitle')}</h2>
+                            <p className="text-xs text-gray-400 mt-0.5">{t('search.historyModalSubtitle')}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -64,16 +67,16 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                             <button
                                 onClick={onClearAll}
                                 className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 rounded-lg transition-colors flex items-center gap-1.5"
-                                title="Effacer tout l'historique"
+                                title={t('search.clearAllHistory')}
                             >
                                 <Trash2 size={14} />
-                                Effacer tout
+                                {t('search.clearAll')}
                             </button>
                         )}
                         <button
                             onClick={onClose}
                             className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                            aria-label="Fermer"
+                            aria-label={t('search.closeLabel')}
                         >
                             <X size={20} />
                         </button>
@@ -83,7 +86,7 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                     {displayed.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">
                             <Search size={40} className="mx-auto mb-3 opacity-50" />
-                            <p>Aucune recherche enregistrée</p>
+                            <p>{t('search.noHistory')}</p>
                         </div>
                     ) : (
                         <ul className="space-y-1">
@@ -108,15 +111,15 @@ export const SearchHistoryModal: React.FC<SearchHistoryModalProps> = ({
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); onDelete(index); }}
                                                 className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                                title="Supprimer"
+                                                title={t('search.delete')}
                                             >
                                                 <Trash2 size={16} />
                                             </button>
                                         )}
                                     </div>
                                     <div className="flex flex-wrap gap-1 mt-0.5 ml-9 mb-1">
-                                        {entry.caseSensitive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">Case</span>}
-                                        {entry.showOnlyActive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Actif</span>}
+                                        {entry.caseSensitive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">{t('search.caseBadge')}</span>}
+                                        {entry.showOnlyActive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{t('search.activeBadge')}</span>}
                                     </div>
                                 </li>
                             ))}

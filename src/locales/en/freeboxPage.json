@@ -1,0 +1,14 @@
+{
+  "freebox": {
+    "page": {
+      "options": "Options",
+      "seeMore": "See more",
+      "speedTestApiMessage": "The Freebox API does not allow running speed tests via the API. Use the Freebox OS interface to run a test.",
+      "period30d": "30D",
+      "period7d": "7D",
+      "period24h": "24H",
+      "wifi": "Wifi",
+      "local": "Local"
+    }
+  }
+}

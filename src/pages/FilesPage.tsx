@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Folder,
   File,
@@ -134,6 +135,7 @@ const FileItem: React.FC<{
   onShare: () => void;
   onDelete: () => void;
 }> = ({ file, isSelected, isShared, isRootFolder, isParentDir, viewMode, onSelect, onOpen, onContextMenu, onRename, onCopy, onMove, onShare, onDelete }) => {
+  const { t } = useTranslation();
   const Icon = getFileIcon(file);
   const iconColor = getFileIconColor(file);
   const [showMenu, setShowMenu] = useState(false);
@@ -196,20 +198,20 @@ const FileItem: React.FC<{
                   disabled={isRootFolder}
                   className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
                 >
-                  <Edit3 size={14} /> Renommer
+                  <Edit3 size={14} /> {t('files.rename')}
                 </button>
                 <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Copy size={14} /> Copier
+                  <Copy size={14} /> {t('files.copy')}
                 </button>
                 <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Move size={14} /> Déplacer
+                  <Move size={14} /> {t('files.move')}
                 </button>
                 <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Share2 size={14} /> Partager
+                  <Share2 size={14} /> {t('files.share')}
                 </button>
                 <div className="border-t border-gray-700 my-1" />
                 <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Trash2 size={14} /> Supprimer
+                  <Trash2 size={14} /> {t('files.delete')}
                 </button>
               </div>
             )}
@@ -217,7 +219,7 @@ const FileItem: React.FC<{
         )}
         {/* Shared indicator */}
         {isShared && !isParentDir && (
-          <div className="absolute top-2 right-8 p-1" title="Partagé">
+          <div className="absolute top-2 right-8 p-1" title={t('files.shared')}>
             <Link size={14} className="text-purple-400" />
           </div>
         )}
@@ -274,7 +276,7 @@ const FileItem: React.FC<{
       <div className="relative">
         <Icon size={20} className={iconColor} />
         {isShared && !isParentDir && (
-          <div className="absolute -top-1 -right-1 bg-purple-500 rounded-full p-0.5" title="Partagé">
+          <div className="absolute -top-1 -right-1 bg-purple-500 rounded-full p-0.5" title={t('files.shared')}>
             <Link size={8} className="text-white" />
           </div>
         )}
@@ -283,7 +285,7 @@ const FileItem: React.FC<{
         {file.name}
       </span>
       {isShared && !isParentDir && (
-        <span className="text-xs text-purple-400 hidden sm:block">Partagé</span>
+        <span className="text-xs text-purple-400 hidden sm:block">{t('files.shared')}</span>
       )}
       {!isParentDir && (
         <span className="text-xs text-gray-500 w-24 text-right">
@@ -319,20 +321,20 @@ const FileItem: React.FC<{
                 disabled={isRootFolder}
                 className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
               >
-                <Edit3 size={14} /> Renommer
+                <Edit3 size={14} /> {t('files.rename')}
               </button>
               <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Copy size={14} /> Copier
+                <Copy size={14} /> {t('files.copy')}
               </button>
               <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Move size={14} /> Déplacer
+                <Move size={14} /> {t('files.move')}
               </button>
               <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                <Share2 size={14} /> Partager
+                <Share2 size={14} /> {t('files.share')}
               </button>
               <div className="border-t border-gray-700 my-1" />
               <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                <Trash2 size={14} /> Supprimer
+                <Trash2 size={14} /> {t('files.delete')}
               </button>
             </div>
           )}
@@ -488,6 +490,7 @@ interface FilesPageProps {
 }
 
 export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initialDownloadId }) => {
+  const { t } = useTranslation();
   const {
     files,
     currentPath,
@@ -1013,8 +1016,8 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   <Folder size={24} className="text-blue-400" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">Fichiers</h1>
-                  <p className="text-sm text-gray-500">Explorateur & Téléchargements</p>
+                  <h1 className="text-xl font-bold text-white">{t('files.pageTitle')}</h1>
+                  <p className="text-sm text-gray-500">{t('files.subtitle')}</p>
                 </div>
               </div>
             </div>
@@ -1024,7 +1027,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
               <div className="hidden md:flex items-center gap-3 bg-[#1a1a1a] px-4 py-2 rounded-lg">
                 <HardDrive size={16} className="text-gray-400" />
                 <div>
-                  <div className="text-xs text-gray-500">Espace utilisé</div>
+                  <div className="text-xs text-gray-500">{t('files.storageUsed')}</div>
                   <div className="text-sm text-white">
                     {formatSize(usedStorage)} / {formatSize(totalStorage)}
                   </div>
@@ -1039,7 +1042,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
             ) : (
               <div className="hidden md:flex items-center gap-3 bg-[#1a1a1a] px-4 py-2 rounded-lg">
                 <HardDrive size={16} className="text-gray-500" />
-                <div className="text-sm text-gray-500">Aucun disque</div>
+                <div className="text-sm text-gray-500">{t('files.noDisk')}</div>
               </div>
             )}
           </div>
@@ -1060,7 +1063,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
             >
               <span className="flex items-center gap-2">
                 <Folder size={16} />
-                Explorateur
+                {t('files.tabExplorer')}
               </span>
             </button>
             <button
@@ -1073,7 +1076,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
             >
               <span className="flex items-center gap-2">
                 <Download size={16} />
-                Téléchargements ({downloads.length})
+                {t('files.tabDownloads')} ({downloads.length})
                 {activeDownloads > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500 text-white rounded-full">
                     {activeDownloads}
@@ -1094,7 +1097,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
             >
               <span className="flex items-center gap-2">
                 <Link size={16} />
-                Partages ({shareLinks.length})
+                {t('files.tabShares')} ({shareLinks.length})
               </span>
             </button>
           </div>
@@ -1120,9 +1123,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
             {!hasDisk && hasExplorerPermission && (
               <div className="flex flex-col items-center justify-center py-16">
                 <HardDrive size={64} className="text-gray-600 mb-4" />
-                <h2 className="text-xl font-semibold text-white mb-2">Aucun disque détecté</h2>
+                <h2 className="text-xl font-semibold text-white mb-2">{t('files.noDiskDetected')}</h2>
                 <p className="text-gray-500 text-center max-w-md">
-                  Connectez un disque dur à votre Freebox pour accéder à l'explorateur de fichiers.
+                  {t('files.noDiskDetectedDesc')}
                 </p>
               </div>
             )}
@@ -1198,27 +1201,27 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#1a1a1a] hover:bg-[#252525] disabled:opacity-50 disabled:cursor-not-allowed border border-gray-700 rounded-lg transition-colors"
                 >
                   <ArrowUp size={14} />
-                  Dossier parent
+                  {t('files.parentFolder')}
                 </button>
                 <button
                   onClick={() => setShowNewFolderModal(true)}
                   disabled={currentPath === '/'}
-                  title={currentPath === '/' ? 'Impossible de créer un dossier à la racine' : 'Nouveau dossier'}
+                  title={currentPath === '/' ? t('files.cannotCreateFolderAtRoot') : t('files.newFolder')}
                   className="flex items-center gap-2 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                 >
                   <FolderPlus size={14} />
-                  Nouveau dossier
+                  {t('files.newFolder')}
                 </button>
               </div>
               <div className="flex items-center gap-2">
                 {selectedFiles.length > 0 ? (
                   <>
-                    <span className="text-xs text-gray-400">{selectedFiles.length} sélectionné(s)</span>
+                    <span className="text-xs text-gray-400">{selectedFiles.length} {t('files.selectedCount')}</span>
                     <button
                       onClick={clearSelection}
                       className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
                     >
-                      Annuler
+                      {t('common.cancel')}
                     </button>
                     {selectedFiles.length === 1 && !isRootLevelFolder(selectedFiles[0]) && (
                       <button
@@ -1523,10 +1526,10 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
         {showNewFolderModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-[#121212] rounded-xl border border-gray-800 p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-white mb-4">Nouveau dossier</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">{t('files.newFolderModalTitle')}</h3>
               <input
                 type="text"
-                placeholder="Nom du dossier"
+                placeholder={t('files.folderNamePlaceholder')}
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
@@ -1541,14 +1544,14 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   }}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleCreateFolder}
                   disabled={!newFolderName.trim()}
                   className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                 >
-                  Créer
+                  {t('files.createFolder')}
                 </button>
               </div>
             </div>
@@ -1579,7 +1582,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   }}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleRename}
@@ -1614,7 +1617,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   <button
                     onClick={() => loadBrowserFiles('/')}
                     className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-                    title="Racine"
+                    title={t('files.root')}
                   >
                     <Home size={14} />
                   </button>
@@ -1622,7 +1625,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                     onClick={browserNavigateUp}
                     disabled={browserPath === '/'}
                     className="p-1.5 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
-                    title="Dossier parent"
+                    title={t('files.parentFolder')}
                   >
                     <ArrowUp size={14} />
                   </button>
@@ -1650,14 +1653,14 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                      Aucun sous-dossier
+                      {t('files.noSubfolder')}
                     </div>
                   )}
                 </div>
               </div>
 
               {browserPath === '/' && (
-                <p className="text-xs text-amber-400 mb-3">Sélectionnez un dossier de destination</p>
+                <p className="text-xs text-amber-400 mb-3">{t('files.selectDestinationFolder')}</p>
               )}
 
               <div className="flex justify-end gap-2">
@@ -1668,7 +1671,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   }}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleCopy}
@@ -1703,7 +1706,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   <button
                     onClick={() => loadBrowserFiles('/')}
                     className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-                    title="Racine"
+                    title={t('files.root')}
                   >
                     <Home size={14} />
                   </button>
@@ -1711,7 +1714,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                     onClick={browserNavigateUp}
                     disabled={browserPath === '/'}
                     className="p-1.5 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
-                    title="Dossier parent"
+                    title={t('files.parentFolder')}
                   >
                     <ArrowUp size={14} />
                   </button>
@@ -1739,14 +1742,14 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-gray-500 text-sm">
-                      Aucun sous-dossier
+                      {t('files.noSubfolder')}
                     </div>
                   )}
                 </div>
               </div>
 
               {browserPath === '/' && (
-                <p className="text-xs text-amber-400 mb-3">Sélectionnez un dossier de destination</p>
+                <p className="text-xs text-amber-400 mb-3">{t('files.selectDestinationFolder')}</p>
               )}
 
               <div className="flex justify-end gap-2">
@@ -1757,7 +1760,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   }}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleMove}
@@ -1812,13 +1815,13 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                       }}
                       className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                     >
-                      Annuler
+                      {t('common.cancel')}
                     </button>
                     <button
                       onClick={handleShare}
                       className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
                     >
-                      Créer le lien
+                      {t('files.createLink')}
                     </button>
                   </div>
                 </>
@@ -1965,7 +1968,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
                   }}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleAddDownload}

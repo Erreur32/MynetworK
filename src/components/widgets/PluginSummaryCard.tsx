@@ -5,6 +5,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { StatusBadge } from '../ui';
@@ -60,13 +61,13 @@ const getAvgTemp = (sensors: SystemSensor[]): number | null => {
     return Math.round(avg);
 };
 
-const getFans = (info: any): SystemFan[] => {
+const getFans = (info: any, tFan?: (key: string) => string): SystemFan[] => {
     if (!info) return [];
     if (info.fans && Array.isArray(info.fans)) {
         return info.fans.sort((a: any, b: any) => a.name.localeCompare(b.name));
     }
     if (info.fan_rpm != null) {
-        return [{ id: 'fan_rpm', name: 'Ventilateur', value: info.fan_rpm }];
+        return [{ id: 'fan_rpm', name: tFan ? tFan('freebox.fan') : 'Fan', value: info.fan_rpm }];
     }
     return [];
 };
@@ -78,6 +79,7 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
 };
 
 export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false, onNavigateToSearch }) => {
+    const { t } = useTranslation();
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { networks: wifiStoreNetworks } = useWifiStore();
@@ -109,7 +111,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         onNavigateToSearch(ip);
                     }}
                     className={`text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${className}`}
-                    title={`Rechercher ${ip} dans la page de recherche`}
+                    title={t('search.searchInPage', { ip })}
                 >
                     <span>{ip}</span>
                     <Link2 size={size} className="opacity-50 relative top-[-2px]" />
@@ -245,7 +247,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 return t.startsWith('uap');
             })
             .map((d) => {
-                const name = d.name || d.model || d.ip || 'Borne Wi‑Fi';
+                const name = d.name || d.model || d.ip || t('unifi.accessPointFallback');
                 const mac = (d.mac || '').toString().toLowerCase();
 
                 const clientsForDevice = clients.filter((client) => {
@@ -357,7 +359,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 return t.startsWith('usw');
             })
             .map((d) => {
-                const name = d.name || d.model || d.ip || 'Switch';
+                const name = d.name || d.model || d.ip || t('unifi.switchFallback');
 
                 // UniFi switch models expose port information in different fields depending on firmware / API version.
                 // We try several common patterns to build a consistent ports array:
@@ -543,11 +545,11 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 loginFreebox().catch(() => {});
                             }}
                             className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors px-2 py-1 rounded border border-gray-700/60 bg-[#1a1a1a] hover:bg-[#252525]"
-                            title={isFreeboxLoggedIn ? 'Rafraîchir la session Freebox' : 'Se reconnecter à la Freebox'}
+                            title={isFreeboxLoggedIn ? t('freebox.refreshSession') : t('freebox.reconnect')}
                         >
                             <span className="w-1.5 h-1.5 rounded-full mr-1"
                                   style={{ backgroundColor: isFreeboxLoggedIn ? '#22c55e' : '#ef4444' }} />
-                            <span>Auth</span>
+                            <span>{t('dashboard.bandwidth.auth')}</span>
                         </button>
                     )}
                     {onViewDetails && (
@@ -555,7 +557,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             onClick={onViewDetails}
                             className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 rounded border border-blue-500/30"
                         >
-                            Accéder
+                            {t('pluginSummary.viewDetails')}
                             <ArrowRight size={14} />
                         </button>
                     )}
@@ -573,12 +575,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     ) : plugin.enabled ? (
                         <div className="flex items-center gap-1.5 text-yellow-400 text-xs">
                             <AlertCircle size={14} />
-                            <span>Configuration requise</span>
+                            <span>{t('dashboard.pluginsState.configRequired')}</span>
                         </div>
                     ) : (
                         <div className="flex items-center gap-1.5 text-gray-500 text-xs">
                             <XCircle size={14} />
-                            <span>Désactivé</span>
+                            <span>{t('dashboard.pluginsState.disabled')}</span>
                         </div>
                     )}
                 </div>
@@ -588,17 +590,17 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     <div className="bg-red-900/20 border border-red-700/60 rounded-lg p-2.5 space-y-1">
                         <div className="flex items-center gap-2 text-red-300 text-xs font-medium">
                             <AlertCircle size={14} />
-                            <span>Problème de connexion</span>
+                            <span>{t('pluginSummary.connectionIssue')}</span>
                         </div>
                         <p className="text-[11px] text-red-400/80 pl-6">
-                            {pluginId === 'unifi' 
-                                ? 'Vérifiez l\'URL, les identifiants et le nom du site dans la configuration.'
+                            {pluginId === 'unifi'
+                                ? t('unifi.checkConfig')
                                 : pluginId === 'freebox'
-                                ? 'Vérifiez la connexion à l\'API Freebox.'
-                                : 'Vérifiez la configuration du plugin.'}
+                                ? t('freebox.checkApiConnection')
+                                : t('pluginSummary.checkPluginConfig')}
                         </p>
                         <p className="text-[10px] text-red-500/60 pl-6 italic">
-                            Consultez les logs backend pour plus de détails.
+                            {t('pluginSummary.seeBackendLogs')}
                         </p>
                     </div>
                 )}
@@ -609,7 +611,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {/* Network Stats (plugin-level, all plugins) */}
                         {pluginId !== 'freebox' && stats.network && (stats.network.download > 0 || stats.network.upload > 0) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2">
-                                <h4 className="text-xs text-gray-400">Débit (plugin)</h4>
+                                <h4 className="text-xs text-gray-400">{t('pluginSummary.throughputPlugin')}</h4>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div>
                                         <span className="text-gray-500">↓</span>
@@ -641,7 +643,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         return (
                                             <div className="space-y-3">
                                         <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400 font-medium">Sites UniFi</span>
+                                                    <span className="text-gray-400 font-medium">{t('unifi.sitesTitle')}</span>
                                                     {/* Version and update badge in header if available */}
                                                     {!hideController && (unifiControllerVersion || unifiControllerUpdateAvailable !== undefined) && (
                                                         <div className="flex items-center gap-2">
@@ -667,7 +669,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                                                     <span className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
                                                                     <span className="text-sm font-semibold text-white truncate">
-                                                                        {site.name || site.id || 'Site UniFi'}
+                                                                        {site.name || site.id || t('unifi.siteFallback')}
                                             </span>
                                         </div>
                                                                 <span
@@ -687,7 +689,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 )}
                                                                 {site.devices && (
                                                                     <div>
-                                                                        <span className="text-gray-500">Équipements:&nbsp;</span>
+                                                                        <span className="text-gray-500">{t('unifi.equipments')}&nbsp;</span>
                                                                         <span className="text-gray-300 font-medium">
                                                                             {site.devices.total ?? 0}
                                                                         </span>
@@ -699,17 +701,17 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 <div className="flex items-center justify-end gap-2 mt-1 pt-2 border-t border-gray-800">
                                                                     {site.devices.clients !== undefined && (
                                                                         <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 font-semibold text-[11px]">
-                                                                            {site.devices.clients ?? 0} Clients
+                                                                            {site.devices.clients ?? 0} {t('unifi.clients')}
                                                                         </span>
                                                                     )}
                                                                     {site.devices.aps !== undefined && (
                                                                         <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 font-semibold text-[11px]">
-                                                                            {site.devices.aps ?? 0} APs
+                                                                            {site.devices.aps ?? 0} {t('unifi.aps')}
                                                                         </span>
                                                                     )}
                                                                     {site.devices.switches !== undefined && (
                                                                         <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 border border-blue-500/50 text-blue-300 font-semibold text-[11px]">
-                                                                            {site.devices.switches ?? 0} Switches
+                                                                            {site.devices.switches ?? 0} {t('unifi.switches')}
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -726,7 +728,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 {/* Clients stats - moved here after sites */}
                                 {!hideController && (unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
                                     <div className="flex items-center justify-between pt-2 border-t border-gray-800 text-[11px]">
-                                            <span className="text-gray-400">Clients connectés</span>
+                                            <span className="text-gray-400">{t('unifi.clientsConnected')}</span>
                                         <div className="flex items-center gap-2">
                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
                                                 {unifiClientsConnected}
@@ -743,7 +745,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 {(!hideController || showDeviceTables) && unifiApRows.length > 0 && (
                                     <div className="pt-2 border-t border-gray-800 space-y-2">
                                         <div className="flex items-center justify-between mb-1">
-                                            <span className="text-gray-400 font-medium text-[11px]">Points d'accès</span>
+                                            <span className="text-gray-400 font-medium text-[11px]">{t('unifi.pointsAccess')}</span>
                                         </div>
                                         <div className={showDeviceTables ? "grid grid-cols-2 gap-3" : "space-y-2"}>
                                             {unifiApRows.map((ap, index) => (
@@ -754,14 +756,14 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                     <div className="flex items-center justify-between mb-1.5">
                                                         <span 
                                                             className="text-xs font-semibold text-white truncate"
-                                                            title={`Point d'accès: ${ap.name}${ap.ip ? ` (${ap.ip})` : ''}`}
+                                                            title={`${t('unifi.accessPointLabel')} ${ap.name}${ap.ip ? ` (${ap.ip})` : ''}`}
                                                         >
                                                             {ap.name}
                                                         </span>
                                                         {ap.ip && (
                                                             <span 
                                                                 className="text-[10px] text-gray-500"
-                                                                title={`Adresse IP du point d'accès`}
+                                                                title={t('unifi.accessPointIpLabel')}
                                                             >
                                                                 {renderClickableIp(ap.ip, 'text-gray-500 text-[10px]', 8)}
                                                             </span>
@@ -776,7 +778,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                         <span
                                                                             key={`dashboard-band-${bandIndex}`}
                                                                             className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-900/40 border border-cyan-700/50 text-cyan-300 whitespace-nowrap"
-                                                                            title={`Bande de fréquence supportée: ${band}`}
+                                                                            title={`${t('unifi.bandSupported')} ${band}`}
                                                                         >
                                                                             {band}
                                                                         </span>
@@ -1008,17 +1010,17 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 {unifiSwitchRows.length > 0 && (
                                             <div className="flex flex-col h-full">
                                         <div className="flex items-center justify-between mb-1">
-                                            <span className="text-gray-400">Switches</span>
+                                            <span className="text-gray-400">{t('unifi.switches')}</span>
                                         </div>
                                                 <div className="rounded border border-gray-800 overflow-hidden flex-1 flex flex-col">
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                                <th className="px-2 py-2 text-left" style={{ width: '22%' }}>Nom</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '22%' }}>{t('unifi.tableName')}</th>
                                                                 <th className="px-2 py-2 text-left" style={{ width: '28%' }}>IP</th>
-                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>Ports actifs</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>{t('unifi.activePorts')}</th>
                                                                 <th className="px-2 py-2 text-right" style={{ width: '16%' }}>Speed</th>
-                                                                <th className="px-2 py-2 text-right" style={{ width: '18%' }}>Total</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '18%' }}>{t('unifi.total')}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1064,7 +1066,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {/* First line: Labels */}
                                     <div className="grid grid-cols-4 gap-4 items-center">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-[10px]">Freebox</span>
+                                            <span className="text-gray-400 text-[10px]">{t('freebox.label')}</span>
                                         </div>
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
@@ -1089,7 +1091,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             }
                                             return lanNetwork ? (
                                     <div className="flex flex-col">
-                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Réseau LAN</span>
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">{t('freebox.lanNetwork')}</span>
                                                 </div>
                                             ) : <div></div>;
                                         })()}
@@ -1110,7 +1112,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {/* Second line: Data */}
                                     <div className="grid grid-cols-4 gap-4 items-center">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-xs">Freebox</span>
+                                            <span className="text-gray-400 text-xs">{t('freebox.label')}</span>
                                         </div>
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
@@ -1190,20 +1192,20 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 : 'inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-red-900/40 border border-red-700 text-red-300 font-semibold'
                                                         }
                                                     >
-                                                        {(stats.system as any).dhcp.enabled ? 'Actif' : 'Désactivé'}
+                                                        {(stats.system as any).dhcp.enabled ? t('network.active') : t('network.inactive')}
                                                     </span>
                                                 </div>
                                                 {((stats.system as any).dhcp.activeLeases != null ||
                                                     (stats.system as any).dhcp.totalConfigured != null) && (
                                                     <>
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-gray-400">Actifs</span>
+                                                            <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.activeCount' : 'unifi.activeCount')}</span>
                                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
                                                                 {(stats.system as any).dhcp.activeLeases ?? 0}
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center justify-between">
-                                                            <span className="text-gray-400">Total</span>
+                                                            <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.total' : 'unifi.total')}</span>
                                                             <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
                                                                 {(stats.system as any).dhcp.totalConfigured ?? 0}
                                                             </span>
@@ -1218,16 +1220,16 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         {isActive && stats.system && (stats.system as any).portForwarding && (
                                             <div className="flex flex-col gap-1">
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">NAT</span>
+                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.nat' : 'unifi.nat')}</span>
                                                 </div>
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">Actives</span>
+                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.activeRules' : 'unifi.activeRules')}</span>
                                                     <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
                                                         {(stats.system as any).portForwarding.enabledRules ?? 0}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">Total</span>
+                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.total' : 'unifi.total')}</span>
                                                     <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
                                                         {(stats.system as any).portForwarding.totalRules ?? 0}
                                                     </span>
@@ -1247,7 +1249,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         data={networkHistory}
                                         dataKey="download"
                                         color="#3b82f6"
-                                        title="Descendant en temps réel"
+                                        title={t('freebox.downloadRealtime')}
                                         currentValue={currentDownload.split(' ')[0]}
                                         unit={currentDownload.split(' ')[1] || 'kb/s'}
                                         trend="down"
@@ -1256,7 +1258,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         data={networkHistory}
                                         dataKey="upload"
                                         color="#10b981"
-                                        title="Montant en temps réel"
+                                        title={t('freebox.uploadRealtime')}
                                         currentValue={currentUpload.split(' ')[0]}
                                         unit={currentUpload.split(' ')[1] || 'kb/s'}
                                         trend="up"
@@ -1268,7 +1270,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {/* Freebox badges and stats (copied from header) */}
                         {pluginId === 'freebox' && connectionStatus && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
-                                <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">État système</div>
+                                <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
 
                                 {/* System badges */}
                                 <div className="flex flex-wrap items-center gap-2">
@@ -1302,7 +1304,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                                     {/* Fan */}
                                     {systemInfo && (() => {
-                                        const fans = getFans(systemInfo);
+                                        const fans = getFans(systemInfo, t);
                                         const fanAvgRpm = getAvgFanRpm(fans);
                                         const fanDisplay = fanAvgRpm != null ? `${fanAvgRpm} T/min` : '--';
                                         return fanDisplay !== '--' ? (
@@ -1338,7 +1340,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {/* Freebox Session */}
                                     <StatusBadge
                                         icon={<Wifi size={14} />}
-                                        value={isFreeboxLoggedIn ? 'Session OK' : 'Session expirée'}
+                                        value={isFreeboxLoggedIn ? t('freebox.sessionOk') : t('freebox.sessionExpired')}
                                         color={isFreeboxLoggedIn ? 'text-emerald-400' : 'text-red-400'}
                                     />
 
@@ -1349,10 +1351,10 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     <div className="mt-2 border-t border-gray-800 pt-2 space-y-2">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[11px] text-gray-400 font-medium">
-                                                Bornes Wi‑Fi Freebox
+                                                {t('freebox.wifiStations')}
                                             </span>
                                             <span className="text-[11px] text-gray-500">
-                                                {wifiStoreNetworks.length} point{wifiStoreNetworks.length > 1 ? 's' : ''} d'accès
+                                                {t('freebox.accessPointsCount', { count: wifiStoreNetworks.length })}
                                             </span>
                                         </div>
                                         <div className="space-y-1.5">
@@ -1372,7 +1374,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                                 {net.ssid}
                                                             </span>
                                                             <span className="text-[10px] text-gray-500">
-                                                                {net.band} • Canal {net.channel || 'n/a'}
+                                                                {net.band} • {t('freebox.channel')} {net.channel || 'n/a'}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -1380,15 +1382,15 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                         {net.active ? (
                                                             <>
                                                         <span className="text-[10px] text-emerald-400 font-medium">
-                                                            {net.connectedDevices} appareils
+                                                            {t('freebox.devicesCount', { count: net.connectedDevices })}
                                                         </span>
                                                         <span className="text-[10px] text-gray-500">
-                                                            Charge {Math.round(net.load)}%
+                                                            {t('freebox.load')} {Math.round(net.load)}%
                                                         </span>
                                                             </>
                                                         ) : (
                                                             <span className="text-[10px] text-gray-500">
-                                                                Désactivé
+                                                                {t('dashboard.pluginsState.disabled')}
                                                             </span>
                                                         )}
                                                     </div>
@@ -1404,7 +1406,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {stats.system && stats.system.temperature && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-1">
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-gray-400">Température</span>
+                                        <span className="text-gray-400">{t('freebox.temperature')}</span>
                                         <span className="text-gray-300">
                                             {stats.system.temperature}°C
                                         </span>
@@ -1415,9 +1417,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 ) : (
                     <div className="text-center py-4 text-gray-500 text-xs">
                         {plugin.enabled ? (
-                            <p>Configuration requise pour voir les stats</p>
+                            <p>{t('pluginSummary.configRequiredForStats')}</p>
                         ) : (
-                            <p>Activez le plugin pour voir les stats</p>
+                            <p>{t('pluginSummary.enablePluginForStats')}</p>
                         )}
                     </div>
                 )}
@@ -1426,7 +1428,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 {/* Uptime unifié en pied de carte (Freebox / UniFi) */}
                 {stats?.system?.uptime && (
                     <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
-                        <span>Uptime</span>
+                        <span>{t('system.uptime')}</span>
                         <span className="text-gray-300 font-medium">
                             {(() => {
                                 const uptimeSeconds = stats.system.uptime;

@@ -1,0 +1,22 @@
+{
+  "server": {
+    "connection_closed": "Connection closed",
+    "ping_timeout": "Ping timeout",
+    "connection_error": "Connection error",
+    "ping_failed": "Unable to measure latency",
+    "bandwidth_error": "Error while retrieving bandwidth",
+    "test_failed": "Error during speed test",
+    "unable_connection_info": "Unable to retrieve connection information",
+    "insufficient_rights": "Permission \"Freebox settings modification\" required. Delete freebox_token.json and re-register the application granting all rights on the Freebox LCD screen.",
+    "insufficient_rights_short": "Insufficient permission. Delete freebox_token.json and re-register the application with all rights.",
+    "wps_disabled": "WPS is disabled on the Freebox. Enable it in Freebox OS WiFi settings.",
+    "wps_error": "Error while starting WPS",
+    "no_disk": "No disk available. A disk is required to create a VM.",
+    "disk_check_failed": "Unable to check disk availability.",
+    "ip_added_ok": "IP added and scanned successfully",
+    "ip_added_offline": "IP added but offline (ping failed)",
+    "ip_rescanned_ok": "IP rescanned successfully (full scan + ports)",
+    "ip_rescanned_offline": "IP rescanned but offline",
+    "unavailable": "Unavailable"
+  }
+}
