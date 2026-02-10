@@ -5,7 +5,7 @@
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
 ![MynetworK](https://img.shields.io/badge/MynetworK-111827?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-DEVELOPMENT-374151?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 [![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
 [![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
