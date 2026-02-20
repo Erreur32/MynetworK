@@ -107,6 +107,10 @@ echo -e "${CYAN}${BOLD}🔄 Mise à jour de la version de ${YELLOW}$OLD_VERSION$
 echo -e "${BLUE}  📝 Mise à jour de package.json...${NC}"
 sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package.json
 
+# 1b. package-lock.json (version mynetwork à la racine et dans packages."")
+echo -e "${BLUE}  📝 Mise à jour de package-lock.json...${NC}"
+sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package-lock.json
+
 # 2. src/constants/version.ts (fichier de constantes centralisé)
 echo -e "${BLUE}  📝 Mise à jour de src/constants/version.ts...${NC}"
 sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
@@ -257,6 +261,7 @@ echo -e "${GREEN}${BOLD}✅ Version mise à jour avec succès de ${YELLOW}$OLD_V
 echo ""
 echo -e "${CYAN}${BOLD}📋 Fichiers modifiés:${NC}"
 echo -e "  ${BLUE}- package.json${NC}"
+echo -e "  ${BLUE}- package-lock.json${NC}"
 echo -e "  ${BLUE}- src/constants/version.ts${NC}"
 echo -e "  ${BLUE}- src/main.tsx (logs console)${NC}"
 echo -e "  ${BLUE}- server/plugins/freebox/FreeboxPlugin.ts${NC}"

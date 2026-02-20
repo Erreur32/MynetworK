@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.7] - 2026-02-20
+
+### Fixed
+
+- **Sécurité (Dependabot) :** Mise à jour de `qs` 6.14.1 → 6.14.2 (CVE arrayLimit bypass, DoS via memory exhaustion)
+- **scripts/update-version.sh :** Ajout de la mise à jour de la version dans `package-lock.json` (racine + packages."")
+
+---
+
 ## [0.7.6] - 2026-02-20
 
 ### Added
