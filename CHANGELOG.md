@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.6] - 2026-02-20
+
+### Added
+
+**Freebox – Notifications de mise à jour firmware**
+- Service backend qui scrape périodiquement dev.freebox.fr/blog pour les dernières versions (Server + Player)
+- API : `GET /api/plugins/freebox/firmware-check`, routes config (get/post), force check
+- Dashboard : badge firmware sur une seule ligne avec version et changelog au survol (PluginSummaryCard)
+- Page Freebox : bandeau de notification avec changelog dépliable (expanded par défaut)
+- Header : indicateur de mise à jour (↑) à côté de la version firmware sur la page Freebox
+- Administration > Général : section « Vérification firmware Freebox » (toggle, intervalle 1h–24h, vérifier maintenant)
+- i18n : clés `freebox.firmwareUpdate.*` et `admin.freeboxFirmwareCheck.*` (FR/EN)
+- Décodage des entités HTML dans le changelog (`&rsquo;` → `'`, accents, etc.) — backend + `src/utils/textUtils.ts`
+- Utilitaire partagé `compareVersions()` extrait dans `server/utils/version.ts`
+
+### Fixed
+
+- **PluginsPage :** ajout de `onNavigateToSettings` à l’interface `PluginsPageProps`
+- **Header :** ajout de `onSearchClick` à l’interface `HeaderProps`
+- **SpeedtestWidget :** suppression des props invalides (`downloadSpeed`, `uploadSpeed`, etc.) — le composant ne prend aucun prop
+
+---
+
 ## [0.7.5] - 2026-02-09
 
 ### Fixed

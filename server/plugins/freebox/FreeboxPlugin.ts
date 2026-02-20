@@ -7,6 +7,7 @@
 
 import { BasePlugin } from '../base/BasePlugin.js';
 import { freeboxApi } from '../../services/freeboxApi.js';
+import { freeboxFirmwareCheckService } from '../../services/freeboxFirmwareCheckService.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 
 export class FreeboxPlugin extends BasePlugin {
@@ -21,7 +22,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.5');
+        super('freebox', 'Freebox', '0.7.6');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -381,6 +382,22 @@ export class FreeboxPlugin extends BasePlugin {
                     (systemStats as any).apiVersion = apiVersion;
                 } else if (sys.api_version) {
                     (systemStats as any).apiVersion = sys.api_version;
+                }
+            }
+
+            // Merge firmware update info from blog check service
+            const boxFw = (systemStats as any).firmware;
+            const playerFw = (systemStats as any).playerFirmware;
+            const firmwareInfo = freeboxFirmwareCheckService.getLatestFirmwareInfo(boxFw, playerFw);
+            if (firmwareInfo) {
+                (systemStats as any).updateAvailable = firmwareInfo.server.updateAvailable;
+                (systemStats as any).latestFirmware = firmwareInfo.server.latestVersion;
+                (systemStats as any).firmwareChangelog = firmwareInfo.server.changelog;
+                (systemStats as any).firmwareBlogUrl = firmwareInfo.server.blogUrl;
+                if (firmwareInfo.player) {
+                    (systemStats as any).playerFirmwareUpdateAvailable = firmwareInfo.player.updateAvailable;
+                    (systemStats as any).latestPlayerFirmware = firmwareInfo.player.latestVersion;
+                    (systemStats as any).playerFirmwareChangelog = firmwareInfo.player.changelog;
                 }
             }
 

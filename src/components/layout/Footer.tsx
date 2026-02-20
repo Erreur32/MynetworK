@@ -173,18 +173,22 @@ export const Footer: React.FC<FooterProps> = ({
             // - Tab "settings" (global Administration) is handled via dedicated button on dashboard
             const displayLabel = t(tab.labelKey);
 
+            const isFreeboxContext = ['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage);
+            const hideLabel = isFreeboxContext && tab.id === 'dashboard';
+
             return (
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
+                className={`flex items-center ${hideLabel ? 'px-3' : 'gap-3 px-4'} py-3 rounded-lg border transition-all ${
                   isActive
                     ? 'btn-theme-active border-theme-hover text-theme-primary'
                     : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
                 }`}
+                title={hideLabel ? displayLabel : undefined}
               >
-                <Icon size={18} />
-                <span className="text-sm font-medium whitespace-nowrap">{displayLabel}</span>
+                <Icon size={18} className={isActive ? 'text-accent-primary' : ''} />
+                {!hideLabel && <span className="text-sm font-medium whitespace-nowrap">{displayLabel}</span>}
               </button>
             );
           })}

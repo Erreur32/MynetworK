@@ -23,6 +23,7 @@ import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { useFavicon } from '../../hooks/useFavicon';
 import { useUpdateStore } from '../../stores/updateStore';
+import { useFreeboxFirmwareStore } from '../../stores/freeboxFirmwareStore';
 import { getVersionString } from '../../constants/version';
 import type { SystemInfo, ConnectionStatus, SystemSensor, SystemFan } from '../../types/api';
 import type { PageType } from './Footer';
@@ -54,6 +55,7 @@ interface HeaderProps {
   onProfileClick?: () => void;
   onUsersClick?: () => void;
   onLogout?: () => void;
+  onSearchClick?: () => void;
   unifiStats?: {
     network?: {
       download?: number;
@@ -373,6 +375,11 @@ export const Header: React.FC<HeaderProps> = ({
   
   // Update check info
   const { updateInfo } = useUpdateStore();
+  // Freebox firmware update info (only relevant on Freebox page)
+  const firmwareInfo = useFreeboxFirmwareStore((s) => s.firmwareInfo);
+  const hasFirmwareUpdate = pageType === 'freebox' && (
+    firmwareInfo?.server?.updateAvailable || firmwareInfo?.player?.updateAvailable
+  );
 
   // Determine if we should show Freebox info
   // Only show Freebox badges on Freebox page, NEVER on dashboard
@@ -406,14 +413,21 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme hover:bg-theme-primary transition-colors"
           >
             {pageType === 'freebox' ? (
-              <>
-                <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
-                <div className="flex flex-col leading-tight">
-                  <span className="font-semibold text-theme-primary">{boxName}</span>
-                  <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
-                </div>
-              </>
-            ) : pageType === 'unifi' ? (
+          <>
+            <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
+            <div className="flex flex-col leading-tight">
+              <span className="font-semibold text-theme-primary">{boxName}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400 font-normal">{systemInfo?.firmware_version ? `v${systemInfo.firmware_version}` : getVersionString()}</span>
+                {hasFirmwareUpdate && (
+                  <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30" title={t('freebox.firmwareUpdate.updateAvailable')}>
+                    ↑
+                  </span>
+                )}
+              </div>
+            </div>
+          </>
+        ) : pageType === 'unifi' ? (
               <>
                 <div className="w-7 h-7 flex items-center justify-center">
                   {/* UniFi icon (custom SVG, same color palette as original) */}
@@ -472,7 +486,14 @@ export const Header: React.FC<HeaderProps> = ({
             <img src={logoUltra} alt="Freebox Ultra" className="w-7 h-7 flex-shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">{boxName}</span>
-              <span className="text-[10px] text-gray-400 font-normal">{getVersionString()}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400 font-normal">{systemInfo?.firmware_version ? `v${systemInfo.firmware_version}` : getVersionString()}</span>
+                {hasFirmwareUpdate && (
+                  <span className="text-[9px] font-semibold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30" title={t('freebox.firmwareUpdate.updateAvailable')}>
+                    ↑
+                  </span>
+                )}
+              </div>
             </div>
           </>
         ) : pageType === 'unifi' ? (

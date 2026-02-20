@@ -217,6 +217,8 @@ import './services/networkScanScheduler.js';
 import { latencyMonitoringScheduler } from './services/latencyMonitoringScheduler.js';
 // Initialize database purge service (loads configs from database)
 import { initializePurgeService } from './services/databasePurgeService.js';
+// Freebox firmware check (scrapes dev.freebox.fr/blog for update notifications)
+import { freeboxFirmwareCheckService } from './services/freeboxFirmwareCheckService.js';
 
 // Initialize database purge service (after database is initialized and routes are imported)
 initializePurgeService();
@@ -231,6 +233,16 @@ setTimeout(() => {
         logger.error('Server', 'Failed to initialize latency monitoring scheduler:', error);
     }
 }, 6000); // Wait 6 seconds for database to be ready
+
+// Start Freebox firmware check service (scrapes blog for firmware updates)
+setTimeout(() => {
+    try {
+        freeboxFirmwareCheckService.start();
+        logger.success('Server', 'Freebox firmware check service initialized');
+    } catch (error) {
+        logger.error('Server', 'Failed to initialize Freebox firmware check service:', error);
+    }
+}, 7000); // Slightly after latency scheduler
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);

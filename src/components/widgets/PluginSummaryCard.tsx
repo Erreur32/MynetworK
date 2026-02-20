@@ -14,6 +14,7 @@ import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
+import { decodeHtmlEntities } from '../../utils/textUtils';
 import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, ArrowDown, ArrowUp, Link2 } from 'lucide-react';
 import type { SystemSensor, SystemFan } from '../../types/api';
 
@@ -83,7 +84,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const { plugins, pluginStats } = usePluginStore();
     const { status: connectionStatus, history: networkHistory } = useConnectionStore();
     const { networks: wifiStoreNetworks } = useWifiStore();
-    const { login: loginFreebox, isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
+    const { isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
     const { info: systemInfo } = useSystemStore();
     
     const plugin = plugins.find(p => p.id === pluginId);
@@ -154,6 +155,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     let freeboxVersion: string | undefined;
     let freeboxPlayerVersion: string | undefined;
     let freeboxUpdateAvailable: boolean | undefined;
+    let freeboxPlayerUpdateAvailable: boolean | undefined;
+    let freeboxLatestFirmware: string | undefined;
+    let freeboxFirmwareChangelog: string | undefined;
+    let freeboxFirmwareBlogUrl: string | undefined;
+    let freeboxLatestPlayerFirmware: string | undefined;
+    let freeboxPlayerFirmwareChangelog: string | undefined;
     let freeboxWifiNetworks: Array<{ ssid: string; band: string; enabled: boolean }> = [];
 
     if (pluginId === 'unifi' && stats) {
@@ -458,7 +465,13 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
             (sys.player_version as string | undefined);
         freeboxUpdateAvailable =
             (sys.updateAvailable as boolean | undefined) ?? (sys.update_available as boolean | undefined);
-        
+        freeboxPlayerUpdateAvailable = sys.playerFirmwareUpdateAvailable as boolean | undefined;
+        freeboxLatestFirmware = sys.latestFirmware as string | undefined;
+        freeboxFirmwareChangelog = sys.firmwareChangelog as string | undefined;
+        freeboxFirmwareBlogUrl = sys.firmwareBlogUrl as string | undefined;
+        freeboxLatestPlayerFirmware = sys.latestPlayerFirmware as string | undefined;
+        freeboxPlayerFirmwareChangelog = sys.playerFirmwareChangelog as string | undefined;
+
         // Get WiFi networks from system stats (when exposed by backend plugin)
         const pluginWifiNetworks = sys.wifiNetworks || [];
         if (Array.isArray(pluginWifiNetworks) && pluginWifiNetworks.length > 0) {
@@ -539,19 +552,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
             actions={
                 <div className="flex items-center gap-2">
 
-                    {pluginId === 'freebox' && (
-                        <button
-                            onClick={() => {
-                                loginFreebox().catch(() => {});
-                            }}
-                            className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors px-2 py-1 rounded border border-gray-700/60 bg-[#1a1a1a] hover:bg-[#252525]"
-                            title={isFreeboxLoggedIn ? t('freebox.refreshSession') : t('freebox.reconnect')}
-                        >
-                            <span className="w-1.5 h-1.5 rounded-full mr-1"
-                                  style={{ backgroundColor: isFreeboxLoggedIn ? '#22c55e' : '#ef4444' }} />
-                            <span>{t('dashboard.bandwidth.auth')}</span>
-                        </button>
-                    )}
                     {onViewDetails && (
                         <button
                             onClick={onViewDetails}
@@ -1059,8 +1059,43 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         )}
 
                         {/* Freebox controller / firmware / WAN IP / DHCP & Port forwarding summary */}
-                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding || freeboxWifiNetworks.length > 0))) && (
+                        {pluginId === 'freebox' && (freeboxVersion || freeboxPlayerVersion || freeboxUpdateAvailable || freeboxPlayerUpdateAvailable || (connectionStatus?.ipv4) || (stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding || freeboxWifiNetworks.length > 0))) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
+                                {/* Firmware update notification - full-width single line */}
+                                {(freeboxUpdateAvailable || freeboxPlayerUpdateAvailable) && (
+                                    <div className="group relative w-full">
+                                        <div className="w-full flex items-center justify-end px-2 py-1 rounded bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px] cursor-help whitespace-nowrap">
+                                            {freeboxUpdateAvailable && freeboxPlayerUpdateAvailable ? (
+                                                <>{t('freebox.firmwareUpdate.updateAvailable')} v{freeboxLatestFirmware || '?'} • {t('freebox.firmwareUpdate.playerUpdate')} v{freeboxLatestPlayerFirmware || '?'}</>
+                                            ) : freeboxUpdateAvailable ? (
+                                                <>{t('freebox.firmwareUpdate.updateAvailable')} v{freeboxLatestFirmware || '?'}</>
+                                            ) : (
+                                                <>{t('freebox.firmwareUpdate.playerUpdate')} v{freeboxLatestPlayerFirmware || '?'}</>
+                                            )}
+                                        </div>
+                                        {(freeboxFirmwareChangelog || freeboxPlayerFirmwareChangelog) && (
+                                            <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block w-64 max-h-48 overflow-y-auto p-2 text-[10px] text-gray-200 bg-gray-900 border border-amber-600/50 rounded-lg shadow-xl">
+                                                {freeboxFirmwareChangelog && (
+                                                    <div className="mb-2">
+                                                        <div className="font-semibold text-amber-400 mb-1">{t('freebox.firmwareUpdate.serverUpdate')} - {t('freebox.firmwareUpdate.changelog')}</div>
+                                                        <pre className="whitespace-pre-wrap break-words font-sans text-gray-300">{decodeHtmlEntities(freeboxFirmwareChangelog)}</pre>
+                                                    </div>
+                                                )}
+                                                {freeboxPlayerFirmwareChangelog && (
+                                                    <div>
+                                                        <div className="font-semibold text-blue-400 mb-1">{t('freebox.firmwareUpdate.playerUpdate')} - {t('freebox.firmwareUpdate.changelog')}</div>
+                                                        <pre className="whitespace-pre-wrap break-words font-sans text-gray-300">{decodeHtmlEntities(freeboxPlayerFirmwareChangelog)}</pre>
+                                                    </div>
+                                                )}
+                                                {freeboxFirmwareBlogUrl && (
+                                                    <a href={freeboxFirmwareBlogUrl} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline mt-1 inline-block">
+                                                        {t('freebox.firmwareUpdate.viewBlog')}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 {/* Freebox, Firmware and LAN Network - Labels on first line, data on second line */}
                                 <div className="space-y-1">
                                     {/* First line: Labels */}
@@ -1095,16 +1130,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                 </div>
                                             ) : <div></div>;
                                         })()}
-                                        <div className="flex items-center justify-end gap-2">
-                                            {freeboxUpdateAvailable && (
-                                                <span className="px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
-                                                    Mise à jour dispo
-                                                </span>
-                                            )}
+                                        <div className="flex items-center justify-end">
                                             {connectionStatus && connectionStatus.ipv4 && (
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] text-gray-400">IP Public</span>
-                                                </div>
+                                                <span className="text-[10px] text-gray-400">IP Public</span>
                                         )}
                                         </div>
                                     </div>

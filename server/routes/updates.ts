@@ -8,6 +8,7 @@ import express from 'express';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
+import { compareVersions } from '../utils/version.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -27,25 +28,6 @@ function getCurrentVersion(): string {
     console.error('[Updates] Error reading package.json:', error);
     return '0.0.0';
   }
-}
-
-/**
- * Compare two version strings (semver format: x.y.z)
- * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
- */
-function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.split('.').map(Number);
-  const parts2 = v2.split('.').map(Number);
-  
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const part1 = parts1[i] || 0;
-    const part2 = parts2[i] || 0;
-    
-    if (part1 > part2) return 1;
-    if (part1 < part2) return -1;
-  }
-  
-  return 0;
 }
 
 /**

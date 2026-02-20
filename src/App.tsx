@@ -54,7 +54,9 @@ import { usePluginStore } from './stores/pluginStore';
 import { startPermissionsRefresh, stopPermissionsRefresh } from './stores/authStore';
 import { useCapabilitiesStore } from './stores/capabilitiesStore';
 import { useUpdateStore } from './stores/updateStore';
+import { useFreeboxFirmwareStore } from './stores/freeboxFirmwareStore';
 import { POLLING_INTERVALS, formatSpeed } from './utils/constants';
+import { decodeHtmlEntities } from './utils/textUtils';
 import {
   MoreHorizontal,
   Settings,
@@ -68,8 +70,88 @@ import {
   Download,
   History,
   Clock,
-  ArrowDownWideNarrow
+  ArrowDownWideNarrow,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink
 } from 'lucide-react';
+
+// Freebox firmware update banner (shown on Freebox page when update available)
+const FreeboxFirmwareBanner: React.FC = () => {
+  const { t } = useTranslation();
+  const { isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
+  const firmwareInfo = useFreeboxFirmwareStore((s) => s.firmwareInfo);
+  const [expanded, setExpanded] = useState(false);
+
+  // Expanded by default when update available so description is visible
+  useEffect(() => {
+    setExpanded(true);
+  }, [firmwareInfo?.lastCheck]);
+
+  if (!isFreeboxLoggedIn || !firmwareInfo) return null;
+  const serverUpdate = firmwareInfo.server?.updateAvailable;
+  const playerUpdate = firmwareInfo.player?.updateAvailable;
+  if (!serverUpdate && !playerUpdate) return null;
+
+  const entries: Array<{ type: 'server' | 'player'; label: string; version: string; changelog: string; blogUrl: string }> = [];
+  if (serverUpdate && firmwareInfo.server) {
+    entries.push({
+      type: 'server',
+      label: t('freebox.firmwareUpdate.serverUpdate'),
+      version: firmwareInfo.server.latestVersion,
+      changelog: firmwareInfo.server.changelog,
+      blogUrl: firmwareInfo.server.blogUrl
+    });
+  }
+  if (playerUpdate && firmwareInfo.player) {
+    entries.push({
+      type: 'player',
+      label: t('freebox.firmwareUpdate.playerUpdate'),
+      version: firmwareInfo.player.latestVersion,
+      changelog: firmwareInfo.player.changelog,
+      blogUrl: firmwareInfo.player.blogUrl
+    });
+  }
+
+  return (
+    <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between gap-2 text-left"
+      >
+        <span className="text-sm font-medium text-amber-400">
+          {t('freebox.firmwareUpdate.updateAvailable')}
+          {entries.length === 1 && ` v${entries[0].version}`}
+          {entries.length > 1 && ` (${entries.map((e) => `v${e.version}`).join(', ')})`}
+        </span>
+        {expanded ? <ChevronUp size={18} className="text-amber-400 flex-shrink-0" /> : <ChevronDown size={18} className="text-amber-400 flex-shrink-0" />}
+      </button>
+      {expanded && (
+        <div className="mt-3 space-y-3 pt-3 border-t border-amber-500/20">
+          {entries.map((entry) => (
+            <div key={entry.type} className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-amber-400">{entry.label} v{entry.version}</span>
+                {entry.blogUrl && (
+                  <a href={entry.blogUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-400 hover:underline flex items-center gap-1">
+                    {t('freebox.firmwareUpdate.viewBlog')}
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+              {entry.changelog && (
+                <pre className="text-xs text-gray-300 whitespace-pre-wrap break-words font-sans max-h-48 overflow-y-auto bg-black/20 p-2 rounded">
+                  {decodeHtmlEntities(entry.changelog)}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Loading component for lazy-loaded pages (receives t from parent so it can be used outside hook scope in Suspense)
 const PageLoader = ({ t }: { t: (key: string) => string }) => (
@@ -216,6 +298,7 @@ const App: React.FC = () => {
 
   // Update check store
   const { loadConfig, checkForUpdates } = useUpdateStore();
+  const checkFirmware = useFreeboxFirmwareStore((s) => s.checkFirmware);
 
   // Fetch plugins and stats when authenticated
   useEffect(() => {
@@ -230,6 +313,9 @@ const App: React.FC = () => {
           checkForUpdates();
         }
       });
+
+      // Check Freebox firmware updates (backend caches blog scrape result)
+      checkFirmware();
       
       // Refresh stats periodically
       const interval = setInterval(() => {
@@ -764,6 +850,7 @@ const App: React.FC = () => {
         />
 
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
+          <FreeboxFirmwareBanner />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
           {/* Column 1 - Multi-Sources + État de la Freebox */}
@@ -825,14 +912,7 @@ const App: React.FC = () => {
 
             {isFreeboxLoggedIn && (
               <Card title={t('freebox.speedTest')}>
-              <SpeedtestWidget
-                downloadSpeed={undefined}
-                uploadSpeed={undefined}
-                ping={undefined}
-                jitter={undefined}
-                downloadHistory={[]}
-                uploadHistory={[]}
-              />
+              <SpeedtestWidget />
               <p className="text-xs text-gray-500 mt-2 text-center">
                 {t('freebox.page.speedTestApiMessage')}
               </p>

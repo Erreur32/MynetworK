@@ -16,6 +16,7 @@ import { LoginModal } from '../components/modals/LoginModal';
 
 interface PluginsPageProps {
     onBack: () => void;
+    onNavigateToSettings?: () => void;
 }
 
 export const PluginsPage: React.FC<PluginsPageProps> = ({ onBack, onNavigateToSettings }) => {

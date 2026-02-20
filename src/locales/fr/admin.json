@@ -244,6 +244,21 @@
       "manualCheckDisabled": "La vérification manuelle des mises à jour est temporairement désactivée.",
       "checkNow": "Vérifier maintenant"
     },
+    "freeboxFirmwareCheck": {
+      "sectionTitle": "Vérification firmware Freebox",
+      "autoCheckLabel": "Activer la vérification firmware",
+      "autoCheckDescription": "Vérifier périodiquement dev.freebox.fr/blog pour les nouvelles versions Server et Player",
+      "currentVersion": "Firmware actuel",
+      "latestVersionAvailable": "Dernière version disponible",
+      "lastCheck": "Dernière vérification",
+      "checkInterval": "Intervalle de vérification",
+      "checkNow": "Vérifier maintenant",
+      "interval1h": "Toutes les heures",
+      "interval3h": "Toutes les 3 heures",
+      "interval6h": "Toutes les 6 heures",
+      "interval12h": "Toutes les 12 heures",
+      "interval24h": "Toutes les 24 heures"
+    },
     "users": {
       "roleAdmin": "Admin",
       "createdOn": "Créé le",

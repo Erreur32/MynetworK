@@ -69,7 +69,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.5');
+        super('unifi', 'UniFi Controller', '0.7.6');
         this.apiService = new UniFiApiService();
     }
 

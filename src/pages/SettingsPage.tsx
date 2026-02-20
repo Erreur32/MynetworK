@@ -63,6 +63,7 @@ import { APP_VERSION, getVersionString } from '../constants/version';
 import { SecuritySection } from '../components/SecuritySection';
 import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
+import { useFreeboxFirmwareStore } from '../stores/freeboxFirmwareStore';
 import { UserMenu } from '../components/ui';
 
 interface SettingsPageProps {
@@ -1913,6 +1914,132 @@ const UpdateCheckSection: React.FC = () => {
               {t('admin.updateCheck.checkNow')}
             </button>
           </div>
+        </>
+      )}
+    </>
+  );
+};
+
+// Freebox Firmware Check Section (Administration > General tab)
+const FirmwareCheckSection: React.FC = () => {
+  const { t } = useTranslation();
+  const { config, firmwareInfo, loadConfig, setConfig, forceCheck, checkFirmware, isChecking } = useFreeboxFirmwareStore();
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  useEffect(() => {
+    if (config?.enabled) {
+      checkFirmware();
+    }
+  }, [config?.enabled]);
+
+  const handleToggle = async (enabled: boolean) => {
+    setIsSaving(true);
+    try {
+      await setConfig({ enabled });
+    } catch (error) {
+      console.error('[FirmwareCheckSection] Error setting config:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleIntervalChange = async (intervalHours: number) => {
+    setIsSaving(true);
+    try {
+      await setConfig({ intervalHours });
+    } catch (error) {
+      console.error('[FirmwareCheckSection] Error setting interval:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const intervalOptions = [
+    { value: 1, labelKey: 'admin.freeboxFirmwareCheck.interval1h' },
+    { value: 3, labelKey: 'admin.freeboxFirmwareCheck.interval3h' },
+    { value: 6, labelKey: 'admin.freeboxFirmwareCheck.interval6h' },
+    { value: 12, labelKey: 'admin.freeboxFirmwareCheck.interval12h' },
+    { value: 24, labelKey: 'admin.freeboxFirmwareCheck.interval24h' },
+  ] as const;
+
+  return (
+    <>
+      <SettingRow
+        label={t('admin.freeboxFirmwareCheck.autoCheckLabel')}
+        description={t('admin.freeboxFirmwareCheck.autoCheckDescription')}
+      >
+        <Toggle
+          enabled={config?.enabled ?? true}
+          onChange={handleToggle}
+          disabled={isSaving}
+        />
+      </SettingRow>
+      {config?.enabled && (
+        <>
+          <SettingRow
+            label={t('admin.freeboxFirmwareCheck.checkInterval')}
+          >
+            <select
+              value={config.intervalHours}
+              onChange={(e) => handleIntervalChange(Number(e.target.value))}
+              disabled={isSaving}
+              className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+            >
+              {intervalOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {t(opt.labelKey)}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
+          <div className="py-3 border-t border-gray-800 space-y-2">
+            {firmwareInfo?.lastCheck && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">{t('admin.freeboxFirmwareCheck.lastCheck')}</span>
+                <span className="text-white">{new Date(firmwareInfo.lastCheck).toLocaleString()}</span>
+              </div>
+            )}
+            {firmwareInfo?.server && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">{t('admin.freeboxFirmwareCheck.currentVersion')} (Server)</span>
+                  <span className="text-white font-mono">{firmwareInfo.server.currentVersion || '--'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">{t('admin.freeboxFirmwareCheck.latestVersionAvailable')} (Server)</span>
+                  <span className={`font-mono ${firmwareInfo.server.updateAvailable ? 'text-amber-400' : 'text-white'}`}>
+                    {firmwareInfo.server.latestVersion}
+                  </span>
+                </div>
+              </>
+            )}
+            {firmwareInfo?.player && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">{t('admin.freeboxFirmwareCheck.currentVersion')} (Player)</span>
+                  <span className="text-white font-mono">{firmwareInfo.player.currentVersion || '--'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">{t('admin.freeboxFirmwareCheck.latestVersionAvailable')} (Player)</span>
+                  <span className={`font-mono ${firmwareInfo.player.updateAvailable ? 'text-amber-400' : 'text-white'}`}>
+                    {firmwareInfo.player.latestVersion}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => forceCheck()}
+            disabled={isChecking}
+            className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 text-amber-400 text-sm rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isChecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {t('admin.freeboxFirmwareCheck.checkNow')}
+          </button>
         </>
       )}
     </>
@@ -4817,6 +4944,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 <div className="space-y-6">
                   <Section title={t('admin.updates')} icon={RefreshCw} iconColor="amber">
                     <UpdateCheckSection />
+                  </Section>
+
+                  <Section title={t('admin.freeboxFirmwareCheck.sectionTitle')} icon={Server} iconColor="amber">
+                    <FirmwareCheckSection />
                   </Section>
 
                   <Section title={t('admin.info')} icon={Key} iconColor="purple">

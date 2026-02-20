@@ -244,6 +244,21 @@
       "manualCheckDisabled": "Manual update check is temporarily disabled.",
       "checkNow": "Check now"
     },
+    "freeboxFirmwareCheck": {
+      "sectionTitle": "Freebox firmware check",
+      "autoCheckLabel": "Enable firmware check",
+      "autoCheckDescription": "Periodically check dev.freebox.fr/blog for new Server and Player firmware versions",
+      "currentVersion": "Current firmware",
+      "latestVersionAvailable": "Latest available",
+      "lastCheck": "Last check",
+      "checkInterval": "Check interval",
+      "checkNow": "Check now",
+      "interval1h": "Every hour",
+      "interval3h": "Every 3 hours",
+      "interval6h": "Every 6 hours",
+      "interval12h": "Every 12 hours",
+      "interval24h": "Every 24 hours"
+    },
     "users": {
       "roleAdmin": "Admin",
       "createdOn": "Created on",

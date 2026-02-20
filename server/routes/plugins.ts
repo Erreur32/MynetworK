@@ -14,6 +14,7 @@ import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
+import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
 
 const router = Router();
 
@@ -182,6 +183,64 @@ router.get('/stats/all', requireAuth, asyncHandler(async (req: AuthenticatedRequ
         throw createError(message, 500, 'PLUGIN_STATS_ERROR');
     }
 }), autoLog('plugin.getAllStats', 'plugin'));
+
+// GET /api/plugins/freebox/firmware-check - Get Freebox firmware update status (from blog scrape)
+router.get('/freebox/firmware-check', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    let currentBoxFirmware: string | undefined;
+    let currentPlayerFirmware: string | undefined;
+
+    try {
+        const stats = await pluginManager.getPluginStats('freebox');
+        const sys = (stats as any)?.system;
+        if (sys) {
+            currentBoxFirmware = sys.firmware || sys.firmware_version || sys.version;
+            currentPlayerFirmware = sys.playerFirmware || sys.player_firmware || sys.player_firmware_version || sys.player_version;
+        }
+    } catch {
+        // Freebox plugin may not be enabled or connected
+    }
+
+    const info = freeboxFirmwareCheckService.getLatestFirmwareInfo(currentBoxFirmware, currentPlayerFirmware);
+    if (!info) {
+        return res.json({
+            success: true,
+            result: null,
+            message: 'No firmware data cached yet. Run a check first.'
+        });
+    }
+
+    res.json({ success: true, result: info });
+}));
+
+// GET /api/plugins/freebox/firmware-check/config - Get firmware check config
+router.get('/freebox/firmware-check/config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const config = freeboxFirmwareCheckService.getConfig();
+    res.json({ success: true, result: config });
+}));
+
+// POST /api/plugins/freebox/firmware-check/config - Update firmware check config (admin only)
+router.post('/freebox/firmware-check/config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { enabled, intervalHours } = req.body;
+    const updates: Record<string, unknown> = {};
+    if (typeof enabled === 'boolean') updates.enabled = enabled;
+    if (typeof intervalHours === 'number' && intervalHours >= 1 && intervalHours <= 24) updates.intervalHours = intervalHours;
+
+    if (Object.keys(updates).length === 0) {
+        throw createError('No valid config fields provided', 400, 'INVALID_CONFIG');
+    }
+
+    freeboxFirmwareCheckService.saveConfig(updates);
+    freeboxFirmwareCheckService.restart();
+
+    const config = freeboxFirmwareCheckService.getConfig();
+    res.json({ success: true, result: config });
+}));
+
+// POST /api/plugins/freebox/firmware-check/force - Force immediate firmware check (admin only)
+router.post('/freebox/firmware-check/force', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const info = await freeboxFirmwareCheckService.forceCheck();
+    res.json({ success: true, result: info });
+}));
 
 // POST /api/plugins/:id/config - Configure plugin (admin only)
 router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
