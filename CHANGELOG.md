@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.9] - 2026-02-24
+
+### Added
+
+**Scanner réseau (NetworkScanPage) – Tooltips style MAC**
+- Colonne **IP** : tooltip au survol « Cliquer pour en savoir plus sur cette IP » (style flottant identique aux autres colonnes)
+- Colonne **Monit** : tooltip explicatif (à quoi sert le monitoring, activation du graph Latency scatter) + actions selon l’état (activer / désactiver, voir le graphique)
+- Icône **Scatter** (quand le monitoring est activé) : tooltip « Ouvre le tableau Latency scatter » + « Cliquer pour ouvrir »
+- Colonne **Actions** : tooltips indépendants par bouton (Rescan, Bannir, Supprimer) au lieu d’un seul tooltip sur toute la cellule
+- Carte **Info Scans** : badge **ON** / **OFF** à côté du titre selon l’état du plugin scan-réseau (actif/inactif) ; tooltip accessibilité « Plugin actif » / « Plugin inactif »
+
+### Modified
+
+- **Info Scans** : suppression du libellé « Auto » et du badge ON/OFF associé à côté du titre (seul le badge plugin reste)
+- **En-tête Scanner** : suppression de l’indicateur « Active » (point vert + texte) à côté du bouton Configuration
+- i18n (networkScan) : `stats.pluginActive`, `stats.pluginInactive`, `tooltips.monitoringDescription`, `tooltips.openScatterTable`, `tooltips.clickToOpenScatter`, `tooltips.clickToKnowMoreIp` (FR/EN)
+
+---
+
 ## [0.7.8] - 2026-02-24
 
 ### Added

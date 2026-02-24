@@ -29,6 +29,7 @@ export interface PortScanProgress {
 }
 
 let _portScanProgress: PortScanProgress = { active: false, current: 0, total: 0 };
+let _portScanAbortRequested = false;
 
 /**
  * Check if nmap is available on the system
@@ -101,8 +102,16 @@ export function getPortScanProgress(): PortScanProgress {
 }
 
 /**
+ * Request abort of the running background port scan. The loop checks this flag between hosts.
+ */
+export function requestPortScanAbort(): void {
+    _portScanAbortRequested = true;
+}
+
+/**
  * Run port scan on all online hosts (background). Updates each host's additionalInfo
  * with openPorts and lastPortScan. Call without await to fire-and-forget.
+ * Can be stopped via requestPortScanAbort().
  */
 export async function runPortScanForOnlineHosts(options?: { portRange?: string }): Promise<void> {
     const available = await isNmapAvailable();
@@ -123,10 +132,18 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
         return;
     }
 
+    _portScanAbortRequested = false;
     _portScanProgress = { active: true, current: 0, total: online.length };
     logger.info('PortScanService', `Starting background port scan for ${online.length} online host(s)`);
 
     for (let i = 0; i < online.length; i++) {
+        if (_portScanAbortRequested) {
+            _portScanProgress.active = false;
+            _portScanProgress.current = i;
+            logger.info('PortScanService', `Background port scan stopped by user at ${i}/${online.length}`);
+            return;
+        }
+
         const host = online[i];
         _portScanProgress.currentIp = host.ip;
         _portScanProgress.current = i;
@@ -154,5 +171,6 @@ export const portScanService = {
     isNmapAvailable,
     runPortScan,
     runPortScanForOnlineHosts,
-    getPortScanProgress
+    getPortScanProgress,
+    requestPortScanAbort
 };

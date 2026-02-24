@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -180,6 +180,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Hover tooltips (MAC + Ports) - anchor rect pour positionner dans la fenêtre
     const [macTooltip, setMacTooltip] = useState<{ mac: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [portsTooltip, setPortsTooltip] = useState<{ ip: string; openPorts: { port: number; protocol?: string }[]; lastPortScan?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [firstSeenTooltip, setFirstSeenTooltip] = useState<{ fullDate: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [statusTooltip, setStatusTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [latencyTooltip, setLatencyTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [hostnameTooltip, setHostnameTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [vendorTooltip, setVendorTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [monitoringTooltip, setMonitoringTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [ipTooltip, setIpTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const TOOLTIP_MAC_W = 320;
     const TOOLTIP_MAC_H = 100;
     const TOOLTIP_PORTS_W = 420;
@@ -188,6 +197,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const hideAllTooltips = useCallback(() => {
         setMacTooltip(null);
         setPortsTooltip(null);
+        setFirstSeenTooltip(null);
+        setStatusTooltip(null);
+        setLatencyTooltip(null);
+        setHostnameTooltip(null);
+        setVendorTooltip(null);
+        setActionsTooltip(null);
+        setMonitoringTooltip(null);
+        setScatterIconTooltip(null);
+        setIpTooltip(null);
     }, []);
     const scheduleTooltipHide = useCallback((ms = 80) => {
         if (tooltipHideTimeoutRef.current) clearTimeout(tooltipHideTimeoutRef.current);
@@ -357,6 +375,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             // ignore
         }
     }, []);
+
+    const [portScanStopping, setPortScanStopping] = useState(false);
+    const handleStopPortScan = useCallback(async () => {
+        if (!portScanProgress?.active || portScanStopping) return;
+        setPortScanStopping(true);
+        try {
+            await api.post('/api/network-scan/port-scan-stop');
+            await fetchPortScanProgress();
+        } catch {
+            // ignore
+        } finally {
+            setPortScanStopping(false);
+        }
+    }, [portScanProgress?.active, portScanStopping, fetchPortScanProgress]);
 
     const fetchHistory = useCallback(async () => {
         try {
@@ -1038,6 +1070,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return formatDate(dateStr);
     };
 
+    /** Short format for first detection: minutes / hours / days / day+month / year depending on age */
+    const formatFirstDetectionShort = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        const diffMonths = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+        const diffYears = now.getFullYear() - date.getFullYear();
+
+        if (diffMins < 1) return t('networkScan.time.justNow');
+        if (diffMins < 60) return t('networkScan.time.minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('networkScan.time.hoursAgo', { count: diffHours });
+        if (diffDays < 31) return t('networkScan.time.daysAgo', { count: diffDays });
+        if (diffYears < 1) return date.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
+        return date.getFullYear().toString();
+    };
+
     const formatNextExecution = (lastExecution: string | null, intervalMinutes: number): string => {
         const now = new Date();
         let nextDate: Date;
@@ -1280,12 +1331,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                {isActive && (
-                        <div className="flex items-center gap-1.5 text-green-400 text-sm">
-                            <div className="w-2 h-2 rounded-full bg-green-400" />
-                            <span>{t('networkScan.status.active')}</span>
-                        </div>
-                    )}
                     <button
                         onClick={() => setConfigModalOpen(true)}
                         className="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg border border-purple-500/30 transition-colors flex items-center gap-2"
@@ -1303,20 +1348,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     {/* Info Scans - Prend 2 colonnes sur la gauche */}
                     <Card 
                         title={
-                            <div className="flex items-center gap-2">
-                                <span>{t('networkScan.stats.infoScans')}</span> 
-                                {autoStatus && !autoStatusLoading && (
-                                    <div className="flex items-center gap-1.5"><span className="text-xs text-gray-500">{t('networkScan.stats.auto')}</span>
-                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                            autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled)
-                                                ? 'bg-emerald-500/20 text-emerald-400'
-                                                : 'bg-gray-500/20 text-gray-400'
-                                        }`}>
-                                            {autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) ? t('networkScan.status.on') : t('networkScan.status.off')}
-                                        </span>
-                                         
-                                    </div>
-                                )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span>{t('networkScan.stats.infoScans')}</span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`} title={isActive ? t('networkScan.stats.pluginActive') : t('networkScan.stats.pluginInactive')}>
+                                    {isActive ? t('networkScan.status.on') : t('networkScan.status.off')}
+                                </span>
                             </div>
                         }
                         className="md:col-span-2"
@@ -1791,6 +1827,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 <span className="text-amber-400/90 text-xs font-normal" title={`${portScanProgress.current}/${portScanProgress.total} IP(s)`}>
                                                     ({portScanProgress.current}/{portScanProgress.total})
                                                 </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleStopPortScan}
+                                                    disabled={portScanStopping}
+                                                    className="p-1 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    title={t('networkScan.tooltips.stopPortScan')}
+                                                >
+                                                    {portScanStopping ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} fill="currentColor" />}
+                                                </button>
                                             </>
                                         ) : (
                                             <span>{t('networkScan.table.headers.openPorts')}</span>
@@ -1830,13 +1875,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.lastSeen')} onClick={() => {
-                                    if (sortBy === 'last_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                                    else { setSortBy('last_seen'); setSortOrder('asc'); }
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.firstDetection')} onClick={() => {
+                                    if (sortBy === 'first_seen') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('first_seen'); setSortOrder('desc'); }
                                 }}>
                                     <div className="flex items-center gap-0.5">
-                                        <span>{t('networkScan.table.headers.lastSeen')}</span>
-                                        {sortBy === 'last_seen' && (
+                                        <span>{t('networkScan.table.headers.firstDetection')}</span>
+                                        {sortBy === 'first_seen' && (
                                             sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
@@ -1872,9 +1917,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 : ''
                                         }`}
                                     >
-                                        <td className={`py-3 px-4 text-sm font-mono break-words ${
-                                            scan.status === 'offline' ? 'text-gray-500' : ''
-                                        }`}>
+                                        <td
+                                            className={`py-3 px-4 text-sm font-mono break-words cursor-default ${scan.status === 'offline' ? 'text-gray-500' : ''}`}
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setIpTooltip({ label: t('networkScan.table.headers.ip'), text: t('networkScan.tooltips.clickToKnowMoreIp'), rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             {onNavigateToSearch ? (
                                                 <button
                                                     onClick={() => {
@@ -1899,7 +1959,27 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="py-3 px-4 text-sm text-gray-300">
+                                        <td
+                                            className="py-3 px-4 text-sm text-gray-300 cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const badge = scan.hostnameSource ? getSourceBadge(scan.hostnameSource, 'hostname') : null;
+                                                let text = scan.hostname || '--';
+                                                if (badge) text += '\n' + t('networkScan.tooltips.source', { source: badge.label });
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setHostnameTooltip({ label: t('networkScan.table.headers.hostname'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             {editingHostname === scan.ip ? (
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <input
@@ -1932,11 +2012,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 </div>
                                             ) : (
                                                 <div className="flex items-start gap-2 group flex-wrap">
-                                                    <span className="break-words whitespace-normal" title={scan.hostname || '--'}>{scan.hostname || '--'}</span>
+                                                    <span className="break-words whitespace-normal">{scan.hostname || '--'}</span>
                                                     {scan.hostnameSource && (() => {
                                                         const badge = getSourceBadge(scan.hostnameSource, 'hostname');
                                                         return badge ? (
-                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={t('networkScan.tooltips.source', { source: badge.label })}>
+                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
                                                                 {badge.label}
                                                             </span>
                                                         ) : null;
@@ -1951,13 +2031,33 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="py-3 px-4 text-sm text-gray-300">
+                                        <td
+                                            className="py-3 px-4 text-sm text-gray-300 cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const badge = scan.vendorSource ? getSourceBadge(scan.vendorSource, 'vendor') : null;
+                                                let text = scan.vendor || '--';
+                                                if (badge) text += '\n' + t('networkScan.tooltips.source', { source: badge.label });
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setVendorTooltip({ label: t('networkScan.table.headers.vendor'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             <div className="flex items-start gap-2 flex-wrap">
-                                                <span className="break-words whitespace-normal" title={scan.vendor || '--'}>{scan.vendor || '--'}</span>
+                                                <span className="break-words whitespace-normal">{scan.vendor || '--'}</span>
                                                 {scan.vendorSource && (() => {
                                                     const badge = getSourceBadge(scan.vendorSource, 'vendor');
                                                     return badge ? (
-                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`} title={t('networkScan.tooltips.source', { source: badge.label })}>
+                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
                                                             {badge.label}
                                                         </span>
                                                     ) : null;
@@ -1969,6 +2069,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
                                                 setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
                                                 const mac = scan.mac?.trim() || '--';
                                                 if (mac === '--') return;
                                                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1982,25 +2090,77 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 return mac.slice(0, 8) + '…';
                                             })()}
                                         </td>
-                                        <td className="py-3 px-2 w-16">
+                                        <td
+                                            className="py-3 px-2 w-16 cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const text = scan.status === 'online' ? t('networkScan.tooltips.online') : scan.status === 'offline' ? t('networkScan.tooltips.offline') : t('networkScan.tooltips.unknown');
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setStatusTooltip({ label: t('networkScan.table.headers.status'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             {scan.status === 'online' ? (
-                                                <span title={t('networkScan.tooltips.online')}><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
+                                                <span><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
                                             ) : scan.status === 'offline' ? (
-                                                <span title={t('networkScan.tooltips.offline')}><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
+                                                <span><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
                                             ) : (
-                                                <span title={t('networkScan.tooltips.unknown')}><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
+                                                <span><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
                                             )}
                                         </td>
-                                        <td className="py-3 px-4">
-                                            <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`} title={formatLatency(scan.pingLatency)}>
-                                                {formatLatency(scan.pingLatency)}
-                                            </span>
+                                        <td
+                                            className="py-3 px-4 cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const text = scan.status === 'offline'
+                                                    ? t('networkScan.tooltips.offSince', { date: formatDate(scan.lastSeen) })
+                                                    : t('networkScan.tooltips.lastPing', { date: formatDate(scan.lastSeen), latency: formatLatency(scan.pingLatency) });
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setLatencyTooltip({ label: t('networkScan.table.headers.latency'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
+                                            {scan.status === 'offline' ? (
+                                                <span className="text-sm text-gray-500 whitespace-nowrap">
+                                                    {formatDate(scan.lastSeen)}
+                                                </span>
+                                            ) : (
+                                                <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`}>
+                                                    {formatLatency(scan.pingLatency)}
+                                                </span>
+                                            )}
                                         </td>
                                         <td
                                             className="py-3 px-4 text-sm text-gray-400 font-mono cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
                                                 setMacTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
                                                 const addInfo = scan.additionalInfo as { openPorts?: { port: number; protocol?: string }[]; lastPortScan?: string } | undefined;
                                                 const openPorts = addInfo?.openPorts;
                                                 const lastPortScan = addInfo?.lastPortScan;
@@ -2051,7 +2211,29 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${latencyStats[scan.ip].max!.toFixed(3)}ms` : '--'}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-2 whitespace-nowrap">
+                                        <td
+                                            className="py-3 px-2 whitespace-nowrap cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                const desc = t('networkScan.tooltips.monitoringDescription');
+                                                const actions = monitoringStatus[scan.ip]
+                                                    ? [t('networkScan.tooltips.disableMonitoring'), t('networkScan.tooltips.viewLatencyGraph')].join('\n')
+                                                    : t('networkScan.tooltips.enableMonitoring');
+                                                const text = `${desc}\n\n${actions}`;
+                                                setMonitoringTooltip({ label: t('networkScan.table.headers.monitoring'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
                                             <div className="flex items-center gap-0.5">
                                                 <button
                                                     onClick={() => handleToggleMonitoring(scan.ip, !monitoringStatus[scan.ip])}
@@ -2069,14 +2251,50 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                         onClick={() => handleOpenLatencyGraph(scan.ip)}
                                                         className="p-0.5 hover:bg-green-500/10 text-green-400 rounded transition-colors"
                                                         title={t('networkScan.tooltips.viewLatencyGraph')}
+                                                        onMouseEnter={(e) => {
+                                                            cancelTooltipHide();
+                                                            setMacTooltip(null);
+                                                            setPortsTooltip(null);
+                                                            setStatusTooltip(null);
+                                                            setLatencyTooltip(null);
+                                                            setHostnameTooltip(null);
+                                                            setVendorTooltip(null);
+                                                            setActionsTooltip(null);
+                                                            setMonitoringTooltip(null);
+                                                            setIpTooltip(null);
+                                                            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                            setScatterIconTooltip({ rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                        }}
+                                                        onMouseLeave={() => scheduleTooltipHide()}
                                                     >
                                                         <BarChart2 size={14} />
                                                     </button>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="py-3 px-2 text-sm text-gray-400 whitespace-nowrap" title={formatRelativeTime(scan.lastSeen)}>
-                                            {formatRelativeTime(scan.lastSeen)}
+                                        <td
+                                            className="py-3 px-2 text-sm text-gray-400 whitespace-nowrap cursor-default"
+                                            onMouseEnter={(e) => {
+                                                cancelTooltipHide();
+                                                setMacTooltip(null);
+                                                setPortsTooltip(null);
+                                                setStatusTooltip(null);
+                                                setLatencyTooltip(null);
+                                                setHostnameTooltip(null);
+                                                setVendorTooltip(null);
+                                                setActionsTooltip(null);
+                                                setMonitoringTooltip(null);
+                                                setScatterIconTooltip(null);
+                                                setIpTooltip(null);
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setFirstSeenTooltip({
+                                                    fullDate: formatDate(scan.firstSeen),
+                                                    rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right }
+                                                });
+                                            }}
+                                            onMouseLeave={() => scheduleTooltipHide()}
+                                        >
+                                            {formatFirstDetectionShort(scan.firstSeen)}
                                         </td>
                                         <td className="py-3 pr-2 pl-0 text-right w-1 whitespace-nowrap">
                                             <div className="flex items-center gap-1 justify-end">
@@ -2085,6 +2303,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     disabled={rescanningIp === scan.ip}
                                                     className="p-1 hover:bg-yellow-500/10 text-yellow-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     title={t('networkScan.tooltips.rescan')}
+                                                    onMouseEnter={(e) => {
+                                                        cancelTooltipHide();
+                                                        setMacTooltip(null);
+                                                        setPortsTooltip(null);
+                                                        setStatusTooltip(null);
+                                                        setLatencyTooltip(null);
+                                                        setHostnameTooltip(null);
+                                                        setVendorTooltip(null);
+                                                        setMonitoringTooltip(null);
+                                                        setScatterIconTooltip(null);
+                                                        setIpTooltip(null);
+                                                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                        setActionsTooltip({ label: t('networkScan.table.headers.actions'), text: t('networkScan.tooltips.rescan'), rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                    }}
+                                                    onMouseLeave={() => scheduleTooltipHide()}
                                                 >
                                                     {rescanningIp === scan.ip ? (
                                                         <Loader2 size={16} className="animate-spin" />
@@ -2096,6 +2329,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     onClick={() => handleBan(scan.ip)}
                                                     className="p-1 hover:bg-orange-500/10 text-orange-400 rounded transition-colors"
                                                     title={t('networkScan.tooltips.banIp')}
+                                                    onMouseEnter={(e) => {
+                                                        cancelTooltipHide();
+                                                        setMacTooltip(null);
+                                                        setPortsTooltip(null);
+                                                        setStatusTooltip(null);
+                                                        setLatencyTooltip(null);
+                                                        setHostnameTooltip(null);
+                                                        setVendorTooltip(null);
+                                                        setMonitoringTooltip(null);
+                                                        setScatterIconTooltip(null);
+                                                        setIpTooltip(null);
+                                                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                        setActionsTooltip({ label: t('networkScan.table.headers.actions'), text: t('networkScan.tooltips.banIp'), rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                    }}
+                                                    onMouseLeave={() => scheduleTooltipHide()}
                                                 >
                                                     <ShieldX size={16} />
                                                 </button>
@@ -2103,6 +2351,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     onClick={() => handleDelete(scan.ip)}
                                                     className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"
                                                     title={t('networkScan.tooltips.delete')}
+                                                    onMouseEnter={(e) => {
+                                                        cancelTooltipHide();
+                                                        setMacTooltip(null);
+                                                        setPortsTooltip(null);
+                                                        setStatusTooltip(null);
+                                                        setLatencyTooltip(null);
+                                                        setHostnameTooltip(null);
+                                                        setVendorTooltip(null);
+                                                        setMonitoringTooltip(null);
+                                                        setScatterIconTooltip(null);
+                                                        setIpTooltip(null);
+                                                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                        setActionsTooltip({ label: t('networkScan.table.headers.actions'), text: t('networkScan.tooltips.delete'), rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                    }}
+                                                    onMouseLeave={() => scheduleTooltipHide()}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -2128,6 +2391,148 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     >
                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{t('networkScan.tooltips.macAddress')}</div>
                         <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Status - même style que MAC */}
+            {statusTooltip && (() => {
+                const pos = getTooltipPosition(statusTooltip.rect, 260, 72);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{statusTooltip.label}</div>
+                        <div className="text-sm text-gray-100">{statusTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Latency - même style que MAC */}
+            {latencyTooltip && (() => {
+                const pos = getTooltipPosition(latencyTooltip.rect, 280, 72);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{latencyTooltip.label}</div>
+                        <div className="text-sm text-gray-100">{latencyTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Hostname - même style que MAC */}
+            {hostnameTooltip && (() => {
+                const pos = getTooltipPosition(hostnameTooltip.rect, 280, 72);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{hostnameTooltip.label}</div>
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{hostnameTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Vendor - même style que MAC */}
+            {vendorTooltip && (() => {
+                const pos = getTooltipPosition(vendorTooltip.rect, 280, 72);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{vendorTooltip.label}</div>
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{vendorTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Actions - même style que MAC (un tip par bouton) */}
+            {actionsTooltip && (() => {
+                const pos = getTooltipPosition(actionsTooltip.rect, 280, 88);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{actionsTooltip.label}</div>
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{actionsTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip Monitoring - même style que MAC */}
+            {monitoringTooltip && (() => {
+                const pos = getTooltipPosition(monitoringTooltip.rect, 320, 120);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{monitoringTooltip.label}</div>
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{monitoringTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip icône Scatter - renvoi vers tableau Latency scatter */}
+            {scatterIconTooltip && (() => {
+                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{t('networkScan.tooltips.openScatterTable')}{'\n'}{t('networkScan.tooltips.clickToOpenScatter')}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip IP - clic pour en savoir plus */}
+            {ipTooltip && (() => {
+                const pos = getTooltipPosition(ipTooltip.rect, 280, 88);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{ipTooltip.label}</div>
+                        <div className="text-sm text-gray-100 whitespace-pre-line">{ipTooltip.text}</div>
+                    </div>
+                );
+            })()}
+
+            {/* Hover tooltip First detection - date/heure complète colorée */}
+            {firstSeenTooltip && (() => {
+                const pos = getTooltipPosition(firstSeenTooltip.rect, 220, 44);
+                return (
+                    <div
+                        className="fixed z-[100] rounded-lg border border-cyan-500/40 bg-[#0d1f1f] shadow-xl py-2 px-3"
+                        style={{ left: pos.left, top: pos.top }}
+                        onMouseEnter={cancelTooltipHide}
+                        onMouseLeave={hideAllTooltips}
+                    >
+                        <span className="text-sm font-medium text-cyan-300">{firstSeenTooltip.fullDate}</span>
                     </div>
                 );
             })()}

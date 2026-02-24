@@ -263,6 +263,18 @@ router.get('/port-scan-progress', requireAuth, asyncHandler(async (_req: Authent
 }));
 
 /**
+ * POST /api/network-scan/port-scan-stop
+ * Request stop of the background port scan (nmap). Takes effect between current and next host.
+ */
+router.post('/port-scan-stop', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    portScanService.requestPortScanAbort();
+    res.json({
+        success: true,
+        result: { stopped: true }
+    });
+}));
+
+/**
  * POST /api/network-scan/refresh
  * Refresh existing IPs (re-ping known IPs)
  * 

@@ -1,0 +1,5 @@
+Release 0.7.9
+
+- Scanner: tooltips style MAC sur colonnes IP, Monit, icône Scatter, Actions (indépendants par bouton)
+- Info Scans: badge ON/OFF plugin à côté du titre; suppression Auto + indicateur Active à côté de Configuration
+- i18n: pluginActive, pluginInactive, monitoringDescription, openScatterTable, clickToOpenScatter, clickToKnowMoreIp
