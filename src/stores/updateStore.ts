@@ -13,6 +13,8 @@ interface UpdateInfo {
   latestVersion: string | null;
   updateAvailable: boolean;
   error?: string;
+  /** ISO date of last check (from backend 12h cache) */
+  lastCheckAt?: string;
 }
 
 interface UpdateConfig {
@@ -40,11 +42,12 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   checkForUpdates: async () => {
     set({ isLoading: true });
     try {
-      const response = await api.get<UpdateInfo>('/api/updates/check');
+      const response = await api.get<{ success: boolean; result?: UpdateInfo }>('/api/updates/check');
       if (response.success && response.result) {
-        set({ 
-          updateInfo: response.result,
-          lastCheck: new Date(),
+        const result = response.result;
+        set({
+          updateInfo: result,
+          lastCheck: result.lastCheckAt ? new Date(result.lastCheckAt) : new Date(),
           isLoading: false
         });
       } else {

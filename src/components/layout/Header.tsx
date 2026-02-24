@@ -11,7 +11,9 @@ import {
   Activity,
   Phone,
   AlertTriangle,
-  Search
+  Search,
+  X,
+  Package
 } from 'lucide-react';
 import logoUltra from '../../icons/logo_ultra.svg';
 import logoMynetworK from '../../icons/logo_mynetwork.svg';
@@ -27,6 +29,58 @@ import { useFreeboxFirmwareStore } from '../../stores/freeboxFirmwareStore';
 import { getVersionString } from '../../constants/version';
 import type { SystemInfo, ConnectionStatus, SystemSensor, SystemFan } from '../../types/api';
 import type { PageType } from './Footer';
+
+const UPDATE_BANNER_DISMISSED_KEY = 'mynetwork_update_banner_dismissed';
+
+/** Visible banner when an app update is available. Dismissible via localStorage per version. */
+const UpdateBanner: React.FC = () => {
+  const { t } = useTranslation();
+  const updateInfo = useUpdateStore((s) => s.updateInfo);
+  const [dismissed, setDismissed] = useState(false);
+
+  const show =
+    !dismissed &&
+    !!updateInfo?.enabled &&
+    !!updateInfo?.updateAvailable &&
+    !!updateInfo?.latestVersion &&
+    typeof window !== 'undefined' &&
+    window.localStorage?.getItem(UPDATE_BANNER_DISMISSED_KEY) !== updateInfo.latestVersion;
+
+  const handleDismiss = () => {
+    if (updateInfo?.latestVersion && typeof window !== 'undefined') {
+      window.localStorage?.setItem(UPDATE_BANNER_DISMISSED_KEY, updateInfo.latestVersion);
+      setDismissed(true);
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-4 w-full px-4 py-3 bg-amber-500/20 border-b-2 border-amber-500 text-amber-100 shadow-lg"
+      style={{ minHeight: '48px' }}
+    >
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <Package size={20} className="text-amber-400 flex-shrink-0" />
+        <span className="font-semibold text-amber-100">
+          {t('admin.updateCheck.newVersionAvailable')} — v{updateInfo?.latestVersion}
+        </span>
+      </div>
+      <code className="hidden sm:block text-xs text-amber-200/90 bg-black/20 px-2 py-1 rounded font-mono">
+        docker-compose pull && docker-compose up -d
+      </code>
+      <button
+        type="button"
+        onClick={handleDismiss}
+        className="p-1.5 rounded-lg hover:bg-amber-500/30 text-amber-200 transition-colors flex-shrink-0"
+        aria-label={t('common.close')}
+      >
+        <X size={20} />
+      </button>
+    </div>
+  );
+};
 
 // Map model to display name
 const getDisplayName = (model: string): string => {
@@ -403,6 +457,7 @@ export const Header: React.FC<HeaderProps> = ({
   // }
 
   return (
+    <>
     <header className="flex flex-col md:flex-row items-center justify-between p-4 bg-theme-header border-b border-theme gap-4 relative z-40" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
       {/* Logo / Box identifier with Search icon */}
       <div className="flex items-center gap-2">
@@ -960,5 +1015,7 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
     </header>
+    <UpdateBanner />
+    </>
   );
 };

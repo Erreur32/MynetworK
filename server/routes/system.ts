@@ -196,14 +196,22 @@ router.get('/security', requireAuth, asyncHandler(async (req: AuthenticatedReque
 
 // POST /api/system/security - Update security configuration
 router.post('/security', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { maxLoginAttempts, lockoutDuration, sessionTimeoutHours } = req.body;
+  const { maxLoginAttempts, lockoutDuration, trackingWindow, sessionTimeoutHours } = req.body;
 
   // Update brute force protection config
-  if (maxLoginAttempts !== undefined || lockoutDuration !== undefined) {
+  if (maxLoginAttempts !== undefined || lockoutDuration !== undefined || trackingWindow !== undefined) {
     const currentConfig = bruteForceProtection.getConfig();
+    const newTrackingWindow = trackingWindow !== undefined ? parseInt(trackingWindow) : currentConfig.trackingWindow;
+    if (trackingWindow !== undefined && (isNaN(newTrackingWindow) || newTrackingWindow < 15 || newTrackingWindow > 120)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Tracking window must be between 15 and 120 minutes' }
+      });
+    }
     bruteForceProtection.setConfig({
       maxAttempts: maxLoginAttempts !== undefined ? parseInt(maxLoginAttempts) : currentConfig.maxAttempts,
-      lockoutDuration: lockoutDuration !== undefined ? parseInt(lockoutDuration) : currentConfig.lockoutDuration
+      lockoutDuration: lockoutDuration !== undefined ? parseInt(lockoutDuration) : currentConfig.lockoutDuration,
+      trackingWindow: trackingWindow !== undefined ? newTrackingWindow : currentConfig.trackingWindow
     });
 
     // Notify about security settings change
@@ -211,7 +219,7 @@ router.post('/security', requireAuth, requireAdmin, asyncHandler(async (req: Aut
       await securityNotificationService.notifySecuritySettingsChanged(
         req.user.userId,
         req.user.username,
-        { maxLoginAttempts, lockoutDuration }
+        { maxLoginAttempts, lockoutDuration, trackingWindow }
       );
     }
   }

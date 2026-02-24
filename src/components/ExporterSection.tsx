@@ -43,9 +43,6 @@ export const ExporterSection: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [prometheusUrl, setPrometheusUrl] = useState('');
-    const [isExporting, setIsExporting] = useState(false);
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [isAuditing, setIsAuditing] = useState(false);
     const [auditResult, setAuditResult] = useState<{ summary: { total: number; success: number; errors: number }; results: any[] } | null>(null);
     const [initialConfig, setInitialConfig] = useState<MetricsConfig | null>(null);
@@ -110,78 +107,6 @@ export const ExporterSection: React.FC = () => {
             setPrometheusUrl(url);
         }
     }, [config.prometheus.port, config.prometheus.enabled, publicUrl]);
-
-    const handleExportConfig = async () => {
-        setIsExporting(true);
-        setConfigMessage(null);
-        
-        try {
-            const response = await api.get<{ content: string; filePath: string }>('/api/config/export');
-            
-            if (response.success && response.result) {
-                // Create blob and download
-                const blob = new Blob([response.result.content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'mynetwork.conf';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                setConfigMessage({
-                    type: 'success',
-                    text: t('admin.exporter.exportSuccess')
-                });
-            } else {
-                throw new Error(response.error?.message || t('admin.exporter.exportFailed'));
-            }
-        } catch (error) {
-            setConfigMessage({
-                type: 'error',
-                text: error instanceof Error ? error.message : t('admin.exporter.exportError')
-            });
-        } finally {
-            setIsExporting(false);
-        }
-    };
-
-    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        
-        setSelectedFile(file);
-        setConfigMessage(null);
-        
-        try {
-            const content = await file.text();
-            
-            const response = await api.post<{ imported: number; errors: string[]; message: string }>('/api/config/import', {
-                content
-            });
-            
-            if (response.success && response.result) {
-                setConfigMessage({
-                    type: 'success',
-                    text: response.result.message || t('admin.exporter.importSuccess', { count: response.result.imported })
-                });
-                
-                // Reload page after 2 seconds to apply changes
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            } else {
-                throw new Error(response.error?.message || t('admin.exporter.importFailed'));
-            }
-        } catch (error) {
-            setConfigMessage({
-                type: 'error',
-                text: error instanceof Error ? error.message : t('admin.exporter.importError')
-            });
-            setSelectedFile(null);
-        }
-    };
 
     const loadConfig = async () => {
         setIsLoading(true);
@@ -638,66 +563,134 @@ export const ExporterSection: React.FC = () => {
                     <span>{t('admin.exporter.saveConfig')}</span>
                 </button>
             </div>
-
-            {/* Configuration Export/Import Section */}
-            <Section title={t('admin.exporter.exportImportTitle')} icon={FileText} iconColor="amber">
-                <div className="space-y-4">
-                    <SettingRow
-                        label={t('admin.exporter.exportConfigLabel')}
-                        description={t('admin.exporter.exportConfigDesc')}
-                    >
-                        <button
-                            onClick={handleExportConfig}
-                            disabled={isExporting}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                            <span>{t('admin.exporter.exportBtn')}</span>
-                        </button>
-                    </SettingRow>
-
-                    <SettingRow
-                        label={t('admin.exporter.importConfigLabel')}
-                        description={t('admin.exporter.importConfigDesc')}
-                    >
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="file"
-                                accept=".conf"
-                                onChange={handleFileSelect}
-                                className="hidden"
-                                id="config-file-input"
-                            />
-                            <label
-                                htmlFor="config-file-input"
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors cursor-pointer"
-                            >
-                                <Upload size={16} />
-                                <span>{t('admin.exporter.selectFile')}</span>
-                            </label>
-                            {selectedFile && (
-                                <span className="text-sm text-gray-400">{selectedFile.name}</span>
-                            )}
-                        </div>
-                    </SettingRow>
-
-                    {configMessage && (
-                        <div className={`p-3 rounded-lg flex items-center gap-2 ${
-                            configMessage.type === 'success' 
-                                ? 'bg-green-900/20 border border-green-700 text-green-400' 
-                                : 'bg-red-900/20 border border-red-700 text-red-400'
-                        }`}>
-                            {configMessage.type === 'success' ? (
-                                <CheckCircle size={16} />
-                            ) : (
-                                <AlertCircle size={16} />
-                            )}
-                            <span className="text-sm">{configMessage.text}</span>
-                        </div>
-                    )}
-                </div>
-            </Section>
         </div>
+    );
+};
+
+/**
+ * Configuration Export/Import Section – app config backup/restore (.conf).
+ * Used in Administration > Backup tab.
+ */
+export const ConfigExportImportSection: React.FC = () => {
+    const { t } = useTranslation();
+    const [isExporting, setIsExporting] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    const handleExportConfig = async () => {
+        setIsExporting(true);
+        setConfigMessage(null);
+        try {
+            const response = await api.get<{ content: string; filePath: string }>('/api/config/export');
+            if (response.success && response.result) {
+                const blob = new Blob([response.result.content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'mynetwork.conf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                setConfigMessage({ type: 'success', text: t('admin.exporter.exportSuccess') });
+            } else {
+                throw new Error(response.error?.message || t('admin.exporter.exportFailed'));
+            }
+        } catch (error) {
+            setConfigMessage({
+                type: 'error',
+                text: error instanceof Error ? error.message : t('admin.exporter.exportError')
+            });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        setSelectedFile(file);
+        setConfigMessage(null);
+        try {
+            const content = await file.text();
+            const response = await api.post<{ imported: number; errors: string[]; message: string }>('/api/config/import', { content });
+            if (response.success && response.result) {
+                setConfigMessage({
+                    type: 'success',
+                    text: response.result.message || t('admin.exporter.importSuccess', { count: response.result.imported })
+                });
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                throw new Error(response.error?.message || t('admin.exporter.importFailed'));
+            }
+        } catch (error) {
+            setConfigMessage({
+                type: 'error',
+                text: error instanceof Error ? error.message : t('admin.exporter.importError')
+            });
+            setSelectedFile(null);
+        }
+        event.target.value = '';
+    };
+
+    return (
+        <Section title={t('admin.exporter.exportImportTitle')} icon={FileText} iconColor="amber">
+            <div className="space-y-4">
+                <SettingRow
+                    label={t('admin.exporter.exportConfigLabel')}
+                    description={t('admin.exporter.exportConfigDesc')}
+                >
+                    <button
+                        onClick={handleExportConfig}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                        <span>{t('admin.exporter.exportBtn')}</span>
+                    </button>
+                </SettingRow>
+
+                <SettingRow
+                    label={t('admin.exporter.importConfigLabel')}
+                    description={t('admin.exporter.importConfigDesc')}
+                >
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="file"
+                            accept=".conf"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                            id="config-export-import-file-input"
+                        />
+                        <label
+                            htmlFor="config-export-import-file-input"
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors cursor-pointer"
+                        >
+                            <Upload size={16} />
+                            <span>{t('admin.exporter.selectFile')}</span>
+                        </label>
+                        {selectedFile && (
+                            <span className="text-sm text-gray-400">{selectedFile.name}</span>
+                        )}
+                    </div>
+                </SettingRow>
+
+                {configMessage && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                        configMessage.type === 'success'
+                            ? 'bg-green-900/20 border border-green-700 text-green-400'
+                            : 'bg-red-900/20 border border-red-700 text-red-400'
+                    }`}>
+                        {configMessage.type === 'success' ? (
+                            <CheckCircle size={16} />
+                        ) : (
+                            <AlertCircle size={16} />
+                        )}
+                        <span className="text-sm">{configMessage.text}</span>
+                    </div>
+                )}
+            </div>
+        </Section>
     );
 };
 

@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Shield, Lock, AlertTriangle, Save, Loader2, CheckCircle, XCircle, Info, Trash2, RefreshCw, Plus, Globe } from 'lucide-react';
 import { Section, SettingRow } from '../pages/SettingsPage';
+import { LogsManagementSection } from './LogsManagementSection';
 import { api } from '../api/client';
 import { useUserAuthStore } from '../stores/userAuthStore';
 
@@ -50,6 +51,7 @@ export const SecuritySection: React.FC = () => {
     const [initialSecuritySettings, setInitialSecuritySettings] = useState<{
         maxLoginAttempts: number;
         lockoutDuration: number;
+        trackingWindow: number;
         sessionTimeoutHours: number;
     } | null>(null);
     const [initialCorsConfig, setInitialCorsConfig] = useState<{
@@ -63,6 +65,7 @@ export const SecuritySection: React.FC = () => {
     const hasUnsavedSecurityChanges = initialSecuritySettings && (
         maxLoginAttempts !== initialSecuritySettings.maxLoginAttempts ||
         lockoutDuration !== initialSecuritySettings.lockoutDuration ||
+        trackingWindow !== initialSecuritySettings.trackingWindow ||
         sessionTimeoutHours !== initialSecuritySettings.sessionTimeoutHours
     );
 
@@ -99,12 +102,14 @@ export const SecuritySection: React.FC = () => {
                 const timeout = response.result.sessionTimeout || 168;
                 setMaxLoginAttempts(maxAttempts);
                 setLockoutDuration(lockout);
-                setTrackingWindow(response.result.trackingWindow || 30);
+                const tracking = response.result.trackingWindow ?? 30;
+                setTrackingWindow(tracking);
                 setSessionTimeoutHours(timeout);
                 // Store initial values
                 setInitialSecuritySettings({
                     maxLoginAttempts: maxAttempts,
                     lockoutDuration: lockout,
+                    trackingWindow: tracking,
                     sessionTimeoutHours: timeout
                 });
             }
@@ -121,6 +126,7 @@ export const SecuritySection: React.FC = () => {
             const response = await api.post('/api/system/security', {
                 maxLoginAttempts,
                 lockoutDuration,
+                trackingWindow,
                 sessionTimeoutHours
             });
             
@@ -137,6 +143,7 @@ export const SecuritySection: React.FC = () => {
                 setInitialSecuritySettings({
                     maxLoginAttempts,
                     lockoutDuration,
+                    trackingWindow,
                     sessionTimeoutHours
                 });
             } else {
@@ -393,10 +400,93 @@ export const SecuritySection: React.FC = () => {
                 </div>
             )}
 
-            {/* Main Security Settings - Two Column Layout */}
+            {/* Two columns: Event log (left first), Security settings (right) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Column: Protection contre les attaques */}
-                <div className="space-y-6">
+                {/* Left column: Event log first (also first on mobile), then Blocked IPs */}
+                <div className="space-y-6 order-1">
+                    <LogsManagementSection />
+                    {/* Blocked IPs and accounts */}
+                    <Section title={t('admin.security.blockedTitle')} icon={Shield} iconColor="red">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <div>
+                                    <p className="text-sm text-gray-400">
+                                        {t('admin.security.blockedListDesc')}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {t('admin.security.blockedListHint')}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={loadBlockedIPs}
+                                    disabled={isLoadingBlockedIPs}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <RefreshCw size={14} className={isLoadingBlockedIPs ? 'animate-spin' : ''} />
+                                    <span>{t('admin.security.refresh')}</span>
+                                </button>
+                            </div>
+
+                            {isLoadingBlockedIPs ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="animate-spin text-blue-400" size={20} />
+                                </div>
+                            ) : blockedIPs.length === 0 ? (
+                                <div className="py-8 text-center">
+                                    <CheckCircle size={32} className="text-green-400 mx-auto mb-2" />
+                                    <p className="text-sm text-gray-400">{t('admin.security.noBlocked')}</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {blockedIPs.map((item) => (
+                                        <div
+                                            key={item.identifier}
+                                            className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg border border-gray-800 hover:border-red-700/50 transition-colors"
+                                        >
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-sm font-medium text-white font-mono">
+                                                        {item.identifier}
+                                                    </span>
+                                                    <span className="px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">
+                                                        {item.count} {item.count > 1 ? t('admin.security.attempts') : t('admin.security.attempt')}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {t('admin.security.blockedFor')} <span className="text-orange-400 font-medium">{formatRemainingTime(item.remainingTime)}</span>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleUnblock(item.identifier)}
+                                                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
+                                                title={t('admin.security.unblockTitle')}
+                                            >
+                                                <Trash2 size={14} />
+                                                <span>{t('admin.security.unblock')}</span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </Section>
+
+                    {/* Active features */}
+                    <div className="p-4 bg-blue-900/10 border border-blue-700/30 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle size={18} className="text-blue-400" />
+                            <h4 className="text-sm font-medium text-blue-400">{t('admin.security.activeFeaturesTitle')}</h4>
+                        </div>
+                        <ul className="space-y-1 text-xs text-gray-400">
+                            <li>• {t('admin.security.activeFeatureBruteforce')}</li>
+                            <li>• {t('admin.security.activeFeatureBlocking')}</li>
+                            <li>• {t('admin.security.activeFeatureNotifications')}</li>
+                        </ul>
+                    </div>
+                </div>
+
+                {/* Right column: Security settings */}
+                <div className="space-y-6 order-2">
                     {/* Protection Brute Force */}
                     <Section title={t('admin.security.attackProtectionTitle')} icon={Shield} iconColor="red">
                         <div className="space-y-4">
@@ -445,11 +535,9 @@ export const SecuritySection: React.FC = () => {
                                         max="120"
                                         value={trackingWindow}
                                         onChange={(e) => setTrackingWindow(parseInt(e.target.value) || 30)}
-                                        disabled
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none opacity-50 cursor-not-allowed"
+                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                                     />
                                     <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
-                                    <span className="text-xs text-gray-500">{t('admin.security.readOnly')}</span>
                                 </div>
                             </SettingRow>
 
@@ -466,10 +554,7 @@ export const SecuritySection: React.FC = () => {
                             </div>
                         </div>
                     </Section>
-                </div>
 
-                {/* Right Column: Options non implémentées */}
-                <div className="space-y-6">
                     {/* Authentification */}
                     <Section title={t('admin.security.authTitle')} icon={Lock} iconColor="blue">
                         <div className="space-y-4">
@@ -518,27 +603,6 @@ export const SecuritySection: React.FC = () => {
                     <Section title={t('admin.security.networkSecurityTitle')} icon={Shield}>
                         <div className="space-y-4">
                             <SettingRow
-                                label={t('admin.security.requireHttps')}
-                                description={t('admin.security.requireHttpsDesc')}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={false}
-                                        disabled
-                                        className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded opacity-50 cursor-not-allowed"
-                                    />
-                                    <span className="text-sm text-gray-500">{t('admin.security.notImplemented')}</span>
-                                </div>
-                                <div className="mt-2 flex items-start gap-2 p-2 bg-gray-900/50 rounded border border-gray-800">
-                                    <XCircle size={14} className="text-gray-500 mt-0.5 flex-shrink-0" />
-                                    <p className="text-xs text-gray-500">
-                                        {t('admin.security.httpsHint')}
-                                    </p>
-                                </div>
-                            </SettingRow>
-
-                            <SettingRow
                                 label={t('admin.security.rateLimit')}
                                 description={t('admin.security.rateLimitDesc')}
                             >
@@ -560,72 +624,9 @@ export const SecuritySection: React.FC = () => {
                             </SettingRow>
                         </div>
                     </Section>
-                </div>
-            </div>
 
-            {/* Blocked IPs Section - Full Width */}
-            <Section title={t('admin.security.blockedTitle')} icon={Shield} iconColor="red">
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm text-gray-400">
-                            {t('admin.security.blockedListDesc')}
-                        </p>
-                        <button
-                            onClick={loadBlockedIPs}
-                            disabled={isLoadingBlockedIPs}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <RefreshCw size={14} className={isLoadingBlockedIPs ? 'animate-spin' : ''} />
-                            <span>{t('admin.security.refresh')}</span>
-                        </button>
-                    </div>
-
-                    {isLoadingBlockedIPs ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader2 className="animate-spin text-blue-400" size={20} />
-                        </div>
-                    ) : blockedIPs.length === 0 ? (
-                        <div className="py-8 text-center">
-                            <CheckCircle size={32} className="text-green-400 mx-auto mb-2" />
-                            <p className="text-sm text-gray-400">{t('admin.security.noBlocked')}</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {blockedIPs.map((item) => (
-                                <div
-                                    key={item.identifier}
-                                    className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg border border-gray-800 hover:border-red-700/50 transition-colors"
-                                >
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-sm font-medium text-white font-mono">
-                                                {item.identifier}
-                                            </span>
-                                            <span className="px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">
-                                                {item.count} {item.count > 1 ? t('admin.security.attempts') : t('admin.security.attempt')}
-                                            </span>
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                            {t('admin.security.blockedFor')} <span className="text-orange-400 font-medium">{formatRemainingTime(item.remainingTime)}</span>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => handleUnblock(item.identifier)}
-                                        className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
-                                        title={t('admin.security.unblockTitle')}
-                                    >
-                                        <Trash2 size={14} />
-                                        <span>{t('admin.security.unblock')}</span>
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </Section>
-
-            {/* CORS Configuration Section - Full Width */}
-            <Section title={t('admin.security.corsTitle')} icon={Globe} iconColor="cyan">
+                    {/* CORS Configuration */}
+                    <Section title={t('admin.security.corsTitle')} icon={Globe} iconColor="cyan">
                 <div className="space-y-4">
                     <div className="p-3 bg-blue-900/10 border border-blue-700/30 rounded-lg">
                         <div className="flex items-start gap-2">
@@ -646,19 +647,22 @@ export const SecuritySection: React.FC = () => {
                         label={t('admin.security.allowedOrigins')}
                         description={t('admin.security.allowedOriginsDesc')}
                     >
-                        <div className="w-full space-y-2">
-                            <div className="flex gap-2">
+                        <div className="w-full space-y-3 max-w-xl">
+                            <p className="text-xs text-gray-500 leading-relaxed max-w-lg">
+                                {t('admin.security.allowedOriginsVsPublicUrl')}
+                            </p>
+                            <div className="flex gap-2 flex-wrap items-center">
                                 <input
                                     type="text"
                                     value={newOrigin}
                                     onChange={(e) => setNewOrigin(e.target.value)}
                                     onKeyPress={(e) => e.key === 'Enter' && addOrigin()}
                                     placeholder={t('admin.security.originPlaceholder')}
-                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                    className="w-full min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
                                 />
                                 <button
                                     onClick={addOrigin}
-                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                                 >
                                     <Plus size={14} />
                                     <span>{t('admin.security.add')}</span>
@@ -684,7 +688,14 @@ export const SecuritySection: React.FC = () => {
                                 </div>
                             )}
                             {(!corsConfig?.allowedOrigins || corsConfig.allowedOrigins.length === 0) && (
-                                <p className="text-xs text-gray-500">{t('admin.security.noOriginsConfigured')}</p>
+                                <div className="space-y-1.5 rounded-lg bg-gray-900/40 border border-gray-800 p-2.5 max-w-lg">
+                                    <p className="text-xs text-gray-400 leading-relaxed">
+                                        {t('admin.security.noOriginsConfigured')}
+                                    </p>
+                                    <p className="text-xs text-gray-500 leading-relaxed">
+                                        {t('admin.security.corsDefaultsDesc')}
+                                    </p>
+                                </div>
                             )}
                         </div>
                     </SettingRow>
@@ -719,18 +730,18 @@ export const SecuritySection: React.FC = () => {
                         description={t('admin.security.allowedMethodsDesc')}
                     >
                         <div className="w-full space-y-2">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
                                 <input
                                     type="text"
                                     value={newMethod}
                                     onChange={(e) => setNewMethod(e.target.value)}
                                     onKeyPress={(e) => e.key === 'Enter' && addMethod()}
                                     placeholder={t('admin.security.methodsPlaceholder')}
-                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
                                 />
                                 <button
                                     onClick={addMethod}
-                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                                 >
                                     <Plus size={14} />
                                     <span>{t('admin.security.add')}</span>
@@ -764,18 +775,18 @@ export const SecuritySection: React.FC = () => {
                         description={t('admin.security.allowedHeadersDesc')}
                     >
                         <div className="w-full space-y-2">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 items-center">
                                 <input
                                     type="text"
                                     value={newHeader}
                                     onChange={(e) => setNewHeader(e.target.value)}
                                     onKeyPress={(e) => e.key === 'Enter' && addHeader()}
                                     placeholder={t('admin.security.headersPlaceholder')}
-                                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
                                 />
                                 <button
                                     onClick={addHeader}
-                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                                 >
                                     <Plus size={14} />
                                     <span>{t('admin.security.add')}</span>
@@ -817,29 +828,18 @@ export const SecuritySection: React.FC = () => {
                 </div>
             </Section>
 
-            {/* Status Summary - Full Width */}
-            <div className="p-4 bg-blue-900/10 border border-blue-700/30 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle size={18} className="text-blue-400" />
-                    <h4 className="text-sm font-medium text-blue-400">{t('admin.security.activeFeaturesTitle')}</h4>
+                    {/* Save Button */}
+                    <div className="flex justify-end pt-4 border-t border-gray-800">
+                        <button
+                            onClick={handleSaveSecuritySettings}
+                            disabled={isLoading}
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        >
+                            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                            <span>{t('admin.security.saveSettings')}</span>
+                        </button>
+                    </div>
                 </div>
-                <ul className="space-y-1 text-xs text-gray-400">
-                    <li>• {t('admin.security.activeFeatureBruteforce')}</li>
-                    <li>• {t('admin.security.activeFeatureBlocking')}</li>
-                    <li>• {t('admin.security.activeFeatureNotifications')}</li>
-                </ul>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end pt-4 border-t border-gray-800">
-                <button
-                    onClick={handleSaveSecuritySettings}
-                    disabled={isLoading}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                    {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                    <span>{t('admin.security.saveSettings')}</span>
-                </button>
             </div>
         </div>
     );

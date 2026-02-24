@@ -219,6 +219,8 @@ import { latencyMonitoringScheduler } from './services/latencyMonitoringSchedule
 import { initializePurgeService } from './services/databasePurgeService.js';
 // Freebox firmware check (scrapes dev.freebox.fr/blog for update notifications)
 import { freeboxFirmwareCheckService } from './services/freeboxFirmwareCheckService.js';
+// Update check (12h cache + scheduler when enabled)
+import { startScheduler as startUpdateCheckScheduler } from './services/updateCheckService.js';
 
 // Initialize database purge service (after database is initialized and routes are imported)
 initializePurgeService();
@@ -243,6 +245,29 @@ setTimeout(() => {
         logger.error('Server', 'Failed to initialize Freebox firmware check service:', error);
     }
 }, 7000); // Slightly after latency scheduler
+
+// Start update check scheduler if config enabled (12h interval)
+setTimeout(() => {
+    try {
+        const db = getDatabase();
+        const row = db.prepare('SELECT value FROM app_config WHERE key = ?').get('update_check_config') as { value: string } | undefined;
+        let enabled = false;
+        if (row) {
+            try {
+                const config = JSON.parse(row.value);
+                enabled = config.enabled === true;
+            } catch {
+                // ignore
+            }
+        }
+        if (enabled) {
+            startUpdateCheckScheduler();
+            logger.success('Server', 'Update check scheduler (12h) started');
+        }
+    } catch (error) {
+        logger.error('Server', 'Failed to start update check scheduler:', error);
+    }
+}, 7500);
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);

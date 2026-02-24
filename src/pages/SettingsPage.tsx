@@ -38,9 +38,12 @@ import {
   Info,
   Github,
   Sparkles,
+  Star,
+  GitFork,
   Download,
   CheckCircle,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES, GITHUB_REPO_URL } from '../utils/constants';
@@ -55,9 +58,8 @@ import { useSystemStore } from '../stores/systemStore';
 import { getPermissionErrorMessage, getPermissionShortError, getFreeboxSettingsUrl, getFreeboxBackupUrl } from '../utils/permissions';
 import { usePluginStore } from '../stores/pluginStore';
 import { useUserAuthStore, type User } from '../stores/userAuthStore';
-import { ExporterSection } from '../components/ExporterSection';
+import { ExporterSection, ConfigExportImportSection } from '../components/ExporterSection';
 import { PluginsManagementSection } from '../components/PluginsManagementSection';
-import { LogsManagementSection } from '../components/LogsManagementSection';
 import logoMynetworK from '../icons/logo_mynetwork.svg';
 import { APP_VERSION, getVersionString } from '../constants/version';
 import { SecuritySection } from '../components/SecuritySection';
@@ -79,7 +81,7 @@ interface SettingsPageProps {
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system' | 'backup';
-type AdminTab = 'general' | 'plugins' | 'logs' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
+type AdminTab = 'general' | 'plugins' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
 
 // Toggle component
 const Toggle: React.FC<{
@@ -1843,10 +1845,12 @@ const UpdateCheckSection: React.FC = () => {
 
   useEffect(() => {
     loadConfig();
+  }, []);
+  useEffect(() => {
     if (updateConfig?.enabled) {
       checkForUpdates();
     }
-  }, []);
+  }, [updateConfig?.enabled]);
 
   const handleToggle = async (enabled: boolean) => {
     setIsSaving(true);
@@ -1872,49 +1876,19 @@ const UpdateCheckSection: React.FC = () => {
         />
       </SettingRow>
       {updateConfig?.enabled && (
-        <>
-          <div className="py-3 border-t border-gray-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-400">{t('admin.updateCheck.currentVersion')}</span>
-              <span className="text-sm font-mono text-white">{updateInfo?.currentVersion || '0.0.0'}</span>
-            </div>
-            {updateInfo?.latestVersion && (
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-400">{t('admin.updateCheck.latestVersionAvailable')}</span>
-                <span className="text-sm font-mono text-amber-400">{updateInfo.latestVersion}</span>
-              </div>
-            )}
-            {updateInfo?.updateAvailable && (
-              <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <p className="text-xs text-amber-400 font-semibold mb-1">{t('admin.updateCheck.newVersionAvailable')}</p>
-                <p className="text-xs text-gray-400">
-                  {t('admin.updateCheck.updateAvailableHint')}
-                </p>
-                <code className="block mt-2 text-xs text-cyan-300 bg-[#0a0a0a] p-2 rounded border border-gray-800">
-                  docker-compose pull && docker-compose up -d
-                </code>
-              </div>
-            )}
-            {updateInfo?.error && (
-              <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-xs text-red-400">{t('admin.updateCheck.checkError')}: {updateInfo.error}</p>
-              </div>
-            )}
-            <div className="mt-3 p-3 bg-gray-500/10 border border-gray-500/30 rounded-lg">
-              <p className="text-xs text-gray-400">
-                {t('admin.updateCheck.manualCheckDisabled')}
-              </p>
-            </div>
-            <button
-              onClick={() => {}}
-              disabled={true}
-              className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-gray-600 text-gray-400 text-sm rounded-lg transition-colors opacity-50 cursor-not-allowed"
-            >
-              <RefreshCw size={14} />
-              {t('admin.updateCheck.checkNow')}
-            </button>
+        <div className="py-3 border-t border-gray-800">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-400">{t('admin.updateCheck.lastCheck')}</span>
+            <span className="text-sm font-mono text-white">
+              {updateInfo?.lastCheckAt
+                ? new Date(updateInfo.lastCheckAt).toLocaleString(undefined, {
+                    dateStyle: 'short',
+                    timeStyle: 'short'
+                  })
+                : '—'}
+            </span>
           </div>
-        </>
+        </div>
       )}
     </>
   );
@@ -2051,6 +2025,7 @@ const BackupSection: React.FC = () => {
   const { t } = useTranslation();
   const { freeboxUrl, isRegistered: isFreeboxRegistered } = useAuthStore();
   const { plugins } = usePluginStore();
+  const [hideBackupImportantBanner, setHideBackupImportantBanner] = useState(false);
   
   // Get UniFi plugin configuration
   const unifiPlugin = plugins.find(p => p.id === 'unifi');
@@ -2079,23 +2054,34 @@ const BackupSection: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Information Alert */}
-      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-        <div className="flex items-start gap-3">
-          <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-amber-400 mb-2">
-              {t('admin.backupImportantTitle')}
-            </h3>
-            <p className="text-sm text-gray-300 mb-2">
-              {t('admin.backupIntro')}
-            </p>
-            <p className="text-sm text-gray-300">
-              <strong className="text-amber-400">{t('admin.backupRecommendationLabel')}</strong> {t('admin.backupRecommendationText')}
-            </p>
+      {/* Information Alert - dismissible */}
+      {!hideBackupImportantBanner && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg relative">
+          <button
+            type="button"
+            onClick={() => setHideBackupImportantBanner(true)}
+            className="absolute top-3 right-3 p-1 rounded text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-colors"
+            title={t('admin.backupDismissBanner')}
+            aria-label={t('admin.backupDismissBanner')}
+          >
+            <X size={18} />
+          </button>
+          <div className="flex items-start gap-3 pr-8">
+            <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-amber-400 mb-2">
+                {t('admin.backupImportantTitle')}
+              </h3>
+              <p className="text-sm text-gray-300 mb-2">
+                {t('admin.backupIntro')}
+              </p>
+              <p className="text-sm text-gray-300">
+                <strong className="text-amber-400">{t('admin.backupRecommendationLabel')}</strong> {t('admin.backupRecommendationText')}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <Section title={t('admin.freeboxBackup')} icon={Server} iconColor="cyan">
         <div className="space-y-4">
@@ -2836,16 +2822,16 @@ const UserProfileSection: React.FC = () => {
   );
 };
 
-// Badge image URLs from project README (GitHub shields.io)
-const GITHUB_README_BADGES = [
-  { src: 'https://img.shields.io/badge/MynetworK---help-111827?style=for-the-badge', alt: 'MynetworK' },
+// GitHub shields.io badges (for-the-badge style). Version badge is built dynamically in InfoSection.
+const GITHUB_BADGES: Array<{ src: string; alt: string; href?: string }> = [
   { src: 'https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge', alt: 'Status' },
   { src: 'https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'Docker' },
-  { src: 'https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'GHCR' },
-  { src: 'https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827', alt: 'Build' },
+  { src: 'https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8', alt: 'GHCR', href: 'https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork' },
+  { src: 'https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827', alt: 'Build', href: 'https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml' },
   { src: 'https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8', alt: 'React' },
   { src: 'https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa', alt: 'TypeScript' },
-  { src: 'https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&labelColor=111827&logoColor=white', alt: 'License' },
+  { src: 'https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white', alt: 'License' },
+  { src: 'https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white', alt: 'GHCR', href: 'https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork' },
 ];
 
 /** Parses CHANGELOG.md content into version blocks (## [version] - date). Returns array of { version, date, body }. */
@@ -2863,7 +2849,7 @@ function parseChangelogVersions(content: string): Array<{ version: string; date:
 }
 
 // Info Section Component (for Administration > Info tab)
-// Displays project badges, GitHub repo stats, and Changelog (latest version by default, optional version selector).
+// Displays project card, GitHub repo stats (small badges), About, Technologies, and Changelog.
 const InfoSection: React.FC = () => {
   const { t } = useTranslation();
   const [changelogVersions, setChangelogVersions] = useState<Array<{ version: string; date: string; body: string }>>([]);
@@ -2917,98 +2903,99 @@ const InfoSection: React.FC = () => {
     <div className="space-y-6">
       <Section title={t('admin.projectInfo')} icon={Info} iconColor="teal">
         <div className="space-y-4">
-          {/* Badges row (same as README) */}
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-teal-500">
-            <div className="flex flex-wrap gap-2 items-center">
-              {GITHUB_README_BADGES.map((badge) => (
-                <a key={badge.alt} href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="focus:outline-none"><img src={badge.src} alt={badge.alt} className="h-7 object-contain" /></a>
-              ))}
-            </div>
-          </div>
-
-          {/* Repository statistics from GitHub API */}
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-blue-500">
-            <h3 className="text-lg font-semibold text-blue-400 mb-3">{t('admin.repoStats')}</h3>
-            {repoStatsLoading && (
-              <div className="flex items-center gap-2 text-theme-secondary">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">{t('common.loading')}</span>
-              </div>
-            )}
-            {repoStatsError && (
-              <p className="text-sm text-amber-500">{repoStatsError}</p>
-            )}
-            {!repoStatsLoading && repoStats && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-theme rounded-lg text-center border border-amber-500/30">
-                  <div className="text-xl font-bold text-amber-400">{repoStats.stars}</div>
-                  <div className="text-xs text-gray-400">{t('admin.stars')}</div>
-                </div>
-                <div className="p-3 bg-theme rounded-lg text-center border border-cyan-500/30">
-                  <div className="text-xl font-bold text-cyan-400">{repoStats.forks}</div>
-                  <div className="text-xs text-gray-400">{t('admin.forks')}</div>
-                </div>
-                <div className="p-3 bg-theme rounded-lg text-center border border-emerald-500/30">
-                  <div className="text-xl font-bold text-emerald-400">{repoStats.watchers}</div>
-                  <div className="text-xs text-gray-400">{t('admin.watchers')}</div>
-                </div>
-                <div className="p-3 bg-theme rounded-lg text-center border border-purple-500/30">
-                  <div className="text-xl font-bold text-purple-400">{repoStats.open_issues}</div>
-                  <div className="text-xs text-gray-400">{t('admin.openIssues')}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-teal-500">
-            <div className="flex items-center gap-4 mb-4">
-              <img src={logoMynetworK} alt="MynetworK" className="h-16 w-16 flex-shrink-0" />
-              <div>
-                <h3 className="text-lg font-semibold text-teal-400 mb-1">{t('admin.projectName')}</h3>
-                <p className="text-sm text-theme-secondary">
-                  {t('admin.projectDescription')}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-start gap-2 py-2 border-b border-gray-700">
-                <span className="text-sm text-gray-400">{t('admin.version')}</span>
-                <span className="text-sm font-mono text-teal-300">{getVersionString()}</span>
-                <span className="text-sm text-gray-400">{t('admin.licenseLabel')}</span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/30">{t('admin.licensePublic')}</span>
-              </div>
-            </div>
-            <br />
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700/50 hover:bg-teal-600/50 text-teal-200 rounded-lg text-sm transition-colors border border-teal-500/50"
-            >
-              <Github size={16} />
-              <span>{t('admin.viewOnGitHub')}</span>
-              <ExternalLink size={14} />
-            </a>
-          </div>
-
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-amber-500">
-            <h3 className="text-lg font-semibold text-amber-400 mb-3">{t('admin.authorTitle')}</h3>
-            <div className="space-y-2">
-              <p className="text-sm text-theme-secondary">
-                {t('admin.authorBy', { name: 'Erreur32' })}
+          {/* Project card: logo 96x96, name, description, version | license, shields.io badges, GitHub button, stats badges */}
+          <div className="p-6 bg-theme-secondary rounded-xl border border-theme border-l-4 border-l-teal-500">
+            <div className="flex flex-col items-center text-center mb-4">
+              <img src={logoMynetworK} alt="MynetworK" width={96} height={96} className="h-24 w-24 flex-shrink-0 mb-4" />
+              <h2 className="text-2xl font-bold text-teal-400 mb-2">{t('admin.projectName')}</h2>
+              <p className="text-sm text-theme-secondary max-w-lg">
+                {t('admin.projectDescription')}
               </p>
             </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 py-3 border-y border-gray-700">
+              <span className="text-sm font-mono text-teal-300">v{getVersionString()}</span>
+              <span className="text-gray-500">|</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/30">{t('admin.licensePublic')}</span>
+            </div>
+            {/* Shields.io badges (MynetworK version dynamic, then static badges) */}
+            <div className="flex flex-wrap justify-center gap-2 py-4">
+              <img
+                src={`https://img.shields.io/badge/MynetworK-${encodeURIComponent(getVersionString())}-111827?style=for-the-badge`}
+                alt="MynetworK"
+                className="h-7 object-contain"
+              />
+              {GITHUB_BADGES.map((badge) => {
+                const img = <img src={badge.src} alt={badge.alt} className="h-7 object-contain" />;
+                if (badge.href) {
+                  return (
+                    <a key={badge.alt} href={badge.href} target="_blank" rel="noopener noreferrer" className="focus:outline-none">
+                      {img}
+                    </a>
+                  );
+                }
+                return <span key={badge.alt}>{img}</span>;
+              })}
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <a
+                href={GITHUB_REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-700/60 hover:bg-teal-600/60 text-teal-100 rounded-lg text-sm font-medium transition-colors border border-teal-500/50"
+              >
+                <Github size={18} />
+                <span>{t('admin.viewOnGitHub')}</span>
+                <ExternalLink size={14} />
+              </a>
+              {repoStatsLoading && (
+                <div className="flex items-center gap-2 text-theme-secondary">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="text-xs">{t('common.loading')}</span>
+                </div>
+              )}
+              {repoStatsError && (
+                <p className="text-xs text-amber-500">{repoStatsError}</p>
+              )}
+              {!repoStatsLoading && repoStats && (
+                <div className="flex flex-wrap justify-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-medium">
+                    <Star size={12} />
+                    {repoStats.stars}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-medium">
+                    <GitFork size={12} />
+                    {repoStats.forks}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/15 border border-orange-500/40 text-orange-400 text-xs font-medium">
+                    <AlertCircle size={12} />
+                    {t('admin.issuesCount', { count: repoStats.open_issues })}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-purple-500">
-            <h3 className="text-lg font-semibold text-purple-400 mb-3">{t('admin.technologiesTitle')}</h3>
+          {/* À propos */}
+          <div className="p-4 bg-theme-secondary rounded-xl border border-theme border-l-4 border-l-cyan-500/50">
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-cyan-400 mb-3">
+              <FileText size={20} />
+              {t('admin.aboutTitle')}
+            </h3>
+            <p className="text-sm text-theme-secondary whitespace-pre-line leading-relaxed">
+              {t('admin.aboutDescription')}
+            </p>
+          </div>
+
+          {/* Technologies */}
+          <div className="p-4 bg-theme-secondary rounded-xl border border-theme border-l-4 border-l-cyan-500/50">
+            <h3 className="text-lg font-semibold text-cyan-400 mb-3">{t('admin.technologiesTitle')}</h3>
             <div className="flex flex-wrap gap-2">
-              <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">React</span>
-              <span className="px-3 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">TypeScript</span>
-              <span className="px-3 py-1 bg-green-900/30 border border-green-700 rounded text-xs text-green-400">Node.js</span>
-              <span className="px-3 py-1 bg-cyan-900/30 border border-cyan-700 rounded text-xs text-cyan-400">Express</span>
-              <span className="px-3 py-1 bg-purple-900/30 border border-purple-700 rounded text-xs text-purple-400">SQLite</span>
-              <span className="px-3 py-1 bg-yellow-900/30 border border-yellow-700 rounded text-xs text-yellow-400">Docker</span>
+              <span className="px-2.5 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">React</span>
+              <span className="px-2.5 py-1 bg-blue-900/30 border border-blue-700 rounded text-xs text-blue-400">TypeScript</span>
+              <span className="px-2.5 py-1 bg-green-900/30 border border-green-700 rounded text-xs text-green-400">Node.js</span>
+              <span className="px-2.5 py-1 bg-cyan-900/30 border border-cyan-700 rounded text-xs text-cyan-400">Express</span>
+              <span className="px-2.5 py-1 bg-purple-900/30 border border-purple-700 rounded text-xs text-purple-400">SQLite</span>
+              <span className="px-2.5 py-1 bg-yellow-900/30 border border-yellow-700 rounded text-xs text-yellow-400">Docker</span>
             </div>
           </div>
 
@@ -3270,18 +3257,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
   // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
-  const storedAdminTab = sessionStorage.getItem('adminTab') as AdminTab | null;
-  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(storedAdminTab || initialAdminTab);
+  const storedAdminTabRaw = sessionStorage.getItem('adminTab') as string | null;
+  const storedAdminTab = (storedAdminTabRaw === 'logs' ? 'security' : storedAdminTabRaw) as AdminTab | null;
+  const initialTab = (initialAdminTab === 'logs' ? 'security' : initialAdminTab) as AdminTab;
+  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(storedAdminTab || initialTab);
 
   // Update activeAdminTab when initialAdminTab changes (e.g., from navigation)
-  // Also check sessionStorage on mount
+  // Also check sessionStorage on mount (legacy 'logs' tab is now inside Security)
   useEffect(() => {
-    const tabFromStorage = sessionStorage.getItem('adminTab') as AdminTab | null;
+    const tabFromStorageRaw = sessionStorage.getItem('adminTab') as string | null;
+    const tabFromStorage = (tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw) as AdminTab | null;
     if (tabFromStorage) {
       setActiveAdminTab(tabFromStorage);
       sessionStorage.removeItem('adminTab'); // Clear after reading
     } else if (initialAdminTab && initialAdminTab !== 'general') {
-      setActiveAdminTab(initialAdminTab);
+      setActiveAdminTab(initialAdminTab === 'logs' ? 'security' : initialAdminTab);
     }
     // Clean URL hash if present
     if (window.location.hash === '#admin') {
@@ -4666,12 +4656,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'general', label: t('admin.tabGeneral'), icon: Settings, color: 'blue' },
     { id: 'plugins', label: t('admin.tabPlugins'), icon: Plug, color: 'emerald' },
     { id: 'theme', label: t('admin.tabTheme'), icon: Lightbulb, color: 'yellow' },
-    { id: 'logs', label: t('admin.tabLogs'), icon: FileText, color: 'cyan' },
     { id: 'security', label: t('admin.tabSecurity'), icon: Shield, color: 'red' },
     { id: 'exporter', label: t('admin.tabExporter'), icon: Share2, color: 'amber' },
     { id: 'database', label: t('admin.tabDatabase'), icon: Database, color: 'purple' },
     { id: 'backup', label: t('admin.tabBackup'), icon: Download, color: 'orange' },
-    { id: 'debug', label: t('admin.tabDebug'), icon: Monitor, color: 'violet' },
+    { id: 'debug', label: t('admin.tabLogs'), icon: Monitor, color: 'violet' },
     { id: 'info', label: t('admin.tabInfo'), icon: Info, color: 'teal' }
   ];
 
@@ -4989,12 +4978,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             )}
 
-            {activeAdminTab === 'logs' && (
-              <div className="space-y-6">
-                <LogsManagementSection />
-              </div>
-            )}
-
             {activeAdminTab === 'security' && (
               <SecuritySection />
             )}
@@ -5008,7 +4991,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             )}
 
             {activeAdminTab === 'backup' && (
-              <BackupSection />
+              <div className="space-y-6">
+                <ConfigExportImportSection />
+                <BackupSection />
+              </div>
             )}
 
             {activeAdminTab === 'info' && (

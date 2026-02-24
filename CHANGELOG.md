@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.8] - 2026-02-24
+
+### Added
+
+**Vérification des mises à jour (12h)**
+- Service backend `updateCheckService` : cache 12h, scheduler toutes les 12h quand activé
+- API `GET /api/updates/check` retourne `lastCheckAt` (ISO) ; résultat mis en cache
+- `POST /api/updates/config` démarre ou arrête le scheduler selon `enabled`
+- Au démarrage du serveur, le scheduler est lancé si la config « update check » est activée en base
+- Bannière de mise à jour dans le Header : visible quand une nouvelle version est disponible et le check activé, masquable (bouton fermer) ; masquage persisté par version dans `localStorage` (`mynetwork_update_banner_dismissed`)
+
+**Administration > Info**
+- Onglet Info repensé : carte projet (logo 96×96, nom, description, version | licence), vrais badges GitHub (shields.io) : MynetworK (version dynamique), Status, Docker, GHCR, Build, React, TypeScript, License ; liens sur GHCR et Build
+- Badges stats repo (Étoiles, Forks, Issues) en petits badges sous le bouton « Voir sur GitHub », sans cadre « Repository stats »
+- Section « À propos » avec icône et description longue (i18n)
+- Section « Technologies » (même style cyan que À propos)
+- i18n : `admin.updateCheck.lastCheck`, `admin.repoStatsTitle`, `admin.aboutTitle`, `admin.aboutDescription`, `admin.issuesCount` (FR/EN)
+
+### Modified
+
+- **Administration > Général** : section « Vérification automatique des mises à jour » n’affiche plus que la **dernière vérification** (date/heure) lorsque activée ; suppression de l’affichage des versions et du bloc « vérification manuelle désactivée »
+- **Update store** : type `UpdateInfo` avec `lastCheckAt` ; `checkForUpdates` enregistre `result.lastCheckAt` et met à jour `lastCheck`
+- **Routes updates** : suppression du code orphelin (ancienne logique GET /check) ; uniquement GET /check, GET /config, POST /config
+
+---
+
 ## [0.7.7] - 2026-02-20
 
 ### Fixed
