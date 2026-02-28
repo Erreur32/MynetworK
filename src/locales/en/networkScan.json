@@ -164,6 +164,7 @@
       "viewLatencyGraph": "View latency graph",
       "openScatterTable": "Open the Latency scatter table",
       "clickToOpenScatter": "Click to open",
+      "lastCheck": "Last check",
       "lastPing": "Last ping on {{date}}: {{latency}}",
       "offSince": "Off since {{date}}",
       "rescan": "Rescan (full scan + ports)",

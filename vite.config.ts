@@ -32,7 +32,11 @@ export default defineConfig({
   server: {
     port: parseInt(process.env.VITE_PORT || '5173', 10),
     host: '0.0.0.0', // Listen on all interfaces to allow access via IP
-    allowedHosts: ['mwk-dev.myoueb.fr'],
+    allowedHosts: ['mwk-dev.myoueb.fr', '192.168.32.150', 'localhost'],
+    // Disable cache in dev so CSS/JS changes are visible immediately
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
     // Configure HMR WebSocket
     // In Docker dev, use DASHBOARD_PORT (host port) instead of VITE_PORT (container port)
     // Vite will automatically detect the host from the browser's window.location.hostname

@@ -164,6 +164,7 @@
       "viewLatencyGraph": "Voir le graphique de latence",
       "openScatterTable": "Ouvre le tableau Latency scatter",
       "clickToOpenScatter": "Cliquer pour ouvrir",
+      "lastCheck": "Dernier check",
       "lastPing": "Dernier ping le {{date}} : {{latency}}",
       "offSince": "Hors ligne depuis le {{date}}",
       "rescan": "Rescanner (scan complet + ports)",
