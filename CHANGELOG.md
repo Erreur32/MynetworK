@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.11] - 2026-02-28
+
+### Added
+
+- **Administration > Général > Mises à jour** : bouton « Vérifier maintenant » sous « Vérification automatique des mises à jour » pour forcer une vérification (bypass du cache 12h) ; notification sur la même page : en cours (« Vérification… »), à jour (vert), mise à jour disponible avec version (ambre), ou erreur (rouge)
+- **Backend** : `GET /api/updates/check?force=1` (ou `force=true`) pour forcer un check sans cache ; `getCheckResultForce()` dans `updateCheckService`
+- **Update store** : `checkForUpdatesForce()` appelle l’API force et retourne le résultat pour l’affichage de la notification
+- i18n : `admin.updateCheck.checking`, `admin.updateCheck.upToDate`, `admin.updateCheck.updateAvailableVersion` (FR/EN)
+
+---
+
 ## [0.7.10] - 2026-02-28
 
 ### Added

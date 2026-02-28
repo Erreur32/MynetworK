@@ -9,16 +9,18 @@ import express from 'express';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
-import { getCheckResult, startScheduler, stopScheduler } from '../services/updateCheckService.js';
+import { getCheckResult, getCheckResultForce, startScheduler, stopScheduler } from '../services/updateCheckService.js';
 
 const router = express.Router();
 
 /**
  * GET /api/updates/check
- * Returns cached result (12h TTL) or runs check. Includes lastCheckAt (ISO date).
+ * Returns cached result (12h TTL) or runs check. Query ?force=1 bypasses cache for manual check.
+ * Includes lastCheckAt (ISO date).
  */
-router.get('/check', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
-  const result = await getCheckResult();
+router.get('/check', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const force = req.query.force === '1' || req.query.force === 'true';
+  const result = force ? await getCheckResultForce() : await getCheckResult();
   res.json({ success: true, result });
 }));
 

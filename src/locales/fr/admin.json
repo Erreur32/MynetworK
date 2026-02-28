@@ -249,7 +249,10 @@
       "checkError": "Erreur lors de la vérification",
       "manualCheckDisabled": "La vérification manuelle des mises à jour est temporairement désactivée.",
       "checkNow": "Vérifier maintenant",
-      "lastCheck": "Dernière vérification"
+      "lastCheck": "Dernière vérification",
+      "checking": "Vérification…",
+      "upToDate": "À jour",
+      "updateAvailableVersion": "Mise à jour disponible : {{version}}"
     },
     "freeboxFirmwareCheck": {
       "sectionTitle": "Vérification firmware Freebox",

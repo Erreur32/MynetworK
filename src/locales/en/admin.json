@@ -249,7 +249,10 @@
       "checkError": "Error while checking",
       "manualCheckDisabled": "Manual update check is temporarily disabled.",
       "checkNow": "Check now",
-      "lastCheck": "Last check"
+      "lastCheck": "Last check",
+      "checking": "Checking…",
+      "upToDate": "Up to date",
+      "updateAvailableVersion": "Update available: {{version}}"
     },
     "freeboxFirmwareCheck": {
       "sectionTitle": "Freebox firmware check",

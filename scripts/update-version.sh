@@ -291,10 +291,10 @@ if [ -z "$1" ] && command -v git &> /dev/null && git rev-parse --git-dir > /dev/
     
     echo -e "${GREEN}✅ Fichiers ajoutés au staging area${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Pour finaliser le commit, exécutez:${NC}"
+    echo -e "${YELLOW}#💡 Pour finaliser le commit, exécutez:${NC}"
     echo -e "${CYAN}git add -A && git commit -F $COMMIT_MESSAGE_FILE${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Pour créer le tag et pousser:${NC}"
+    echo -e "${YELLOW}#💡 Pour créer le tag et pousser:${NC}"
     echo -e "${CYAN}git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\"${NC}"
     echo -e "${CYAN}git push origin main && git push origin v$NEW_VERSION${NC}"
     echo ""

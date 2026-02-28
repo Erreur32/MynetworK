@@ -213,6 +213,39 @@ export async function getCheckResult(): Promise<CheckResultWithTime> {
 }
 
 /**
+ * Force a fresh update check (bypass cache). Updates cache and returns result with lastCheckAt.
+ */
+export async function getCheckResultForce(): Promise<CheckResultWithTime> {
+  const configRow = getDatabase().prepare('SELECT value FROM app_config WHERE key = ?').get('update_check_config') as { value: string } | undefined;
+  let enabled = false;
+  if (configRow) {
+    try {
+      const config = JSON.parse(configRow.value);
+      enabled = config.enabled === true;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!enabled) {
+    return {
+      enabled: false,
+      currentVersion: getCurrentVersion(),
+      latestVersion: null,
+      updateAvailable: false
+    };
+  }
+
+  const result = await performUpdateCheck();
+  cachedResult = result;
+  cachedAt = Date.now();
+  return {
+    ...result,
+    lastCheckAt: new Date(cachedAt).toISOString()
+  };
+}
+
+/**
  * Start the 12h scheduler. Runs check now and then every 12h. Call when config is enabled.
  */
 export function startScheduler(): void {

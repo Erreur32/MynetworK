@@ -29,6 +29,8 @@ interface UpdateStore {
   
   // Actions
   checkForUpdates: () => Promise<void>;
+  /** Force a fresh check (bypass 12h cache). Returns result for inline notification. */
+  checkForUpdatesForce: () => Promise<UpdateInfo | null>;
   loadConfig: () => Promise<void>;
   setConfig: (enabled: boolean) => Promise<void>;
 }
@@ -56,6 +58,28 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
     } catch (error) {
       console.error('[UpdateStore] Error checking for updates:', error);
       set({ isLoading: false });
+    }
+  },
+
+  checkForUpdatesForce: async (): Promise<UpdateInfo | null> => {
+    set({ isLoading: true });
+    try {
+      const response = await api.get<{ success: boolean; result?: UpdateInfo }>('/api/updates/check?force=1');
+      if (response.success && response.result) {
+        const result = response.result;
+        set({
+          updateInfo: result,
+          lastCheck: result.lastCheckAt ? new Date(result.lastCheckAt) : new Date(),
+          isLoading: false
+        });
+        return result;
+      }
+      set({ isLoading: false });
+      return null;
+    } catch (error) {
+      console.error('[UpdateStore] Error forcing update check:', error);
+      set({ isLoading: false });
+      return null;
     }
   },
   

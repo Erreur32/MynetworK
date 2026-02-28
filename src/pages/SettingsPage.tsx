@@ -1836,11 +1836,15 @@ const DebugLogSection: React.FC = () => {
   );
 };
 
+// Inline notification type for manual update check result
+type UpdateCheckNotification = { type: 'up-to-date' } | { type: 'update-available'; version: string } | { type: 'error'; message: string };
+
 // Update Check Section Component (for Administration > General tab)
 const UpdateCheckSection: React.FC = () => {
   const { t } = useTranslation();
-  const { updateConfig, updateInfo, loadConfig, setConfig, checkForUpdates, isLoading } = useUpdateStore();
+  const { updateConfig, updateInfo, loadConfig, setConfig, checkForUpdates, checkForUpdatesForce, isLoading } = useUpdateStore();
   const [isSaving, setIsSaving] = useState(false);
+  const [notification, setNotification] = useState<UpdateCheckNotification | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -1853,12 +1857,29 @@ const UpdateCheckSection: React.FC = () => {
 
   const handleToggle = async (enabled: boolean) => {
     setIsSaving(true);
+    setNotification(null);
     try {
       await setConfig(enabled);
     } catch (error) {
       console.error('[UpdateCheckSection] Error setting config:', error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCheckNow = async () => {
+    setNotification(null);
+    const result = await checkForUpdatesForce();
+    if (result) {
+      if (result.error) {
+        setNotification({ type: 'error', message: result.error });
+      } else if (result.updateAvailable && result.latestVersion) {
+        setNotification({ type: 'update-available', version: result.latestVersion });
+      } else {
+        setNotification({ type: 'up-to-date' });
+      }
+    } else {
+      setNotification({ type: 'error', message: t('admin.updateCheck.checkError') });
     }
   };
 
@@ -1875,7 +1896,7 @@ const UpdateCheckSection: React.FC = () => {
         />
       </SettingRow>
       {updateConfig?.enabled && (
-        <div className="py-3 border-t border-gray-800">
+        <div className="py-3 border-t border-gray-800 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-400">{t('admin.updateCheck.lastCheck')}</span>
             <span className="text-sm font-mono text-white">
@@ -1886,6 +1907,39 @@ const UpdateCheckSection: React.FC = () => {
                   })
                 : '—'}
             </span>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleCheckNow}
+              disabled={isLoading}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
+            >
+              {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {t('admin.updateCheck.checkNow')}
+            </button>
+            {isLoading && (
+              <span className="text-sm text-gray-400">{t('admin.updateCheck.checking')}</span>
+            )}
+            {!isLoading && notification && (
+              <span
+                className={`text-sm flex items-center gap-1.5 ${
+                  notification.type === 'up-to-date'
+                    ? 'text-green-400'
+                    : notification.type === 'update-available'
+                      ? 'text-amber-400'
+                      : 'text-red-400'
+                }`}
+              >
+                {notification.type === 'up-to-date' && <CheckCircle size={14} />}
+                {notification.type === 'update-available' && <AlertCircle size={14} />}
+                {notification.type === 'error' && <AlertCircle size={14} />}
+                {notification.type === 'up-to-date' && t('admin.updateCheck.upToDate')}
+                {notification.type === 'update-available' &&
+                  t('admin.updateCheck.updateAvailableVersion', { version: notification.version })}
+                {notification.type === 'error' && notification.message}
+              </span>
+            )}
           </div>
         </div>
       )}
