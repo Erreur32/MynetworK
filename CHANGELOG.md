@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.12] - 2026-02-28
+
+### Fixed
+
+- **Sécurité (Dependabot)** : vulnérabilité Rollup (high) — Arbitrary File Write via Path Traversal (GHSA-mw96-cpmx-2vgc) ; override `rollup` `>=4.59.0` dans `package.json` pour forcer la version corrigée en dépendance transitive (Vite)
+
+---
+
 ## [0.7.11] - 2026-02-28
 
 ### Added
