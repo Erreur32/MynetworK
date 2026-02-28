@@ -17,13 +17,18 @@
       "deleteWithError": "Erreur lors de la suppression : {{error}}",
       "rescan": "Erreur lors du rescan",
       "rescanWithError": "Erreur lors du rescan : {{error}}",
+      "scanStop": "Erreur lors de la demande d'arrêt du scan",
+      "scanStopWithError": "Erreur lors de la demande d'arrêt du scan : {{error}}",
       "ban": "Erreur lors du bannissement",
       "banWithError": "Erreur lors du bannissement : {{error}}",
       "hostnameSave": "Erreur lors de la sauvegarde du hostname",
       "hostnameSaveWithError": "Erreur lors de la sauvegarde : {{error}}"
     },
     "success": {
-      "ipAdded": "IP ajoutée et scannée avec succès"
+      "ipAdded": "IP ajoutée et scannée avec succès",
+      "rescanDone": "Scan terminé pour {{ip}}",
+      "rescanDoneRefreshFailed": "Scan terminé mais la liste n'a pas pu être rafraîchie",
+      "scanStopRequested": "Arrêt du scan demandé"
     },
     "confirm": {
       "deleteIp": "Êtes-vous sûr de vouloir supprimer l'IP {{ip}} de l'historique ? Cette action est irréversible.",
@@ -119,6 +124,7 @@
       "config": "Configuration",
       "refresh": "Rafraîchir",
       "scan": "Scanner",
+      "stop": "Arrêt",
       "addIp": "Ajouter IP",
       "close": "Fermer",
       "cancel": "Annuler",
@@ -132,6 +138,7 @@
       "refreshFull": "Rafraîchir (ping + MAC + hostname)",
       "chooseRefreshType": "Choisir le type de rafraîchissement",
       "fullScan": "Scan complet du réseau (ping + MAC + vendor + hostname)",
+      "stopScan": "Arrêter le scan en cours",
       "addIp": "Ajouter une IP manuellement",
       "clear": "Effacer",
       "portScanInProgress": "Scan des ports en cours",
@@ -157,9 +164,13 @@
       "lastPing": "Dernier ping le {{date}} : {{latency}}",
       "offSince": "Hors ligne depuis le {{date}}",
       "rescan": "Rescanner (scan complet + ports)",
+      "rescanOfflineDisabled": "Impossible de rescanner une IP hors ligne",
       "banIp": "Bannir cette IP (exclure des scans futurs)",
       "delete": "Supprimer",
-      "macAddress": "Adresse MAC"
+      "macAddress": "Adresse MAC",
+      "headerTotal": "Nombre total d'IPs en base (en ligne + hors ligne)",
+      "headerOnline": "Nombre d'IPs en ligne (répondant au ping)",
+      "headerOffline": "Nombre d'IPs hors ligne (ne répondant pas, présentes dans l'historique)"
     },
     "placeholders": {
       "search": "Rechercher par IP, MAC, hostname, vendor ou ports...",
@@ -189,7 +200,8 @@
     "filters": {
       "results": "Résultats:",
       "all": "Tous",
-      "full": "Full"
+      "full": "Full",
+      "statusFilterLabel": "Filtrer par statut"
     },
     "scanInfo": {
       "range": "Plage :",

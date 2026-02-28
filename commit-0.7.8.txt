@@ -1,6 +1,0 @@
-Release 0.7.8
-
-- Update check: 12h backend cache + scheduler, lastCheckAt in API, banner dismissible
-- Admin General: only last check time when update check enabled
-- Admin Info: project card, shields.io badges, repo stats under GitHub button, About + Technologies (cyan)
-- i18n: updateCheck.lastCheck, repoStatsTitle, aboutTitle, aboutDescription, issuesCount

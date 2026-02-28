@@ -120,7 +120,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
         // Start scan in background (non-blocking)
         // The scan will run asynchronously and results will be available via /progress endpoint
         networkScanService.scanNetwork(scanRange, scanType)
-            .then((result) => {
+            .then((result: { scanned: number; found: number; updated: number; stopped?: boolean }) => {
                 // Track last manual scan
                 AppConfigRepository.set('network_scan_last_manual', JSON.stringify({
                     type: 'full',
@@ -129,9 +129,11 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
                     timestamp: new Date().toISOString(),
                     result: result
                 }));
-                logger.info('NetworkScan', `Scan completed successfully: ${result.scanned} scanned, ${result.found} found, ${result.updated} updated`);
-                // If port scan option is ON, run nmap on online hosts in background (full scan only)
-                if (scanType === 'full') {
+                logger.info('NetworkScan', result.stopped
+                    ? `Scan stopped by user: ${result.scanned} scanned, ${result.found} found, ${result.updated} updated`
+                    : `Scan completed successfully: ${result.scanned} scanned, ${result.found} found, ${result.updated} updated`);
+                // If port scan option is ON and scan was NOT stopped, run nmap on online hosts in background (full scan only)
+                if (scanType === 'full' && !result.stopped) {
                     const unifiedStr = AppConfigRepository.get('network_scan_unified_auto');
                     if (unifiedStr) {
                         try {
@@ -209,6 +211,26 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
                 suggestion,
                 details: process.env.NODE_ENV === 'development' ? error.message : undefined
             }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/scan-stop
+ * Request stop of the current full scan. Takes effect between current and next batch.
+ */
+router.post('/scan-stop', requireAuth, autoLog('network-scan', 'scan-stop'), asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    try {
+        networkScanService.requestStopScan();
+        portScanService.requestPortScanAbort();
+        res.json({
+            success: true,
+            result: { stopped: true, message: 'Scan stop requested (main scan + port scan)' }
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            error: { message: error.message || 'Failed to request scan stop', code: 'SCAN_STOP_ERROR' }
         });
     }
 }));

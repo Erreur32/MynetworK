@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.10] - 2026-02-28
+
+### Added
+
+- **Administration > Plugins** : disposition verticale des cartes (une carte par ligne, empilées) ; cartes élargies avec plus de padding et d’options directement dans chaque carte
+- **Plugin Freebox** : section « Freebox firmware check » intégrée dans la carte Freebox (options firmware dans la carte), section pliable (repliée par défaut) avec en-tête cliquable et chevron (▶ / ▼)
+- **Scanner** : bouton « Stop » / « Arrêt » pendant un full scan (remplace « Scan ») pour arrêter le scan en cours ; API `POST /api/network-scan/scan-stop` et flag `requestStopScan` côté backend
+- **Scanner** : filtres par statut en badges colorés (All / Online / Offline) avec bordure et ring sur l’actif, transparence renforcée pour inactifs ; tooltips explicatifs sur les effectifs (total, online, offline) dans l’en-tête du tableau
+- **Scanner** : rescan manuel désactivé pour les IP offline (bouton grisé + tooltip) ; toast succès + icône CheckCircle après rescan ; rafraîchissement liste en arrière-plan pour éviter « serveur indisponible » ; toasts à la place des alert pour les erreurs
+- i18n : `admin.logsUserLogin`, `networkScan.tooltips.headerTotal/headerOnline/headerOffline`, `networkScan.success.rescanDone/rescanDoneRefreshFailed/scanStopRequested`, `networkScan.buttons.stop`, `networkScan.tooltips.stopScan/rescanOfflineDisabled`, `networkScan.filters.statusFilterLabel`, erreurs `scanStop` (FR/EN)
+
+### Modified
+
+- **Administration > Général** : Localisation (fuseau horaire + langue de l’interface) regroupée dans la section « Mon profil » (même cadre) ; sous-titre « Région et langue » (au lieu de « Localisation ») avec style renforcé (text-sm, font-semibold, theme-secondary)
+- **Administration > Général** : section « Gestion des utilisateurs » déplacée en 2ᵉ colonne sous « Configuration réseau » et renommée « Logs connexion utilisateurs »
+- **Administration > Général** : suppression des sections séparées « Localisation » et « Langue de l’interface » ; suppression de la section dédiée « Freebox firmware check » de l’onglet Général (déplacée dans Plugins > carte Freebox)
+- **Scanner** : menu déroulant filtre statut remplacé par trois boutons-badges (All, Online, Offline) ; affichage des effectifs online/offline sur la ligne des filtres avec tooltips ; tooltip sur le badge total en-tête
+- **Scanner** : logique rescan (succès immédiat en UI, refresh en arrière-plan, erreurs en toast)
+- i18n : `admin.localization` mis à jour (« Region & language » / « Région et langue »)
+- Composant `FreeboxFirmwareCheckSection` extrait dans `src/components/FreeboxFirmwareCheckSection.tsx` et réutilisé dans la carte plugin Freebox
+- Backend : `networkScanService` — flag `scanStopRequested` et sortie de boucle entre batches pour arrêt du scan à la demande
+
+---
+
 ## [0.7.9] - 2026-02-24
 
 ### Added

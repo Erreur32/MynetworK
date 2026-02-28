@@ -6,10 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings, Power, CheckCircle, XCircle, RefreshCw, AlertCircle, ExternalLink } from 'lucide-react';
+import { Settings, CheckCircle, XCircle, RefreshCw, AlertCircle, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { usePluginStore, type Plugin } from '../stores/pluginStore';
 import { useAuthStore } from '../stores/authStore';
 import { Section, SettingRow } from '../pages/SettingsPage';
+import { FreeboxFirmwareCheckSection } from './FreeboxFirmwareCheckSection';
 import { PluginConfigModal } from './modals/PluginConfigModal';
 import { LoginModal } from './modals/LoginModal';
 import { NetworkScanConfigModal } from './modals/NetworkScanConfigModal';
@@ -27,6 +28,7 @@ export const PluginsManagementSection: React.FC = () => {
     const [freeboxLoginModalOpen, setFreeboxLoginModalOpen] = useState(false);
     const [networkScanConfigModalOpen, setNetworkScanConfigModalOpen] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [freeboxFirmwareSectionOpen, setFreeboxFirmwareSectionOpen] = useState(false);
 
     // Load plugins and stats once on mount (with cache check)
     useEffect(() => {
@@ -208,11 +210,11 @@ export const PluginsManagementSection: React.FC = () => {
                         </div>
                     </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="flex flex-col gap-4">
                     {plugins.map((plugin) => (
                         <div
                             key={plugin.id}
-                            className={`rounded-lg p-3 border transition-all hover:shadow-lg flex flex-col ${
+                            className={`rounded-xl p-4 border transition-all hover:shadow-lg flex flex-col ${
                                 plugin.enabled && plugin.connectionStatus
                                     ? 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50 hover:shadow-emerald-500/20'
                                     : plugin.enabled
@@ -221,16 +223,16 @@ export const PluginsManagementSection: React.FC = () => {
                             }`}
                         >
                             {/* Header */}
-                            <div className="flex items-center justify-between mb-2.5">
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
                                         plugin.enabled && plugin.connectionStatus 
                                             ? 'bg-emerald-500/20 border border-emerald-500/30' 
                                             : plugin.enabled 
                                                 ? 'bg-yellow-500/20 border border-yellow-500/30'
                                                 : 'bg-gray-500/20 border border-gray-500/30'
                                     }`}>
-                                        <Settings size={16} className={
+                                        <Settings size={20} className={
                                             plugin.enabled && plugin.connectionStatus 
                                                 ? 'text-emerald-400' 
                                                 : plugin.enabled 
@@ -239,25 +241,25 @@ export const PluginsManagementSection: React.FC = () => {
                                         } />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <h4 className="font-semibold text-theme-primary text-sm truncate">{plugin.name}</h4>
-                                        <p className="text-[10px] text-theme-tertiary">v{plugin.version}</p>
+                                        <h4 className="font-semibold text-theme-primary text-base truncate">{plugin.name}</h4>
+                                        <p className="text-xs text-theme-tertiary">v{plugin.version}</p>
                                     </div>
                                 </div>
-                                {/* Status badge - top right */}
+                                {/* Status badge */}
                                 <div className="flex-shrink-0">
                                     {plugin.connectionStatus ? (
-                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded text-emerald-400 text-[10px] font-medium">
-                                            <CheckCircle size={11} />
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-medium">
+                                            <CheckCircle size={12} />
                                             <span>{t('admin.plugins.statusConnected')}</span>
                                         </div>
                                     ) : plugin.enabled ? (
-                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-400 text-[10px] font-medium">
-                                            <AlertCircle size={11} />
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-xs font-medium">
+                                            <AlertCircle size={12} />
                                             <span>{t('admin.plugins.statusNotConnected')}</span>
                                         </div>
                                     ) : (
-                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-gray-400 text-[10px] font-medium">
-                                            <XCircle size={11} />
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-500/20 border border-gray-500/30 rounded-lg text-gray-400 text-xs font-medium">
+                                            <XCircle size={12} />
                                             <span>{t('admin.plugins.statusDisabled')}</span>
                                         </div>
                                     )}
@@ -266,7 +268,7 @@ export const PluginsManagementSection: React.FC = () => {
 
                             {/* Plugin-specific info */}
                             {plugin.connectionStatus && (
-                                <div className="mb-2.5 flex flex-wrap gap-1.5">
+                                <div className="mb-3 flex flex-wrap gap-2">
                                     {plugin.id === 'freebox' && (() => {
                                         // Get all Freebox versions from pluginStats.system (where they're actually stored)
                                         const stats = pluginStats?.[plugin.id]?.system as any;
@@ -384,8 +386,31 @@ export const PluginsManagementSection: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* Freebox options: firmware check (collapsible, collapsed by default) */}
+                            {plugin.id === 'freebox' && (
+                                <div className="mt-3 pt-3 border-t border-gray-700/80">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFreeboxFirmwareSectionOpen((v) => !v)}
+                                        className="flex items-center gap-2 w-full text-left text-xs font-semibold text-theme-secondary uppercase tracking-wider hover:text-theme-primary transition-colors"
+                                    >
+                                        {freeboxFirmwareSectionOpen ? (
+                                            <ChevronDown size={14} className="flex-shrink-0" />
+                                        ) : (
+                                            <ChevronRight size={14} className="flex-shrink-0" />
+                                        )}
+                                        {t('admin.freeboxFirmwareCheck.sectionTitle')}
+                                    </button>
+                                    {freeboxFirmwareSectionOpen && (
+                                        <div className="mt-3">
+                                            <FreeboxFirmwareCheckSection />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-2.5 mt-auto">
+                            <div className="flex items-center justify-between pt-3 mt-auto">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[10px] text-theme-tertiary font-medium">{t('admin.plugins.active')}</span>
                                     <button

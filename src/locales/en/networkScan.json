@@ -17,13 +17,18 @@
       "deleteWithError": "Error while deleting: {{error}}",
       "rescan": "Error during rescan",
       "rescanWithError": "Error during rescan: {{error}}",
+      "scanStop": "Error while requesting scan stop",
+      "scanStopWithError": "Error while requesting scan stop: {{error}}",
       "ban": "Error while banning",
       "banWithError": "Error while banning: {{error}}",
       "hostnameSave": "Error while saving hostname",
       "hostnameSaveWithError": "Error while saving: {{error}}"
     },
     "success": {
-      "ipAdded": "IP added and scanned successfully"
+      "ipAdded": "IP added and scanned successfully",
+      "rescanDone": "Scan completed for {{ip}}",
+      "rescanDoneRefreshFailed": "Scan completed but list could not be refreshed",
+      "scanStopRequested": "Scan stop requested"
     },
     "confirm": {
       "deleteIp": "Are you sure you want to remove IP {{ip}} from history? This action cannot be undone.",
@@ -119,6 +124,7 @@
       "config": "Configuration",
       "refresh": "Refresh",
       "scan": "Scan",
+      "stop": "Stop",
       "addIp": "Add IP",
       "close": "Close",
       "cancel": "Cancel",
@@ -132,6 +138,7 @@
       "refreshFull": "Refresh (ping + MAC + hostname)",
       "chooseRefreshType": "Choose refresh type",
       "fullScan": "Full network scan (ping + MAC + vendor + hostname)",
+      "stopScan": "Stop the scan in progress",
       "addIp": "Add an IP manually",
       "clear": "Clear",
       "portScanInProgress": "Port scan in progress",
@@ -157,9 +164,13 @@
       "lastPing": "Last ping on {{date}}: {{latency}}",
       "offSince": "Off since {{date}}",
       "rescan": "Rescan (full scan + ports)",
+      "rescanOfflineDisabled": "Cannot rescan an offline IP",
       "banIp": "Ban this IP (exclude from future scans)",
       "delete": "Delete",
-      "macAddress": "MAC address"
+      "macAddress": "MAC address",
+      "headerTotal": "Total number of IPs in the database (online + offline)",
+      "headerOnline": "Number of online IPs (responding to ping)",
+      "headerOffline": "Number of offline IPs (not responding, last seen in history)"
     },
     "placeholders": {
       "search": "Search by IP, MAC, hostname, vendor or ports...",
@@ -189,7 +200,8 @@
     "filters": {
       "results": "Results:",
       "all": "All",
-      "full": "Full"
+      "full": "Full",
+      "statusFilterLabel": "Filter by status"
     },
     "scanInfo": {
       "range": "Range:",

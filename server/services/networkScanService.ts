@@ -119,6 +119,9 @@ export class NetworkScanService {
         isActive: boolean;
     } | null = null;
     
+    // Request to stop the current scan (checked between batches)
+    private scanStopRequested = false;
+
     // Last scan result (stored after scan completes, cleared when new scan starts)
     private lastScanResult: {
         range: string;
@@ -156,6 +159,7 @@ export class NetworkScanService {
             throw new Error(`A scan is already in progress (${progress.scanned}/${progress.total} IPs scanned). Please wait for it to complete.`);
         }
 
+        this.scanStopRequested = false;
         const startTime = Date.now();
         
         // Parse IP range to get list of IPs to scan
@@ -230,10 +234,16 @@ export class NetworkScanService {
         let updated = 0;
         let scanned = 0;
         let vendorsFound = 0; // Track vendors found during this scan
+        let scanWasStopped = false;
         const latencies: number[] = []; // Collect latencies for metrics
 
         // Process IPs in batches to limit concurrent operations
         for (let i = 0; i < ipsToScan.length; i += MAX_CONCURRENT_PINGS) {
+            if (this.scanStopRequested) {
+                scanWasStopped = true;
+                logger.info('NetworkScanService', `Scan stopped by user at ${scanned}/${ipsToScan.length} IPs`);
+                break;
+            }
             const batch = ipsToScan.slice(i, i + MAX_CONCURRENT_PINGS);
             
             // Ping all IPs in batch in parallel
@@ -499,7 +509,7 @@ export class NetworkScanService {
         // Record metrics AFTER scan completes (not during, to avoid performance impact)
         metricsCollector.recordScanComplete(duration, scanned, found, updated, latencies);
 
-        // Store final results before clearing progress
+        // Store final results before clearing progress (include stopped flag so route does not start port scan)
         const finalResult = {
             range,
             scanType,
@@ -507,7 +517,8 @@ export class NetworkScanService {
             found,
             updated,
             duration,
-            detectionSummary
+            detectionSummary,
+            stopped: scanWasStopped
         };
         this.lastScanResult = finalResult;
 
@@ -2635,6 +2646,14 @@ export class NetworkScanService {
     }
 
     /**
+     * Request stop of the current scan. Takes effect between the current and next batch.
+     */
+    requestStopScan(): void {
+        this.scanStopRequested = true;
+        logger.info('NetworkScanService', 'Stop scan requested by user');
+    }
+
+    /**
      * Get current scan progress (if a scan is in progress)
      */
     getScanProgress(): { scanned: number; total: number; found: number; updated: number; isActive: boolean } | null {
@@ -2652,6 +2671,7 @@ export class NetworkScanService {
         updated: number;
         duration: number;
         detectionSummary?: { mac: number; vendor: number; hostname: number };
+        stopped?: boolean;
     } | null {
         return this.lastScanResult;
     }

@@ -15,6 +15,7 @@ import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
+import { ToastContainer, type ToastData } from '../components/ui/Toast';
 import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
@@ -173,6 +174,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [manualHostname, setManualHostname] = useState('');
     const [isAddingIp, setIsAddingIp] = useState(false);
     const [rescanningIp, setRescanningIp] = useState<string | null>(null);
+    const [rescanSuccessIp, setRescanSuccessIp] = useState<string | null>(null);
+    const [toasts, setToasts] = useState<ToastData[]>([]);
     
     // Port scan (nmap) progress - active when scan ports runs in background after full scan
     const [portScanProgress, setPortScanProgress] = useState<{ active: boolean; current: number; total: number; currentIp?: string } | null>(null);
@@ -771,6 +774,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     };
 
+    const handleStopScan = async () => {
+        if (!isScanning) return;
+        try {
+            const response = await api.post<{ result?: { stopped: boolean } }>('/api/network-scan/scan-stop');
+            if (response.success) {
+                addToast('success', t('networkScan.success.scanStopRequested'));
+            } else {
+                addToast('error', response.error?.message || t('networkScan.errors.scanStop'));
+            }
+        } catch (error: any) {
+            addToast('error', t('networkScan.errors.scanStopWithError', { error: error.message || t('networkScan.errors.unknown') }));
+        }
+    };
+
     const handleAddManualIp = async () => {
         if (!manualIp.trim()) {
             alert(t('networkScan.errors.ipRequired'));
@@ -908,24 +925,51 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     };
 
-    const handleRescan = async (ip: string) => {
+    const addToast = useCallback((type: ToastData['type'], message: string, id?: string, progress?: number) => {
+        const toastId = id || `toast-${Date.now()}`;
+        setToasts((prev) => {
+            const existing = prev.find((t) => t.id === toastId);
+            if (existing) {
+                return prev.map((t) => (t.id === toastId ? { ...t, type, message, progress } : t));
+            }
+            return [...prev, { id: toastId, type, message, progress }];
+        });
+        return toastId;
+    }, []);
+    const removeToast = useCallback((id: string) => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
+
+    const handleRescan = async (ip: string, status: 'online' | 'offline' | 'unknown') => {
+        if (status === 'offline') return; // Do not rescan offline IPs
         if (rescanningIp === ip) return; // Prevent double-click
 
         setRescanningIp(ip);
+        setRescanSuccessIp(null);
         try {
             const response = await api.post(`/api/network-scan/${ip}/rescan`);
 
             if (response.success) {
-                await fetchHistory();
-                await fetchStats();
-                // Refresh port scan progress if available
-                await fetchPortScanProgress();
+                // Update UI immediately so user sees success even if refresh fails
+                setRescanSuccessIp(ip);
+                addToast('success', t('networkScan.success.rescanDone', { ip }));
+                setTimeout(() => setRescanSuccessIp(null), 2500);
+                // Refresh list/stats in background; do not let failures here affect the rescan success or trigger full-page behavior
+                Promise.all([
+                    fetchHistory(),
+                    fetchStats(),
+                    fetchPortScanProgress()
+                ]).catch((err) => {
+                    console.warn('[NetworkScanPage] Background refresh after rescan failed:', err);
+                    addToast('warning', t('networkScan.success.rescanDoneRefreshFailed'));
+                });
             } else {
-                alert(response.error?.message || t('networkScan.errors.rescan'));
+                addToast('error', response.error?.message || t('networkScan.errors.rescan'));
             }
         } catch (error: any) {
             console.error('Rescan failed:', error);
-            alert(t('networkScan.errors.rescanWithError', { error: error.message || t('networkScan.errors.unknown') }));
+            const msg = error?.message || error?.error?.message || t('networkScan.errors.unknown');
+            addToast('error', t('networkScan.errors.rescanWithError', { error: msg }));
         } finally {
             setRescanningIp(null);
         }
@@ -1498,13 +1542,22 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                                 </div>
                                     <button
-                                        onClick={handleScan}
-                                        disabled={isScanning}
-                                        className="w-full px-2 py-1 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors text-xs"
-                                        title={t('networkScan.tooltips.fullScan')}
+                                        onClick={isScanning ? handleStopScan : handleScan}
+                                        disabled={isRefreshing && !isScanning}
+                                        className={`w-full px-2 py-1 rounded-lg border flex items-center justify-center gap-1.5 transition-colors text-xs ${isScanning ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30' : 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border-green-500/30'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        title={isScanning ? t('networkScan.tooltips.stopScan') : t('networkScan.tooltips.fullScan')}
                                     >
-                                        <Play size={12} className={isScanning ? 'animate-spin' : ''} />
-                                        {t('networkScan.buttons.scan')}
+                                        {isScanning ? (
+                                            <>
+                                                <Square size={12} fill="currentColor" />
+                                                {t('networkScan.buttons.stop')}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Play size={12} />
+                                                {t('networkScan.buttons.scan')}
+                                            </>
+                                        )}
                                     </button>
                                     <button
                                         onClick={() => setShowAddIpModal(true)}
@@ -1606,7 +1659,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                             <Network size={16} className="text-cyan-400" />
                         </div>
                         
-                        <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-bold">
+                        <span className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-bold cursor-help" title={t('networkScan.tooltips.headerTotal')}>
                             {stats?.total || 0}
                         </span>
                         
@@ -1717,17 +1770,38 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     </button>
                                 )}
                         </div>
-                        <select
-                                id="status-filter"
-                                name="status-filter"
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value as any)}
-                                className="px-4 py-2.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                        >
-                            <option value="all">{t('networkScan.filters.all')}</option>
-                            <option value="online">{t('networkScan.status.online')}</option>
-                            <option value="offline">{t('networkScan.status.offline')}</option>
-                            </select>
+                        <div className="flex items-center gap-1.5" role="group" aria-label={t('networkScan.filters.statusFilterLabel')}>
+                            {(['all', 'online', 'offline'] as const).map((value) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => setStatusFilter(value)}
+                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
+                                        statusFilter === value
+                                            ? value === 'all'
+                                                ? 'bg-gray-500/25 text-gray-100 border-gray-300 ring-2 ring-gray-300/50 ring-offset-1 ring-offset-[#121212]'
+                                                : value === 'online'
+                                                    ? 'bg-emerald-500/30 text-emerald-300 border-emerald-400 ring-2 ring-emerald-400/60 ring-offset-1 ring-offset-[#121212]'
+                                                    : 'bg-red-500/30 text-red-300 border-red-400 ring-2 ring-red-400/60 ring-offset-1 ring-offset-[#121212]'
+                                            : value === 'all'
+                                                ? 'bg-gray-500/10 text-gray-400 border-gray-600 hover:bg-gray-500/20 hover:text-gray-300'
+                                                : value === 'online'
+                                                    ? 'bg-emerald-500/5 text-emerald-400/50 border-emerald-500/20 hover:bg-emerald-500/10 hover:text-emerald-400/70'
+                                                    : 'bg-red-500/5 text-red-400/50 border-red-500/20 hover:bg-red-500/10 hover:text-red-400/70'
+                                    }`}
+                                >
+                                    {value === 'all' ? t('networkScan.filters.all') : value === 'online' ? t('networkScan.status.online') : t('networkScan.status.offline')}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="px-2 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold cursor-help" title={t('networkScan.tooltips.headerOnline')}>
+                                {stats?.online ?? 0}
+                            </span>
+                            <span className="px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400/90 text-xs font-semibold cursor-help" title={t('networkScan.tooltips.headerOffline')}>
+                                {stats?.offline ?? 0}
+                            </span>
+                        </div>
                         <div className="flex items-center gap-2">
                                 <label htmlFor="results-per-page" className="text-sm text-gray-400 whitespace-nowrap">{t('networkScan.filters.results')}</label>
                                 <select
@@ -2299,10 +2373,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         <td className="py-3 pr-2 pl-0 text-right w-1 whitespace-nowrap">
                                             <div className="flex items-center gap-1 justify-end">
                                                 <button
-                                                    onClick={() => handleRescan(scan.ip)}
-                                                    disabled={rescanningIp === scan.ip}
+                                                    onClick={() => handleRescan(scan.ip, scan.status)}
+                                                    disabled={rescanningIp === scan.ip || scan.status === 'offline'}
                                                     className="p-1 hover:bg-yellow-500/10 text-yellow-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    title={t('networkScan.tooltips.rescan')}
+                                                    title={scan.status === 'offline' ? t('networkScan.tooltips.rescanOfflineDisabled') : t('networkScan.tooltips.rescan')}
                                                     onMouseEnter={(e) => {
                                                         cancelTooltipHide();
                                                         setMacTooltip(null);
@@ -2315,11 +2389,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                         setScatterIconTooltip(null);
                                                         setIpTooltip(null);
                                                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                                        setActionsTooltip({ label: t('networkScan.table.headers.actions'), text: t('networkScan.tooltips.rescan'), rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                        const actionText = scan.status === 'offline' ? t('networkScan.tooltips.rescanOfflineDisabled') : t('networkScan.tooltips.rescan');
+                                                        setActionsTooltip({ label: t('networkScan.table.headers.actions'), text: actionText, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
                                                     }}
                                                     onMouseLeave={() => scheduleTooltipHide()}
                                                 >
-                                                    {rescanningIp === scan.ip ? (
+                                                    {rescanSuccessIp === scan.ip ? (
+                                                        <CheckCircle size={16} className="text-emerald-400" />
+                                                    ) : rescanningIp === scan.ip ? (
                                                         <Loader2 size={16} className="animate-spin" />
                                                     ) : (
                                                         <RefreshCw size={16} />
@@ -2811,6 +2888,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     ip={selectedIpForGraph}
                 />
             )}
+
+            <ToastContainer toasts={toasts} onClose={removeToast} />
         </div>
     );
 };
