@@ -65,16 +65,44 @@ function getPortCategoryColor(cat: string): { label: string; cell: string; icon:
     }
 }
 
-/** Calcule left/top du tooltip pour rester dans la fenêtre (avec marge 16px) */
-function getTooltipPosition(rect: { left: number; top: number; bottom: number; right: number }, tooltipWidth: number, tooltipHeight: number): { left: number; top: number } {
+/** Options optionnelles pour le positionnement. tableRect = garder le tooltip horizontalement dans le tableau. */
+type TooltipPositionOptions = { preferAbove?: boolean; offsetX?: number; offsetY?: number; tableRect?: { left: number; right: number } };
+
+/** Écart vertical minimal entre la ligne et le tooltip (rapproché de la ligne). */
+const TOOLTIP_V_GAP = 2;
+
+/** Calcule left/top du tooltip. Au-dessus ou en dessous de la ligne selon placement. Horizontalement : au niveau de la colonne, puis clamp dans le tableau si tableRect fourni, puis dans la fenêtre. */
+function getTooltipPosition(
+    rect: { left: number; top: number; bottom: number; right: number },
+    tooltipWidth: number,
+    tooltipHeight: number,
+    options?: boolean | TooltipPositionOptions
+): { left: number; top: number } {
+    const forcePreferAbove = options === true || (typeof options === 'object' && options?.preferAbove);
+    const offsetX = typeof options === 'object' && options?.offsetX != null ? options.offsetX : 0;
+    const offsetY = typeof options === 'object' && options?.offsetY != null ? options.offsetY : 0;
+    const tableRect = typeof options === 'object' && options?.tableRect != null ? options.tableRect : null;
     const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 300;
     const margin = 16;
-    let left = rect.left;
+    let left = rect.left - offsetX;
+    if (tableRect != null) {
+        left = Math.max(tableRect.left, Math.min(left, tableRect.right - tooltipWidth));
+    }
     if (left + tooltipWidth > vw - margin) left = vw - tooltipWidth - margin;
     if (left < margin) left = margin;
-    let top = rect.bottom + 6;
-    if (top + tooltipHeight > vh - margin) top = rect.top - tooltipHeight - 8;
+    const aboveTop = rect.top - tooltipHeight - TOOLTIP_V_GAP;
+    const belowTop = rect.bottom + TOOLTIP_V_GAP;
+    const rowInLowerHalf = rect.top > vh / 2;
+    const preferAbove = forcePreferAbove || rowInLowerHalf;
+    let top: number;
+    if (preferAbove) {
+        top = aboveTop >= margin ? aboveTop : belowTop;
+    } else {
+        top = belowTop + tooltipHeight <= vh - margin ? belowTop : aboveTop;
+    }
+    top -= offsetY;
+    if (top + tooltipHeight > vh - margin) top = Math.max(margin, rect.top - tooltipHeight - TOOLTIP_V_GAP - offsetY);
     if (top < margin) top = margin;
     return { left, top };
 }
@@ -189,7 +217,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [hostnameTooltip, setHostnameTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [vendorTooltip, setVendorTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
-    const [monitoringTooltip, setMonitoringTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [monitoringTooltip, setMonitoringTooltip] = useState<{ label: string; text: string; linkText?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const TOOLTIP_MAC_W = 320;
@@ -197,6 +225,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const TOOLTIP_PORTS_W = 420;
     const TOOLTIP_PORTS_H = 320;
     const tooltipHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const tableContainerRef = useRef<HTMLDivElement>(null);
     const hideAllTooltips = useCallback(() => {
         setMacTooltip(null);
         setPortsTooltip(null);
@@ -1819,7 +1848,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     </div>
                 }
             >
-                <div className="overflow-x-auto">
+                <div ref={tableContainerRef} className="overflow-x-auto">
                     <table className="w-full table-auto">
                         <colgroup>
                             <col className="min-w-[144px]" /><col className="min-w-[200px]" /><col className="min-w-[200px]" /><col className="min-w-[72px]" /><col className="min-w-[100px]" /><col className="min-w-[80px]" /><col className="min-w-[140px]" /><col className="min-w-[80px]" /><col className="min-w-[80px]" /><col className="min-w-[52px]" /><col className="min-w-[64px]" /><col className="min-w-[100px]" /><col className="min-w-[60px]" />
@@ -1995,6 +2024,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className={`py-3 px-4 text-sm font-mono break-words cursor-default ${scan.status === 'offline' ? 'text-gray-500' : ''}`}
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2037,6 +2067,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-4 text-sm text-gray-300 cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2109,6 +2140,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-4 text-sm text-gray-300 cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2142,6 +2174,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-2 text-sm font-mono text-gray-400 whitespace-nowrap cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
                                                 setLatencyTooltip(null);
@@ -2168,6 +2201,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-2 w-16 cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setLatencyTooltip(null);
@@ -2195,6 +2229,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-4 cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2226,6 +2261,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-4 text-sm text-gray-400 font-mono cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setStatusTooltip(null);
                                                 setLatencyTooltip(null);
@@ -2289,6 +2325,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-2 whitespace-nowrap cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2299,12 +2336,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 setScatterIconTooltip(null);
                                                 setIpTooltip(null);
                                                 const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                                const desc = t('networkScan.tooltips.monitoringDescription');
-                                                const actions = monitoringStatus[scan.ip]
-                                                    ? [t('networkScan.tooltips.disableMonitoring'), t('networkScan.tooltips.viewLatencyGraph')].join('\n')
-                                                    : t('networkScan.tooltips.enableMonitoring');
-                                                const text = `${desc}\n\n${actions}`;
-                                                setMonitoringTooltip({ label: t('networkScan.table.headers.monitoring'), text, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
+                                                const isActive = monitoringStatus[scan.ip];
+                                                const text = isActive ? t('networkScan.tooltips.monitoringShortOn') : t('networkScan.tooltips.monitoringShortOff');
+                                                const linkText = isActive ? t('networkScan.tooltips.monitoringOpenScatter') : undefined;
+                                                setMonitoringTooltip({ label: t('networkScan.table.headers.monitoring'), text, linkText, rect: { left: r.left, top: r.top, bottom: r.bottom, right: r.right } });
                                             }}
                                             onMouseLeave={() => scheduleTooltipHide()}
                                         >
@@ -2324,9 +2359,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     <button
                                                         onClick={() => handleOpenLatencyGraph(scan.ip)}
                                                         className="p-0.5 hover:bg-green-500/10 text-green-400 rounded transition-colors"
-                                                        title={t('networkScan.tooltips.viewLatencyGraph')}
+                                                        aria-label={t('networkScan.tooltips.openScatterTable')}
                                                         onMouseEnter={(e) => {
                                                             cancelTooltipHide();
+                                                            setFirstSeenTooltip(null);
                                                             setMacTooltip(null);
                                                             setPortsTooltip(null);
                                                             setStatusTooltip(null);
@@ -2350,6 +2386,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             className="py-3 px-2 text-sm text-gray-400 whitespace-nowrap cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
+                                                setFirstSeenTooltip(null);
                                                 setMacTooltip(null);
                                                 setPortsTooltip(null);
                                                 setStatusTooltip(null);
@@ -2379,6 +2416,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     title={scan.status === 'offline' ? t('networkScan.tooltips.rescanOfflineDisabled') : t('networkScan.tooltips.rescan')}
                                                     onMouseEnter={(e) => {
                                                         cancelTooltipHide();
+                                                        setFirstSeenTooltip(null);
                                                         setMacTooltip(null);
                                                         setPortsTooltip(null);
                                                         setStatusTooltip(null);
@@ -2408,6 +2446,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     title={t('networkScan.tooltips.banIp')}
                                                     onMouseEnter={(e) => {
                                                         cancelTooltipHide();
+                                                        setFirstSeenTooltip(null);
                                                         setMacTooltip(null);
                                                         setPortsTooltip(null);
                                                         setStatusTooltip(null);
@@ -2430,6 +2469,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     title={t('networkScan.tooltips.delete')}
                                                     onMouseEnter={(e) => {
                                                         cancelTooltipHide();
+                                                        setFirstSeenTooltip(null);
                                                         setMacTooltip(null);
                                                         setPortsTooltip(null);
                                                         setStatusTooltip(null);
@@ -2456,9 +2496,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 </div>
             </Card>
 
-            {/* Hover tooltip MAC - positionné dans la fenêtre */}
+            {/* Hover tooltips tableau - au-dessus/en dessous de la ligne, horizontalement dans le tableau */}
             {macTooltip && (() => {
-                const pos = getTooltipPosition(macTooltip.rect, TOOLTIP_MAC_W, TOOLTIP_MAC_H);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(macTooltip.rect, TOOLTIP_MAC_W, TOOLTIP_MAC_H, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(340px,calc(100vw-32px))]"
@@ -2472,9 +2513,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Status - même style que MAC */}
             {statusTooltip && (() => {
-                const pos = getTooltipPosition(statusTooltip.rect, 260, 72);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(statusTooltip.rect, 260, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2488,9 +2529,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Latency - même style que MAC */}
             {latencyTooltip && (() => {
-                const pos = getTooltipPosition(latencyTooltip.rect, 280, 72);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(latencyTooltip.rect, 280, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2504,9 +2545,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Hostname - même style que MAC */}
             {hostnameTooltip && (() => {
-                const pos = getTooltipPosition(hostnameTooltip.rect, 280, 72);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(hostnameTooltip.rect, 280, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2520,9 +2561,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Vendor - même style que MAC */}
             {vendorTooltip && (() => {
-                const pos = getTooltipPosition(vendorTooltip.rect, 280, 72);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(vendorTooltip.rect, 280, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2536,9 +2577,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Actions - même style que MAC (un tip par bouton) */}
             {actionsTooltip && (() => {
-                const pos = getTooltipPosition(actionsTooltip.rect, 280, 88);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(actionsTooltip.rect, 280, 88, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2552,25 +2593,28 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip Monitoring - même style que MAC */}
             {monitoringTooltip && (() => {
-                const pos = getTooltipPosition(monitoringTooltip.rect, 320, 120);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(monitoringTooltip.rect, 260, 72, tr ? { preferAbove: true, offsetX: 140, offsetY: 24, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 140, offsetY: 24 });
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-3 px-4"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{monitoringTooltip.label}</div>
-                        <div className="text-sm text-gray-100 whitespace-pre-line">{monitoringTooltip.text}</div>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">{monitoringTooltip.label}</div>
+                        <div className="text-sm text-gray-100">{monitoringTooltip.text}</div>
+                        {monitoringTooltip.linkText && (
+                            <div className="text-sm text-cyan-400 mt-1 font-medium">{monitoringTooltip.linkText}</div>
+                        )}
                     </div>
                 );
             })()}
 
-            {/* Hover tooltip icône Scatter - renvoi vers tableau Latency scatter */}
             {scatterIconTooltip && (() => {
-                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2583,9 +2627,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip IP - clic pour en savoir plus */}
             {ipTooltip && (() => {
-                const pos = getTooltipPosition(ipTooltip.rect, 280, 88);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(ipTooltip.rect, 280, 88, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
@@ -2599,24 +2643,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 );
             })()}
 
-            {/* Hover tooltip First detection - date/heure complète colorée */}
             {firstSeenTooltip && (() => {
-                const pos = getTooltipPosition(firstSeenTooltip.rect, 220, 44);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const pos = getTooltipPosition(firstSeenTooltip.rect, 260, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-lg border border-cyan-500/40 bg-[#0d1f1f] shadow-xl py-2 px-3"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
-                        <span className="text-sm font-medium text-cyan-300">{firstSeenTooltip.fullDate}</span>
+                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{t('networkScan.table.headers.firstDetection')}</div>
+                        <div className="text-sm text-gray-100">{firstSeenTooltip.fullDate}</div>
                     </div>
                 );
             })()}
 
-            {/* Hover tooltip Ports - positionné dans la fenêtre, ports par catégorie / colonnes */}
             {portsTooltip && (() => {
-                const pos = getTooltipPosition(portsTooltip.rect, TOOLTIP_PORTS_W, TOOLTIP_PORTS_H);
+                const tr = tableContainerRef.current?.getBoundingClientRect();
+                const portsMaxH = typeof window !== 'undefined' ? Math.min(TOOLTIP_PORTS_H, Math.floor(window.innerHeight * 0.7)) : TOOLTIP_PORTS_H;
+                const pos = getTooltipPosition(portsTooltip.rect, TOOLTIP_PORTS_W, portsMaxH, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 const sorted = [...portsTooltip.openPorts].sort((a, b) => a.port - b.port);
                 const byCategory = sorted.reduce<Record<string, { port: number; protocol?: string }[]>>((acc, p) => {
                     const cat = getPortCategory(p.port);
@@ -2628,8 +2674,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(420px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(420px,calc(100vw-32px))] overflow-y-auto"
+                        style={{ left: pos.left, top: pos.top, maxHeight: portsMaxH }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
