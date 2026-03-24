@@ -1,52 +1,52 @@
-feat: Version 0.7.15 - Amélioration détection vendor Plugin Scanner
+feat: Version 0.7.17 - Validation build CI et optimisation bundles
 
-## Plugin Scanner — Fiabilisation détection MAC & vendor
+## Vérification des mises à jour — Validation build GitHub CI
 
-### Fix : Ordre méthodes ARP
-- Table ARP `/host/proc/net/arp` consultée EN PREMIER (instantané, fiable en
-  Docker bridge après ping) au lieu de `ip neigh get` (timeout 3s, inutile en
-  bridge Docker car container sur subnet différent)
-- Nouvel ordre : ARP table → arping → ip neigh → arp-scan → arp -n
+### Ajout : `isBuildValidated()` dans `updateCheckService`
+- Nouvelle fonction qui interroge l'API GitHub Check Runs
+  (`/repos/erreur32/MynetworK/commits/{sha}/check-runs`) avant de
+  signaler une version comme disponible
+- Une version n'est proposée que si son commit associé a **au moins un
+  check run complété avec `conclusion: "success"` et aucun
+  `conclusion: "failure"` ou `"cancelled"`**
+- Si aucun check run n'existe pour le tag → version ignorée (build non
+  validé)
+- En cas d'erreur réseau ou rate limit GitHub API → fallback permissif
+  (la version n'est pas bloquée) pour éviter de casser la détection
+  en cas d'indisponibilité de l'API
 
-### Ajout : arping
-- `arping` ajouté au Dockerfile (Alpine : `apk add arping`)
-- Nouvelle Method 2 dans getMacAddress() : envoie requête ARP directe L2
-- Fiable en natif et `network_mode: host`, échoue silencieusement en bridge
-  Docker (comportement attendu — pas d'erreur)
+### Comportement de l'itération des tags
+- On itère les tags du plus récent au plus ancien
+- Le **premier tag dont le build est validé** est retenu comme
+  `latestVersion`
+- Les tags ignorés sont loggés : `Skipping 0.7.x — build not validated
+  for abc1234`
+- La version retenue est loggée : `Latest validated version: 0.7.x
+  (build OK for abc1234)`
 
-### Ajout : Fallback vendor par hostname
-- Nouvelle méthode privée `getVendorFromHostname()` avec 60+ patterns :
-  · Boxes FR : Freebox (Iliad), Orange Livebox, Bouygues Bbox, SFR
-  · Apple (iPhone, iPad, MacBook, iMac, Apple TV)
-  · Google (Android, Pixel, Chromecast, Nest, Google Home)
-  · Amazon (Echo, Ring, Fire TV, Kindle)
-  · Samsung, Ubiquiti/UniFi, Cisco, TP-Link, ASUS, Netgear, D-Link, Linksys
-  · NAS : Synology, QNAP, TrueNAS
-  · Imprimantes : HP, Epson, Canon, Brother, Xerox
-  · Consoles : PlayStation, Xbox, Nintendo
-  · IoT : Shelly, Tasmota, ESP8266/ESP32, IKEA Tradfri, Home Assistant
-  · Serveurs/SBC : Raspberry Pi, Proxmox, Dell, Lenovo
-  · Huawei, Xiaomi, MikroTik, OpenWrt, pfSense/OPNsense
-- Respect strict de la priorité plugin : s'active UNIQUEMENT si `scanner`
-  figure dans `vendorPriority` et seulement quand vendor est vide après tous
-  les lookups OUI/MAC/Freebox/UniFi
+## Build / Bundle — Optimisation découpage Vite/Rollup
 
-### Documentation
-- `docker-compose.yml` : commentaire `network_mode: host` (option pour
-  activer détection MAC maximale via arping sur LAN physique)
+### Amélioration : `manualChunks` dans `vite.config.ts`
+- Nouveau chunk **`vendor-markdown`** : isole `react-markdown`,
+  `remark-gfm` et toutes leurs dépendances transitives (`unified`,
+  `mdast`, `hast`, `micromark`, `vfile`) — paquet lourd qui gonflait
+  le chunk `vendor` générique
+- Nouveau chunk **`vendor-i18n`** : isole `i18next`, `react-i18next`
+  et `i18next-browser-languagedetector`
+- Chunk **`vendor-charts`** étendu : inclut désormais les sous-paquets
+  `d3-*` (dépendances transitives de Recharts) qui tombaient
+  auparavant dans `vendor`
+- Exclusion React corrigée : filtre `/react/` et `/react-dom/` sur le
+  chemin complet au lieu d'un simple substring, ce qui évitait
+  d'exclure à tort `react-markdown` et `react-i18next` du découpage
 
-### UI : Colonne Status — dernier vu pour offline
-- `formatLastSeenCompact()` : format adaptatif ultra-court (< 1m / 5m / 3h /
-  2d / 27/03 / 2025) basé sur l'âge de `scan.lastSeen`
-- Offline : icône `XCircle` 14px + date compacte `10px / opacity-60` inline
-- Online / Unknown : icône seule (inchangé)
-- Colonne élargie w-16 → w-20 pour loger la date
-- Tooltip au survol inchangé (affiche la date complète)
+### Résultat attendu
+- 6 chunks vendor distincts : `vendor`, `vendor-charts`,
+  `vendor-icons`, `vendor-state`, `vendor-markdown`, `vendor-i18n`
+- Élimination de l'avertissement "chunks larger than 600 kB" au build
 
-### Contexte
-- DB vendor Wireshark : 38 625 entrées depuis oui.txt (inchangé)
-- Subnet auto-detect : filtre déjà 172.17-31.x.x (Docker), préfère
-  192.168.x.x → comportement inchangé, correct
-- Fichiers modifiés : Dockerfile, docker-compose.yml,
-  server/services/networkScanService.ts, src/pages/NetworkScanPage.tsx,
-  package.json, CHANGELOG.md
+### Fichiers modifiés
+- `server/services/updateCheckService.ts`
+- `vite.config.ts`
+- `package.json` (version bump 0.7.16 → 0.7.17)
+- `CHANGELOG.md`

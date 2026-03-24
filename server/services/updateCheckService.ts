@@ -42,6 +42,35 @@ function getCurrentVersion(): string {
 }
 
 /**
+ * Check if the GitHub build (CI check runs) for a given commit SHA is validated (all completed runs passed).
+ * Returns true if at least one check run completed successfully and none failed.
+ */
+async function isBuildValidated(sha: string, headers: Record<string, string>): Promise<boolean> {
+  try {
+    const url = `https://api.github.com/repos/erreur32/MynetworK/commits/${sha}/check-runs`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      // If we can't check (e.g. no token, rate limit), fall back to allowing the version
+      logger.warn('Updates', `Cannot verify build status for ${sha}: ${response.status}`);
+      return true;
+    }
+    const data = await response.json() as { total_count: number; check_runs: Array<{ status: string; conclusion: string | null; name: string }> };
+    if (data.total_count === 0) {
+      // No check runs → build not validated
+      logger.warn('Updates', `No CI check runs found for commit ${sha.slice(0, 7)} — skipping`);
+      return false;
+    }
+    const completed = data.check_runs.filter(r => r.status === 'completed');
+    const hasFailed = completed.some(r => r.conclusion === 'failure' || r.conclusion === 'cancelled');
+    const hasSuccess = completed.some(r => r.conclusion === 'success');
+    return hasSuccess && !hasFailed;
+  } catch (e) {
+    logger.warn('Updates', `Build validation check failed: ${e instanceof Error ? e.message : String(e)}`);
+    return true; // network error → don't block the update check
+  }
+}
+
+/**
  * Perform the actual check (fetch from GitHub/registry). Used by GET /check and scheduler.
  */
 export async function performUpdateCheck(): Promise<UpdateCheckResult> {
@@ -86,23 +115,34 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
     try {
       const tagsResponse = await fetch('https://api.github.com/repos/erreur32/MynetworK/tags', { headers });
       if (tagsResponse.ok) {
-        const tags = await tagsResponse.json() as Array<{ name: string }>;
+        const tags = await tagsResponse.json() as Array<{ name: string; commit: { sha: string } }>;
         if (tags.length > 0) {
-          versionTags = tags
-            .map(tag => tag.name)
+          // Filter to valid version tags, preserve sha for build validation
+          const validTags = tags
             .filter(tag => {
-              const ok = /^\d+\.\d+\.\d+/.test(tag) || /^v\d+\.\d+\.\d+/.test(tag) || /^\d+\.\d+$/.test(tag) || /^v\d+\.\d+$/.test(tag);
-              const excluded = ['latest', 'main', 'dev', 'develop', 'master', 'staging', 'beta', 'alpha', 'rc'].includes(tag.toLowerCase());
+              const ok = /^\d+\.\d+\.\d+/.test(tag.name) || /^v\d+\.\d+\.\d+/.test(tag.name) || /^\d+\.\d+$/.test(tag.name) || /^v\d+\.\d+$/.test(tag.name);
+              const excluded = ['latest', 'main', 'dev', 'develop', 'master', 'staging', 'beta', 'alpha', 'rc'].includes(tag.name.toLowerCase());
               return ok && !excluded;
             })
-            .map(tag => tag.replace(/^v/, ''))
-            .filter((tag, i, self) => self.indexOf(tag) === i)
-            .sort((a, b) => compareVersions(b, a));
-          if (versionTags.length > 0) {
-            latestVersion = versionTags[0];
-            updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
-            return { enabled: true, currentVersion, latestVersion, updateAvailable };
+            .map(tag => ({ version: tag.name.replace(/^v/, ''), sha: tag.commit.sha }))
+            .filter((tag, i, self) => self.findIndex(t => t.version === tag.version) === i)
+            .sort((a, b) => compareVersions(b.version, a.version));
+
+          // Find the most recent tag whose build is validated
+          for (const tag of validTags) {
+            const validated = await isBuildValidated(tag.sha, headers);
+            if (validated) {
+              versionTags = [tag.version];
+              latestVersion = tag.version;
+              updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+              logger.info('Updates', `Latest validated version: ${latestVersion} (build OK for ${tag.sha.slice(0, 7)})`);
+              return { enabled: true, currentVersion, latestVersion, updateAvailable };
+            } else {
+              logger.info('Updates', `Skipping ${tag.version} — build not validated for ${tag.sha.slice(0, 7)}`);
+            }
           }
+          // All tags failed build check
+          lastError = 'No version with a validated build found.';
         }
       } else if (tagsResponse.status === 403) {
         const reset = tagsResponse.headers.get('x-ratelimit-reset');

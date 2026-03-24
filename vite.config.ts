@@ -165,21 +165,31 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Don't split React/React-DOM - keep them in main chunk to avoid issues with lazy loading
-          // Separate Recharts into vendor-charts chunk
-          if (id.includes('recharts')) {
-            return 'vendor-charts';
-          }
-          // Separate Lucide React icons into vendor-icons chunk
-          if (id.includes('lucide-react')) {
-            return 'vendor-icons';
-          }
-          // Separate Zustand state management into vendor-state chunk
-          if (id.includes('zustand')) {
-            return 'vendor-state';
-          }
-          // Separate other node_modules dependencies into vendor chunk (but not React)
-          if (id.includes('node_modules') && !id.includes('react') && !id.includes('react-dom')) {
+          if (id.includes('node_modules')) {
+            // Recharts + d3 dependencies
+            if (id.includes('recharts') || id.includes('/d3-')) {
+              return 'vendor-charts';
+            }
+            // Lucide icons
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            // Zustand state management
+            if (id.includes('zustand')) {
+              return 'vendor-state';
+            }
+            // Markdown rendering
+            if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('unified') || id.includes('mdast') || id.includes('hast') || id.includes('micromark') || id.includes('vfile')) {
+              return 'vendor-markdown';
+            }
+            // i18n
+            if (id.includes('i18next') || id.includes('react-i18next')) {
+              return 'vendor-i18n';
+            }
+            // Keep React/React-DOM in main chunk
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-is/')) {
+              return undefined;
+            }
             return 'vendor';
           }
         }

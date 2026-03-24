@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.17] - 2026-03-24
+
+### Added
+
+- **Vérification des mises à jour — Validation build CI** : le service de check ne signale plus une version comme disponible sans avoir vérifié que son build GitHub CI est validé ; nouvelle fonction `isBuildValidated()` qui interroge l'API GitHub Check Runs (`/commits/{sha}/check-runs`) — un tag n'est retenu que si son commit a au moins un check run `conclusion: success` et aucun `failure`/`cancelled` ; si aucun check run n'existe → version ignorée ; en cas d'erreur réseau ou rate limit → fallback permissif pour ne pas bloquer la détection
+
+### Fixed
+
+- **Build — Chunks trop volumineux (> 600 kB)** : découpage `manualChunks` Rollup revu dans `vite.config.ts` ; nouveau chunk `vendor-markdown` pour `react-markdown` + `remark-gfm` et leurs dépendances transitives (`unified`, `mdast`, `hast`, `micromark`, `vfile`) ; nouveau chunk `vendor-i18n` pour `i18next` / `react-i18next` / `i18next-browser-languagedetector` ; chunk `vendor-charts` étendu aux sous-paquets `d3-*` ; exclusion React corrigée (filtre sur chemin complet `/react/` pour éviter d'exclure `react-markdown` et `react-i18next`)
+
+---
+
 ## [0.7.16] - 2026-03-24
 
 ---

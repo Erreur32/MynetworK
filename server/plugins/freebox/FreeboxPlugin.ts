@@ -22,7 +22,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.16');
+        super('freebox', 'Freebox', '0.7.17');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
