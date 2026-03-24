@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.18] - 2026-03-24
 
+### Added
+
+- **Release notes 0.7.18**: ajout de l'entree de version dans le changelog et preparation du message de commit associe via `commit.txt`.
+
 ---
 
 ## [0.7.17] - 2026-03-24

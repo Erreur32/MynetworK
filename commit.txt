@@ -1,52 +1,11 @@
-feat: Version 0.7.17 - Validation build CI et optimisation bundles
+docs: prepare release notes for 0.7.18
 
-## Vérification des mises à jour — Validation build GitHub CI
+## Release 0.7.18
 
-### Ajout : `isBuildValidated()` dans `updateCheckService`
-- Nouvelle fonction qui interroge l'API GitHub Check Runs
-  (`/repos/erreur32/MynetworK/commits/{sha}/check-runs`) avant de
-  signaler une version comme disponible
-- Une version n'est proposée que si son commit associé a **au moins un
-  check run complété avec `conclusion: "success"` et aucun
-  `conclusion: "failure"` ou `"cancelled"`**
-- Si aucun check run n'existe pour le tag → version ignorée (build non
-  validé)
-- En cas d'erreur réseau ou rate limit GitHub API → fallback permissif
-  (la version n'est pas bloquée) pour éviter de casser la détection
-  en cas d'indisponibilité de l'API
+### Updated
+- Added the `0.7.18` section to `CHANGELOG.md` with the release date `2026-03-24`
+- Added the matching commit message for this release in `commit.txt`
 
-### Comportement de l'itération des tags
-- On itère les tags du plus récent au plus ancien
-- Le **premier tag dont le build est validé** est retenu comme
-  `latestVersion`
-- Les tags ignorés sont loggés : `Skipping 0.7.x — build not validated
-  for abc1234`
-- La version retenue est loggée : `Latest validated version: 0.7.x
-  (build OK for abc1234)`
-
-## Build / Bundle — Optimisation découpage Vite/Rollup
-
-### Amélioration : `manualChunks` dans `vite.config.ts`
-- Nouveau chunk **`vendor-markdown`** : isole `react-markdown`,
-  `remark-gfm` et toutes leurs dépendances transitives (`unified`,
-  `mdast`, `hast`, `micromark`, `vfile`) — paquet lourd qui gonflait
-  le chunk `vendor` générique
-- Nouveau chunk **`vendor-i18n`** : isole `i18next`, `react-i18next`
-  et `i18next-browser-languagedetector`
-- Chunk **`vendor-charts`** étendu : inclut désormais les sous-paquets
-  `d3-*` (dépendances transitives de Recharts) qui tombaient
-  auparavant dans `vendor`
-- Exclusion React corrigée : filtre `/react/` et `/react-dom/` sur le
-  chemin complet au lieu d'un simple substring, ce qui évitait
-  d'exclure à tort `react-markdown` et `react-i18next` du découpage
-
-### Résultat attendu
-- 6 chunks vendor distincts : `vendor`, `vendor-charts`,
-  `vendor-icons`, `vendor-state`, `vendor-markdown`, `vendor-i18n`
-- Élimination de l'avertissement "chunks larger than 600 kB" au build
-
-### Fichiers modifiés
-- `server/services/updateCheckService.ts`
-- `vite.config.ts`
-- `package.json` (version bump 0.7.16 → 0.7.17)
+### Files modified
 - `CHANGELOG.md`
+- `commit.txt`
