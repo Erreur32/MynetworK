@@ -13,6 +13,7 @@ import { Cpu, MemoryStick, CheckCircle, XCircle, Activity, Loader2, Database } f
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
+import type { NetworkStat as ChartNetworkStat } from '../../types';
 
 interface DiskInfo {
     mount: string;
@@ -26,6 +27,14 @@ interface NetworkStat {
     timestamp: number;
     download: number;
     upload: number;
+}
+
+function historyForBarChart(history: NetworkStat[]): ChartNetworkStat[] {
+    return history.map((h) => ({
+        time: String(h.timestamp),
+        download: h.download,
+        upload: h.upload
+    }));
 }
 
 interface SystemNetworkData {
@@ -315,7 +324,7 @@ export const SystemServerWidget: React.FC = () => {
                         </div>
                         <div className="flex flex-col gap-3">
                             <BarChart
-                                data={networkData.history || []}
+                                data={historyForBarChart(networkData.history || [])}
                                 dataKey="download"
                                 color="#3b82f6"
                                 title={t('system.download')}
@@ -328,7 +337,7 @@ export const SystemServerWidget: React.FC = () => {
                                 trend="down"
                             />
                             <BarChart
-                                data={networkData.history || []}
+                                data={historyForBarChart(networkData.history || [])}
                                 dataKey="upload"
                                 color="#10b981"
                                 title={t('system.upload')}

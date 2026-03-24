@@ -102,6 +102,13 @@ class MetricsCollector {
         runsTotal: 0
     };
 
+    private databaseMetrics: DatabaseMetrics = {
+        scanEntriesTotal: 0,
+        historyEntriesTotal: 0,
+        dbSizeBytes: 0,
+        oldestEntryTimestamp: 0
+    };
+
     /**
      * Record scan completion metrics
      * Called AFTER scan completes to avoid performance impact

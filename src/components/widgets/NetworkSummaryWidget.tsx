@@ -78,7 +78,7 @@ export const NetworkSummaryWidget: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await api.get<{ success: boolean; result: NetworkSummaryResult }>('/api/dashboard/network-summary');
+      const res = await api.get<NetworkSummaryResult>('/api/dashboard/network-summary');
       if (res.success && res.result) {
         setData(res.result);
       } else {

@@ -185,19 +185,16 @@ export class WiresharkVendorService {
             '00:1e:58': 'D-Link Corporation',
             '00:21:91': 'D-Link Corporation',
             '00:24:01': 'D-Link Corporation',
-            '00:26:5a': 'D-Link Corporation',
             '00:1d:7e': 'Netgear',
             '00:09:5b': 'Netgear',
             '00:0f:b5': 'Netgear',
             '00:1b:2f': 'Netgear',
             '00:24:b2': 'Netgear',
             '00:1e:68': 'TP-Link Technologies Co., Ltd.',
-            '00:21:91': 'TP-Link Technologies Co., Ltd.',
             '00:23:cd': 'TP-Link Technologies Co., Ltd.',
             '00:27:19': 'TP-Link Technologies Co., Ltd.',
             // Computer manufacturers
             '00:1b:77': 'Apple, Inc.',
-            '00:1e:c2': 'Apple, Inc.',
             '00:23:12': 'Apple, Inc.',
             '00:23:df': 'Apple, Inc.',
             '00:25:00': 'Apple, Inc.',
@@ -217,8 +214,7 @@ export class WiresharkVendorService {
             '00:24:8c': 'ASUSTeK Computer Inc.',
             '00:26:18': 'ASUSTeK Computer Inc.',
             '00:1e:8c': 'ASUSTeK Computer Inc.',
-            // Electronics
-            '00:1d:7e': 'Samsung Electronics Co.,Ltd',
+            // Electronics (00:1d:7e is Netgear above)
             '00:1e:7d': 'Samsung Electronics Co.,Ltd',
             '00:23:39': 'Samsung Electronics Co.,Ltd',
             '00:23:d6': 'Samsung Electronics Co.,Ltd',
@@ -233,45 +229,16 @@ export class WiresharkVendorService {
             '00:03:ff': 'Microsoft Corporation',
             '00:50:f2': 'Microsoft Corporation',
             '00:12:5a': 'Microsoft Corporation',
-            // Chipset manufacturers
-            '00:1b:11': 'Intel Corporation',
+            // Chipset manufacturers (OUIs unique; broader vendor lists use Wireshark import)
             '00:1e:67': 'Intel Corporation',
             '00:1f:3c': 'Intel Corporation',
             '00:21:5c': 'Intel Corporation',
             '00:23:14': 'Intel Corporation',
-            '00:25:00': 'Intel Corporation',
-            '00:26:18': 'Intel Corporation',
-            '00:27:19': 'Intel Corporation',
             '00:1b:44': 'Realtek Semiconductor Corp.',
             '00:1c:25': 'Realtek Semiconductor Corp.',
-            '00:1e:68': 'Realtek Semiconductor Corp.',
             '00:21:85': 'Realtek Semiconductor Corp.',
             '00:23:8d': 'Realtek Semiconductor Corp.',
             '00:25:90': 'Realtek Semiconductor Corp.',
-            '00:1b:11': 'Broadcom Corporation',
-            '00:1c:23': 'Broadcom Corporation',
-            '00:1e:84': 'Broadcom Corporation',
-            '00:21:85': 'Broadcom Corporation',
-            '00:23:6c': 'Broadcom Corporation',
-            '00:25:90': 'Broadcom Corporation',
-            '00:1b:11': 'Qualcomm Atheros',
-            '00:1c:23': 'Qualcomm Atheros',
-            '00:1e:84': 'Qualcomm Atheros',
-            '00:21:85': 'Qualcomm Atheros',
-            '00:23:6c': 'Qualcomm Atheros',
-            '00:25:90': 'Qualcomm Atheros',
-            '00:1b:11': 'Marvell Technology Group Ltd.',
-            '00:1c:23': 'Marvell Technology Group Ltd.',
-            '00:1e:84': 'Marvell Technology Group Ltd.',
-            '00:21:85': 'Marvell Technology Group Ltd.',
-            '00:23:6c': 'Marvell Technology Group Ltd.',
-            '00:25:90': 'Marvell Technology Group Ltd.',
-            '00:1b:11': 'MediaTek Inc.',
-            '00:1c:23': 'MediaTek Inc.',
-            '00:1e:84': 'MediaTek Inc.',
-            '00:21:85': 'MediaTek Inc.',
-            '00:23:6c': 'MediaTek Inc.',
-            '00:25:90': 'MediaTek Inc.',
         };
 
         db.exec('BEGIN TRANSACTION');
@@ -451,7 +418,7 @@ export class WiresharkVendorService {
                             if (device.mac && (device.type || device.vendor_name)) {
                                 const mac = device.mac.toLowerCase().trim();
                                 const oui = mac.substring(0, 8).replace(/[:-]/g, ':');
-                                const vendor = (device.type || device.vendor_name || '').trim();
+                                const vendor = String(device.type ?? device.vendor_name ?? '').trim();
                                 if (vendor && vendor !== 'unknown' && /^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$/i.test(oui)) {
                                     vendors.set(oui, vendor);
                                 }
@@ -476,7 +443,9 @@ export class WiresharkVendorService {
                             if (device.mac && (device.vendor || device.vendor_name || device.type)) {
                                 const mac = device.mac.toLowerCase().trim();
                                 const oui = mac.substring(0, 8).replace(/[:-]/g, ':');
-                                const vendor = (device.vendor || device.vendor_name || device.type || '').trim();
+                                const vendor = String(
+                                    device.vendor ?? device.vendor_name ?? device.type ?? ''
+                                ).trim();
                                 if (vendor && vendor !== 'unknown' && /^[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$/i.test(oui)) {
                                     if (!vendors.has(oui)) {
                                         vendors.set(oui, vendor);

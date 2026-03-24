@@ -31,7 +31,8 @@ interface UnifiedAutoScanConfig {
         enabled: boolean;
         interval: number; // minutes: 15, 30, 60, 120, 360, 720, 1440
         portScanEnabled?: boolean; // run nmap on online hosts after full scan (background)
-        // scanType retiré - scan complet toujours en mode 'full'
+        /** Present when migrating legacy `network_scan_auto` JSON. */
+        scanType?: 'full' | 'quick';
     };
     refresh?: {
         enabled: boolean;

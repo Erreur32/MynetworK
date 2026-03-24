@@ -227,7 +227,7 @@ const DatabaseManagementSection: React.FC = () => {
 
   const loadDbStats = async () => {
     try {
-      const response = await api.get('/api/database/stats');
+      const response = await api.get<DatabaseStatsRow>('/api/database/stats');
       if (response.success && response.result) {
         setDbStats(response.result);
       }
@@ -238,7 +238,7 @@ const DatabaseManagementSection: React.FC = () => {
 
   const loadSizeEstimate = async () => {
     try {
-      const response = await api.get<{ success: boolean; result: { currentSizeMB: number; estimatedSizeAfterPurgeMB: number; estimatedFreedMB: number } }>('/api/network-scan/database-size-estimate');
+      const response = await api.get<SizeEstimatePayload>('/api/network-scan/database-size-estimate');
       if (response.success && response.result) {
         setSizeEstimate(response.result);
       }
@@ -249,7 +249,7 @@ const DatabaseManagementSection: React.FC = () => {
 
   const loadRetentionConfig = async () => {
     try {
-      const response = await api.get('/api/network-scan/retention-config');
+      const response = await api.get<RetentionConfigPayload>('/api/network-scan/retention-config');
       if (response.success && response.result) {
         setRetentionConfig(response.result);
         setMessage(null); // Clear any previous error
@@ -293,7 +293,7 @@ const DatabaseManagementSection: React.FC = () => {
     setIsSaving(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/retention-config', retentionConfig);
+      const response = await api.post<RetentionConfigPayload>('/api/network-scan/retention-config', retentionConfig);
       if (response.success && response.result) {
         setRetentionConfig(response.result);
         setMessage({ type: 'success', text: t('admin.database.saveSuccess') });
@@ -822,6 +822,54 @@ interface DatabaseConfig {
   wiresharkAutoUpdate?: boolean;
 }
 
+interface DatabaseStatsRow {
+  pageSize: number;
+  pageCount: number;
+  cacheSize: number;
+  synchronous: number;
+  journalMode: string;
+  walSize: number;
+  dbSize: number;
+}
+
+interface SizeEstimatePayload {
+  currentSizeMB: number;
+  estimatedSizeAfterPurgeMB: number;
+  estimatedFreedMB: number;
+}
+
+interface RetentionConfigPayload {
+  historyRetentionDays: number;
+  scanRetentionDays: number;
+  offlineRetentionDays: number;
+  latencyMeasurementsRetentionDays: number;
+  keepIpsOnPurge: boolean;
+  autoPurgeEnabled: boolean;
+  purgeSchedule: string;
+}
+
+interface WiresharkVendorStatsPayload {
+  totalVendors: number;
+  lastUpdate: string | null;
+}
+
+interface PluginPriorityPayload {
+  hostnamePriority: ('freebox' | 'unifi' | 'scanner')[];
+  vendorPriority: ('freebox' | 'unifi' | 'scanner')[];
+  overwriteExisting: { hostname: boolean; vendor: boolean };
+}
+
+interface DatabasePerformancePayload {
+  walMode: 'WAL' | 'DELETE' | 'TRUNCATE' | 'PERSIST' | 'MEMORY' | 'OFF';
+  walCheckpointInterval: number;
+  walAutoCheckpoint: boolean;
+  synchronous: 0 | 1 | 2;
+  cacheSize: number;
+  busyTimeout: number;
+  tempStore: 0 | 1 | 2;
+  optimizeForDocker: boolean;
+}
+
 interface PurgeResponse {
   deleted: number;
   retentionDays?: number;
@@ -867,7 +915,7 @@ const WiresharkVendorSection: React.FC = () => {
   const loadStats = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/network-scan/wireshark-vendor-stats');
+      const response = await api.get<WiresharkVendorStatsPayload>('/api/network-scan/wireshark-vendor-stats');
       if (response.success && response.result) {
         setStats(response.result);
         setMessage(null);
@@ -1064,7 +1112,7 @@ const PluginPrioritySection: React.FC = () => {
   const loadConfig = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/network-scan/plugin-priority-config');
+      const response = await api.get<PluginPriorityPayload>('/api/network-scan/plugin-priority-config');
       if (response.success && response.result) {
         setConfig(response.result);
         setMessage(null);
@@ -1083,7 +1131,7 @@ const PluginPrioritySection: React.FC = () => {
     setIsSaving(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/network-scan/plugin-priority-config', config);
+      const response = await api.post<PluginPriorityPayload>('/api/network-scan/plugin-priority-config', config);
       if (response.success) {
         setMessage({ type: 'success', text: 'Configuration sauvegardée avec succès' });
         setTimeout(() => setMessage(null), 3000);
@@ -1310,7 +1358,7 @@ const DatabasePerformanceSection: React.FC = () => {
   const loadDbConfig = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get('/api/database/config');
+      const response = await api.get<DatabasePerformancePayload>('/api/database/config');
       if (response.success && response.result) {
         setDbConfig(response.result);
       } else {
@@ -1328,7 +1376,7 @@ const DatabasePerformanceSection: React.FC = () => {
     setIsSaving(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/database/config', dbConfig);
+      const response = await api.post<DatabasePerformancePayload>('/api/database/config', dbConfig);
       if (response.success && response.result) {
         setDbConfig(response.result);
         setMessage({ type: 'success', text: t('admin.database.perfSaveSuccess') });
@@ -1707,7 +1755,8 @@ const AppLogsSection: React.FC = () => {
           <div className="flex items-center gap-2 text-yellow-400 text-sm">
             <AlertCircle size={16} />
             <span>
-              <strong>{t('admin.debug.attention')}</strong> {t('admin.debug.warningManyLogs', { count: filteredLogs.length.toLocaleString() })}
+              <strong>{t('admin.debug.attention')}</strong>{' '}
+              {t('admin.debug.warningManyLogs', { count: filteredLogs.length })}
             </span>
           </div>
         </div>
@@ -3162,20 +3211,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
   // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
   const storedAdminTabRaw = sessionStorage.getItem('adminTab') as string | null;
-  const storedAdminTab = (storedAdminTabRaw === 'logs' ? 'security' : storedAdminTabRaw) as AdminTab | null;
-  const initialTab = (initialAdminTab === 'logs' ? 'security' : initialAdminTab) as AdminTab;
+  const storedAdminTab = (
+    storedAdminTabRaw === 'logs' ? 'security' : storedAdminTabRaw === 'users' ? 'general' : storedAdminTabRaw
+  ) as AdminTab | null;
+  const initialTab = (
+    initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab
+  ) as AdminTab;
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(storedAdminTab || initialTab);
 
   // Update activeAdminTab when initialAdminTab changes (e.g., from navigation)
   // Also check sessionStorage on mount (legacy 'logs' tab is now inside Security)
   useEffect(() => {
     const tabFromStorageRaw = sessionStorage.getItem('adminTab') as string | null;
-    const tabFromStorage = (tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw) as AdminTab | null;
+    const tabFromStorage = (
+      tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw === 'users' ? 'general' : tabFromStorageRaw
+    ) as AdminTab | null;
     if (tabFromStorage) {
       setActiveAdminTab(tabFromStorage);
       sessionStorage.removeItem('adminTab'); // Clear after reading
     } else if (initialAdminTab && initialAdminTab !== 'general') {
-      setActiveAdminTab(initialAdminTab === 'logs' ? 'security' : initialAdminTab);
+      setActiveAdminTab(
+        initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab
+      );
     }
     // Clean URL hash if present
     if (window.location.hash === '#admin') {
@@ -3267,7 +3324,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   useEffect(() => {
     if (mode === 'freebox') {
       setLoadingToken(true);
-      api.get<{ success: boolean; result?: { appToken: string | null; isRegistered: boolean } }>('/api/auth/token')
+      api.get<{ appToken: string | null; isRegistered: boolean }>('/api/auth/token')
         .then((response) => {
           if (response.success && response.result && 'appToken' in response.result) {
             setFreeboxToken(response.result.appToken || null);

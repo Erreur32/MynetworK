@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.20] - 2026-03-24
+
+### Fixed
+
+- **TypeScript (`tsc --noEmit`)** : alignement des génériques `api.get` / `api.post` sur le type du **payload** `result` (et non l’enveloppe `{ success, result }`) — widgets résumé réseau, `updateStore`, section admin base de données et appels associés.
+- **Serveur** : `NetworkScanService.isDockerIp` / `isIpInRange` exposés pour les routes ; `UnifiedAutoScanConfig.fullScan.scanType` optionnel (migration anciennes configs) ; `metricsCollector` : état `databaseMetrics` initialisé ; `NetworkScanRepository.getDatabaseStats` : compteur `offlineScans` ; purge DB : utilisation de `scansCount` / `historyCount` / `offlineScans` ; `wiresharkVendorService` : suppression des clés OUI dupliquées dans le jeu par défaut, normalisation `String()` pour champs `unknown` avant `.trim()`.
+- **UI** : `AreaChart` sans `isAnimationActive` (animation sur les `Area`) ; `MultiSourceWidget` : `onPluginClick(plugin.id)` ; `SystemNetworkWidget` / `SystemServerWidget` : historique mappé vers `NetworkStat` (`time` depuis `timestamp`) pour `BarChart` ; `PhonePage` : signatures `TFunction` (i18next) ; `TvPage` : `useTranslation` dans `ProgramTooltip` / `EpgProgramCard`, `RecordingFormModal` avec `number` de chaîne optionnel ; `SettingsPage` : typage des réponses API (stats DB, rétention, estimate, vendors Wireshark, priorités plugins, perf SQLite), normalisation onglet admin `users` → `general`, interpolation `admin.debug.warningManyLogs` avec `count` numérique ; `Button` : prop `title` ; indicateur refresh plugins en `aria-label`.
+
+---
 
 ## [0.7.19] - 2026-03-24
 

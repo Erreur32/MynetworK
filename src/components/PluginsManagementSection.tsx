@@ -152,7 +152,11 @@ export const PluginsManagementSection: React.FC = () => {
                 {/* Discreet refresh indicator */}
                 {isRefreshing && (
                     <div className="absolute top-4 right-4 z-10">
-                        <RefreshCw size={14} className="text-gray-500 animate-spin" title={t('admin.plugins.refreshing')} />
+                        <RefreshCw
+                            size={14}
+                            className="text-gray-500 animate-spin"
+                            aria-label={t('admin.plugins.refreshing')}
+                        />
                     </div>
                 )}
                 {/* Freebox Permission Warning */}
@@ -476,10 +480,7 @@ export const PluginsManagementSection: React.FC = () => {
 
             {/* Freebox Login Modal */}
             {freeboxLoginModalOpen && (
-                <LoginModal
-                    isOpen={freeboxLoginModalOpen}
-                    onClose={() => setFreeboxLoginModalOpen(false)}
-                />
+                <LoginModal isOpen={freeboxLoginModalOpen} />
             )}
 
             {/* Network Scan Config Modal */}

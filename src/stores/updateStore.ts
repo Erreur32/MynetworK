@@ -44,7 +44,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   checkForUpdates: async () => {
     set({ isLoading: true });
     try {
-      const response = await api.get<{ success: boolean; result?: UpdateInfo }>('/api/updates/check');
+      const response = await api.get<UpdateInfo>('/api/updates/check');
       if (response.success && response.result) {
         const result = response.result;
         set({
@@ -64,7 +64,7 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   checkForUpdatesForce: async (): Promise<UpdateInfo | null> => {
     set({ isLoading: true });
     try {
-      const response = await api.get<{ success: boolean; result?: UpdateInfo }>('/api/updates/check?force=1');
+      const response = await api.get<UpdateInfo>('/api/updates/check?force=1');
       if (response.success && response.result) {
         const result = response.result;
         set({

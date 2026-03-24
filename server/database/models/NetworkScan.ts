@@ -710,6 +710,7 @@ export class NetworkScanRepository {
     static getDatabaseStats(): {
         scansCount: number;
         historyCount: number;
+        offlineScans: number;
         oldestScan: Date | null;
         oldestHistory: Date | null;
         totalSize: number; // Approximate size in bytes
@@ -723,6 +724,11 @@ export class NetworkScanRepository {
             
             const historyCountStmt = db.prepare('SELECT COUNT(*) as count FROM network_scan_history');
             const historyCount = (historyCountStmt.get() as { count: number }).count;
+
+            const offlineScansStmt = db.prepare(
+                "SELECT COUNT(*) as count FROM network_scans WHERE status = 'offline'"
+            );
+            const offlineScans = (offlineScansStmt.get() as { count: number }).count;
             
             // Get oldest entries
             const oldestScanStmt = db.prepare('SELECT MIN(first_seen) as oldest FROM network_scans');
@@ -739,6 +745,7 @@ export class NetworkScanRepository {
             return {
                 scansCount,
                 historyCount,
+                offlineScans,
                 oldestScan,
                 oldestHistory,
                 totalSize

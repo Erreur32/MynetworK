@@ -11,11 +11,20 @@ import { Activity, RefreshCw } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
+import type { NetworkStat as ChartNetworkStat } from '../../types';
 
 interface NetworkStat {
     timestamp: number;
     download: number;
     upload: number;
+}
+
+function historyForBarChart(history: NetworkStat[]): ChartNetworkStat[] {
+    return history.map((h) => ({
+        time: String(h.timestamp),
+        download: h.download,
+        upload: h.upload
+    }));
 }
 
 interface SystemNetworkData {
@@ -123,7 +132,7 @@ export const SystemNetworkWidget: React.FC = () => {
         : '0 kb/s';
 
     // Convert history to format expected by BarChart
-    const history = networkData.history || [];
+    const history = historyForBarChart(networkData.history || []);
 
     return (
         <Card

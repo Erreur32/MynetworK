@@ -158,7 +158,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                 className={`rounded border border-gray-800 bg-[#111111] px-3 py-2 text-xs flex flex-col gap-1.5 ${
                                                     onPluginClick ? 'cursor-pointer' : ''
                                                 }`}
-                                                onClick={() => onPluginClick?.()}
+                                                onClick={() => onPluginClick?.(plugin.id)}
                                                 title={onPluginClick ? `${t('dashboard.pluginsState.goToAdmin')} ${plugin.name}` : undefined}
                                     >
                                         {/* Header: plugin name, version and status */}

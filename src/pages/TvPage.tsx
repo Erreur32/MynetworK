@@ -263,6 +263,7 @@ const ProgramTooltip: React.FC<{
     visible: boolean;
     position: { x: number; y: number };
 }> = ({program, visible, position}) => {
+    const { t } = useTranslation();
     if (!visible) return null;
 
     const startTime = new Date(program.date * 1000);
@@ -896,6 +897,7 @@ const EpgProgramCard: React.FC<{
     onRecord: (program: EpgEntry) => void;
     freeboxUrl: string;
 }> = ({program, onRecord, freeboxUrl}) => {
+    const { t } = useTranslation();
     const now = Math.floor(Date.now() / 1000);
     const endTime = program.date + program.duration;
     const isLive = now >= program.date && now < endTime;
@@ -1096,7 +1098,7 @@ const RecordingFormModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
     onSave: (data: Partial<PvrProgrammed>) => Promise<boolean>;
-    channels: { uuid: string; name: string; number: number }[];
+    channels: { uuid: string; name: string; number?: number }[];
     prefillProgram?: EpgEntry | null;
 }> = ({isOpen, onClose, onSave, channels, prefillProgram}) => {
     const { t } = useTranslation();

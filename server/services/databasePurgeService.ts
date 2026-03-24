@@ -402,8 +402,8 @@ export function estimateDatabaseSize(): {
         // Count entries that would be deleted (rough estimation)
         // We'll use a simpler approach: estimate based on retention percentages
         const stats = NetworkScanRepository.getDatabaseStats();
-        const totalScans = stats.totalScans || 0;
-        const totalHistory = stats.totalHistory || 0;
+        const totalScans = stats.scansCount || 0;
+        const totalHistory = stats.historyCount || 0;
         
         // Estimate entries to be deleted
         let estimatedDeletedEntries = 0;
@@ -419,7 +419,7 @@ export function estimateDatabaseSize(): {
                 estimatedDeletedEntries += Math.floor(totalScans * 0.1); // Rough estimate: 10% older than retention
             }
             // Offline entries
-            const offlineScans = stats.offlineScans || 0;
+            const offlineScans = stats.offlineScans ?? 0;
             if (config.offlineRetentionDays > 0) {
                 estimatedDeletedEntries += Math.floor(offlineScans * 0.5); // Rough estimate: 50% older than retention
             }

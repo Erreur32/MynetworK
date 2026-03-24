@@ -2848,7 +2848,8 @@ export class NetworkScanService {
      * - In this application, we also know that 10.10.x.x is used by Docker on some hosts.
      * - We explicitly skip these ranges so that the scanner focuses on the real LAN.
      */
-    private isDockerIp(ip: string): boolean {
+    /** Exposed for routes that filter history (same rules as scan). */
+    isDockerIp(ip: string): boolean {
         if (!ip || !this.isValidIp(ip)) {
             return false;
         }
@@ -2904,7 +2905,8 @@ export class NetworkScanService {
      * - For invalid inputs, it returns false instead of throwing.
      * - It only supports IPv4 addresses in dotted notation.
      */
-    private isIpInRange(ip: string, range: string): boolean {
+    /** Exposed for API filtering by configured LAN range. */
+    isIpInRange(ip: string, range: string): boolean {
         if (!this.isValidIp(ip)) {
             return false;
         }

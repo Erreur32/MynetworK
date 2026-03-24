@@ -20,9 +20,10 @@ import { usePhoneStore } from '../stores';
 import { useAuthStore } from '../stores/authStore';
 import { PermissionBanner } from '../components/ui/PermissionBanner';
 import type { CallEntry, Contact } from '../types/api';
+import type { TFunction } from 'i18next';
 
 // Format timestamp to relative time (t from useTranslation)
-const formatRelativeTime = (t: (k: string, o?: object) => string, timestamp: number): string => {
+const formatRelativeTime = (t: TFunction, timestamp: number): string => {
   const now = Date.now() / 1000;
   const diff = now - timestamp;
 
@@ -71,7 +72,7 @@ const getCallIcon = (type: CallEntry['type']) => {
 };
 
 // Get call type label (t from useTranslation)
-const getCallTypeLabel = (t: (k: string) => string, type: CallEntry['type']): string => {
+const getCallTypeLabel = (t: TFunction, type: CallEntry['type']): string => {
   switch (type) {
     case 'incoming':
     case 'accepted':
