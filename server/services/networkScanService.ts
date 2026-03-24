@@ -161,6 +161,13 @@ export class NetworkScanService {
 
         this.scanStopRequested = false;
         const startTime = Date.now();
+
+        if (!this.isScanRangeAuthorized(range.trim())) {
+            throw new Error(
+                'Scan not allowed: use only a subnet where this server has a LAN address, or the range saved in network scan settings (Admin). ' +
+                    'The 10.10.x.x space and similar overlays are blocked unless that range is explicitly configured.'
+            );
+        }
         
         // Parse IP range to get list of IPs to scan
         let ipsToScan = this.parseIpRange(range);
@@ -193,7 +200,10 @@ export class NetworkScanService {
         });
         
         if (ipsToScan.length === 0) {
-            throw new Error('Invalid IP range format. Use CIDR (192.168.1.0/24) or range (192.168.1.1-254)');
+            throw new Error(
+                'No IP addresses to scan: range is invalid, empty, or every address was excluded (Docker bridge 172.17–31.x / blacklist). ' +
+                    'Set a valid range in network scan settings (e.g. CIDR 192.168.1.0/24 or 192.168.1.1-254).'
+            );
         }
 
         logger.info('NetworkScanService', `Starting scan of ${ipsToScan.length} IPs (type: ${scanType})`);
@@ -1094,6 +1104,207 @@ export class NetworkScanService {
     }
 
     /**
+     * Non-loopback IPv4 /24 subnets derived from this host's interfaces (real LAN candidates).
+     * Excludes Docker bridges (172.17–31), virtual iface names, and 10.10.x.x (overlay — must be set in Admin options to scan).
+     */
+    private collectEligibleLanSlash24s(): Array<{ cidr: string; priority: number; name: string }> {
+        const interfaces = os.networkInterfaces();
+
+        const preferredRanges: Array<{ pattern: RegExp; priority: number }> = [
+            { pattern: /^192\.168\./, priority: 1 },
+            { pattern: /^10\./, priority: 2 },
+            { pattern: /^172\.(1[6-9]|2[0-9]|3[0-1])\./, priority: 3 }
+        ];
+
+        const found: Array<{ cidr: string; priority: number; name: string }> = [];
+
+        for (const name of Object.keys(interfaces)) {
+            if (
+                name.startsWith('lo') ||
+                name.startsWith('docker') ||
+                name.startsWith('veth') ||
+                name.startsWith('br-') ||
+                (name.startsWith('eth0') && name.includes('docker'))
+            ) {
+                continue;
+            }
+
+            for (const iface of interfaces[name] || []) {
+                const fam = iface.family;
+                const isV4 = fam === 'IPv4' || fam === 4;
+                if (!isV4 || iface.internal) {
+                    continue;
+                }
+
+                const ip = iface.address;
+
+                if (ip.startsWith('172.')) {
+                    const p = ip.split('.').map(Number);
+                    if (p.length === 4 && p[0] === 172 && p[1] >= 17 && p[1] <= 31) {
+                        logger.debug('NetworkScanService', `Skipping Docker network interface ${name} with IP ${ip}`);
+                        continue;
+                    }
+                }
+
+                const parts = ip.split('.').map(Number);
+                if (parts.length !== 4 || parts.some(n => Number.isNaN(n) || n < 0 || n > 255)) {
+                    continue;
+                }
+
+                if (parts[0] === 10 && parts[1] === 10) {
+                    logger.debug(
+                        'NetworkScanService',
+                        `Skipping 10.10.x.x on ${name} (${ip}) for auto LAN; configure default range in Admin if you need this subnet`
+                    );
+                    continue;
+                }
+
+                let priority = 99;
+                for (const pref of preferredRanges) {
+                    if (pref.pattern.test(ip)) {
+                        priority = pref.priority;
+                        break;
+                    }
+                }
+
+                found.push({
+                    cidr: `${parts[0]}.${parts[1]}.${parts[2]}.0/24`,
+                    priority,
+                    name
+                });
+            }
+        }
+
+        found.sort((a, b) => a.priority - b.priority);
+        return found;
+    }
+
+    /** Distinct /24 LANs present on this host (same rules as auto-detect). */
+    getMachineLanRanges(): string[] {
+        const found = this.collectEligibleLanSlash24s();
+        return [...new Set(found.map(f => f.cidr))];
+    }
+
+    /**
+     * Whether a scan range is allowed: subnet of a real host interface, or covered by network_scan_default.
+     */
+    isScanRangeAuthorized(range: string): boolean {
+        const trimmed = range.trim();
+        if (!trimmed) {
+            return false;
+        }
+
+        const cfg = this.getConfiguredRange();
+        if (cfg) {
+            const pScan = this.firstHostProbeForRange(trimmed);
+            if (pScan && this.isIpInRange(pScan, cfg)) {
+                return true;
+            }
+        }
+
+        for (const m of this.getMachineLanRanges()) {
+            const probe = this.probeHostOnLan24(m);
+            if (probe && this.isIpInRange(probe, trimmed)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolves range for scheduled scans using the same rules as the API (defaultRange + defaultAutoDetect).
+     */
+    resolveScanRangeFromAppConfig(): string | null {
+        const defaultConfigStr = AppConfigRepository.get('network_scan_default');
+        if (defaultConfigStr) {
+            try {
+                const defaultConfig = JSON.parse(defaultConfigStr) as {
+                    defaultRange?: string;
+                    defaultAutoDetect?: boolean;
+                };
+                const dr = typeof defaultConfig.defaultRange === 'string' ? defaultConfig.defaultRange.trim() : '';
+                const autoDetectOn = defaultConfig.defaultAutoDetect === true;
+
+                if (dr && !autoDetectOn) {
+                    return this.isScanRangeAuthorized(dr) ? dr : null;
+                }
+                if (dr && autoDetectOn) {
+                    const detected = this.getNetworkRange();
+                    const chosen = detected || dr;
+                    return this.isScanRangeAuthorized(chosen) ? chosen : null;
+                }
+                const detectedOnly = this.getNetworkRange();
+                return detectedOnly && this.isScanRangeAuthorized(detectedOnly) ? detectedOnly : null;
+            } catch (e: any) {
+                logger.warn('NetworkScanService', `resolveScanRangeFromAppConfig: ${e?.message || e}`);
+            }
+        }
+
+        const detected = this.getNetworkRange();
+        if (detected && this.isScanRangeAuthorized(detected)) {
+            return detected;
+        }
+        return null;
+    }
+
+    private probeHostOnLan24(slash24: string): string | null {
+        const m = slash24.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.0\/24$/);
+        if (!m) {
+            return null;
+        }
+        return `${m[1]}.${m[2]}.${m[3]}.1`;
+    }
+
+    private normalizeToSlash24(range: string): string | null {
+        const t = range.trim();
+        if (t.includes('/') && !t.includes('-')) {
+            const [network, cidrStr] = t.split('/');
+            const cidr = parseInt(cidrStr, 10);
+            if (cidr !== 24) {
+                return null;
+            }
+            const parts = network.split('.').map(Number);
+            if (parts.length !== 4 || parts.some(p => Number.isNaN(p) || p < 0 || p > 255)) {
+                return null;
+            }
+            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        }
+        if (t.includes('-')) {
+            const startIp = t.split('-')[0].trim();
+            const parts = startIp.split('.').map(Number);
+            if (parts.length !== 4 || parts.some(p => Number.isNaN(p) || p < 0 || p > 255)) {
+                return null;
+            }
+            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        }
+        if (this.isValidIp(t)) {
+            const parts = t.split('.');
+            return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+        }
+        return null;
+    }
+
+    private firstHostProbeForRange(range: string): string | null {
+        const t = range.trim();
+        const n = this.normalizeToSlash24(t);
+        if (n) {
+            return this.probeHostOnLan24(n);
+        }
+        if (t.includes('/') && !t.includes('-')) {
+            const [network, cidrStr] = t.split('/');
+            const cidr = parseInt(cidrStr, 10);
+            const parts = network.split('.').map(Number);
+            if (parts.length === 4 && !parts.some(Number.isNaN)) {
+                if (cidr === 16) {
+                    return `${parts[0]}.${parts[1]}.1.1`;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Get the local network range automatically
      * Returns the network range in CIDR notation (e.g., "192.168.1.0/24")
      * Always limits to /24 subnet which is the standard for most local networks
@@ -1102,74 +1313,12 @@ export class NetworkScanService {
      * - Prevents scanning overly large networks like /16 (65536 IPs) which would fail
      */
     getNetworkRange(): string | null {
-        const interfaces = os.networkInterfaces();
-        
-        // Priority order: prefer 192.168.x.x, then 10.x.x.x, then 172.16-31.x.x (but skip Docker networks 172.17-31.x.x)
-        const preferredRanges: Array<{ pattern: RegExp; priority: number }> = [
-            { pattern: /^192\.168\./, priority: 1 },      // Highest priority: 192.168.x.x
-            { pattern: /^10\./, priority: 2 },             // Second: 10.x.x.x
-            { pattern: /^172\.(1[6-9]|2[0-9]|3[0-1])\./, priority: 3 } // Third: 172.16-31.x.x (private range, but may be Docker)
-        ];
-        
-        const foundInterfaces: Array<{ ip: string; priority: number; name: string }> = [];
-        
-        for (const name of Object.keys(interfaces)) {
-            // Skip Docker interfaces explicitly
-            if (name.startsWith('lo') || 
-                name.startsWith('docker') || 
-                name.startsWith('veth') || 
-                name.startsWith('br-') ||
-                name.startsWith('eth0') && name.includes('docker')) {
-                continue;
-            }
-            
-            for (const iface of interfaces[name] || []) {
-                // Skip internal (loopback) and non-IPv4 addresses
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    const ip = iface.address;
-                    
-                    // Skip Docker networks (172.17.0.0/16 to 172.31.255.255)
-                    // Docker uses 172.17.0.0/16 by default, but can use other ranges
-                    // We'll prefer 192.168.x.x and 10.x.x.x over 172.x.x.x
-                    if (ip.startsWith('172.')) {
-                        const parts = ip.split('.').map(Number);
-                        // Docker typically uses 172.17-31.x.x, skip these
-                        if (parts.length === 4 && parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
-                            logger.debug('NetworkScanService', `Skipping Docker network interface ${name} with IP ${ip}`);
-                            continue;
-                        }
-                    }
-                    
-                    const parts = ip.split('.');
-                    if (parts.length === 4) {
-                        // Find priority for this IP
-                        let priority = 99; // Default low priority
-                        for (const pref of preferredRanges) {
-                            if (pref.pattern.test(ip)) {
-                                priority = pref.priority;
-                                break;
-                            }
-                        }
-                        
-                        foundInterfaces.push({
-                            ip: `${parts[0]}.${parts[1]}.${parts[2]}.0/24`,
-                            priority,
-                            name
-                        });
-                    }
-                }
-            }
+        const found = this.collectEligibleLanSlash24s();
+        if (found.length > 0) {
+            const selected = found[0];
+            logger.debug('NetworkScanService', `Auto-detected network range: ${selected.cidr} from interface ${selected.name}`);
+            return selected.cidr;
         }
-        
-        // Sort by priority (lower number = higher priority)
-        foundInterfaces.sort((a, b) => a.priority - b.priority);
-        
-        if (foundInterfaces.length > 0) {
-            const selected = foundInterfaces[0];
-            logger.debug('NetworkScanService', `Auto-detected network range: ${selected.ip} from interface ${selected.name}`);
-            return selected.ip;
-        }
-        
         return null;
     }
 
@@ -2841,12 +2990,10 @@ export class NetworkScanService {
     }
 
     /**
-     * Check if an IP belongs to a Docker network that should be ignored.
+     * Check if an IP belongs to a Docker/overlay network that should be ignored.
      *
-     * Important notes:
-     * - Docker uses 172.17.0.0/16 by default, but many setups use 172.17-31.x.x.
-     * - In this application, we also know that 10.10.x.x is used by Docker on some hosts.
-     * - We explicitly skip these ranges so that the scanner focuses on the real LAN.
+     * - 172.17–31.x.x: Docker bridges (always skipped).
+     * - 10.10.x.x: overlay unless that subnet is explicitly set in network_scan_default (Admin).
      */
     /** Exposed for routes that filter history (same rules as scan). */
     isDockerIp(ip: string): boolean {
@@ -2864,8 +3011,11 @@ export class NetworkScanService {
             return true;
         }
 
-        // 10.10.0.0/16 (user-specific Docker network where 10.10.1.x is used)
         if (parts[0] === 10 && parts[1] === 10) {
+            const cfg = this.getConfiguredRange();
+            if (cfg && this.isIpInRange(ip, cfg)) {
+                return false;
+            }
             return true;
         }
 

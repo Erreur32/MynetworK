@@ -112,6 +112,17 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
         scanRange = range;
     }
 
+    if (!networkScanService.isScanRangeAuthorized(scanRange)) {
+        return res.status(403).json({
+            success: false,
+            error: {
+                message:
+                    'This range is not allowed: scan only subnets where this server has a LAN address, or the range saved in network scan settings (10.10.x.x and similar overlays require an explicit default range).',
+                code: 'SCAN_RANGE_NOT_ALLOWED'
+            }
+        });
+    }
+
     try {
         // Pause auto scans during manual scan to avoid conflicts
         const { networkScanScheduler } = await import('../services/networkScanScheduler.js');

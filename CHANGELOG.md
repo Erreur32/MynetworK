@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.21] - 2026-03-24
+
+### Fixed
+
+- **Logs (buffer)** : sérialisation des `Error` avec `name`, `message` et `stack` dans `logBuffer` — les erreurs UniFi / plugins ne s’affichent plus comme `[{}]` dans le flux de logs.
+- **Surveillance latence** : min/max des statistiques calculés avec `reduce` au lieu de `Math.max(...)` / `Math.min(...)` sur de grands tableaux, supprimant l’erreur « Maximum call stack size exceeded » sur l’endpoint batch des stats (`LatencyMonitoring`).
+
+### Added
+
+- **Scan réseau — plages autorisées** : `isScanRangeAuthorized()` — scan limité aux sous-réseaux où le serveur a une adresse LAN détectée (hors interfaces Docker / overlay) **ou** à la plage enregistrée dans les options (`network_scan_default`) ; `10.10.x.x` non considéré comme LAN auto (configuration explicite requise) ; `resolveScanRangeFromAppConfig()` pour le planificateur (même logique que l’API : `defaultRange` + `defaultAutoDetect`) ; réponse **403** avec code `SCAN_RANGE_NOT_ALLOWED` sur `POST /scan` si la plage est refusée ; message d’erreur explicite lorsque la liste d’IPs à scanner est vide après exclusions.
+
+### Changed
+
+- **`NetworkScanService`** : collecte des /24 éligibles via `collectEligibleLanSlash24s()` ; `getMachineLanRanges()` ; `getNetworkRange()` et détection IPv4 (`family` `IPv4` ou `4`).
+- **`isDockerIp`** : `10.10.x.x` traité comme overlay (exclusion refresh / génération de liste) sauf si l’adresse est couverte par la plage configurée en Admin.
+
+---
+
 ## [0.7.20] - 2026-03-24
 
 ### Fixed

@@ -250,10 +250,12 @@ class NetworkScanSchedulerService {
 
             logger.info('NetworkScanScheduler', `Executing scheduled scan (type: ${scanType})...`);
             try {
-                // Auto-detect network range
-                const range = networkScanService.getNetworkRange();
+                const range = networkScanService.resolveScanRangeFromAppConfig();
                 if (!range) {
-                    logger.warn('NetworkScanScheduler', 'Could not auto-detect network range, skipping scan');
+                    logger.warn(
+                        'NetworkScanScheduler',
+                        'No allowed scan range (use machine LAN or the range saved in network scan settings), skipping scan'
+                    );
                     return;
                 }
 

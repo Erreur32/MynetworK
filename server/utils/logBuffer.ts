@@ -27,6 +27,14 @@ function sanitizeArgs(args: any[]): any[] {
   
   return args.map(arg => {
     try {
+      // Error: non-enumerable fields serialize to {} with JSON.stringify
+      if (arg instanceof Error) {
+        const stack =
+          typeof arg.stack === 'string' && arg.stack.length > MAX_ARG_SIZE
+            ? arg.stack.substring(0, MAX_ARG_SIZE) + '...[truncated]'
+            : arg.stack;
+        return { name: arg.name, message: arg.message, stack };
+      }
       // If argument is already a string, check its size
       if (typeof arg === 'string') {
         if (arg.length > MAX_ARG_SIZE) {

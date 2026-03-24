@@ -7,6 +7,17 @@
 import { getDatabase } from '../connection.js';
 import { logger } from '../../utils/logger.js';
 
+/** Min/max without spread — large arrays would exceed the JS call stack (Math.max(...arr)). */
+function safeNumberMax(values: number[]): number | null {
+    if (values.length === 0) return null;
+    return values.reduce((a, b) => (a > b ? a : b));
+}
+
+function safeNumberMin(values: number[]): number | null {
+    if (values.length === 0) return null;
+    return values.reduce((a, b) => (a < b ? a : b));
+}
+
 export interface LatencyMonitoring {
     id: number;
     ip: string;
@@ -227,13 +238,8 @@ export class LatencyMonitoringRepository {
             ? validLatencies1h.reduce((sum, lat) => sum + lat, 0) / validLatencies1h.length
             : null;
         
-        const max = validLatenciesAll.length > 0
-            ? Math.max(...validLatenciesAll)
-            : null;
-        
-        const min = validLatenciesAll.length > 0
-            ? Math.min(...validLatenciesAll)
-            : null;
+        const max = safeNumberMax(validLatenciesAll);
+        const min = safeNumberMin(validLatenciesAll);
         
         // Get 24h average
         const stmt24h = db.prepare(`
