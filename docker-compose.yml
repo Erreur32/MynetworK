@@ -82,15 +82,21 @@ services:
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
 
     # Network capabilities required for network scanning (Plugin Scan Réseau)
-    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
+    # NET_RAW: Required to send ICMP packets (ping) and arping (direct ARP requests)
     # NET_ADMIN: Required for some network operations and ARP table access (ip neigh)
     # These capabilities enable:
-    # - Network scanning (ping, MAC detection via ip neigh)
-    # - Vendor detection via Wireshark database
+    # - Network scanning (ping, MAC detection via ARP table + arping)
+    # - Vendor detection via Wireshark OUI database (38,000+ vendors)
     # - Hostname resolution
     cap_add:
       - NET_RAW
       - NET_ADMIN
+
+    # OPTIONAL: Use host network mode for better MAC/vendor detection
+    # In bridge mode (default), the container reads the host's ARP table via /host/proc/net/arp.
+    # In host network mode, arping can directly resolve MACs on the LAN for maximum reliability.
+    # To enable, uncomment the line below and remove the "ports" section above:
+    # network_mode: host
 
     # Health check: verify container is responding to API requests
     # Uses wget (available in Alpine base image) to check /api/health endpoint

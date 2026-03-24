@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 
 
+## [0.7.16] - 2026-03-24
+
+---
+
+## [0.7.15] - 2026-03-24
+
+### Fixed
+
+- **Plugin Scanner — Détection vendor** : réorganisation des méthodes de résolution MAC pour fiabiliser la détection en mode Docker bridge ; la table ARP (`/host/proc/net/arp`) est désormais consultée **en premier** (instantané, alimentée après chaque ping) au lieu de `ip neigh get` (timeout 3 s, inutilisable en bridge Docker)
+
+### Added
+
+- **Plugin Scanner — `arping`** : ajout d'`arping` au Dockerfile (Alpine) et comme nouvelle méthode de détection MAC (Method 2) ; envoie une requête ARP directe pour obtenir le MAC sans dépendre de la table ARP passive — fiable en mode natif et `network_mode: host`, échoue silencieusement en bridge Docker (comportement attendu)
+- **Plugin Scanner — Fallback vendor par hostname** : nouvelle méthode `getVendorFromHostname()` avec 60+ patterns reconnus (boxes FR : Freebox/Livebox/Bbox/SFR ; Apple, Google/Android, Amazon, Samsung, Ubiquiti, Cisco, TP-Link, ASUS, Netgear, D-Link, Synology, QNAP, consoles, IoT Shelly/ESP32/Tasmota, Raspberry Pi, etc.) ; s'active uniquement si `scanner` est dans `vendorPriority` et seulement quand vendor est vide après tous les lookups OUI/MAC
+- **`docker-compose.yml`** : ajout d'un commentaire documentant l'option `network_mode: host` pour activer la détection MAC maximale via `arping` sur le réseau LAN physique
+
+- **Scanner — Colonne Status** : pour les équipements **offline**, affichage compact de la date du **dernier vu** directement à côté de l'icône rouge (`XCircle 14px` + date en `10px/60%` opacity) ; format ultra-court adaptatif : `< 1m` → `5m` → `3h` → `2d` → `27/03` → `2025` ; colonne élargie de `w-16` à `w-20` ; tooltip existant inchangé (date complète au survol)
+
+### Notes
+
+- L'ordre des méthodes MAC est désormais : ARP table (passive) → arping (active L2) → ip neigh → arp-scan → arp -n
+- Le fallback hostname respecte la configuration `vendorPriority` : ne s'active que si `scanner` figure dans la liste de priorité configurée
+- DB vendor Wireshark : 38 625 entrées chargées depuis `oui.txt` (inchangé)
+
+---
+
 ## [0.7.14] - 2026-02-28
 
 ---

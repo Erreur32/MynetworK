@@ -1156,6 +1156,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return date.getFullYear().toString();
     };
 
+    /** Ultra-compact last-seen format for the status column: 5m / 3h / 2d / 27/03 */
+    const formatLastSeenCompact = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const diffMs = Date.now() - date.getTime();
+        const diffMins  = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays  = Math.floor(diffMs / 86400000);
+        if (diffMins  < 1)  return '<1m';
+        if (diffMins  < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays  < 365) return date.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
+        return date.getFullYear().toString();
+    };
+
     const formatNextExecution = (lastExecution: string | null, intervalMinutes: number): string => {
         const now = new Date();
         let nextDate: Date;
@@ -2144,7 +2158,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             })()}
                                         </td>
                                         <td
-                                            className="py-3 px-2 w-16 cursor-default"
+                                            className="py-3 px-2 w-20 cursor-default"
                                             onMouseEnter={(e) => {
                                                 cancelTooltipHide();
                                                 setFirstSeenTooltip(null);
@@ -2161,11 +2175,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             onMouseLeave={() => scheduleTooltipHide()}
                                         >
                                             {scan.status === 'online' ? (
-                                                <span><CheckCircle size={16} className="text-emerald-400 flex-shrink-0 mx-auto" /></span>
+                                                <span className="flex justify-center"><CheckCircle size={16} className="text-emerald-400 flex-shrink-0" /></span>
                                             ) : scan.status === 'offline' ? (
-                                                <span><XCircle size={16} className="text-red-400 flex-shrink-0 mx-auto" /></span>
+                                                <span className="flex items-center justify-center gap-1">
+                                                    <XCircle size={14} className="text-red-400 flex-shrink-0" />
+                                                    <span className="text-[10px] text-red-300/60 leading-none tabular-nums">{formatLastSeenCompact(scan.lastSeen)}</span>
+                                                </span>
                                             ) : (
-                                                <span><Clock size={16} className="text-gray-400 flex-shrink-0 mx-auto" /></span>
+                                                <span className="flex justify-center"><Clock size={16} className="text-gray-400 flex-shrink-0" /></span>
                                             )}
                                         </td>
                                         <td

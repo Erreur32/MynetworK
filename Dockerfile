@@ -48,7 +48,8 @@ WORKDIR /app
 # Note: libpcap/libpcap-dev removed as arp-scan is optional (fallback after ip neigh).
 #       If arp-scan is needed, it must be compiled in the build stage.
 # nmap: for port scanning (option "Scan ports after each full scan").
-RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common curl nmap
+# arping: for direct ARP-based MAC address resolution (reliable in native and host network mode).
+RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common curl nmap arping
 
 # Create data directory with correct permissions
 RUN mkdir -p /app/data && chown -R node:node /app

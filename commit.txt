@@ -1,0 +1,52 @@
+feat: Version 0.7.15 - Amélioration détection vendor Plugin Scanner
+
+## Plugin Scanner — Fiabilisation détection MAC & vendor
+
+### Fix : Ordre méthodes ARP
+- Table ARP `/host/proc/net/arp` consultée EN PREMIER (instantané, fiable en
+  Docker bridge après ping) au lieu de `ip neigh get` (timeout 3s, inutile en
+  bridge Docker car container sur subnet différent)
+- Nouvel ordre : ARP table → arping → ip neigh → arp-scan → arp -n
+
+### Ajout : arping
+- `arping` ajouté au Dockerfile (Alpine : `apk add arping`)
+- Nouvelle Method 2 dans getMacAddress() : envoie requête ARP directe L2
+- Fiable en natif et `network_mode: host`, échoue silencieusement en bridge
+  Docker (comportement attendu — pas d'erreur)
+
+### Ajout : Fallback vendor par hostname
+- Nouvelle méthode privée `getVendorFromHostname()` avec 60+ patterns :
+  · Boxes FR : Freebox (Iliad), Orange Livebox, Bouygues Bbox, SFR
+  · Apple (iPhone, iPad, MacBook, iMac, Apple TV)
+  · Google (Android, Pixel, Chromecast, Nest, Google Home)
+  · Amazon (Echo, Ring, Fire TV, Kindle)
+  · Samsung, Ubiquiti/UniFi, Cisco, TP-Link, ASUS, Netgear, D-Link, Linksys
+  · NAS : Synology, QNAP, TrueNAS
+  · Imprimantes : HP, Epson, Canon, Brother, Xerox
+  · Consoles : PlayStation, Xbox, Nintendo
+  · IoT : Shelly, Tasmota, ESP8266/ESP32, IKEA Tradfri, Home Assistant
+  · Serveurs/SBC : Raspberry Pi, Proxmox, Dell, Lenovo
+  · Huawei, Xiaomi, MikroTik, OpenWrt, pfSense/OPNsense
+- Respect strict de la priorité plugin : s'active UNIQUEMENT si `scanner`
+  figure dans `vendorPriority` et seulement quand vendor est vide après tous
+  les lookups OUI/MAC/Freebox/UniFi
+
+### Documentation
+- `docker-compose.yml` : commentaire `network_mode: host` (option pour
+  activer détection MAC maximale via arping sur LAN physique)
+
+### UI : Colonne Status — dernier vu pour offline
+- `formatLastSeenCompact()` : format adaptatif ultra-court (< 1m / 5m / 3h /
+  2d / 27/03 / 2025) basé sur l'âge de `scan.lastSeen`
+- Offline : icône `XCircle` 14px + date compacte `10px / opacity-60` inline
+- Online / Unknown : icône seule (inchangé)
+- Colonne élargie w-16 → w-20 pour loger la date
+- Tooltip au survol inchangé (affiche la date complète)
+
+### Contexte
+- DB vendor Wireshark : 38 625 entrées depuis oui.txt (inchangé)
+- Subnet auto-detect : filtre déjà 172.17-31.x.x (Docker), préfère
+  192.168.x.x → comportement inchangé, correct
+- Fichiers modifiés : Dockerfile, docker-compose.yml,
+  server/services/networkScanService.ts, src/pages/NetworkScanPage.tsx,
+  package.json, CHANGELOG.md

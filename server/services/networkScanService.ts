@@ -400,14 +400,34 @@ export class NetworkScanService {
                             // Hostname resolution may fail, preserve existing if available (but not if it's an IP)
                             if (!scanData.hostname && existing?.hostname) {
                                 const existingHostname = existing.hostname.trim();
-                                if (existingHostname && 
-                                    existingHostname !== ip && 
+                                if (existingHostname &&
+                                    existingHostname !== ip &&
                                     !/^\d+\.\d+\.\d+\.\d+$/.test(existingHostname) &&
                                     existingHostname.length > 0 &&
                                     existingHostname.length < 64) {
                                     scanData.hostname = existing.hostname;
                                     scanData.hostnameSource = existing.hostnameSource || 'manual';
                                     logger.debug('NetworkScanService', `[${ip}] Preserving existing hostname after error: ${existingHostname} (source: ${scanData.hostnameSource})`);
+                                }
+                            }
+                        }
+
+                        // Hostname-based vendor fallback: if vendor still empty after all plugin lookups,
+                        // try to infer vendor from hostname patterns (only when 'scanner' is in priority)
+                        const currentVendor = scanData.vendor?.trim() || '';
+                        const isVendorEmpty = !currentVendor || currentVendor === '--' || currentVendor.toLowerCase() === 'unknown';
+                        if (isVendorEmpty) {
+                            const hostnameForVendor = scanData.hostname || existing?.hostname?.trim() || '';
+                            if (hostnameForVendor) {
+                                const priorityCfg = PluginPriorityConfigService.getConfig();
+                                if (priorityCfg.vendorPriority.includes('scanner')) {
+                                    const hostnameVendor = this.getVendorFromHostname(hostnameForVendor);
+                                    if (hostnameVendor) {
+                                        scanData.vendor = hostnameVendor;
+                                        scanData.vendorSource = 'scanner';
+                                        vendorsFound++;
+                                        logger.info('NetworkScanService', `[${ip}] ✓ Vendor from hostname "${hostnameForVendor}": ${hostnameVendor} (source: scanner/hostname)`);
+                                    }
                                 }
                             }
                         }
@@ -1506,55 +1526,16 @@ export class NetworkScanService {
                     logger.debug('NetworkScanService', `[MAC] Windows arp failed for ${ip}: ${error.message || error}`);
                 }
             } else {
-                // Linux/Mac: Try multiple methods for better detection (like WatchYourLAN)
-                
-                // Method 1: Try ip neigh get (forces ARP request if not in table)
-                // This is more reliable than 'show' as it will query if needed
-                // In Docker, we need to ensure we can access the host's network namespace
-                try {
-                    // First try to force an ARP request
-                    logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip}...`);
-                    const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: 3000 });
-                    logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${stdout.substring(0, 100)}`);
-                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                    if (match) {
-                        const mac = match[0].toLowerCase().replace(/-/g, ':');
-                        // Filter out invalid MACs (00:00:00:00:00:00)
-                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
-                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
-                            return mac;
-                        } else {
-                            logger.debug('NetworkScanService', `[MAC] Invalid MAC found for ${ip}: ${mac}`);
-                        }
-                    } else {
-                        logger.debug('NetworkScanService', `[MAC] No MAC pattern found in ip neigh output for ${ip}`);
-                    }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] ip neigh get/show failed for ${ip}: ${error.message || error}`);
-                    // Try alternative: ip neigh show (read-only, faster)
-                    try {
-                        logger.debug('NetworkScanService', `[MAC] Trying ip neigh show (fallback) for ${ip}...`);
-                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: 1000 });
-                        const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                        if (match) {
-                            const mac = match[0].toLowerCase().replace(/-/g, ':');
-                            if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
-                                logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh show`);
-                                return mac;
-                            }
-                        }
-                    } catch (error2: any) {
-                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
-                    }
-                }
-                
-                // Method 2: Try reading /proc/net/arp (Linux only)
-                // In Docker, try /host/proc/net/arp first (mounted from host), then container /proc/net/arp
+                // Linux/Mac: Try multiple methods for MAC detection
+
+                // Method 1: Read ARP table (passive, fast, most reliable in Docker bridge mode)
+                // In Docker with /host/proc mounted, reads HOST's ARP table (populated after container pings)
+                // This is tried first as it's instant and works reliably after a successful ping
                 const hostPathPrefix = getHostPathPrefix();
-                const arpPaths = hostPathPrefix 
-                    ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']  // Try host first, then container
-                    : ['/proc/net/arp'];  // Only container path
-                
+                const arpPaths = hostPathPrefix
+                    ? [`${hostPathPrefix}/proc/net/arp`, '/proc/net/arp']  // Host ARP table first, then container
+                    : ['/proc/net/arp'];
+
                 for (const arpPath of arpPaths) {
                     try {
                         logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip}...`);
@@ -1574,18 +1555,64 @@ export class NetworkScanService {
                         }
                     } catch (error: any) {
                         logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${error.message || error}`);
-                        // Continue to next path
                     }
                 }
-                
-                // Method 3: Try arp-scan if available (like WatchYourLAN)
-                // arp-scan is more reliable for network scanning but requires root/privileges
+
+                // Method 2: arping (direct ARP request - most reliable on same L2 network)
+                // Works in native mode and Docker network_mode: host
+                // Silently fails in Docker bridge mode (different L2 subnet) - expected behavior
                 try {
-                    // Get network interface for arp-scan
+                    const networkInterface = this.getNetworkInterface();
+                    const arpingCmd = networkInterface
+                        ? `arping -c 1 -w 1 -I ${networkInterface} ${ip} 2>/dev/null`
+                        : `arping -c 1 -w 1 ${ip} 2>/dev/null`;
+                    const { stdout } = await execAsync(arpingCmd, { timeout: 2000 });
+                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                    if (match) {
+                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
+                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using arping`);
+                            return mac;
+                        }
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[MAC] arping not available or failed for ${ip}: ${error.message || error}`);
+                }
+
+                // Method 3: ip neigh (forces ARP resolution for stale/missing entries in native mode)
+                try {
+                    logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip}...`);
+                    const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: 2000 });
+                    logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${stdout.substring(0, 100)}`);
+                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                    if (match) {
+                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
+                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
+                            return mac;
+                        }
+                    }
+                } catch (error: any) {
+                    logger.debug('NetworkScanService', `[MAC] ip neigh failed for ${ip}: ${error.message || error}`);
+                    try {
+                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: 1000 });
+                        const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                        if (match) {
+                            const mac = match[0].toLowerCase().replace(/-/g, ':');
+                            if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
+                                logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh show`);
+                                return mac;
+                            }
+                        }
+                    } catch (error2: any) {
+                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
+                    }
+                }
+
+                // Method 4: arp-scan (if installed)
+                try {
                     const networkInterface = this.getNetworkInterface();
                     if (networkInterface) {
-                        // arp-scan -l -q -x (local network, quiet, exit after first match)
-                        // Note: arp-scan scans entire network, so we parse output for our IP
                         const { stdout } = await execAsync(
                             `arp-scan -l -q -x -I ${networkInterface} 2>/dev/null | grep ${ip}`,
                             { timeout: 5000 }
@@ -1596,15 +1623,14 @@ export class NetworkScanService {
                             if (mac !== '00:00:00:00:00:00') {
                                 logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
                                 return mac;
+                            }
+                        }
                     }
-                }
-            }
-        } catch (error) {
-                    // arp-scan not available or failed (may require root privileges)
+                } catch (error) {
                     logger.debug('NetworkScanService', `arp-scan not available or failed for ${ip}:`, error);
                 }
-                
-                // Method 4: Fallback to traditional arp command
+
+                // Method 5: Traditional arp command (last resort)
                 try {
                     const { stdout } = await execAsync(`arp -n ${ip}`, { timeout: 2000 });
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
@@ -1617,7 +1643,6 @@ export class NetworkScanService {
                     }
                 } catch (error: any) {
                     logger.debug('NetworkScanService', `[MAC] Traditional arp command failed for ${ip}: ${error.message || error}`);
-                    // Continue - all system methods have been tried
                 }
             }
             
@@ -2285,7 +2310,102 @@ export class NetworkScanService {
         logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found for MAC ${mac} after trying all methods`);
         return null;
     }
-    
+
+    /**
+     * Infer vendor from hostname patterns (fallback when MAC-based lookup fails)
+     * Used only when 'scanner' is in the vendor priority list
+     * @param hostname Device hostname
+     * @returns Vendor name or null if no pattern matches
+     */
+    private getVendorFromHostname(hostname: string): string | null {
+        if (!hostname) return null;
+        const h = hostname.toLowerCase().replace(/[._]/g, '-');
+
+        // French ISP boxes (most common in France)
+        if (h.includes('freebox') || h.includes('freeboxos') || h.includes('mafreebox')) return 'Freebox (Iliad)';
+        if (h.includes('livebox')) return 'Orange Livebox';
+        if (h.startsWith('bbox-') || h.includes('-bbox-') || h.endsWith('-bbox') || h === 'bbox') return 'Bouygues Bbox';
+        if (h.includes('sfrbox') || h.includes('sfr-box')) return 'SFR';
+        if (h.includes('numericable')) return 'Numericable';
+
+        // Apple
+        if (h.includes('iphone') || h.includes('ipad') || h.includes('ipod')) return 'Apple';
+        if (h.includes('macbook') || h.includes('imac') || h.includes('mac-mini') || h.includes('macmini')) return 'Apple';
+        if (h.includes('apple') || h.includes('appletv') || h.includes('apple-tv')) return 'Apple';
+
+        // Google / Android
+        if (h.includes('chromecast') || h.match(/google-?(home|nest|hub|wifi)/)) return 'Google';
+        if (h.includes('android') || h.match(/pixel-[0-9]/)) return 'Google Android';
+        if (h.includes('nest-') || h.includes('googlenest')) return 'Google Nest';
+
+        // Amazon
+        if (h.match(/amazon|firetv|fire-tv|firestick|fire-stick|kindle/)) return 'Amazon';
+        if (h.match(/echo-|echo\d|alexa-/)) return 'Amazon Echo';
+        if (h.match(/ring-|ringdoorbell/)) return 'Amazon Ring';
+
+        // Samsung
+        if (h.includes('samsung')) return 'Samsung';
+        if (h.match(/^(sm|gt|sgh|sch)-/)) return 'Samsung';
+
+        // Ubiquiti / UniFi
+        if (h.includes('unifi') || h.includes('ubiquiti')) return 'Ubiquiti';
+        if (h.match(/^(uap|udm|uck|usw|usg|ubb|uxg)-/)) return 'Ubiquiti';
+
+        // Networking equipment
+        if (h.includes('cisco') || h.includes('catalyst') || h.match(/^(asr|isr|csr|c9[0-9]{3})/)) return 'Cisco';
+        if (h.includes('netgear') || h.match(/^(wndr|wgr|wgt|r[67][0-9]{3})/)) return 'Netgear';
+        if (h.includes('tp-link') || h.includes('tplink') || h.match(/^archer-/)) return 'TP-Link';
+        if (h.includes('asus') || h.includes('asuswrt') || h.match(/^rt-/)) return 'ASUS';
+        if (h.includes('d-link') || h.includes('dlink') || h.match(/^dir-/)) return 'D-Link';
+        if (h.includes('linksys') || h.match(/^wrt/)) return 'Linksys';
+        if (h.includes('mikrotik') || h.includes('routerboard')) return 'MikroTik';
+        if (h.includes('openwrt')) return 'OpenWrt';
+        if (h.includes('pfsense') || h.includes('opnsense')) return 'Netgate/OPNsense';
+
+        // NAS / Storage
+        if (h.includes('synology') || h.includes('diskstation') || h.includes('ds918') || h.includes('ds220')) return 'Synology';
+        if (h.includes('qnap') || h.match(/^ts-[0-9]/)) return 'QNAP';
+        if (h.includes('truenas') || h.includes('freenas')) return 'TrueNAS';
+
+        // Printers
+        if (h.match(/envy|officejet|laserjet|designjet|hp-?print/)) return 'HP';
+        if (h.includes('epson')) return 'Epson';
+        if (h.includes('canon')) return 'Canon';
+        if (h.includes('brother')) return 'Brother';
+        if (h.includes('xerox')) return 'Xerox';
+        if (h.includes('lexmark')) return 'Lexmark';
+
+        // Gaming consoles
+        if (h.match(/playstation|ps[345]($|-)/)) return 'Sony PlayStation';
+        if (h.match(/xbox|ms-xbox/)) return 'Microsoft Xbox';
+        if (h.match(/nintendo|wii($|-)|nswitch/)) return 'Nintendo';
+
+        // Media / Smart TV
+        if (h.includes('roku')) return 'Roku';
+        if (h.includes('shield')) return 'NVIDIA Shield';
+        if (h.match(/samsung-?tv|samsungtv|smarttv/)) return 'Samsung Smart TV';
+        if (h.match(/lgtv|lg-?tv|webos/)) return 'LG';
+        if (h.includes('philips') || h.match(/^hue-/)) return 'Philips';
+
+        // IoT / Smart Home
+        if (h.includes('sonos')) return 'Sonos';
+        if (h.includes('shelly')) return 'Shelly';
+        if (h.match(/esp-?8266|esp-?32|^esp-/)) return 'Espressif';
+        if (h.includes('tasmota')) return 'Tasmota Device';
+        if (h.includes('homeassistant') || h.includes('home-assistant') || h.includes('hassio')) return 'Home Assistant';
+        if (h.includes('ikea') || h.includes('tradfri')) return 'IKEA';
+
+        // Computers / Servers
+        if (h.includes('raspberry') || h.includes('raspberrypi') || h.match(/^rpi-/)) return 'Raspberry Pi';
+        if (h.includes('proxmox') || h.match(/^pve-/)) return 'Proxmox';
+        if (h.includes('dell') || h.match(/^(optiplex|inspiron|latitude|xps)-/)) return 'Dell';
+        if (h.includes('lenovo') || h.match(/^(thinkpad|thinkcentre)-/)) return 'Lenovo';
+        if (h.includes('huawei')) return 'Huawei';
+        if (h.includes('xiaomi') || h.includes('mibox') || h.includes('miui')) return 'Xiaomi';
+
+        return null;
+    }
+
     /**
      * Validate hostname format
      */
