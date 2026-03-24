@@ -1907,7 +1907,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors w-16" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors w-20" onClick={() => {
                                     if (sortBy === 'status') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('status'); setSortOrder('asc'); }
                                 }}>
