@@ -2817,7 +2817,7 @@ const InfoSection: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 py-3 border-y border-gray-700">
-              <span className="text-sm font-mono text-teal-300">v{getVersionString()}</span>
+              <span className="text-sm font-mono text-teal-300">{getVersionString()}</span>
               <span className="text-gray-500">|</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/15 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/30">{t('admin.licensePublic')}</span>
             </div>

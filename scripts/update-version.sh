@@ -112,8 +112,13 @@ echo -e "${BLUE}  📝 Mise à jour de package-lock.json...${NC}"
 sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package-lock.json
 
 # 2. src/constants/version.ts (fichier de constantes centralisé)
+# Use perl so APP_VERSION is updated even when it was out of sync with package.json (sed with OLD_VERSION would skip)
 echo -e "${BLUE}  📝 Mise à jour de src/constants/version.ts...${NC}"
-sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
+if command -v perl &> /dev/null; then
+    perl -i -pe "s/export const APP_VERSION = '[0-9]+\.[0-9]+\.[0-9]+';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
+else
+    sed -i "s/export const APP_VERSION = '$OLD_VERSION';/export const APP_VERSION = '$NEW_VERSION';/" src/constants/version.ts
+fi
 
 # 2b. src/main.tsx (logs console)
 echo -e "${BLUE}  📝 Mise à jour de src/main.tsx (logs console)...${NC}"
