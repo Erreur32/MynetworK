@@ -21,6 +21,10 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    env:
+      # Dépréciation Node.js 20 sur GitHub Actions : on force Node.js 24 pour
+      # éviter les avertissements sur les actions tournant encore sur Node 20.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     permissions:
       contents: read
       packages: write
