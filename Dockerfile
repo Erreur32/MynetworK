@@ -7,7 +7,7 @@ ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
 # ---------- Stage 1: Build (with build tools) ----------
-FROM --platform=$TARGETPLATFORM node:22-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ RUN npm prune --production && npm cache clean --force
 # Re-declare so this stage gets Buildx TARGETPLATFORM (global ARG is not available after first FROM)
 ARG TARGETPLATFORM
 # Use TARGETPLATFORM so the runtime base matches the built arch (required for HA / Raspberry)
-FROM --platform=$TARGETPLATFORM node:22-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 

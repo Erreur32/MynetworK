@@ -13,6 +13,9 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/mynetwork
+  # GitHub déprécie Node.js 20 pour les actions. On force Node.js 24 dès maintenant
+  # pour éviter les warnings et les incompatibilités futures.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 
 jobs:

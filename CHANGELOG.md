@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.23] - 2026-03-25
+
+### Fixed
+
+- **Docker** : suppression de `FROM --platform=$TARGETPLATFORM` (redondant avec Buildx) pour réduire les warnings `RedundantTargetPlatform` pendant le build multi-arch.
+
+---
+
 ## [0.7.22] - 2026-03-25
 
 ### Fixed
