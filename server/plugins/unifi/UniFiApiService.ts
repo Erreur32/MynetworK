@@ -77,6 +77,16 @@ export class UniFiApiService {
     private isAuthenticated: boolean = false;
     private siteManagerBaseUrl = 'https://api.ui.com/v1';
     private loginInProgress: Promise<boolean> | null = null;
+    /**
+     * Controller (local) login coordination.
+     *
+     * UniFi enforces a login attempt rate limit (HTTP 429). When our backend
+     * triggers multiple parallel API calls (e.g. dashboard stats via Promise.all),
+     * we must avoid sending multiple simultaneous logins, otherwise UniFi may
+     * temporarily block authentication attempts.
+     */
+    private controllerLoginInFlight: Promise<void> | null = null;
+    private controllerLoginCooldownUntilMs: number | null = null;
 
     /**
      * Session management for controller mode (HTTP + cookie)
@@ -156,9 +166,7 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null;
         this.lastLoginAt = null;
-        // Log API key status (first 8 chars only for security)
-        const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
-        logger.debug('UniFi', `Site Manager (cloud) connection configured with API key: ${apiKeyPreview} (length: ${this.apiKey.length})`);
+        logger.debug('UniFi', `Site Manager (cloud) connection configured (apiKeyLength: ${this.apiKey.length})`);
     }
 
     /**
@@ -182,8 +190,7 @@ export class UniFiApiService {
                     // For Site Manager, we mark as authenticated immediately
                     // The actual authentication will be verified on the first API call
                     this.isAuthenticated = true;
-                    const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
-                    logger.debug('UniFi', `Site Manager API authenticated (API key: ${apiKeyPreview}, length: ${this.apiKey.length})`);
+                    logger.debug('UniFi', `Site Manager API authenticated (apiKeyLength: ${this.apiKey.length})`);
                     return true;
                 } else {
                     if (!this.url || !this.username || !this.password) {
@@ -191,7 +198,7 @@ export class UniFiApiService {
                     }
 
                     // Controller API (local) using HTTP + session cookie (curl-like)
-                    await this.rawControllerLogin();
+                    await this.ensureControllerSession({ force: true });
                     this.isAuthenticated = true;
                     // Authentication successful - no need to log every time (logged at plugin level if needed)
                     // logger.success('UniFi', 'Controller API authenticated via HTTP session cookie');
@@ -279,9 +286,7 @@ export class UniFiApiService {
             throw new Error('API key not set');
         }
 
-        // Log API key status (first 8 chars only for security)
-        const apiKeyPreview = this.apiKey.length > 8 ? `${this.apiKey.substring(0, 8)}...` : '***';
-        logger.debug('UniFi', `Site Manager API request to ${endpoint} with API key: ${apiKeyPreview} (length: ${this.apiKey.length})`);
+        logger.debug('UniFi', `Site Manager API request to ${endpoint} (apiKeyLength: ${this.apiKey.length})`);
 
         // Use insecure agent for UniFi self-signed certificates (only for local controller, not Site Manager)
         // Site Manager API uses valid certificates, but we use the same agent for consistency
@@ -317,7 +322,7 @@ export class UniFiApiService {
                     // Ignore errors when reading response body
                 }
                 const details = errorDetails ? ` - ${errorDetails}` : '';
-                logger.error('UniFi', `Site Manager API authentication failed (401). API key preview: ${apiKeyPreview}, length: ${this.apiKey.length}${details}`);
+                logger.error('UniFi', `Site Manager API authentication failed (401). apiKeyLength: ${this.apiKey.length}${details}`);
                 throw new Error(`Site Manager API authentication failed (401 Unauthorized): Invalid or expired API key${details}. Verify your API key is correct and has not expired. Get a new key from https://unifi.ui.com/api`);
             } else if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After');
@@ -455,7 +460,7 @@ export class UniFiApiService {
             password: this.password
         };
 
-        logger.debug('UniFi', `Attempting login to: ${baseUrl} (username: ${this.username.trim()})`);
+        logger.debug('UniFi', `Attempting login to controller at: ${baseUrl}`);
 
         // Use insecure agent for UniFi self-signed certificates
         const agent = getInsecureAgent();
@@ -551,8 +556,15 @@ export class UniFiApiService {
                 throw new Error(`UniFi login failed (403 Forbidden): Access denied${details}. Verify the account has admin permissions and is not blocked.`);
             } else if (response.status === 429) {
                 // Rate limiting - too many login attempts
-                const retryAfter = response.headers.get('Retry-After') || response.headers.get('retry-after');
-                const retryHint = retryAfter ? ` Wait ${retryAfter} seconds before retrying.` : ' Wait a few minutes before retrying.';
+                const retryAfterHeader = response.headers.get('Retry-After') || response.headers.get('retry-after');
+                const retryAfterSeconds = retryAfterHeader ? Number.parseInt(String(retryAfterHeader), 10) : NaN;
+                const backoffSeconds = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds : 120;
+                this.controllerLoginCooldownUntilMs = Date.now() + (backoffSeconds * 1000);
+                // Ensure we don't keep "thinking" we're authenticated during the cooldown.
+                this.isAuthenticated = false;
+                this.sessionCookie = null;
+                this.lastLoginAt = null;
+                const retryHint = retryAfterHeader ? ` Wait ${retryAfterHeader} seconds before retrying.` : ' Wait a few minutes before retrying.';
                 throw new Error(`UniFi login failed (429 Too Many Requests): You've reached the login attempt limit.${retryHint}${details}`);
             } else if (response.status === 404) {
                 const deploymentHint = this.deploymentType === 'unifios'
@@ -593,8 +605,60 @@ export class UniFiApiService {
         this.sessionCookie = cookiePairs.join('; ');
         this.lastLoginAt = Date.now();
         this.isAuthenticated = true;
+        this.controllerLoginCooldownUntilMs = null;
 
         // Session stored successfully (logged at verbose level if needed)
+    }
+
+    private getControllerLoginCooldownRemainingMs(nowMs: number): number {
+        if (!this.controllerLoginCooldownUntilMs) return 0;
+        return Math.max(0, this.controllerLoginCooldownUntilMs - nowMs);
+    }
+
+    /**
+     * Ensure we have a usable controller session cookie, without stampeding UniFi login.
+     */
+    private async ensureControllerSession(options?: { force?: boolean }): Promise<void> {
+        if (this.apiMode === 'site-manager') {
+            // Site Manager uses API key, no cookie session required.
+            return;
+        }
+
+        const now = Date.now();
+        const remainingCooldownMs = this.getControllerLoginCooldownRemainingMs(now);
+        if (remainingCooldownMs > 0) {
+            const waitSeconds = Math.ceil(remainingCooldownMs / 1000);
+            throw new Error(
+                `UniFi login is temporarily rate-limited (429). Waiting for cooldown: ${waitSeconds}s before next login attempt.`
+            );
+        }
+
+        const force = options?.force === true;
+        const hasValidSession =
+            !!this.sessionCookie &&
+            !!this.lastLoginAt &&
+            (now - this.lastLoginAt) <= this.sessionTtlMs;
+
+        if (!force && hasValidSession) {
+            return;
+        }
+
+        // Singleflight: if a login is already running, await it.
+        if (this.controllerLoginInFlight) {
+            await this.controllerLoginInFlight;
+            return;
+        }
+
+        this.controllerLoginInFlight = (async () => {
+            try {
+                await this.rawControllerLogin();
+                this.isAuthenticated = true;
+            } finally {
+                this.controllerLoginInFlight = null;
+            }
+        })();
+
+        await this.controllerLoginInFlight;
     }
 
     /**
@@ -622,11 +686,8 @@ export class UniFiApiService {
             throw new Error('UniFi controller URL not set');
         }
 
-        // Refresh session if missing or expired
-        const now = Date.now();
-        if (!this.sessionCookie || !this.lastLoginAt || (now - this.lastLoginAt) > this.sessionTtlMs) {
-            await this.rawControllerLogin();
-        }
+        // Refresh session if missing or expired (singleflight + cooldown-aware)
+        await this.ensureControllerSession();
 
         const baseUrl = this.url.replace(/\/+$/, '');
         const apiBase = this.getApiBasePath();
@@ -713,7 +774,7 @@ export class UniFiApiService {
                 this.sessionCookie = null;
                 this.isAuthenticated = false;
                 try {
-                    await this.rawControllerLogin();
+                    await this.ensureControllerSession({ force: true });
                     return await doRequest();
                 } catch (retryError) {
                     // If retry also fails, throw the original error with context

@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.22] - 2026-03-25
 
+### Fixed
+
+- **UniFi — erreurs 429 (Too Many Requests)** : prévention des rafales de login en cas d'appels parallèles (mutualisation de l'authentification) + cooldown après rate-limit (`Retry-After` si présent, sinon backoff par défaut) afin d'éviter de déclencher la limite « login attempt » côté UniFi.
+- **Logs** : niveau debug/verbose **désactivé par défaut** ; ajout d'une redaction centralisée pour masquer automatiquement les données sensibles dans les logs (password, apiKey, tokens, headers `Authorization`, cookies / session) ; suppression des logs UniFi trop bavards (username, preview de clé, `console.*`).
+
+---
 
 ## [0.7.21] - 2026-03-24
 

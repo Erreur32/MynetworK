@@ -7,6 +7,8 @@
  * This wrapper provides the same interface as node-unifi but with modern, secure dependencies
  */
 
+import { logger } from '../../utils/logger.js';
+
 export interface UniFiControllerOptions {
     host: string;
     port?: number;
@@ -92,10 +94,10 @@ export class UniFiController {
 
             this.sessionCookie = cookiePairs.join('; ');
             this.lastLoginAt = Date.now();
-            
-            console.log('[UniFiController] Login successful');
+
+            logger.debug('UniFiController', 'Login successful');
         } catch (error) {
-            console.error('[UniFiController] Login failed:', error);
+            logger.error('UniFiController', 'Login failed:', error);
             throw error;
         }
     }

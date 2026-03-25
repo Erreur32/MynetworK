@@ -31,6 +31,80 @@ class Logger {
     this.loadDebugConfig();
   }
 
+  private redactString(input: string): string {
+    if (!input) return input;
+
+    // Redact common credential patterns in plain text and JSON-ish strings.
+    // Keep this conservative: if we detect a sensitive key, we mask its value.
+    return input
+      // key=value (Authorization=Bearer ..., password=..., cookie=...)
+      .replace(
+        /\b(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessioncookie)\b\s*[:=]\s*([^\s,;]+)/gi,
+        (_m, key) => `${key}=[REDACTED]`
+      )
+      // "key":"value"
+      .replace(
+        /("?(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessionCookie)"?\s*:\s*)(".*?"|'.*?'|[^,\}\]]+)/gi,
+        (_m, prefix) => `${prefix}"[REDACTED]"`
+      );
+  }
+
+  private sanitizeArg(value: any, depth: number = 0): any {
+    if (depth > 5) return '[Truncated]';
+    if (value === null || value === undefined) return value;
+
+    if (typeof value === 'string') {
+      return this.redactString(value);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return value;
+    }
+
+    if (value instanceof Error) {
+      // Error messages/stacks can sometimes include URLs with credentials or headers.
+      return {
+        name: value.name,
+        message: this.redactString(value.message || ''),
+        stack: this.redactString(value.stack || '')
+      };
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((v) => this.sanitizeArg(v, depth + 1));
+    }
+
+    if (typeof value === 'object') {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(value)) {
+        const keyLower = k.toLowerCase();
+        const isSensitiveKey =
+          keyLower.includes('password') ||
+          keyLower === 'pass' ||
+          keyLower.includes('apikey') ||
+          keyLower.includes('api_key') ||
+          keyLower.includes('token') ||
+          keyLower.includes('authorization') ||
+          keyLower.includes('cookie') ||
+          keyLower.includes('session');
+
+        out[k] = isSensitiveKey ? '[REDACTED]' : this.sanitizeArg(v, depth + 1);
+      }
+      return out;
+    }
+
+    // Functions, symbols, etc.
+    try {
+      return this.redactString(String(value));
+    } catch {
+      return '[Unserializable]';
+    }
+  }
+
+  private sanitizeArgs(args: any[]): any[] {
+    return args.map((a) => this.sanitizeArg(a));
+  }
+
   /**
    * Load debug configuration from database
    */
@@ -41,7 +115,8 @@ class Logger {
       const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_config'").get();
       if (!tableCheck) {
         // Table doesn't exist yet, use defaults
-        this.debugEnabled = process.env.NODE_ENV !== 'production';
+        // Default should be quiet unless explicitly enabled via config/UI.
+        this.debugEnabled = false;
         this.verboseEnabled = false;
         return;
       }
@@ -54,13 +129,14 @@ class Logger {
         this.debugEnabled = config.debug === true;
         this.verboseEnabled = config.verbose === true;
       } else {
-        // Default: debug enabled in development, disabled in production
-        this.debugEnabled = process.env.NODE_ENV !== 'production';
+        // Default should be quiet unless explicitly enabled via config/UI.
+        this.debugEnabled = false;
         this.verboseEnabled = false;
       }
     } catch (error) {
       // If database not ready, use defaults
-      this.debugEnabled = process.env.NODE_ENV !== 'production';
+      // Default should be quiet unless explicitly enabled via config/UI.
+      this.debugEnabled = false;
       this.verboseEnabled = false;
     }
   }
@@ -145,27 +221,30 @@ class Logger {
    * Log error message (always shown)
    */
   error(prefix: string, message: string, ...args: any[]): void {
-    const formatted = this.formatMessage('error', prefix, message);
-    console.error(formatted, ...args);
-    logBuffer.add('error', prefix, message, ...args);
+    const formatted = this.formatMessage('error', prefix, this.redactString(message));
+    const safeArgs = this.sanitizeArgs(args);
+    console.error(formatted, ...safeArgs);
+    logBuffer.add('error', prefix, this.redactString(message), ...safeArgs);
   }
 
   /**
    * Log warning message (always shown)
    */
   warn(prefix: string, message: string, ...args: any[]): void {
-    const formatted = this.formatMessage('warn', prefix, message);
-    console.warn(formatted, ...args);
-    logBuffer.add('warn', prefix, message, ...args);
+    const formatted = this.formatMessage('warn', prefix, this.redactString(message));
+    const safeArgs = this.sanitizeArgs(args);
+    console.warn(formatted, ...safeArgs);
+    logBuffer.add('warn', prefix, this.redactString(message), ...safeArgs);
   }
 
   /**
    * Log info message (always shown)
    */
   info(prefix: string, message: string, ...args: any[]): void {
-    const formatted = this.formatMessage('info', prefix, message);
-    console.log(formatted, ...args);
-    logBuffer.add('info', prefix, message, ...args);
+    const formatted = this.formatMessage('info', prefix, this.redactString(message));
+    const safeArgs = this.sanitizeArgs(args);
+    console.log(formatted, ...safeArgs);
+    logBuffer.add('info', prefix, this.redactString(message), ...safeArgs);
   }
 
   /**
@@ -173,9 +252,10 @@ class Logger {
    */
   debug(prefix: string, message: string, ...args: any[]): void {
     if (this.debugEnabled) {
-      const formatted = this.formatMessage('debug', prefix, message);
-      console.log(formatted, ...args);
-      logBuffer.add('debug', prefix, message, ...args);
+      const formatted = this.formatMessage('debug', prefix, this.redactString(message));
+      const safeArgs = this.sanitizeArgs(args);
+      console.log(formatted, ...safeArgs);
+      logBuffer.add('debug', prefix, this.redactString(message), ...safeArgs);
     }
   }
 
@@ -184,9 +264,10 @@ class Logger {
    */
   verbose(prefix: string, message: string, ...args: any[]): void {
     if (this.verboseEnabled) {
-      const formatted = this.formatMessage('verbose', prefix, message);
-      console.log(formatted, ...args);
-      logBuffer.add('verbose', prefix, message, ...args);
+      const formatted = this.formatMessage('verbose', prefix, this.redactString(message));
+      const safeArgs = this.sanitizeArgs(args);
+      console.log(formatted, ...safeArgs);
+      logBuffer.add('verbose', prefix, this.redactString(message), ...safeArgs);
     }
   }
 
@@ -196,9 +277,11 @@ class Logger {
   success(prefix: string, message: string, ...args: any[]): void {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
     const formattedPrefix = `${colors.dim}[${timestamp}]${colors.reset} ${colors.bright}${colors.green}[${prefix}]${colors.reset}`;
-    const formatted = `${formattedPrefix} ${colors.green}${message}${colors.reset}`;
-    console.log(formatted, ...args);
-    logBuffer.add('info', prefix, message, ...args); // Store as info level
+    const safeMessage = this.redactString(message);
+    const formatted = `${formattedPrefix} ${colors.green}${safeMessage}${colors.reset}`;
+    const safeArgs = this.sanitizeArgs(args);
+    console.log(formatted, ...safeArgs);
+    logBuffer.add('info', prefix, safeMessage, ...safeArgs); // Store as info level
   }
 }
 
