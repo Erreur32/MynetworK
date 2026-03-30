@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.27] - 2026-03-30
+
+---
+
+## [0.7.26] - 2026-03-30
+
+### Security
+
+- **path-to-regexp** : mise à jour `8.3.0 → 8.4.0` — corrige **CVE-2026-4926** (GHSA-j3q9-mxjg-w52f) et **CVE-2026-4923** (GHSA-27v5-c462-wpq7) : restriction du backtracking sur les wildcards répétés et rejet des combinaisons de routes optionnelles trop larges (> 256).
+
+---
+
 ## [0.7.25] - 2026-03-26
 
 ### Fixed
