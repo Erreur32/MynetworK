@@ -738,6 +738,7 @@ router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: Aut
         const history = typeof unifiPluginAny.getBandwidthHistory === 'function'
             ? unifiPluginAny.getBandwidthHistory(wanId, rangeSeconds)
             : [];
+        res.setHeader('Cache-Control', 'private, max-age=20');
         res.json({ success: true, result: history });
     } catch (error) {
         logger.error('UniFi', 'Failed to get bandwidth history:', error);
@@ -761,6 +762,7 @@ router.get('/unifi/wan-interfaces', requireAuth, asyncHandler(async (_req: Authe
         const interfaces = typeof unifiPluginAny.getWanInterfaces === 'function'
             ? unifiPluginAny.getWanInterfaces()
             : [{ id: 'wan1', name: 'WAN' }];
+        res.setHeader('Cache-Control', 'private, max-age=300');
         res.json({ success: true, result: interfaces });
     } catch (error) {
         logger.error('UniFi', 'Failed to get WAN interfaces:', error);

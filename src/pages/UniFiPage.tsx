@@ -115,20 +115,19 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         interval: POLLING_INTERVALS.system
     });
 
-    // Fetch WAN interfaces once when bandwidth tab becomes active
-    const fetchWanInterfaces = async () => {
-        if (!isActive) return;
-        try {
-            const res = await api.get<Array<{ id: string; name: string; ip?: string }>>('/api/plugins/unifi/wan-interfaces');
+    // Fetch WAN interfaces once when plugin becomes active (not per tab — quasi-static data)
+    useEffect(() => {
+        if (!isActive || wanInterfaces.length > 0) return; // already loaded
+        api.get<Array<{ id: string; name: string; ip?: string }>>('/api/plugins/unifi/wan-interfaces').then(res => {
             if (res.success && Array.isArray(res.result) && res.result.length > 0) {
                 setWanInterfaces(res.result);
-                // Auto-select first WAN if current selection no longer exists
-                if (!res.result.find(w => w.id === selectedWan)) {
+                if (!res.result.find((w: { id: string }) => w.id === selectedWan)) {
                     setSelectedWan(res.result[0].id);
                 }
             }
-        } catch { /* ignore */ }
-    };
+        }).catch(() => {/* ignore */});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isActive]);
 
     // Fetch bandwidth history from server
     const fetchBandwidthHistory = async () => {
@@ -146,7 +145,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     useEffect(() => {
         if (isActive && activeTab === 'traffic') {
-            fetchWanInterfaces();
             fetchBandwidthHistory();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps

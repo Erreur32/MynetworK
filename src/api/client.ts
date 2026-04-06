@@ -13,6 +13,8 @@ interface FreeboxErrorResponse {
 
 class ApiClient {
   private baseUrl: string;
+  // In-flight GET request deduplication: same URL → same Promise
+  private readonly _inflight = new Map<string, Promise<ApiResponse<any>>>();
 
   constructor(baseUrl = '') {
     this.baseUrl = baseUrl;
@@ -258,7 +260,15 @@ class ApiClient {
   }
 
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>('GET', endpoint);
+    // Deduplicate concurrent identical GET requests
+    const key = endpoint;
+    const inflight = this._inflight.get(key);
+    if (inflight) return inflight as Promise<ApiResponse<T>>;
+    const promise = this.request<T>('GET', endpoint).finally(() => {
+      this._inflight.delete(key);
+    });
+    this._inflight.set(key, promise);
+    return promise;
   }
 
   async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
