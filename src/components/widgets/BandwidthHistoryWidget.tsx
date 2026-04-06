@@ -322,8 +322,9 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                             />
                             <YAxis
                                 stroke="#6b7280"
-                                tick={{ fill: '#6b7280', fontSize: 11 }}
-                                tickFormatter={(value) => formatSpeed(value * 1024).split(' ')[0]}
+                                tick={{ fill: '#6b7280', fontSize: 10 }}
+                                tickFormatter={(value) => formatSpeed(value * 1024)}
+                                width={65}
                             />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}

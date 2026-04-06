@@ -47,7 +47,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                     </span>
                 </div>
             }
-            className={`h-[356px] ${className}`}
+            className={`h-full ${className}`}
         >
             {plugins.length === 0 ? (
                 <div className="text-center py-8">

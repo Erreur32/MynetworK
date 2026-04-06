@@ -57,19 +57,29 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
     const hasAnyPlugin = plugins.some(p => p.configured);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="flex flex-col gap-6">
 
-            {/* Column 1 - à gauche (état des plugins + récapitulatif réseau + système serveur) */}
-            <div className="flex flex-col gap-6">
+            {/* Row 1: Plugin Status (1 col) + Bandwidth chart (3 cols) — aligned heights */}
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
                 <MultiSourceWidget onPluginClick={() => onNavigateToPlugins?.()} />
+                {(hasFreebox || hasUniFi) && (
+                    <div className="xl:col-span-3">
+                        <BandwidthHistoryWidget freeboxAvailable={hasFreebox} unifiAvailable={hasUniFi} />
+                    </div>
+                )}
+            </div>
+
+            {/* Row 2: Rest of dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+            {/* Column 1 - récapitulatif réseau + système serveur */}
+            <div className="flex flex-col gap-6">
                 {(hasFreebox || hasUniFi) && <NetworkSummaryDashboardWidget />}
                 <SystemServerWidget />
             </div>
 
-            {/* Colonnes 2-3-4 - bande passante en haut, cartes Freebox / UniFi + évènements réseau en dessous */}
+            {/* Colonnes 2-3-4 */}
             <div className="md:col-span-1 xl:col-span-3 flex flex-col gap-6">
-                {/* Bande passante (ligne du haut, large) - uniquement si Freebox est actif et connecté (même condition que la carte Freebox) */}
-                {(hasFreebox || hasUniFi) && <BandwidthHistoryWidget freeboxAvailable={hasFreebox} unifiAvailable={hasUniFi} />}
 
                 {/* Message si aucun plugin configuré */}
                 {!hasAnyPlugin && (
@@ -103,6 +113,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                     )}
                 </div>
                 )}
+            </div>
             </div>
         </div>
     );
