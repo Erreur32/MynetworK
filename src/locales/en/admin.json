@@ -23,6 +23,8 @@
     "info": "Information",
     "version": "Version",
     "database": {
+      "healthToastWarning": "Database: optimizations are recommended (fragmentation or WAL size). Check the Database tab.",
+      "healthToastCritical": "Database: critical issues detected (integrity or high fragmentation). Action required in the Database tab.",
       "retentionTitle": "Scan data retention",
       "saveSuccess": "Configuration saved successfully",
       "loadError": "Error loading configuration",
@@ -137,6 +139,11 @@
     "delete": "Delete",
     "moveUp": "Move up",
     "moveDown": "Move down",
+    "backup": {
+      "tabApp": "Application",
+      "tabFreebox": "Freebox",
+      "tabUnifi": "UniFi"
+    },
     "backupImportantTitle": "Important: manual backups recommended",
     "backupIntro": "It is difficult to create automatic backups via this application for network equipment (Freebox, UniFi Controller). These devices' APIs do not provide official endpoints to trigger configuration exports in an automated way.",
     "backupRecommendationLabel": "Recommendation:",
@@ -338,6 +345,9 @@
     "security": {
       "sectionTitle": "Security",
       "subtitle": "Security and authentication settings",
+      "tabAuth": "Auth & Protection",
+      "tabNetwork": "Network & CORS",
+      "tabLogs": "Logs",
       "saveSuccess": "Security settings saved successfully",
       "saveError": "Error while saving",
       "unblockSuccess": "Identifier \"{{identifier}}\" has been unblocked successfully",

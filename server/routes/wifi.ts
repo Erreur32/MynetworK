@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { modelDetection } from '../services/modelDetection.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -40,9 +41,9 @@ router.get('/bss', asyncHandler(async (_req, res) => {
 // PUT /api/wifi/bss/:id - Enable/disable a specific BSS
 router.put('/bss/:id', asyncHandler(async (req, res) => {
   const { enabled } = req.body;
-  console.log(`[WiFi] Toggle BSS ${req.params.id} -> enabled: ${enabled}`);
+  logger.debug('WiFi', `Toggle BSS ${req.params.id} -> enabled: ${enabled}`);
   const result = await freeboxApi.updateWifiBss(req.params.id, { enabled });
-  console.log(`[WiFi] Toggle BSS result:`, result.success ? 'OK' : 'FAILED');
+  logger.debug('WiFi', `Toggle BSS result:`, result.success ? 'OK' : 'FAILED');
   res.json(result);
 }));
 
@@ -166,10 +167,10 @@ router.put('/planning', asyncHandler(async (req, res) => {
 router.post('/wps/start', asyncHandler(async (_req, res) => {
   // Check if we have settings permission (required for WPS)
   const permissions = freeboxApi.getPermissions();
-  console.log('[WiFi WPS] Current permissions:', permissions);
+  logger.debug('WiFi WPS', 'Current permissions:', permissions);
 
   if (!permissions.settings) {
-    console.log('[WiFi WPS] Missing settings permission');
+    logger.warn('WiFi WPS', 'Missing settings permission');
     res.json({
       success: false,
       error: {
@@ -181,7 +182,7 @@ router.post('/wps/start', asyncHandler(async (_req, res) => {
   }
 
   const result = await freeboxApi.startWps();
-  console.log('[WiFi WPS] Start result:', result);
+  logger.debug('WiFi WPS', 'Start result:', result);
 
   // Add helpful error message if WPS fails
   if (!result.success) {

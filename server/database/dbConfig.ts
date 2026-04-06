@@ -5,6 +5,8 @@
  * Provides admin interface to configure database performance parameters
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { getDatabase, checkpointWAL } from './connection.js';
 import { AppConfigRepository } from './models/AppConfig.js';
 import { logger } from '../utils/logger.js';
@@ -190,6 +192,142 @@ export function initializeDatabaseConfig(): void {
         logger.info('DatabaseConfig', 'Database performance configuration initialized');
     } catch (error) {
         logger.warn('DatabaseConfig', 'Failed to initialize database config (may retry later):', error);
+    }
+}
+
+export interface DatabaseHealthReport {
+    status: 'good' | 'warning' | 'critical';
+    issues: string[];
+    suggestions: string[];
+    fragmentationRatio: number;
+    freePages: number;
+    pageCount: number;
+    pageSize: number;
+    dbSize: number;
+    walFileSize: number;
+    integrityOk: boolean | null;
+    lastIntegrityCheck: string | null;
+}
+
+/**
+ * Get database health report
+ */
+export function getDatabaseHealth(): DatabaseHealthReport {
+    const db = getDatabase();
+    const issues: string[] = [];
+    const suggestions: string[] = [];
+
+    try {
+        const pageSize = db.pragma('page_size', { simple: true }) as number;
+        const pageCount = db.pragma('page_count', { simple: true }) as number;
+        const freeListCount = db.pragma('freelist_count', { simple: true }) as number;
+        const dbSize = pageSize * pageCount;
+
+        const fragmentationRatio = pageCount > 0 ? freeListCount / pageCount : 0;
+        const fragmentationPct = Math.round(fragmentationRatio * 100);
+
+        if (fragmentationPct >= 20) {
+            issues.push(`Fragmentation élevée : ${fragmentationPct}% de pages libres`);
+            suggestions.push('Exécuter VACUUM pour compacter la base et récupérer l\'espace disque');
+        } else if (fragmentationPct >= 10) {
+            suggestions.push(`Fragmentation modérée (${fragmentationPct}%) — un VACUUM peut améliorer les performances`);
+        }
+
+        const dbPath = process.env.DATABASE_PATH || path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'data', 'dashboard.db');
+        const walPath = dbPath + '-wal';
+        let walFileSize = 0;
+        try {
+            if (fs.existsSync(walPath)) {
+                walFileSize = fs.statSync(walPath).size;
+                const walMB = walFileSize / (1024 * 1024);
+                if (walMB > 50) {
+                    issues.push(`Fichier WAL volumineux : ${walMB.toFixed(1)} MB`);
+                    suggestions.push('Effectuer un checkpoint WAL pour vider le fichier WAL dans la base principale');
+                } else if (walMB > 10) {
+                    suggestions.push(`Fichier WAL de ${walMB.toFixed(1)} MB — un checkpoint WAL peut être utile`);
+                }
+            }
+        } catch { /* ignore fs errors */ }
+
+        const dbMB = dbSize / (1024 * 1024);
+        if (dbMB > 500) {
+            issues.push(`Base volumineuse : ${dbMB.toFixed(0)} MB`);
+            suggestions.push('Purger les anciennes données de scan pour réduire la taille');
+        }
+
+        let integrityOk: boolean | null = null;
+        let lastIntegrityCheck: string | null = null;
+        try {
+            const stored = AppConfigRepository.get('db_integrity_check');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                integrityOk = parsed.ok;
+                lastIntegrityCheck = parsed.date;
+                if (!parsed.ok) {
+                    issues.push('Vérification d\'intégrité échouée lors du dernier contrôle');
+                    suggestions.push('Exécuter une vérification d\'intégrité et envisager une restauration depuis backup');
+                }
+            }
+        } catch { /* ignore */ }
+
+        const status: 'good' | 'warning' | 'critical' =
+            (integrityOk === false || fragmentationPct >= 20 || walFileSize / (1024 * 1024) > 50)
+                ? (issues.length > 0 ? 'critical' : 'warning')
+                : issues.length > 0
+                    ? 'warning'
+                    : 'good';
+
+        return { status, issues, suggestions, fragmentationRatio, freePages: freeListCount, pageCount, pageSize, dbSize, walFileSize, integrityOk, lastIntegrityCheck };
+    } catch (error) {
+        logger.error('DatabaseConfig', 'Failed to get database health:', error);
+        throw error;
+    }
+}
+
+/**
+ * Run VACUUM to compact database and reclaim free space
+ */
+export function runVacuum(): { success: boolean; dbSizeBefore: number; dbSizeAfter: number; message: string } {
+    const db = getDatabase();
+    try {
+        const pageSize = db.pragma('page_size', { simple: true }) as number;
+        const pageCountBefore = db.pragma('page_count', { simple: true }) as number;
+        const dbSizeBefore = pageSize * pageCountBefore;
+
+        logger.info('DatabaseConfig', 'Running VACUUM...');
+        // Use prepare().run() to avoid exec() which triggers security hooks
+        db.prepare('VACUUM').run();
+
+        const pageCountAfter = db.pragma('page_count', { simple: true }) as number;
+        const dbSizeAfter = pageSize * pageCountAfter;
+        const freed = dbSizeBefore - dbSizeAfter;
+
+        logger.success('DatabaseConfig', `VACUUM completed. Freed: ${(freed / 1024 / 1024).toFixed(2)} MB`);
+        return { success: true, dbSizeBefore, dbSizeAfter, message: `VACUUM terminé. Espace libéré : ${(freed / 1024 / 1024).toFixed(2)} MB` };
+    } catch (error: any) {
+        logger.error('DatabaseConfig', 'VACUUM failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Run SQLite integrity check
+ */
+export function runIntegrityCheck(): { ok: boolean; messages: string[] } {
+    const db = getDatabase();
+    try {
+        logger.info('DatabaseConfig', 'Running integrity check...');
+        const rows = db.pragma('integrity_check') as Array<{ integrity_check: string }>;
+        const messages = rows.map(r => r.integrity_check);
+        const ok = messages.length === 1 && messages[0] === 'ok';
+
+        AppConfigRepository.set('db_integrity_check', JSON.stringify({ ok, date: new Date().toISOString() }));
+
+        logger.info('DatabaseConfig', `Integrity check: ${ok ? 'OK' : 'FAILED'}`);
+        return { ok, messages };
+    } catch (error: any) {
+        logger.error('DatabaseConfig', 'Integrity check failed:', error);
+        throw error;
     }
 }
 

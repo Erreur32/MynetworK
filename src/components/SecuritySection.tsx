@@ -13,9 +13,12 @@ import { LogsManagementSection } from './LogsManagementSection';
 import { api } from '../api/client';
 import { useUserAuthStore } from '../stores/userAuthStore';
 
+type SecInnerTab = 'auth' | 'network' | 'logs';
+
 export const SecuritySection: React.FC = () => {
     const { t } = useTranslation();
     const { user } = useUserAuthStore();
+    const [secTab, setSecTab] = useState<SecInnerTab>('auth');
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     
@@ -347,498 +350,342 @@ export const SecuritySection: React.FC = () => {
         });
     };
 
+    const secTabs: { id: SecInnerTab; label: string; icon: React.ElementType }[] = [
+        { id: 'auth', label: t('admin.security.tabAuth'), icon: Shield },
+        { id: 'network', label: t('admin.security.tabNetwork'), icon: Globe },
+        { id: 'logs', label: t('admin.security.tabLogs'), icon: Lock },
+    ];
+
     return (
-        <div className="space-y-6">
-            {/* Unsaved Changes Notification */}
-            {hasUnsavedChanges && (
-                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg flex items-start gap-3">
-                    <AlertTriangle size={20} className="text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="space-y-4">
+            {/* Global alerts — toujours visibles */}
+            {jwtSecretWarning && (
+                <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-xl flex items-start gap-3">
+                    <AlertTriangle size={18} className="text-yellow-400 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                        <h4 className="text-sm font-medium text-amber-400 mb-1">
-                            {t('admin.security.unsavedChangesTitle')}
-                        </h4>
-                        <p className="text-xs text-amber-300">
-                            {t('admin.security.unsavedChangesHint')}
+                        <h4 className="text-sm font-medium text-yellow-400 mb-1">{t('admin.security.jwtDefaultTitle')}</h4>
+                        <p className="text-xs text-yellow-300 mb-1">
+                            {t('admin.security.jwtDefaultDesc')} <code className="bg-yellow-900/30 px-1.5 py-0.5 rounded">JWT_SECRET</code> {t('admin.security.jwtDefaultDescSuffix')}
                         </p>
+                        <p className="text-xs text-gray-400">{t('admin.security.jwtProductionHint')}</p>
                     </div>
                 </div>
             )}
 
-            {/* Message Banner */}
+            {hasUnsavedChanges && (
+                <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-xl flex items-center gap-3">
+                    <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
+                    <div className="flex-1">
+                        <span className="text-sm font-medium text-amber-400">{t('admin.security.unsavedChangesTitle')} </span>
+                        <span className="text-xs text-amber-300">{t('admin.security.unsavedChangesHint')}</span>
+                    </div>
+                </div>
+            )}
+
             {message && (
-                <div className={`p-3 rounded-lg flex items-center gap-2 ${
-                    message.type === 'success' 
-                        ? 'bg-green-900/20 border border-green-700 text-green-400' 
+                <div className={`p-3 rounded-xl flex items-center gap-2 ${
+                    message.type === 'success'
+                        ? 'bg-green-900/20 border border-green-700 text-green-400'
                         : 'bg-red-900/20 border border-red-700 text-red-400'
                 }`}>
-                    {message.type === 'success' ? (
-                        <CheckCircle size={16} />
-                    ) : (
-                        <AlertTriangle size={16} />
-                    )}
+                    {message.type === 'success' ? <CheckCircle size={15} /> : <AlertTriangle size={15} />}
                     <span className="text-sm">{message.text}</span>
                 </div>
             )}
 
-            {/* JWT Secret Warning - Full Width Alert */}
-            {jwtSecretWarning && (
-                <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
-                    <div className="flex items-start gap-3">
-                        <AlertTriangle size={20} className="text-yellow-400 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                            <h4 className="text-sm font-medium text-yellow-400 mb-1">
-                                {t('admin.security.jwtDefaultTitle')}
-                            </h4>
-                            <p className="text-xs text-yellow-300 mb-2">
-                                {t('admin.security.jwtDefaultDesc')} <code className="bg-yellow-900/30 px-1.5 py-0.5 rounded">JWT_SECRET</code> {t('admin.security.jwtDefaultDescSuffix')}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                                {t('admin.security.jwtProductionHint')}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Two columns: Event log (left first), Security settings (right) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left column: Event log first (also first on mobile), then Blocked IPs */}
-                <div className="space-y-6 order-1">
-                    <LogsManagementSection />
-                    {/* Blocked IPs and accounts */}
-                    <Section title={t('admin.security.blockedTitle')} icon={Shield} iconColor="red">
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <div>
-                                    <p className="text-sm text-gray-400">
-                                        {t('admin.security.blockedListDesc')}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        {t('admin.security.blockedListHint')}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={loadBlockedIPs}
-                                    disabled={isLoadingBlockedIPs}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <RefreshCw size={14} className={isLoadingBlockedIPs ? 'animate-spin' : ''} />
-                                    <span>{t('admin.security.refresh')}</span>
-                                </button>
-                            </div>
-
-                            {isLoadingBlockedIPs ? (
-                                <div className="flex items-center justify-center py-8">
-                                    <Loader2 className="animate-spin text-blue-400" size={20} />
-                                </div>
-                            ) : blockedIPs.length === 0 ? (
-                                <div className="py-8 text-center">
-                                    <CheckCircle size={32} className="text-green-400 mx-auto mb-2" />
-                                    <p className="text-sm text-gray-400">{t('admin.security.noBlocked')}</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {blockedIPs.map((item) => (
-                                        <div
-                                            key={item.identifier}
-                                            className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg border border-gray-800 hover:border-red-700/50 transition-colors"
-                                        >
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-sm font-medium text-white font-mono">
-                                                        {item.identifier}
-                                                    </span>
-                                                    <span className="px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">
-                                                        {item.count} {item.count > 1 ? t('admin.security.attempts') : t('admin.security.attempt')}
-                                                    </span>
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    {t('admin.security.blockedFor')} <span className="text-orange-400 font-medium">{formatRemainingTime(item.remainingTime)}</span>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => handleUnblock(item.identifier)}
-                                                className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
-                                                title={t('admin.security.unblockTitle')}
-                                            >
-                                                <Trash2 size={14} />
-                                                <span>{t('admin.security.unblock')}</span>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
+            {/* Panneau à onglets */}
+            <div className="bg-theme-card rounded-xl border border-theme overflow-hidden" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
+                {/* Tab bar */}
+                <div className="flex items-center gap-1 px-4 py-2 border-b border-theme bg-theme-primary overflow-x-auto">
+                    <Shield size={16} className="text-red-400 mr-2 shrink-0" />
+                    {secTabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setSecTab(tab.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                                secTab === tab.id
+                                    ? 'bg-red-600/20 text-red-300 border border-red-600/40'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                            }`}
+                        >
+                            <tab.icon size={12} />
+                            {tab.label}
+                            {tab.id === 'auth' && blockedIPs.length > 0 && (
+                                <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
+                                    {blockedIPs.length}
+                                </span>
                             )}
-                        </div>
-                    </Section>
-
-                    {/* Active features */}
-                    <div className="p-4 bg-blue-900/10 border border-blue-700/30 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <CheckCircle size={18} className="text-blue-400" />
-                            <h4 className="text-sm font-medium text-blue-400">{t('admin.security.activeFeaturesTitle')}</h4>
-                        </div>
-                        <ul className="space-y-1 text-xs text-gray-400">
-                            <li>• {t('admin.security.activeFeatureBruteforce')}</li>
-                            <li>• {t('admin.security.activeFeatureBlocking')}</li>
-                            <li>• {t('admin.security.activeFeatureNotifications')}</li>
-                        </ul>
-                    </div>
+                        </button>
+                    ))}
                 </div>
 
-                {/* Right column: Security settings */}
-                <div className="space-y-6 order-2">
-                    {/* Protection Brute Force */}
-                    <Section title={t('admin.security.attackProtectionTitle')} icon={Shield} iconColor="red">
-                        <div className="space-y-4">
-                            <SettingRow
-                                label={t('admin.security.maxLoginAttempts')}
-                                description={t('admin.security.maxLoginAttemptsDesc')}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="number"
-                                        min="3"
-                                        max="10"
-                                        value={maxLoginAttempts}
-                                        onChange={(e) => setMaxLoginAttempts(parseInt(e.target.value) || 5)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-                                    />
-                                    <span className="text-sm text-gray-400">{t('admin.security.attemptsUnit')}</span>
-                                </div>
-                            </SettingRow>
+                <div className="p-4 space-y-6">
 
-                            <SettingRow
-                                label={t('admin.security.lockoutDuration')}
-                                description={t('admin.security.lockoutDurationDesc')}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="number"
-                                        min="5"
-                                        max="60"
-                                        value={lockoutDuration}
-                                        onChange={(e) => setLockoutDuration(parseInt(e.target.value) || 15)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-                                    />
-                                    <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
-                                </div>
-                            </SettingRow>
-
-                            <SettingRow
-                                label={t('admin.security.trackingWindow')}
-                                description={t('admin.security.trackingWindowDesc')}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="number"
-                                        min="15"
-                                        max="120"
-                                        value={trackingWindow}
-                                        onChange={(e) => setTrackingWindow(parseInt(e.target.value) || 30)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
-                                    />
-                                    <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
-                                </div>
-                            </SettingRow>
-
-                            <div className="mt-4 p-3 bg-green-900/10 border border-green-700/30 rounded-lg">
-                                <div className="flex items-start gap-2">
-                                    <CheckCircle size={16} className="text-green-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1">
-                                        <p className="text-xs text-green-400 font-medium mb-1">{t('admin.security.protectionActive')}</p>
-                                        <p className="text-xs text-gray-400">
-                                            {t('admin.security.protectionActiveDesc', { max: maxLoginAttempts, duration: lockoutDuration })}
-                                        </p>
+                    {/* TAB: Auth & Protection */}
+                    {secTab === 'auth' && (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Brute force */}
+                                <Section title={t('admin.security.attackProtectionTitle')} icon={Shield} iconColor="red">
+                                    <div className="space-y-4">
+                                        <SettingRow label={t('admin.security.maxLoginAttempts')} description={t('admin.security.maxLoginAttemptsDesc')}>
+                                            <div className="flex items-center gap-2">
+                                                <input type="number" min="3" max="10" value={maxLoginAttempts}
+                                                    onChange={(e) => setMaxLoginAttempts(parseInt(e.target.value) || 5)}
+                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
+                                                <span className="text-sm text-gray-400">{t('admin.security.attemptsUnit')}</span>
+                                            </div>
+                                        </SettingRow>
+                                        <SettingRow label={t('admin.security.lockoutDuration')} description={t('admin.security.lockoutDurationDesc')}>
+                                            <div className="flex items-center gap-2">
+                                                <input type="number" min="5" max="60" value={lockoutDuration}
+                                                    onChange={(e) => setLockoutDuration(parseInt(e.target.value) || 15)}
+                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
+                                                <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
+                                            </div>
+                                        </SettingRow>
+                                        <SettingRow label={t('admin.security.trackingWindow')} description={t('admin.security.trackingWindowDesc')}>
+                                            <div className="flex items-center gap-2">
+                                                <input type="number" min="15" max="120" value={trackingWindow}
+                                                    onChange={(e) => setTrackingWindow(parseInt(e.target.value) || 30)}
+                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500" />
+                                                <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
+                                            </div>
+                                        </SettingRow>
+                                        <div className="p-3 bg-green-900/10 border border-green-700/30 rounded-lg flex items-start gap-2">
+                                            <CheckCircle size={15} className="text-green-400 mt-0.5 flex-shrink-0" />
+                                            <div>
+                                                <p className="text-xs text-green-400 font-medium mb-0.5">{t('admin.security.protectionActive')}</p>
+                                                <p className="text-xs text-gray-400">{t('admin.security.protectionActiveDesc', { max: maxLoginAttempts, duration: lockoutDuration })}</p>
+                                            </div>
+                                        </div>
                                     </div>
+                                </Section>
+
+                                {/* Session */}
+                                <Section title={t('admin.security.authTitle')} icon={Lock} iconColor="blue">
+                                    <div className="space-y-4">
+                                        <SettingRow label={t('admin.security.sessionTimeout')} description={t('admin.security.sessionTimeoutDesc')}>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <input type="number" min="1" max="168" value={sessionTimeoutHours}
+                                                    onChange={(e) => handleSessionTimeoutChange(parseInt(e.target.value) || 168)}
+                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
+                                                <span className="text-sm text-gray-400">{t('admin.security.hours')}</span>
+                                                {sessionTimeoutHours >= 24 && (
+                                                    <span className="text-sm text-blue-400 font-medium">
+                                                        ({sessionTimeoutHours % 24 === 0
+                                                            ? `${sessionTimeoutHours / 24} ${sessionTimeoutHours >= 48 ? t('admin.security.days') : t('admin.security.day')}`
+                                                            : `${Math.round((sessionTimeoutHours / 24) * 10) / 10} ${sessionTimeoutHours >= 48 ? t('admin.security.days') : t('admin.security.day')}`
+                                                        })
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {showSessionWarning && (
+                                                <div className="mt-2 flex items-start gap-2 p-2 bg-yellow-900/20 rounded border border-yellow-700/50">
+                                                    <AlertTriangle size={13} className="text-yellow-400 mt-0.5 flex-shrink-0" />
+                                                    <p className="text-xs text-yellow-300">{t('admin.security.sessionWarning')}</p>
+                                                </div>
+                                            )}
+                                            <div className="mt-2 flex items-start gap-2 p-2 bg-gray-900/50 rounded border border-gray-800">
+                                                <Info size={13} className="text-gray-500 mt-0.5 flex-shrink-0" />
+                                                <p className="text-xs text-gray-500">
+                                                    {t('admin.security.sessionStorageHintPrefix')}<code className="bg-gray-800 px-1 rounded">JWT_EXPIRES_IN</code>{t('admin.security.sessionStorageHintSuffix')}
+                                                </p>
+                                            </div>
+                                        </SettingRow>
+                                    </div>
+                                </Section>
+                            </div>
+
+                            {/* Features actives */}
+                            <div className="p-3 bg-blue-900/10 border border-blue-700/30 rounded-lg flex items-start gap-3">
+                                <CheckCircle size={16} className="text-blue-400 mt-0.5 shrink-0" />
+                                <div>
+                                    <h4 className="text-sm font-medium text-blue-400 mb-1">{t('admin.security.activeFeaturesTitle')}</h4>
+                                    <ul className="space-y-0.5 text-xs text-gray-400">
+                                        <li>• {t('admin.security.activeFeatureBruteforce')}</li>
+                                        <li>• {t('admin.security.activeFeatureBlocking')}</li>
+                                        <li>• {t('admin.security.activeFeatureNotifications')}</li>
+                                    </ul>
                                 </div>
                             </div>
-                        </div>
-                    </Section>
 
-                    {/* Authentification */}
-                    <Section title={t('admin.security.authTitle')} icon={Lock} iconColor="blue">
-                        <div className="space-y-4">
-                            <SettingRow
-                                label={t('admin.security.sessionTimeout')}
-                                description={t('admin.security.sessionTimeoutDesc')}
-                            >
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="168"
-                                        value={sessionTimeoutHours}
-                                        onChange={(e) => handleSessionTimeoutChange(parseInt(e.target.value) || 168)}
-                                        className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:outline-none"
-                                    />
-                                    <span className="text-sm text-gray-400">{t('admin.security.hours')}</span>
-                                    {sessionTimeoutHours >= 24 && (
-                                        <span className="text-sm text-blue-400 font-medium">
-                                            ({sessionTimeoutHours % 24 === 0 
-                                                ? `${sessionTimeoutHours / 24} ${sessionTimeoutHours >= 48 ? t('admin.security.days') : t('admin.security.day')}`
-                                                : `${Math.round((sessionTimeoutHours / 24) * 10) / 10} ${sessionTimeoutHours >= 48 ? t('admin.security.days') : t('admin.security.day')}`
-                                            })
-                                        </span>
+                            {/* IPs bloquées */}
+                            <Section title={t('admin.security.blockedTitle')} icon={Shield} iconColor="red">
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm text-gray-400">{t('admin.security.blockedListDesc')}</p>
+                                        <button onClick={loadBlockedIPs} disabled={isLoadingBlockedIPs}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg disabled:opacity-50">
+                                            <RefreshCw size={13} className={isLoadingBlockedIPs ? 'animate-spin' : ''} />
+                                            {t('admin.security.refresh')}
+                                        </button>
+                                    </div>
+                                    {isLoadingBlockedIPs ? (
+                                        <div className="flex items-center justify-center py-6">
+                                            <Loader2 className="animate-spin text-blue-400" size={20} />
+                                        </div>
+                                    ) : blockedIPs.length === 0 ? (
+                                        <div className="py-6 text-center">
+                                            <CheckCircle size={28} className="text-green-400 mx-auto mb-2" />
+                                            <p className="text-sm text-gray-400">{t('admin.security.noBlocked')}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {blockedIPs.map((item) => (
+                                                <div key={item.identifier}
+                                                    className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg border border-gray-800 hover:border-red-700/50 transition-colors">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <span className="text-sm font-medium text-white font-mono truncate">{item.identifier}</span>
+                                                            <span className="shrink-0 px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">
+                                                                {item.count} {item.count > 1 ? t('admin.security.attempts') : t('admin.security.attempt')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-500">
+                                                            {t('admin.security.blockedFor')} <span className="text-orange-400 font-medium">{formatRemainingTime(item.remainingTime)}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => handleUnblock(item.identifier)}
+                                                        className="shrink-0 ml-3 flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg">
+                                                        <Trash2 size={13} />
+                                                        {t('admin.security.unblock')}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
-                                {showSessionWarning && (
-                                    <div className="mt-2 flex items-start gap-2 p-2 bg-yellow-900/20 rounded border border-yellow-700/50">
-                                        <AlertTriangle size={14} className="text-yellow-400 mt-0.5 flex-shrink-0" />
-                                        <p className="text-xs text-yellow-300">
-                                            {t('admin.security.sessionWarning')}
-                                        </p>
+                            </Section>
+
+                            {/* Bouton sauvegarder auth */}
+                            <div className="flex justify-end pt-2 border-t border-gray-800">
+                                <button onClick={handleSaveSecuritySettings} disabled={isLoading}
+                                    className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white text-sm transition-colors disabled:opacity-50 font-medium">
+                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                    {t('admin.security.saveSettings')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: Réseau & CORS */}
+                    {secTab === 'network' && (
+                        <div className="space-y-6">
+                            {/* CORS */}
+                            <Section title={t('admin.security.corsTitle')} icon={Globe} iconColor="cyan">
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-blue-900/10 border border-blue-700/30 rounded-lg flex items-start gap-2">
+                                        <Info size={15} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-blue-300 font-semibold mb-0.5">{t('admin.security.corsIntroTitle')}</p>
+                                            <p className="text-xs text-gray-400">{t('admin.security.corsIntroDesc')}</p>
+                                        </div>
                                     </div>
-                                )}
-                                <div className="mt-2 flex items-start gap-2 p-2 bg-gray-900/50 rounded border border-gray-800">
-                                    <Info size={14} className="text-gray-500 mt-0.5 flex-shrink-0" />
-                                    <p className="text-xs text-gray-500">
-                                        {t('admin.security.sessionStorageHintPrefix')}<code className="bg-gray-800 px-1 rounded">JWT_EXPIRES_IN</code>{t('admin.security.sessionStorageHintSuffix')}
-                                    </p>
-                                </div>
-                            </SettingRow>
-                        </div>
-                    </Section>
 
-                    {/* Sécurité réseau */}
-                    <Section title={t('admin.security.networkSecurityTitle')} icon={Shield}>
-                        <div className="space-y-4">
-                            <SettingRow
-                                label={t('admin.security.rateLimit')}
-                                description={t('admin.security.rateLimitDesc')}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={false}
-                                        disabled
-                                        className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded opacity-50 cursor-not-allowed"
-                                    />
-                                    <span className="text-sm text-gray-500">{t('admin.security.notImplemented')}</span>
-                                </div>
-                                <div className="mt-2 flex items-start gap-2 p-2 bg-gray-900/50 rounded border border-gray-800">
-                                    <XCircle size={14} className="text-gray-500 mt-0.5 flex-shrink-0" />
-                                    <p className="text-xs text-gray-500">
-                                        {t('admin.security.rateLimitHintPrefix')}<code className="bg-gray-800 px-1 rounded">express-rate-limit</code>{t('admin.security.rateLimitHintSuffix')}
-                                    </p>
-                                </div>
-                            </SettingRow>
-                        </div>
-                    </Section>
-
-                    {/* CORS Configuration */}
-                    <Section title={t('admin.security.corsTitle')} icon={Globe} iconColor="cyan">
-                <div className="space-y-4">
-                    <div className="p-3 bg-blue-900/10 border border-blue-700/30 rounded-lg">
-                        <div className="flex items-start gap-2">
-                            <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                                <p className="text-xs text-blue-300 mb-1">
-                                    <strong>{t('admin.security.corsIntroTitle')}</strong>
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                    {t('admin.security.corsIntroDesc')}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Allowed Origins */}
-                    <SettingRow
-                        label={t('admin.security.allowedOrigins')}
-                        description={t('admin.security.allowedOriginsDesc')}
-                    >
-                        <div className="w-full space-y-3 max-w-xl">
-                            <p className="text-xs text-gray-500 leading-relaxed max-w-lg">
-                                {t('admin.security.allowedOriginsVsPublicUrl')}
-                            </p>
-                            <div className="flex gap-2 flex-wrap items-center">
-                                <input
-                                    type="text"
-                                    value={newOrigin}
-                                    onChange={(e) => setNewOrigin(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && addOrigin()}
-                                    placeholder={t('admin.security.originPlaceholder')}
-                                    className="w-full min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                                />
-                                <button
-                                    onClick={addOrigin}
-                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Plus size={14} />
-                                    <span>{t('admin.security.add')}</span>
-                                </button>
-                            </div>
-                            {corsConfig?.allowedOrigins && corsConfig.allowedOrigins.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {corsConfig.allowedOrigins.map((origin) => (
-                                        <div
-                                            key={origin}
-                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
-                                        >
-                                            <span className="text-sm text-white font-mono">{origin}</span>
-                                            <button
-                                                onClick={() => removeOrigin(origin)}
-                                                className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={t('admin.security.remove')}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                    <SettingRow label={t('admin.security.allowedOrigins')} description={t('admin.security.allowedOriginsDesc')}>
+                                        <div className="w-full space-y-2">
+                                            <p className="text-xs text-gray-500">{t('admin.security.allowedOriginsVsPublicUrl')}</p>
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <input type="text" value={newOrigin}
+                                                    onChange={(e) => setNewOrigin(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && addOrigin()}
+                                                    placeholder={t('admin.security.originPlaceholder')}
+                                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                                                <button onClick={addOrigin}
+                                                    className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
+                                                    <Plus size={13} /> {t('admin.security.add')}
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                                                {corsConfig?.allowedOrigins && corsConfig.allowedOrigins.length > 0
+                                                    ? corsConfig.allowedOrigins.map(origin => (
+                                                        <div key={origin} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
+                                                            <span className="text-sm text-white font-mono">{origin}</span>
+                                                            <button onClick={() => removeOrigin(origin)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
+                                                        </div>
+                                                    ))
+                                                    : <p className="text-xs text-gray-500 self-center">{t('admin.security.noOriginsConfigured')}</p>
+                                                }
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                            {(!corsConfig?.allowedOrigins || corsConfig.allowedOrigins.length === 0) && (
-                                <div className="space-y-1.5 rounded-lg bg-gray-900/40 border border-gray-800 p-2.5 max-w-lg">
-                                    <p className="text-xs text-gray-400 leading-relaxed">
-                                        {t('admin.security.noOriginsConfigured')}
-                                    </p>
-                                    <p className="text-xs text-gray-500 leading-relaxed">
-                                        {t('admin.security.corsDefaultsDesc')}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </SettingRow>
+                                    </SettingRow>
 
-                    {/* Allow Credentials */}
-                    <SettingRow
-                        label={t('admin.security.allowCredentials')}
-                        description={t('admin.security.allowCredentialsDesc')}
-                    >
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true}
-                                onChange={(e) => setCorsConfig({
-                                    ...corsConfig,
-                                    allowCredentials: e.target.checked,
-                                    allowedOrigins: corsConfig?.allowedOrigins || [],
-                                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-                                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
-                                })}
-                                className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-400">
-                                {corsConfig?.allowCredentials !== undefined && corsConfig.allowCredentials ? t('admin.security.enabled') : t('admin.security.disabled')}
-                            </span>
-                        </div>
-                    </SettingRow>
-
-                    {/* Allowed Methods */}
-                    <SettingRow
-                        label={t('admin.security.allowedMethods')}
-                        description={t('admin.security.allowedMethodsDesc')}
-                    >
-                        <div className="w-full space-y-2">
-                            <div className="flex gap-2 items-center">
-                                <input
-                                    type="text"
-                                    value={newMethod}
-                                    onChange={(e) => setNewMethod(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && addMethod()}
-                                    placeholder={t('admin.security.methodsPlaceholder')}
-                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                                />
-                                <button
-                                    onClick={addMethod}
-                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Plus size={14} />
-                                    <span>{t('admin.security.add')}</span>
-                                </button>
-                            </div>
-                            {corsConfig?.allowedMethods && corsConfig.allowedMethods.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {corsConfig.allowedMethods.map((method) => (
-                                        <div
-                                            key={method}
-                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
-                                        >
-                                            <span className="text-sm text-white font-mono">{method}</span>
-                                            <button
-                                                onClick={() => removeMethod(method)}
-                                                className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={t('admin.security.remove')}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                    <SettingRow label={t('admin.security.allowCredentials')} description={t('admin.security.allowCredentialsDesc')}>
+                                        <div className="flex items-center gap-2">
+                                            <input type="checkbox"
+                                                checked={corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true}
+                                                onChange={(e) => setCorsConfig({ ...corsConfig, allowCredentials: e.target.checked, allowedOrigins: corsConfig?.allowedOrigins || [], allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'], allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With'] })}
+                                                className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500" />
+                                            <span className="text-sm text-gray-400">
+                                                {(corsConfig?.allowCredentials ?? true) ? t('admin.security.enabled') : t('admin.security.disabled')}
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </SettingRow>
+                                    </SettingRow>
 
-                    {/* Allowed Headers */}
-                    <SettingRow
-                        label={t('admin.security.allowedHeaders')}
-                        description={t('admin.security.allowedHeadersDesc')}
-                    >
-                        <div className="w-full space-y-2">
-                            <div className="flex gap-2 items-center">
-                                <input
-                                    type="text"
-                                    value={newHeader}
-                                    onChange={(e) => setNewHeader(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && addHeader()}
-                                    placeholder={t('admin.security.headersPlaceholder')}
-                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                                />
-                                <button
-                                    onClick={addHeader}
-                                    className="flex-shrink-0 min-w-[90px] px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Plus size={14} />
-                                    <span>{t('admin.security.add')}</span>
-                                </button>
-                            </div>
-                            {corsConfig?.allowedHeaders && corsConfig.allowedHeaders.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {corsConfig.allowedHeaders.map((header) => (
-                                        <div
-                                            key={header}
-                                            className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg"
-                                        >
-                                            <span className="text-sm text-white font-mono">{header}</span>
-                                            <button
-                                                onClick={() => removeHeader(header)}
-                                                className="text-red-400 hover:text-red-300 transition-colors"
-                                                title={t('admin.security.remove')}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                    <SettingRow label={t('admin.security.allowedMethods')} description={t('admin.security.allowedMethodsDesc')}>
+                                        <div className="w-full space-y-2">
+                                            <div className="flex gap-2 items-center">
+                                                <input type="text" value={newMethod}
+                                                    onChange={(e) => setNewMethod(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && addMethod()}
+                                                    placeholder={t('admin.security.methodsPlaceholder')}
+                                                    className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                                                <button onClick={addMethod} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
+                                                    <Plus size={13} /> {t('admin.security.add')}
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {corsConfig?.allowedMethods?.map(method => (
+                                                    <div key={method} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
+                                                        <span className="text-sm text-white font-mono">{method}</span>
+                                                        <button onClick={() => removeMethod(method)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
-                                    ))}
+                                    </SettingRow>
+
+                                    <SettingRow label={t('admin.security.allowedHeaders')} description={t('admin.security.allowedHeadersDesc')}>
+                                        <div className="w-full space-y-2">
+                                            <div className="flex gap-2 items-center">
+                                                <input type="text" value={newHeader}
+                                                    onChange={(e) => setNewHeader(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && addHeader()}
+                                                    placeholder={t('admin.security.headersPlaceholder')}
+                                                    className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+                                                <button onClick={addHeader} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
+                                                    <Plus size={13} /> {t('admin.security.add')}
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {corsConfig?.allowedHeaders?.map(header => (
+                                                    <div key={header} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
+                                                        <span className="text-sm text-white font-mono">{header}</span>
+                                                        <button onClick={() => removeHeader(header)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </SettingRow>
+
+                                    <div className="flex justify-end pt-2 border-t border-gray-800">
+                                        <button onClick={handleSaveCorsConfig} disabled={isLoading}
+                                            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm rounded-lg disabled:opacity-50">
+                                            {isLoading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                            {t('admin.security.saveCors')}
+                                        </button>
+                                    </div>
                                 </div>
-                            )}
+                            </Section>
                         </div>
-                    </SettingRow>
+                    )}
 
-                    {/* Save CORS Config Button */}
-                    <div className="flex justify-end pt-2 border-t border-gray-800">
-                        <button
-                            onClick={handleSaveCorsConfig}
-                            disabled={isLoading}
-                            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                            <span>{t('admin.security.saveCors')}</span>
-                        </button>
-                    </div>
-                </div>
-            </Section>
+                    {/* TAB: Journaux */}
+                    {secTab === 'logs' && (
+                        <LogsManagementSection />
+                    )}
 
-                    {/* Save Button */}
-                    <div className="flex justify-end pt-4 border-t border-gray-800">
-                        <button
-                            onClick={handleSaveSecuritySettings}
-                            disabled={isLoading}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                        >
-                            {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                            <span>{t('admin.security.saveSettings')}</span>
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>

@@ -7,9 +7,16 @@
       "clients": "Clients",
       "switches": "Switch",
       "analyse": "Analysis",
+      "bandwidth": "Bandwidth",
       "traffic": "Traffic",
       "events": "Events",
       "debug": "Debug"
+    },
+    "bandwidth": {
+      "chartTitle": "WAN Bandwidth",
+      "loading": "Collecting data...",
+      "noData": "Not enough data yet",
+      "noDataHint": "Data accumulates with each poll (~30s). Check back in a few minutes."
     },
     "pluginNotInstalled": "UniFi plugin is not installed or configured.",
     "pluginNotConnectedDescription": "UniFi plugin is not enabled or connected.",

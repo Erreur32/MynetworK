@@ -4,6 +4,8 @@
     "interfaceLanguage": "Langue de l'interface",
     "interfaceLanguageDescription": "Langue d'affichage de l'application",
     "languageEn": "English",
-    "languageFr": "Français"
+    "languageFr": "Français",
+    "timeFormat24h": "Format 24 heures",
+    "timeFormat12h": "Format 12 heures (AM/PM)"
   }
 }

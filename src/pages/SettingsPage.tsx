@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -66,6 +67,7 @@ import { SecuritySection } from '../components/SecuritySection';
 import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
 import { UserMenu } from '../components/ui';
+import { ToastContainer, type ToastData } from '../components/ui/Toast';
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -174,10 +176,27 @@ export const Section: React.FC<{
   );
 };
 
+type DbInnerTab = 'health' | 'data' | 'performance' | 'vendors';
+
+interface DbHealthReport {
+  status: 'good' | 'warning' | 'critical';
+  issues: string[];
+  suggestions: string[];
+  fragmentationRatio: number;
+  freePages: number;
+  pageCount: number;
+  pageSize: number;
+  dbSize: number;
+  walFileSize: number;
+  integrityOk: boolean | null;
+  lastIntegrityCheck: string | null;
+}
+
 // Database Management Section Component
 const DatabaseManagementSection: React.FC = () => {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
+  const [dbInnerTab, setDbInnerTab] = useState<DbInnerTab>('health');
   const [retentionConfig, setRetentionConfig] = useState({
     historyRetentionDays: 30,
     scanRetentionDays: 90,
@@ -208,12 +227,14 @@ const DatabaseManagementSection: React.FC = () => {
     walSize: number;
     dbSize: number;
   } | null>(null);
+  const [health, setHealth] = useState<DbHealthReport | null>(null);
+  const [isLoadingHealth, setIsLoadingHealth] = useState(false);
+  const [isVacuuming, setIsVacuuming] = useState(false);
+  const [isCheckingIntegrity, setIsCheckingIntegrity] = useState(false);
+  const [isCheckpointing, setIsCheckpointing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
-  const [isPurgingHistory, setIsPurgingHistory] = useState(false);
-  const [isPurgingScans, setIsPurgingScans] = useState(false);
-  const [isPurgingOffline, setIsPurgingOffline] = useState(false);
   const [isPurgingAll, setIsPurgingAll] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -223,6 +244,7 @@ const DatabaseManagementSection: React.FC = () => {
     loadDatabaseStats();
     loadSizeEstimate();
     loadDbStats();
+    loadHealth();
   }, []);
 
   const loadDbStats = async () => {
@@ -233,6 +255,83 @@ const DatabaseManagementSection: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to load DB stats:', error);
+    }
+  };
+
+  const loadHealth = async () => {
+    setIsLoadingHealth(true);
+    try {
+      const response = await api.get<DbHealthReport>('/api/database/health');
+      if (response.success && response.result) {
+        setHealth(response.result);
+      }
+    } catch (error: any) {
+      console.error('Failed to load DB health:', error);
+    } finally {
+      setIsLoadingHealth(false);
+    }
+  };
+
+  const handleVacuum = async () => {
+    if (!confirm('Exécuter VACUUM ? La base sera compactée et l\'espace libéré. Cela peut prendre quelques secondes.')) return;
+    setIsVacuuming(true);
+    setMessage(null);
+    try {
+      const response = await api.post<{ message: string; dbSizeBefore: number; dbSizeAfter: number }>('/api/database/vacuum');
+      if (response.success && response.result) {
+        setMessage({ type: 'success', text: response.result.message });
+        await loadHealth();
+        await loadDbStats();
+        setTimeout(() => setMessage(null), 5000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du VACUUM' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors du VACUUM' });
+    } finally {
+      setIsVacuuming(false);
+    }
+  };
+
+  const handleIntegrityCheck = async () => {
+    setIsCheckingIntegrity(true);
+    setMessage(null);
+    try {
+      const response = await api.post<{ ok: boolean; messages: string[] }>('/api/database/integrity-check');
+      if (response.success && response.result) {
+        if (response.result.ok) {
+          setMessage({ type: 'success', text: 'Intégrité OK — aucun problème détecté' });
+        } else {
+          setMessage({ type: 'error', text: `Problèmes détectés : ${response.result.messages.join(', ')}` });
+        }
+        await loadHealth();
+        setTimeout(() => setMessage(null), 6000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la vérification' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors de la vérification d\'intégrité' });
+    } finally {
+      setIsCheckingIntegrity(false);
+    }
+  };
+
+  const handleWalCheckpoint = async () => {
+    setIsCheckpointing(true);
+    setMessage(null);
+    try {
+      const response = await api.post('/api/database/wal-checkpoint');
+      if (response.success) {
+        setMessage({ type: 'success', text: 'Checkpoint WAL effectué avec succès' });
+        await loadHealth();
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du checkpoint WAL' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Erreur lors du checkpoint WAL' });
+    } finally {
+      setIsCheckpointing(false);
     }
   };
 
@@ -346,87 +445,6 @@ const DatabaseManagementSection: React.FC = () => {
     }
   };
 
-  const handlePurgeHistory = async () => {
-    if (!confirm(t('admin.database.confirmPurgeHistory'))) {
-      return;
-    }
-    setIsPurgingHistory(true);
-    setMessage(null);
-    try {
-      const response = await api.post<PurgeResponse>('/api/network-scan/purge/history', { retentionDays: retentionConfig.historyRetentionDays });
-      if (response.success && response.result) {
-        setMessage({ 
-          type: 'success', 
-          text: t('admin.database.purgeHistorySuccess', { count: response.result.deleted })
-        });
-        loadDatabaseStats();
-        loadSizeEstimate();
-        loadDbStats();
-        setTimeout(() => setMessage(null), 5000);
-      } else {
-        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeHistoryError') });
-      }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: t('admin.database.purgeHistoryError') });
-    } finally {
-      setIsPurgingHistory(false);
-    }
-  };
-
-  const handlePurgeScans = async () => {
-    if (!confirm(t('admin.database.confirmPurgeScans'))) {
-      return;
-    }
-    setIsPurgingScans(true);
-    setMessage(null);
-    try {
-      const response = await api.post<PurgeResponse>('/api/network-scan/purge/scans', { retentionDays: retentionConfig.scanRetentionDays });
-      if (response.success && response.result) {
-        setMessage({ 
-          type: 'success', 
-          text: t('admin.database.purgeScansSuccess', { count: response.result.deleted })
-        });
-        loadDatabaseStats();
-        loadSizeEstimate();
-        loadDbStats();
-        setTimeout(() => setMessage(null), 5000);
-      } else {
-        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeScansError') });
-      }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: t('admin.database.purgeScansError') });
-    } finally {
-      setIsPurgingScans(false);
-    }
-  };
-
-  const handlePurgeOffline = async () => {
-    if (!confirm(t('admin.database.confirmPurgeOffline'))) {
-      return;
-    }
-    setIsPurgingOffline(true);
-    setMessage(null);
-    try {
-      const response = await api.post<PurgeResponse>('/api/network-scan/purge/offline', { retentionDays: retentionConfig.offlineRetentionDays });
-      if (response.success && response.result) {
-        setMessage({ 
-          type: 'success', 
-          text: t('admin.database.purgeOfflineSuccess', { count: response.result.deleted })
-        });
-        loadDatabaseStats();
-        loadSizeEstimate();
-        loadDbStats();
-        setTimeout(() => setMessage(null), 5000);
-      } else {
-        setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeOfflineError') });
-      }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: t('admin.database.purgeOfflineError') });
-    } finally {
-      setIsPurgingOffline(false);
-    }
-  };
-
   const handlePurgeAll = async () => {
     if (!confirm(t('admin.database.confirmPurgeAll'))) {
       return;
@@ -510,312 +528,445 @@ const DatabaseManagementSection: React.FC = () => {
     });
   };
 
+  const dbInnerTabs: { id: DbInnerTab; label: string }[] = [
+    { id: 'health', label: 'Santé & Actions' },
+    { id: 'data', label: 'Données & Rétention' },
+    { id: 'performance', label: 'Performance' },
+    { id: 'vendors', label: 'Vendors IEEE' },
+  ];
+
+  const healthBadge = health ? (
+    health.status === 'good'
+      ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/40 text-emerald-400 border border-emerald-700/50">Bonne</span>
+      : health.status === 'warning'
+        ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-900/40 text-amber-400 border border-amber-700/50">Avertissement</span>
+        : <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-900/40 text-red-400 border border-red-700/50">Critique</span>
+  ) : null;
+
   return (
-    <div className="space-y-6">
-      <Section title={t('admin.database.retentionTitle')} icon={Database} iconColor="purple">
-        <div className="space-y-6">
-          {message && (
-            <div className={`p-3 rounded-lg ${
-              message.type === 'success' 
-                ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400' 
-                : 'bg-red-900/20 border border-red-700/50 text-red-400'
-            }`}>
-              {message.text}
+    <div className="space-y-4">
+      {/* Health notification banner */}
+      {health && health.status !== 'good' && (
+        <div className={`p-4 rounded-xl border flex items-start gap-3 ${
+          health.status === 'critical'
+            ? 'bg-red-900/20 border-red-700/50'
+            : 'bg-amber-900/20 border-amber-700/50'
+        }`}>
+          <AlertCircle size={18} className={health.status === 'critical' ? 'text-red-400 mt-0.5 shrink-0' : 'text-amber-400 mt-0.5 shrink-0'} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-semibold mb-1 ${health.status === 'critical' ? 'text-red-300' : 'text-amber-300'}`}>
+              {health.status === 'critical' ? 'Problèmes détectés sur la base de données' : 'Avertissements sur la base de données'}
+            </p>
+            <ul className={`text-xs space-y-0.5 ${health.status === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>
+              {health.issues.map((issue, i) => <li key={i}>• {issue}</li>)}
+            </ul>
+            {health.suggestions.length > 0 && (
+              <ul className="text-xs text-gray-400 mt-1 space-y-0.5">
+                {health.suggestions.map((s, i) => <li key={i}>→ {s}</li>)}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setDbInnerTab('health')} className={`text-xs shrink-0 underline ${health.status === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>Voir</button>
+        </div>
+      )}
+
+      {/* Global message */}
+      {message && (
+        <div className={`p-3 rounded-lg text-sm ${
+          message.type === 'success'
+            ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400'
+            : 'bg-red-900/20 border border-red-700/50 text-red-400'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Inner tab bar */}
+      <div className="bg-theme-card rounded-xl border border-theme overflow-hidden" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-theme bg-theme-primary overflow-x-auto">
+          <Database size={16} className="text-purple-400 mr-2 shrink-0" />
+          {dbInnerTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setDbInnerTab(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                dbInnerTab === tab.id
+                  ? 'bg-purple-600/30 text-purple-300 border border-purple-600/50'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              }`}
+            >
+              {tab.label}
+              {tab.id === 'health' && health && health.status !== 'good' && (
+                <span className={`w-2 h-2 rounded-full ${health.status === 'critical' ? 'bg-red-400' : 'bg-amber-400'}`} />
+              )}
+            </button>
+          ))}
+          <div className="ml-auto shrink-0">{healthBadge}</div>
+        </div>
+
+        <div className="p-4 space-y-6">
+
+          {/* TAB: Santé & Actions */}
+          {dbInnerTab === 'health' && (
+            <div className="space-y-6">
+              {/* Status card */}
+              <div className={`p-4 rounded-xl border ${
+                !health ? 'border-gray-700 bg-[#1a1a1a]'
+                : health.status === 'good' ? 'border-emerald-700/40 bg-emerald-900/10'
+                : health.status === 'warning' ? 'border-amber-700/40 bg-amber-900/10'
+                : 'border-red-700/40 bg-red-900/10'
+              }`}>
+                {isLoadingHealth ? (
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Loader2 size={16} className="animate-spin" /> Chargement du rapport de santé...
+                  </div>
+                ) : health ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                        health.status === 'good' ? 'bg-emerald-500/20' : health.status === 'warning' ? 'bg-amber-500/20' : 'bg-red-500/20'
+                      }`}>
+                        {health.status === 'good'
+                          ? <CheckCircle size={20} className="text-emerald-400" />
+                          : <AlertCircle size={20} className={health.status === 'warning' ? 'text-amber-400' : 'text-red-400'} />
+                        }
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-200">
+                          {health.status === 'good' ? 'Base de données saine' : health.status === 'warning' ? 'Avertissements détectés' : 'Problèmes critiques'}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          Fragmentation : {Math.round(health.fragmentationRatio * 100)}% · {health.freePages} pages libres / {health.pageCount} total
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">Taille DB</div>
+                        <div className="text-sm font-semibold text-gray-200">{formatBytes(health.dbSize)}</div>
+                      </div>
+                      <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">Fichier WAL</div>
+                        <div className={`text-sm font-semibold ${health.walFileSize > 50 * 1024 * 1024 ? 'text-red-400' : health.walFileSize > 10 * 1024 * 1024 ? 'text-amber-400' : 'text-gray-200'}`}>
+                          {health.walFileSize > 0 ? formatBytes(health.walFileSize) : 'Vide'}
+                        </div>
+                      </div>
+                      <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">Fragmentation</div>
+                        <div className={`text-sm font-semibold ${health.fragmentationRatio >= 0.2 ? 'text-red-400' : health.fragmentationRatio >= 0.1 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {Math.round(health.fragmentationRatio * 100)}%
+                        </div>
+                      </div>
+                      <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+                        <div className="text-xs text-gray-500 mb-1">Intégrité</div>
+                        <div className={`text-sm font-semibold ${health.integrityOk === null ? 'text-gray-400' : health.integrityOk ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {health.integrityOk === null ? 'Non vérifiée' : health.integrityOk ? 'OK' : 'Erreur'}
+                        </div>
+                        {health.lastIntegrityCheck && (
+                          <div className="text-xs text-gray-600 mt-0.5">
+                            {new Date(health.lastIntegrityCheck).toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {health.issues.length > 0 && (
+                      <div className="space-y-1">
+                        {health.issues.map((issue, i) => (
+                          <div key={i} className={`flex items-start gap-2 text-xs p-2 rounded ${health.status === 'critical' ? 'text-red-400 bg-red-900/10' : 'text-amber-400 bg-amber-900/10'}`}>
+                            <AlertCircle size={12} className="mt-0.5 shrink-0" /> {issue}
+                          </div>
+                        ))}
+                        {health.suggestions.map((s, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs text-gray-400 p-2 rounded bg-[#111]">
+                            <span className="text-blue-400 shrink-0">→</span> {s}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Impossible de charger le rapport de santé.</div>
+                )}
+              </div>
+
+              {/* Actions — toutes regroupées ici */}
+              <div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Actions</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* VACUUM */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={14} className="text-purple-400" />
+                      <span className="text-sm font-medium text-gray-200">VACUUM</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Compacte la base, récupère les pages libres et réduit la fragmentation.</p>
+                    <button onClick={handleVacuum} disabled={isVacuuming}
+                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isVacuuming ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      {isVacuuming ? 'En cours...' : 'Exécuter VACUUM'}
+                    </button>
+                  </div>
+                  {/* Optimiser */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={14} className="text-blue-400" />
+                      <span className="text-sm font-medium text-gray-200">{t('admin.database.optimizeTitle')}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('admin.database.optimizeDesc')}</p>
+                    <button onClick={handleOptimize} disabled={isOptimizing}
+                      className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isOptimizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      {isOptimizing ? 'En cours...' : t('admin.database.optimizeDb')}
+                    </button>
+                  </div>
+                  {/* Intégrité */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Shield size={14} className="text-cyan-400" />
+                      <span className="text-sm font-medium text-gray-200">Vérification intégrité</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Vérifie la cohérence interne de la base (PRAGMA integrity_check).</p>
+                    <button onClick={handleIntegrityCheck} disabled={isCheckingIntegrity}
+                      className="w-full px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isCheckingIntegrity ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
+                      {isCheckingIntegrity ? 'Vérification...' : 'Vérifier intégrité'}
+                    </button>
+                  </div>
+                  {/* Checkpoint WAL */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw size={14} className="text-emerald-400" />
+                      <span className="text-sm font-medium text-gray-200">Checkpoint WAL</span>
+                    </div>
+                    <p className="text-xs text-gray-500">Force l'écriture du fichier WAL dans la base principale (recommandé Docker).</p>
+                    <button onClick={handleWalCheckpoint} disabled={isCheckpointing}
+                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isCheckpointing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      {isCheckpointing ? 'En cours...' : 'Checkpoint WAL'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={() => { loadHealth(); loadDbStats(); }} disabled={isLoadingHealth}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-xs text-gray-300 flex items-center gap-1.5">
+                  {isLoadingHealth ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Actualiser
+                </button>
+              </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-6">
+          {/* TAB: Données & Rétention */}
+          {dbInnerTab === 'data' && (
             <div className="space-y-6">
-              <SettingRow
-                label={t('admin.database.retentionHistory')}
-                description={t('admin.database.retentionHistoryDesc')}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={retentionConfig.historyRetentionDays}
-                    onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
-                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                  />
-                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
-                </div>
-              </SettingRow>
-
-              <SettingRow
-                label={t('admin.database.retentionScans')}
-                description={t('admin.database.retentionScansDesc')}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={retentionConfig.scanRetentionDays}
-                    onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
-                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                  />
-                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
-                </div>
-              </SettingRow>
-
-              <SettingRow
-                label={t('admin.database.retentionOffline')}
-                description={t('admin.database.retentionOfflineDesc')}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={retentionConfig.offlineRetentionDays}
-                    onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
-                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                  />
-                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
-                </div>
-              </SettingRow>
-
-              <SettingRow
-                label={t('admin.database.retentionLatency')}
-                description={t('admin.database.retentionLatencyDesc')}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={retentionConfig.latencyMeasurementsRetentionDays}
-                    onChange={(e) => setRetentionConfig({ ...retentionConfig, latencyMeasurementsRetentionDays: parseInt(e.target.value) || 30 })}
-                    className="w-24 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                  />
-                  <span className="text-sm text-gray-400">{t('admin.database.days')}</span>
-                </div>
-              </SettingRow>
-            </div>
-
-            <div className="space-y-6">
-              <SettingRow
-                label={t('admin.database.keepIpsOnPurge')}
-                description={t('admin.database.keepIpsOnPurgeDesc')}
-              >
-                <Toggle
-                  enabled={retentionConfig.keepIpsOnPurge}
-                  onChange={(enabled) => setRetentionConfig({ ...retentionConfig, keepIpsOnPurge: enabled })}
-                />
-              </SettingRow>
-
-              <SettingRow
-                label={t('admin.database.autoPurge')}
-                description={t('admin.database.autoPurgeDesc')}
-              >
-                <Toggle
-                  enabled={retentionConfig.autoPurgeEnabled}
-                  onChange={(enabled) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: enabled })}
-                />
-              </SettingRow>
-
-              {retentionConfig.autoPurgeEnabled && (
-                <SettingRow
-                  label={t('admin.database.purgeSchedule')}
-                  description={t('admin.database.purgeScheduleDesc')}
-                >
-                  <input
-                    type="text"
-                    value={retentionConfig.purgeSchedule}
-                    onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
-                    placeholder={t('admin.database.purgeSchedulePlaceholder')}
-                    className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-                  />
-                </SettingRow>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-            >
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {t('admin.database.save')}
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      <div className="grid grid-cols-2 gap-6">
-        <Section title={t('admin.database.statsTitle')} icon={Database} iconColor="purple">
-          <div className="space-y-4">
-            {databaseStats ? (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.scanEntries')}</div>
-                    <div className="text-lg font-semibold text-gray-200">{databaseStats.scansCount.toLocaleString()}</div>
-                  </div>
-                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.historyEntries')}</div>
-                    <div className="text-lg font-semibold text-gray-200">{databaseStats.historyCount.toLocaleString()}</div>
-                  </div>
-                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.oldestScan')}</div>
-                    <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
-                  </div>
-                  <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-1">{t('admin.database.oldestHistory')}</div>
-                    <div className="text-sm text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
-                  </div>
-                </div>
-                {sizeEstimate && (
-                  <div className="space-y-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                    <div className="text-xs text-gray-400 mb-2">{t('admin.database.sizeEstimate')}</div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">{t('admin.database.currentSize')}</span>
-                        <span className="text-gray-200 font-medium">{sizeEstimate.currentSizeMB.toFixed(2)} MB</span>
+              {/* Stats données scans */}
+              <div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Statistiques des données</div>
+                {databaseStats ? (
+                  <div className="space-y-3">
+                    {/* Compteurs principaux */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 bg-blue-950/30 border border-blue-800/30 rounded-lg">
+                        <div className="p-2 bg-blue-900/40 rounded-lg flex-shrink-0">
+                          <Database size={16} className="text-blue-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-gray-500 truncate">{t('admin.database.scanEntries')}</div>
+                          <div className="text-xl font-bold text-blue-300">{databaseStats.scansCount.toLocaleString()}</div>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">{t('admin.database.estimatedSizeAfterPurge')}</span>
-                        <span className="text-gray-200 font-medium">{sizeEstimate.estimatedSizeAfterPurgeMB.toFixed(2)} MB</span>
-                      </div>
-                      <div className="flex justify-between text-sm pt-1 border-t border-gray-700">
-                        <span className="text-gray-400">{t('admin.database.freedEstimate')}</span>
-                        <span className="text-emerald-400 font-medium">~{sizeEstimate.estimatedFreedMB.toFixed(2)} MB</span>
+                      <div className="flex items-center gap-3 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg">
+                        <div className="p-2 bg-purple-900/40 rounded-lg flex-shrink-0">
+                          <Clock size={16} className="text-purple-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-gray-500 truncate">{t('admin.database.historyEntries')}</div>
+                          <div className="text-xl font-bold text-purple-300">{databaseStats.historyCount.toLocaleString()}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                {dbStats && (
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700">
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.dbSize')}</div>
-                      <div className="text-lg font-semibold text-gray-200">{formatBytes(dbStats.dbSize)}</div>
-                    </div>
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.journalMode')}</div>
-                      <div className="text-lg font-semibold text-gray-200">{dbStats.journalMode}</div>
-                    </div>
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.cacheSize')}</div>
-                      <div className="text-lg font-semibold text-gray-200">{formatBytes(Math.abs(dbStats.cacheSize) * 1024)}</div>
-                    </div>
-                    <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-700">
-                      <div className="text-xs text-gray-400 mb-1">{t('admin.database.syncMode')}</div>
-                      <div className="text-lg font-semibold text-gray-200">
-                        {dbStats.synchronous === 0 ? t('admin.database.syncOff') : dbStats.synchronous === 1 ? t('admin.database.syncNormal') : t('admin.database.syncFull')}
+                    {/* Dates */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
+                        <div className="p-2 bg-gray-800 rounded-lg flex-shrink-0">
+                          <Calendar size={14} className="text-gray-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-gray-500 truncate">{t('admin.database.oldestScan')}</div>
+                          <div className="text-sm font-medium text-gray-300">{formatDate(databaseStats.oldestScan)}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
+                        <div className="p-2 bg-gray-800 rounded-lg flex-shrink-0">
+                          <Calendar size={14} className="text-gray-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-gray-500 truncate">{t('admin.database.oldestHistory')}</div>
+                          <div className="text-sm font-medium text-gray-300">{formatDate(databaseStats.oldestHistory)}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Loader2 size={24} className="animate-spin mx-auto mb-2" />
-                <div>{t('admin.database.loadingStats')}</div>
-              </div>
-            )}
-          </div>
-        </Section>
-
-        <Section title={t('admin.database.maintenanceTitle')} icon={Trash2} iconColor="red">
-        <div className="space-y-4">
-          <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
-            <p className="text-sm text-amber-400 mb-2">
-              <strong>⚠️ {t('admin.debug.attention')}</strong> {t('admin.database.warningIrreversible')}
-            </p>
-          </div>
-
-          <div className="space-y-4">
-
-          <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">{t('admin.database.optimizeTitle')}</h4>
- 
-              <div className="flex items-start gap-4">
-                <button
-                  onClick={handleOptimize}
-                  disabled={isOptimizing}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isOptimizing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                  {t('admin.database.optimizeDb')}
-                </button>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400">
-                    {t('admin.database.optimizeDesc')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-
-            <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">{t('admin.database.cleanDbSection')}</h4>
-
-              <div className="flex items-start gap-4">
-                <button
-                  onClick={handlePurge}
-                  disabled={isPurging}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurging ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  {t('admin.database.cleanDb')}
-                </button>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-400">
-                    {t('admin.database.purgeRetentionDesc')}
-                    <br />- {t('admin.database.historyDays', { days: retentionConfig.historyRetentionDays })}
-                    <br />- {t('admin.database.scansDays', { days: retentionConfig.scanRetentionDays })}
-                    <br />- {t('admin.database.offlineDays', { days: retentionConfig.offlineRetentionDays })}
-                    <br />- {t('admin.database.latencyDays', { days: retentionConfig.latencyMeasurementsRetentionDays })}
-                    {retentionConfig.keepIpsOnPurge && (
-                      <><br /><span className="text-emerald-400">{t('admin.database.ipsKept')}</span></>
+                    {/* Taille */}
+                    {sizeEstimate && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
+                          <div className="p-2 bg-gray-800 rounded-lg flex-shrink-0">
+                            <HardDrive size={14} className="text-gray-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-gray-500 truncate">{t('admin.database.currentSize')}</div>
+                            <div className="text-sm font-semibold text-gray-200">{sizeEstimate.currentSizeMB.toFixed(2)} MB</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
+                          <div className="p-2 bg-gray-800 rounded-lg flex-shrink-0">
+                            <Trash2 size={14} className="text-gray-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-gray-500 truncate">{t('admin.database.estimatedSizeAfterPurge')}</div>
+                            <div className="text-sm font-semibold text-gray-200">{sizeEstimate.estimatedSizeAfterPurgeMB.toFixed(2)} MB</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 bg-emerald-950/30 border border-emerald-800/30 rounded-lg">
+                          <div className="p-2 bg-emerald-900/40 rounded-lg flex-shrink-0">
+                            <CheckCircle size={14} className="text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] text-gray-500 truncate">{t('admin.database.freedEstimate')}</div>
+                            <div className="text-sm font-semibold text-emerald-400">~{sizeEstimate.estimatedFreedMB.toFixed(2)} MB</div>
+                          </div>
+                        </div>
+                      </div>
                     )}
-                  </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-gray-400 text-sm">
+                    <Loader2 size={14} className="animate-spin" /> {t('admin.database.loadingStats')}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-800" />
+
+              {/* Config rétention */}
+              <div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Rétention automatique</div>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-0">
+                  <div>
+                    <SettingRow label={t('admin.database.retentionHistory')} description={t('admin.database.retentionHistoryDesc')}>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="1" max="365" value={retentionConfig.historyRetentionDays}
+                          onChange={(e) => setRetentionConfig({ ...retentionConfig, historyRetentionDays: parseInt(e.target.value) || 30 })}
+                          className="w-20 px-2 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500" />
+                        <span className="text-xs text-gray-500">{t('admin.database.days')}</span>
+                      </div>
+                    </SettingRow>
+                    <SettingRow label={t('admin.database.retentionScans')} description={t('admin.database.retentionScansDesc')}>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="1" max="365" value={retentionConfig.scanRetentionDays}
+                          onChange={(e) => setRetentionConfig({ ...retentionConfig, scanRetentionDays: parseInt(e.target.value) || 90 })}
+                          className="w-20 px-2 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500" />
+                        <span className="text-xs text-gray-500">{t('admin.database.days')}</span>
+                      </div>
+                    </SettingRow>
+                    <SettingRow label={t('admin.database.retentionOffline')} description={t('admin.database.retentionOfflineDesc')}>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="1" max="365" value={retentionConfig.offlineRetentionDays}
+                          onChange={(e) => setRetentionConfig({ ...retentionConfig, offlineRetentionDays: parseInt(e.target.value) || 7 })}
+                          className="w-20 px-2 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500" />
+                        <span className="text-xs text-gray-500">{t('admin.database.days')}</span>
+                      </div>
+                    </SettingRow>
+                    <SettingRow label={t('admin.database.retentionLatency')} description={t('admin.database.retentionLatencyDesc')}>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="1" max="365" value={retentionConfig.latencyMeasurementsRetentionDays}
+                          onChange={(e) => setRetentionConfig({ ...retentionConfig, latencyMeasurementsRetentionDays: parseInt(e.target.value) || 30 })}
+                          className="w-20 px-2 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500" />
+                        <span className="text-xs text-gray-500">{t('admin.database.days')}</span>
+                      </div>
+                    </SettingRow>
+                  </div>
+                  <div>
+                    <SettingRow label={t('admin.database.keepIpsOnPurge')} description={t('admin.database.keepIpsOnPurgeDesc')}>
+                      <Toggle enabled={retentionConfig.keepIpsOnPurge} onChange={(v) => setRetentionConfig({ ...retentionConfig, keepIpsOnPurge: v })} />
+                    </SettingRow>
+                    <SettingRow label={t('admin.database.autoPurge')} description={t('admin.database.autoPurgeDesc')}>
+                      <Toggle enabled={retentionConfig.autoPurgeEnabled} onChange={(v) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: v })} />
+                    </SettingRow>
+                    {retentionConfig.autoPurgeEnabled && (
+                      <SettingRow label={t('admin.database.purgeSchedule')} description={t('admin.database.purgeScheduleDesc')}>
+                        <input type="text" value={retentionConfig.purgeSchedule}
+                          onChange={(e) => setRetentionConfig({ ...retentionConfig, purgeSchedule: e.target.value })}
+                          placeholder="0 2 * * *"
+                          className="w-32 px-2 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500" />
+                      </SettingRow>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-gray-800">
+                  <button onClick={handleSave} disabled={isSaving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-sm font-medium text-white flex items-center gap-2">
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    {t('admin.database.save')}
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <h4 className="text-sm font-semibold text-red-400 mb-2">{t('admin.database.dangerousActions')}</h4>
-              <div className="flex items-start gap-4">
-                <button
-                  onClick={handlePurgeAll}
-                  disabled={isPurgingAll}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white flex items-center gap-2"
-                >
-                  {isPurgingAll ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  {t('admin.database.deleteAll')}
-                </button>
-                {retentionConfig.keepIpsOnPurge && (
-                  <div className="flex-1">
-                    <p className="text-xs text-amber-400">
-                      {t('admin.database.noteIpsKept')}
+              <div className="border-t border-gray-800" />
+
+              {/* Purge / nettoyage */}
+              <div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nettoyage des données</div>
+                <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg mb-3">
+                  <p className="text-xs text-amber-400"><strong>⚠️</strong> {t('admin.database.warningIrreversible')}</p>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <button onClick={handlePurge} disabled={isPurging}
+                      className="shrink-0 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 rounded-lg text-sm font-medium text-white flex items-center gap-2">
+                      {isPurging ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      {t('admin.database.cleanDb')}
+                    </button>
+                    <p className="text-xs text-gray-500">
+                      {t('admin.database.purgeRetentionDesc')} historique {retentionConfig.historyRetentionDays}j, scans {retentionConfig.scanRetentionDays}j, offline {retentionConfig.offlineRetentionDays}j, latence {retentionConfig.latencyMeasurementsRetentionDays}j
+                      {retentionConfig.keepIpsOnPurge && <span className="text-emerald-400"> · IPs conservées</span>}
                     </p>
                   </div>
-                )}
+                  <div className="flex items-center gap-4">
+                    <button onClick={handlePurgeAll} disabled={isPurgingAll}
+                      className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg text-sm font-medium text-white flex items-center gap-2">
+                      {isPurgingAll ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      {t('admin.database.deleteAll')}
+                    </button>
+                    <p className="text-xs text-amber-400">{retentionConfig.keepIpsOnPurge ? t('admin.database.noteIpsKept') : 'Supprime toutes les données de scan sans rétention.'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button onClick={() => { loadDatabaseStats(); loadSizeEstimate(); }} disabled={isLoading}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-xs text-gray-300 flex items-center gap-1.5">
+                  {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Actualiser
+                </button>
               </div>
             </div>
+          )}
 
+          {/* TAB: Performance */}
+          {dbInnerTab === 'performance' && <DatabasePerformanceSection />}
 
-          </div>
+          {/* TAB: Vendors IEEE */}
+          {dbInnerTab === 'vendors' && <WiresharkVendorSection />}
+
         </div>
-        </Section>
       </div>
-
-      <Section title={t('admin.database.perfSectionTitle')} icon={Sparkles} iconColor="blue">
-        <DatabasePerformanceSection />
-      </Section>
-
-
-      <Section title="Base de vendors IEEE OUI" icon={HardDrive} iconColor="cyan">
-        <WiresharkVendorSection />
-      </Section>
     </div>
   );
 };
+
 
 // Types for API responses
 interface DatabaseConfig {
@@ -1997,27 +2148,29 @@ const UpdateCheckSection: React.FC = () => {
 };
 
 // Backup Section Component (for Administration > Backup tab)
+type BackupInnerTab = 'freebox' | 'unifi';
+
 const BackupSection: React.FC = () => {
   const { t } = useTranslation();
   const { freeboxUrl, isRegistered: isFreeboxRegistered } = useAuthStore();
   const { plugins } = usePluginStore();
   const [hideBackupImportantBanner, setHideBackupImportantBanner] = useState(false);
-  
+  const [backupTab, setBackupTab] = useState<BackupInnerTab>('freebox');
+
   // Get UniFi plugin configuration
   const unifiPlugin = plugins.find(p => p.id === 'unifi');
   const unifiUrl = unifiPlugin?.settings?.url as string | undefined;
   const unifiSite = (unifiPlugin?.settings?.site as string) || 'default';
   const unifiConfigured = unifiPlugin?.configured || false;
-  
+
   // Build Freebox backup URL
   const freeboxBackupUrl = freeboxUrl ? getFreeboxBackupUrl(freeboxUrl) : null;
-  
+
   // Build UniFi backup URL: {controllerUrl}/manage/{site}/settings/system/backups
   const getUnifiBackupUrl = (): string | null => {
     if (!unifiUrl) return null;
     try {
       const url = new URL(unifiUrl);
-      // UniFi backup page format: /manage/{site}/settings/system/backups
       const site = unifiSite || 'default';
       const baseUrl = `${url.protocol}//${url.host}${url.port ? `:${url.port}` : ''}`;
       return `${baseUrl}/manage/${site}/settings/system/backups`;
@@ -2025,12 +2178,17 @@ const BackupSection: React.FC = () => {
       return null;
     }
   };
-  
+
   const unifiBackupUrl = getUnifiBackupUrl();
 
+  const backupTabs: { id: BackupInnerTab; label: string; icon: React.ElementType }[] = [
+    { id: 'freebox', label: t('admin.backup.tabFreebox'), icon: Server },
+    { id: 'unifi', label: t('admin.backup.tabUnifi'), icon: Network },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Information Alert - dismissible */}
+    <div className="space-y-4">
+      {/* Dismissible info banner */}
       {!hideBackupImportantBanner && (
         <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg relative">
           <button
@@ -2059,94 +2217,120 @@ const BackupSection: React.FC = () => {
         </div>
       )}
 
-      <Section title={t('admin.freeboxBackup')} icon={Server} iconColor="cyan">
-        <div className="space-y-4">
-          <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-sm text-gray-300 mb-3">
-              {t('admin.freeboxBackupDesc')}
-              {t('admin.freeboxBackupFirmwareNote')}
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.freeboxBackupExportNote')}
-            </p>
-            {freeboxBackupUrl && isFreeboxRegistered ? (
-              <div className="space-y-2">
-                <div className="text-xs text-gray-500 font-mono break-all">
-                  {freeboxBackupUrl}
+      {/* Tab panel */}
+      <div className="bg-[#111111] border border-[#2a2a2a] rounded-xl overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex border-b border-[#2a2a2a] bg-[#0d0d0d]">
+          {backupTabs.map(tab => {
+            const Icon = tab.icon;
+            const active = backupTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setBackupTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                  active
+                    ? 'text-orange-300 border-orange-500 bg-orange-600/10'
+                    : 'text-gray-400 border-transparent hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                <Icon size={14} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab content */}
+        <div className="p-6">
+
+          {/* TAB: Freebox */}
+          {backupTab === 'freebox' && (
+            <div className="space-y-6">
+              <Section title={t('admin.freeboxBackup')} icon={Server} iconColor="cyan">
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <p className="text-sm text-gray-300 mb-3">
+                      {t('admin.freeboxBackupDesc')}
+                      {t('admin.freeboxBackupFirmwareNote')}
+                    </p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.freeboxBackupExportNote')}
+                    </p>
+                    {freeboxBackupUrl && isFreeboxRegistered ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-500 font-mono break-all">
+                          {freeboxBackupUrl}
+                        </div>
+                        <a
+                          href={freeboxBackupUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                        >
+                          <ExternalLink size={16} />
+                          {t('admin.openFreeboxBackupPage')}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <p className="text-xs text-amber-400">
+                          {!isFreeboxRegistered
+                            ? t('admin.freeboxNotRegistered')
+                            : t('admin.freeboxUrlUnavailable')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <a
-                  href={freeboxBackupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  <ExternalLink size={16} />
-                  {t('admin.openFreeboxBackupPage')}
-                </a>
- 
-              </div>
-            ) : (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <p className="text-xs text-amber-400">
-                  {!isFreeboxRegistered 
-                    ? t('admin.freeboxNotRegistered')
-                    : t('admin.freeboxUrlUnavailable')}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </Section>
+              </Section>
+            </div>
+          )}
 
-      <Section title={t('admin.unifiBackup')} icon={Network} iconColor="purple">
-        <div className="space-y-4">
-          <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-            <p className="text-sm text-gray-300 mb-3">
-              {t('admin.unifiBackupDesc')}
-            </p>
-            <p className="text-xs text-gray-400 mb-4">
-              <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.unifiBackupNote')}
-            </p>
-            {unifiBackupUrl && unifiConfigured ? (
-              <div className="space-y-2">
-                <div className="text-xs text-gray-500 font-mono break-all">
-                  {unifiBackupUrl}
+          {/* TAB: UniFi */}
+          {backupTab === 'unifi' && (
+            <div className="space-y-6">
+              <Section title={t('admin.unifiBackup')} icon={Network} iconColor="purple">
+                <div className="space-y-4">
+                  <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <p className="text-sm text-gray-300 mb-3">
+                      {t('admin.unifiBackupDesc')}
+                    </p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      <strong className="text-gray-300">{t('admin.backupNoteLabel')} :</strong> {t('admin.unifiBackupNote')}
+                    </p>
+                    {unifiBackupUrl && unifiConfigured ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-500 font-mono break-all">
+                          {unifiBackupUrl}
+                        </div>
+                        <a
+                          href={unifiBackupUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+                        >
+                          <ExternalLink size={16} />
+                          {t('admin.openUnifiBackupPage')}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <p className="text-xs text-amber-400">
+                          {!unifiConfigured
+                            ? t('admin.unifiNotConfigured')
+                            : t('admin.unifiUrlUnavailable')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <a
-                  href={unifiBackupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  <ExternalLink size={16} />
-                  {t('admin.openUnifiBackupPage')}
-                </a>
+              </Section>
+            </div>
+          )}
 
-              </div>
-            ) : (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <p className="text-xs text-amber-400">
-                  {!unifiConfigured 
-                    ? t('admin.unifiNotConfigured')
-                    : t('admin.unifiUrlUnavailable')}
-                </p>
-              </div>
-            )}
-          </div>
         </div>
-      </Section>
-
-      <Section title={t('admin.info')} icon={Info} iconColor="teal">
-        <div className="space-y-3 text-sm text-gray-400">
-          <p>
-            <strong className="text-gray-300">Freebox :</strong> {t('admin.backupInfoFreeboxPrefix')} <code className="text-xs bg-gray-800 px-1 py-0.5 rounded">.bin</code> {t('admin.backupInfoFreeboxSuffix')}
-          </p>
-          <p>
-            <strong className="text-gray-300">UniFi :</strong> {t('admin.backupInfoUnifi')}
-          </p>
- 
-        </div>
-      </Section>
+      </div>
     </div>
   );
 };
@@ -3207,6 +3391,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLogout
 }) => {
   const { t, i18n } = useTranslation();
+  const { format: timeFormat, setFormat: setTimeFormat } = useTimeFormat();
   const { user: currentUser } = useUserAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('network');
   // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
@@ -3239,10 +3424,42 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, [initialAdminTab]);
+
+  // Auto-check DB health on admin mount, show toast if issues detected
+  useEffect(() => {
+    if (mode !== 'administration') return;
+    let cancelled = false;
+    const checkHealth = async () => {
+      try {
+        const res = await api.get<{ status: string; issues: string[]; suggestions: string[] }>('/api/database/health');
+        if (cancelled) return;
+        if (res.success && res.result) {
+          const status = res.result.status as 'good' | 'warning' | 'critical';
+          setDbHealthStatus(status);
+          if (status === 'critical') {
+            addToast('error', t('admin.db.healthToastCritical'), 0);
+          } else if (status === 'warning') {
+            addToast('warning', t('admin.db.healthToastWarning'), 10000);
+          }
+        }
+      } catch { /* silently ignore */ }
+    };
+    checkHealth();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [dbHealthStatus, setDbHealthStatus] = useState<'good' | 'warning' | 'critical' | null>(null);
+
+  const addToast = (type: ToastData['type'], message: string, duration = 8000) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, type, message, duration }]);
+  };
+  const removeToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
 
   // Modal states
   const [showParentalModal, setShowParentalModal] = useState(false);
@@ -4629,24 +4846,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     <div className="min-h-screen bg-theme-primary text-theme-primary">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-theme-header backdrop-blur-sm border-b border-theme" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
-        <div className="max-w-[1920px] mx-auto px-4 py-4">
+        <div className="w-full px-4 py-2">
           <div className="flex items-center justify-between relative">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button
                 onClick={onBack}
-                  className="p-2 hover:bg-theme-tertiary rounded-lg transition-colors"
+                className="p-1.5 hover:bg-theme-tertiary rounded-lg transition-colors"
               >
-                <ChevronLeft size={24} />
+                <ChevronLeft size={20} />
               </button>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-theme-secondary/50 rounded-lg">
-                  <Settings size={24} className="text-theme-primary" />
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-theme-secondary/50 rounded-lg">
+                  <Settings size={18} className="text-theme-primary" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-theme-primary">
+                  <h1 className="text-base font-bold text-theme-primary leading-tight">
                     {mode === 'administration' ? t('common.administration') : t('common.settings')}
                   </h1>
-                  <p className="text-sm text-theme-secondary">
+                  <p className="text-xs text-theme-secondary leading-tight">
                     {mode === 'administration' ? t('admin.subtitleApp') : t('admin.subtitleFreebox')}
                   </p>
                 </div>
@@ -4655,18 +4872,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             {/* Logo centré - uniquement en mode administration */}
             {mode === 'administration' && (
-              <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-3">
-                <img src={logoMynetworK} alt="MynetworK" className="w-12 h-12 flex-shrink-0" />
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-theme-primary text-lg">MynetworK</span>
+              <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2">
+                <img src={logoMynetworK} alt="MynetworK" className="w-8 h-8 flex-shrink-0" />
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-theme-primary text-sm">MynetworK</span>
                   {import.meta.env.DEV ? (
-                    <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded text-xs font-semibold text-amber-400 flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded text-[10px] font-semibold text-amber-400 flex items-center gap-1">
                       <span>🔧</span>
                       <span>DEV</span>
                       <span className="text-amber-500/70 font-mono">v{APP_VERSION}</span>
                     </span>
                   ) : (
-                    <span className="text-sm text-theme-secondary font-mono">v{APP_VERSION}</span>
+                    <span className="text-xs text-theme-secondary font-mono">v{APP_VERSION}</span>
                   )}
                 </div>
               </div>
@@ -4675,13 +4892,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             {mode === 'administration' ? (
               <div className="flex items-center gap-3">
                 {/* Date and Time (Freebox Revolution style with yellow LED) */}
-                <div className="flex items-center gap-2 bg-theme-secondary px-4 py-2 rounded-lg border border-theme">
-                  <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
+                <div className="flex items-center gap-1.5 bg-theme-secondary px-3 py-1.5 rounded-lg border border-theme">
+                  <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 shadow-md shadow-yellow-400/50 animate-pulse" />
                   <div className="flex flex-col items-end">
-                    <div className="text-sm font-mono text-theme-primary font-semibold">
+                    <div className="text-xs font-mono text-theme-primary font-semibold leading-tight">
                       {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                     </div>
-                    <div className="text-xs text-theme-secondary">
+                    <div className="text-[10px] text-theme-secondary leading-tight">
                       {currentTime.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
                     </div>
                   </div>
@@ -4779,6 +4996,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 >
                   <Icon size={16} className={isActive ? 'text-white' : 'text-gray-400'} />
                   <span className="text-sm font-medium">{tab.label}</span>
+                  {tab.id === 'database' && dbHealthStatus && dbHealthStatus !== 'good' && (
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dbHealthStatus === 'critical' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                  )}
                 </button>
               );
             })}
@@ -4878,14 +5098,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         label={t('settings.interfaceLanguage')}
                         description={t('settings.interfaceLanguageDescription')}
                       >
-                        <select
-                          value={i18n.language?.startsWith('fr') ? 'fr' : 'en'}
-                          onChange={(e) => i18n.changeLanguage(e.target.value as 'en' | 'fr')}
-                          className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 min-w-[12rem]"
-                        >
-                          <option value="en">{t('settings.languageEn')}</option>
-                          <option value="fr">{t('settings.languageFr')}</option>
-                        </select>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={i18n.language?.startsWith('fr') ? 'fr' : 'en'}
+                            onChange={(e) => i18n.changeLanguage(e.target.value as 'en' | 'fr')}
+                            className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 min-w-[10rem]"
+                          >
+                            <option value="en">{t('settings.languageEn')}</option>
+                            <option value="fr">{t('settings.languageFr')}</option>
+                          </select>
+                          <div className="flex items-center gap-1 bg-[#1a1a1a] border border-gray-700 rounded-lg p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setTimeFormat('24h')}
+                              className={`px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${timeFormat === '24h' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-gray-200'}`}
+                              title={t('settings.timeFormat24h')}
+                            >
+                              24h
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTimeFormat('12h')}
+                              className={`px-2.5 py-1.5 text-xs font-medium rounded transition-colors ${timeFormat === '12h' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-400 hover:text-gray-200'}`}
+                              title={t('settings.timeFormat12h')}
+                            >
+                              12h
+                            </button>
+                          </div>
+                        </div>
                       </SettingRow>
                     </div>
                   </Section>
@@ -4907,28 +5147,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     <UpdateCheckSection />
                   </Section>
 
-                  <Section title={t('admin.info')} icon={Key} iconColor="purple">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">{t('admin.version')}</span>
-                          <span className="text-sm text-white font-mono">{getVersionString()}</span>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">{t('admin.databaseLabel')}</span>
-                          <span className="text-sm text-white">SQLite</span>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-400">{t('admin.authLabel')}</span>
-                          <span className="text-sm text-white">JWT</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Section>
                 </div>
               </div>
             )}
@@ -5005,6 +5223,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             )}
           </>
         )}
+
+        <ToastContainer toasts={toasts} onClose={removeToast} />
 
         {/* Freebox Mode Content */}
         {mode === 'freebox' && (

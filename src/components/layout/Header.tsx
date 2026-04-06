@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatTimeWithPreference } from '../../hooks/useTimeFormat';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -458,7 +459,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-    <header className="flex flex-col md:flex-row items-center justify-between p-4 bg-theme-header border-b border-theme gap-4 relative z-40" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
+    <header className="flex flex-col md:flex-row items-center justify-between px-4 py-2 bg-theme-header border-b border-theme gap-3 relative z-40" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
       {/* Logo / Box identifier with Search icon */}
       <div className="flex items-center gap-2">
         {/* Logo badge - cliquable pour retour dashboard */}
@@ -632,7 +633,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
             <div className="flex flex-col items-end">
               <div className="text-sm font-mono text-theme-primary font-semibold">
-                {currentTime.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
+                {formatTimeWithPreference(currentTime, dateLocale, { hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-xs text-theme-secondary">
                 {currentTime.toLocaleDateString(dateLocale, { weekday: 'short', day: '2-digit', month: 'short' })}
@@ -993,7 +994,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50 animate-pulse" />
             <div className="flex flex-col items-end">
               <div className="text-sm font-mono text-theme-primary font-semibold">
-                {currentTime.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}
+                {formatTimeWithPreference(currentTime, dateLocale, { hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-xs text-theme-secondary">
                 {currentTime.toLocaleDateString(dateLocale, { weekday: 'short', day: '2-digit', month: 'short' })}

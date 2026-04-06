@@ -40,6 +40,10 @@ services:
       # Must match the port in the "ports" section above
       DASHBOARD_PORT: ${DASHBOARD_PORT:-7555}
       
+      # Timezone for logs (uses host timezone by default)
+      # Override with e.g. TZ=America/New_York in your .env file
+      TZ: ${TZ:-Europe/Paris}
+
       # Host machine IP address (optional, for better log display)
       # If not set, the container will try to auto-detect from Docker gateway
       # Example: HOST_IP=192.168.1.100

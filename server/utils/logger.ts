@@ -35,18 +35,38 @@ class Logger {
     if (!input) return input;
 
     // Redact common credential patterns in plain text and JSON-ish strings.
-    // Keep this conservative: if we detect a sensitive key, we mask its value.
     return input
-      // key=value (Authorization=Bearer ..., password=..., cookie=...)
+      // key=value patterns
       .replace(
-        /\b(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessioncookie)\b\s*[:=]\s*([^\s,;]+)/gi,
+        /\b(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessioncookie|psk|passphrase|wpa[_-]?key|secret|private[_-]?key|app[_-]?token)\b\s*[:=]\s*([^\s,;]+)/gi,
         (_m, key) => `${key}=[REDACTED]`
       )
-      // "key":"value"
+      // "key":"value" JSON patterns
       .replace(
-        /("?(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessionCookie)"?\s*:\s*)(".*?"|'.*?'|[^,\}\]]+)/gi,
+        /("?(password|passwd|pass|api[_-]?key|token|access[_-]?token|refresh[_-]?token|authorization|cookie|set-cookie|sessionCookie|psk|passphrase|wpa[_-]?key|secret|private[_-]?key|app[_-]?token)"?\s*:\s*)(".*?"|'.*?'|[^,\}\]]+)/gi,
         (_m, prefix) => `${prefix}"[REDACTED]"`
       );
+  }
+
+  private isSensitiveKey(keyLower: string): boolean {
+    return (
+      keyLower.includes('password') ||
+      keyLower === 'pass' ||
+      keyLower === 'key' ||          // WiFi WPA key field
+      keyLower === 'psk' ||          // Pre-shared key
+      keyLower === 'secret' ||
+      keyLower.includes('passphrase') ||
+      keyLower.includes('apikey') ||
+      keyLower.includes('api_key') ||
+      keyLower.includes('app_token') ||
+      keyLower.includes('token') ||
+      keyLower.includes('authorization') ||
+      keyLower.includes('cookie') ||
+      keyLower.includes('session') ||
+      keyLower.includes('private_key') ||
+      keyLower.includes('wpa') ||    // wpa_key, wpa_password, etc.
+      keyLower.includes('credential')
+    );
   }
 
   private sanitizeArg(value: any, depth: number = 0): any {
@@ -77,18 +97,7 @@ class Logger {
     if (typeof value === 'object') {
       const out: Record<string, any> = {};
       for (const [k, v] of Object.entries(value)) {
-        const keyLower = k.toLowerCase();
-        const isSensitiveKey =
-          keyLower.includes('password') ||
-          keyLower === 'pass' ||
-          keyLower.includes('apikey') ||
-          keyLower.includes('api_key') ||
-          keyLower.includes('token') ||
-          keyLower.includes('authorization') ||
-          keyLower.includes('cookie') ||
-          keyLower.includes('session');
-
-        out[k] = isSensitiveKey ? '[REDACTED]' : this.sanitizeArg(v, depth + 1);
+        out[k] = this.isSensitiveKey(k.toLowerCase()) ? '[REDACTED]' : this.sanitizeArg(v, depth + 1);
       }
       return out;
     }
@@ -211,7 +220,7 @@ class Logger {
         break;
     }
 
-    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    const timestamp = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const formattedPrefix = `${colors.dim}[${timestamp}]${colors.reset} ${levelColor}[${prefix}]${colors.reset}`;
     
     return `${formattedPrefix} ${color}${message}${colors.reset}`;
@@ -275,7 +284,7 @@ class Logger {
    * Log important success message (always shown, green)
    */
   success(prefix: string, message: string, ...args: any[]): void {
-    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    const timestamp = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const formattedPrefix = `${colors.dim}[${timestamp}]${colors.reset} ${colors.bright}${colors.green}[${prefix}]${colors.reset}`;
     const safeMessage = this.redactString(message);
     const formatted = `${formattedPrefix} ${colors.green}${safeMessage}${colors.reset}`;

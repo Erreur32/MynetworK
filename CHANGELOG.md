@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.28] - 2026-04-06
+
+### ✨ Ajouté
+
+- **UniFi — Bande passante** : nouvel onglet *Bandwidth* avec graphique AreaChart (download/upload) et support multi-WAN pour CloudGateway (UCG Ultra, UDM Pro) — détection automatique des interfaces WAN, sélecteur WAN intégré dans le header du graphique.
+- **UniFi — WAN bytes CloudGateway** : extraction des compteurs cumulatifs depuis le device gateway (`wan1_rx_bytes`, `uplink.rx_bytes`, `network_table`, `wan_stats`) en fallback du endpoint `stat/dashboard` qui ne retourne pas de données WAN sur UniFiOS.
+- **Format horaire 12h/24h** : nouvelle option dans les paramètres Généraux (à côté de la langue) — préférence persistée en localStorage, appliquée à l'horloge du header.
+- **Footer — pages Freebox & UniFi** : boutons *Search* et *Administration* toujours visibles (icônes seules sur Freebox pour économiser la place).
+
+### 🔧 Modifié
+
+- **Onglet Debug UniFi** : masqué en production, visible uniquement en mode développement (`import.meta.env.DEV`).
+- **Footer Freebox** : suppression du bouton *Options* en double (icône Administration remplace l'engrenage redondant).
+- **Logger — redaction étendue** : ajout de `key` (mot de passe WiFi Freebox/UniFi), `psk`, `secret`, `passphrase`, `wpa*`, `app_token`, `private_key`, `credential` dans les patterns sensibles — ces champs sont maintenant masqués `[REDACTED]` dans tous les logs y compris en mode debug.
+- **Sécurité logs** : remplacement de tous les `console.log/warn/error` dans `freeboxNativeWebSocket.ts`, `FreeboxPlugin.ts`, `freeboxApi.ts`, `FreeboxApiService.ts`, `routes/wifi.ts` et `routes/plugins.ts` par le logger centralisé — les logs verbeux ne s'affichent qu'en mode debug activé.
+- **Logs Docker** : timestamps des logs serveur en heure locale (respect de la variable `TZ`) au lieu de UTC.
+
+### 🐛 Corrigé
+
+- **UniFi — historique bandwidth par WAN** : chaque interface WAN a son propre buffer d'historique ; le changement de WAN recharge le graphique correspondant.
+
+---
+
 ## [0.7.27] - 2026-03-30
 
 ---

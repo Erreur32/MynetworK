@@ -65,12 +65,178 @@ function buildGatewayNatSummary(
     };
 }
 
+interface BandwidthRawPoint {
+    timestamp: number; // ms
+    rx_bytes: number;
+    tx_bytes: number;
+}
+
+interface WanInterface {
+    id: string;   // 'wan1', 'wan2', etc.
+    name: string; // Display name
+    ip?: string;
+}
+
+/**
+ * Extract WAN bytes from a gateway device entry (from stat/device).
+ * Tries multiple field formats used by different UniFi firmware versions.
+ */
+function extractWanBytesFromGatewayDevice(
+    device: any,
+    wanIndex: 1 | 2 = 1
+): { rx_bytes: number; tx_bytes: number } | null {
+    if (!device) return null;
+
+    const wan = `wan${wanIndex}`;
+
+    // Format 1: Direct WAN fields (UniFiOS CloudGateway / UDM Pro)
+    const directRx = device[`${wan}_rx_bytes`];
+    const directTx = device[`${wan}_tx_bytes`];
+    if (typeof directRx === 'number' && typeof directTx === 'number' && (directRx > 0 || directTx > 0)) {
+        return { rx_bytes: directRx, tx_bytes: directTx };
+    }
+
+    // Format 2: uplink field (primary WAN / single-WAN devices)
+    if (wanIndex === 1 && device.uplink) {
+        const upRx = device.uplink.rx_bytes;
+        const upTx = device.uplink.tx_bytes;
+        if (typeof upRx === 'number' && typeof upTx === 'number' && (upRx > 0 || upTx > 0)) {
+            return { rx_bytes: upRx, tx_bytes: upTx };
+        }
+    }
+
+    // Format 3: network_table wan entries
+    const networkTable = device.network_table || device.networkTable || [];
+    if (Array.isArray(networkTable) && networkTable.length > 0) {
+        const wanEntries = networkTable.filter((n: any) => {
+            const type = (n.type || n.purpose || '').toString().toLowerCase();
+            const name = (n.name || '').toString().toLowerCase();
+            return type.includes('wan') || (name.includes('wan') && !type.includes('lan'));
+        });
+        const entry = wanEntries[wanIndex - 1];
+        if (entry) {
+            const netRx = entry.rx_bytes;
+            const netTx = entry.tx_bytes;
+            if (typeof netRx === 'number' && (netRx > 0 || netTx > 0)) {
+                return { rx_bytes: netRx, tx_bytes: netTx };
+            }
+        }
+    }
+
+    // Format 4: wan_stats array
+    if (Array.isArray(device.wan_stats)) {
+        const wanStat = device.wan_stats[wanIndex - 1];
+        if (wanStat) {
+            const wsRx = wanStat.rx_bytes;
+            const wsTx = wanStat.tx_bytes;
+            if (typeof wsRx === 'number' && (wsRx > 0 || wsTx > 0)) {
+                return { rx_bytes: wsRx, tx_bytes: wsTx };
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Detect available WAN interfaces from a gateway device entry.
+ */
+function detectWanInterfaces(device: any): WanInterface[] {
+    if (!device) return [];
+    const interfaces: WanInterface[] = [];
+
+    // Check network_table for WAN entries
+    const networkTable = device.network_table || device.networkTable || [];
+    if (Array.isArray(networkTable) && networkTable.length > 0) {
+        const wanEntries = networkTable.filter((n: any) => {
+            const type = (n.type || n.purpose || '').toString().toLowerCase();
+            const name = (n.name || '').toString().toLowerCase();
+            return type.includes('wan') || (name.includes('wan') && !type.includes('lan'));
+        });
+        if (wanEntries.length > 0) {
+            wanEntries.forEach((n: any, i: number) => {
+                interfaces.push({
+                    id: `wan${i + 1}`,
+                    name: n.name || n.display_name || `WAN${i + 1}`,
+                    ip: n.ip || n.address
+                });
+            });
+            return interfaces;
+        }
+    }
+
+    // Check for wan1/wan2 direct fields
+    if (typeof device.wan1_rx_bytes === 'number') {
+        interfaces.push({ id: 'wan1', name: 'WAN 1' });
+    }
+    if (typeof device.wan2_rx_bytes === 'number') {
+        interfaces.push({ id: 'wan2', name: 'WAN 2' });
+    }
+    if (interfaces.length > 0) return interfaces;
+
+    // Check uplink as fallback single-WAN
+    if (device.uplink && typeof device.uplink.rx_bytes === 'number') {
+        interfaces.push({ id: 'wan1', name: 'WAN' });
+    }
+
+    // If nothing detected but it's a gateway device, assume single WAN
+    if (interfaces.length === 0) {
+        interfaces.push({ id: 'wan1', name: 'WAN' });
+    }
+
+    return interfaces;
+}
+
 export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
+    private _bandwidthHistories: Map<string, BandwidthRawPoint[]> = new Map();
+    private _wanInterfaces: WanInterface[] = [];
+    private readonly BANDWIDTH_MAX = 360; // 3h at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.27');
+        super('unifi', 'UniFi Controller', '0.7.28');
         this.apiService = new UniFiApiService();
+    }
+
+    private _getOrCreateHistory(wanId: string): BandwidthRawPoint[] {
+        if (!this._bandwidthHistories.has(wanId)) {
+            this._bandwidthHistories.set(wanId, []);
+        }
+        return this._bandwidthHistories.get(wanId)!;
+    }
+
+    private _pushToHistory(wanId: string, rxBytes: number, txBytes: number): void {
+        const history = this._getOrCreateHistory(wanId);
+        const last = history[history.length - 1];
+        if (!last || (rxBytes >= last.rx_bytes && txBytes >= last.tx_bytes)) {
+            history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
+            if (history.length > this.BANDWIDTH_MAX) history.shift();
+        } else {
+            // Counter reset (reboot) – clear history and start fresh
+            this._bandwidthHistories.set(wanId, [{ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes }]);
+        }
+    }
+
+    getBandwidthHistory(wanId = 'wan1'): Array<{ time: string; timestamp: number; download: number; upload: number }> {
+        const history = this._bandwidthHistories.get(wanId) || [];
+        if (history.length < 2) return [];
+        const result = [];
+        for (let i = 1; i < history.length; i++) {
+            const prev = history[i - 1];
+            const curr = history[i];
+            const dtSec = (curr.timestamp - prev.timestamp) / 1000;
+            if (dtSec <= 0) continue;
+            const download = Math.max(0, Math.round((curr.rx_bytes - prev.rx_bytes) / dtSec / 1024));
+            const upload = Math.max(0, Math.round((curr.tx_bytes - prev.tx_bytes) / dtSec / 1024));
+            const d = new Date(curr.timestamp);
+            const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            result.push({ time, timestamp: curr.timestamp, download, upload });
+        }
+        return result;
+    }
+
+    getWanInterfaces(): WanInterface[] {
+        return this._wanInterfaces;
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -345,14 +511,6 @@ export class UniFiPlugin extends BasePlugin {
             // Combine devices and clients
             const allDevices = [...normalizedDevices, ...clientDevices];
 
-            // Normalize network stats
-            const networkStats = {
-                download: stats.wan?.rx_bytes || 0,
-                upload: stats.wan?.tx_bytes || 0,
-                totalDownload: stats.wan?.rx_bytes || 0,
-                totalUpload: stats.wan?.tx_bytes || 0
-            };
-
             // Get API mode from settings
             const apiMode = (this.config?.settings?.apiMode as 'controller' | 'site-manager') || 'controller';
             // Get deployment type from API service
@@ -366,6 +524,55 @@ export class UniFiPlugin extends BasePlugin {
                     || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
             });
             const gatewaySummary = buildGatewayNatSummary(gatewayDevice, portForwardRules);
+
+            // Detect WAN interfaces from gateway device and update cached list
+            if (gatewayDevice) {
+                this._wanInterfaces = detectWanInterfaces(gatewayDevice);
+            } else if (this._wanInterfaces.length === 0) {
+                this._wanInterfaces = [{ id: 'wan1', name: 'WAN' }];
+            }
+
+            // Collect WAN bytes for all known WAN interfaces.
+            // Priority: stats from getNetworkStats() (stat/dashboard / site-manager isp-metrics)
+            // Fallback: extract directly from gateway device fields (works for UniFiOS/CloudGateway).
+            for (const wan of this._wanInterfaces) {
+                const wanIdx = (parseInt(wan.id.replace('wan', ''), 10) || 1) as 1 | 2;
+
+                let rxBytes: number;
+                let txBytes: number;
+
+                if (wanIdx === 1 && (stats.wan?.rx_bytes || 0) > 0) {
+                    // Use stats from API (stat/dashboard or site-manager)
+                    rxBytes = stats.wan!.rx_bytes!;
+                    txBytes = stats.wan!.tx_bytes || 0;
+                } else {
+                    // Fallback: extract from gateway device directly (UniFiOS CloudGateway)
+                    const deviceWan = extractWanBytesFromGatewayDevice(gatewayDevice, wanIdx);
+                    rxBytes = deviceWan?.rx_bytes || 0;
+                    txBytes = deviceWan?.tx_bytes || 0;
+                    if (rxBytes > 0 || txBytes > 0) {
+                        logger.debug('UniFiPlugin', `WAN${wanIdx} bytes from gateway device: rx=${rxBytes}, tx=${txBytes}`);
+                    }
+                }
+
+                if (rxBytes > 0 || txBytes > 0) {
+                    this._pushToHistory(wan.id, rxBytes, txBytes);
+                }
+            }
+
+            // Primary WAN bytes for networkStats (wan1)
+            const primaryHistory = this._bandwidthHistories.get('wan1') || [];
+            const lastPoint = primaryHistory[primaryHistory.length - 1];
+            const primaryRx = lastPoint?.rx_bytes || stats.wan?.rx_bytes || 0;
+            const primaryTx = lastPoint?.tx_bytes || stats.wan?.tx_bytes || 0;
+
+            // Normalize network stats
+            const networkStats = {
+                download: primaryRx,
+                upload: primaryTx,
+                totalDownload: primaryRx,
+                totalUpload: primaryTx
+            };
 
             // Normalize system stats
             const systemStats: any = {

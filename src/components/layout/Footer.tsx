@@ -162,39 +162,92 @@ export const Footer: React.FC<FooterProps> = ({
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 bg-theme-footer backdrop-blur-md border-t border-theme p-3 z-50" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
-      <div className="flex items-center justify-between max-w-[1920px] mx-auto px-2">
-        {/* Navigation tabs + Freebox actions (left) */}
+      <div className="flex items-center justify-between w-full px-3">
+        {/* Navigation tabs + actions (left) */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {visibleTabs.map((tab) => {
+          {/* On Freebox pages: Home first, then Search + Admin icons, then remaining tabs */}
+          {['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage) ? (
+            <>
+              {/* 1. Home / Dashboard */}
+              {visibleTabs.filter(tab => tab.id === 'dashboard').map((tab) => {
+                const Icon = tab.icon;
+                const isActive = currentPage === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabClick(tab.id)}
+                    className={`flex items-center px-3 py-3 rounded-lg border transition-all ${
+                      isActive
+                        ? 'btn-theme-active border-theme-hover text-theme-primary'
+                        : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
+                    }`}
+                    title={t(tab.labelKey)}
+                  >
+                    <Icon size={18} className={isActive ? 'text-accent-primary' : ''} />
+                  </button>
+                );
+              })}
+              {/* 2. Search + Administration icons */}
+              <button
+                onClick={() => onPageChange?.('search')}
+                className="p-2.5 btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary rounded-lg border transition-all"
+                title={t('nav.search')}
+              >
+                <Search size={18} />
+              </button>
+              <button
+                onClick={() => {
+                  sessionStorage.setItem('adminMode', 'true');
+                  onPageChange?.('settings');
+                }}
+                className="p-2.5 btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary rounded-lg border transition-all"
+                title={t('nav.administration')}
+              >
+                <Settings size={18} />
+              </button>
+              {/* 3. Rest of Freebox tabs (tv, phone, files, etc.) */}
+              {visibleTabs.filter(tab => tab.id !== 'dashboard').map((tab) => {
+                const Icon = tab.icon;
+                const isActive = currentPage === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabClick(tab.id)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
+                      isActive
+                        ? 'btn-theme-active border-theme-hover text-theme-primary'
+                        : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
+                    }`}
+                  >
+                    <Icon size={18} className={isActive ? 'text-accent-primary' : ''} />
+                    <span className="text-sm font-medium whitespace-nowrap">{t(tab.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </>
+          ) : visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentPage === tab.id;
-
-            // Pour bien séparer :
-            // - Tab "settings" (global Administration) is handled via dedicated button on dashboard
             const displayLabel = t(tab.labelKey);
-
-            const isFreeboxContext = ['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage);
-            const hideLabel = isFreeboxContext && tab.id === 'dashboard';
 
             return (
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className={`flex items-center ${hideLabel ? 'px-3' : 'gap-3 px-4'} py-3 rounded-lg border transition-all ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
                   isActive
                     ? 'btn-theme-active border-theme-hover text-theme-primary'
                     : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
                 }`}
-                title={hideLabel ? displayLabel : undefined}
               >
                 <Icon size={18} className={isActive ? 'text-accent-primary' : ''} />
-                {!hideLabel && <span className="text-sm font-medium whitespace-nowrap">{displayLabel}</span>}
+                <span className="text-sm font-medium whitespace-nowrap">{displayLabel}</span>
               </button>
             );
           })}
           
-          {/* Show Search button on dashboard, search page, and network-scan page */}
-          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && (
+          {/* Show Search button on dashboard, search, network-scan and unifi pages */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi') && (
             <button
               onClick={() => onPageChange?.('search')}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
@@ -207,9 +260,9 @@ export const Footer: React.FC<FooterProps> = ({
               <span className="text-sm font-medium whitespace-nowrap">{t('nav.search')}</span>
             </button>
           )}
-          
-          {/* Show Administration button on dashboard, search page, and network-scan page if settings tab is hidden */}
-          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan') && !visibleTabs.find(t => t.id === 'settings') && (
+
+          {/* Show Administration button on dashboard, search, network-scan and unifi pages */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi') && !visibleTabs.find(t => t.id === 'settings') && (
             <button
               onClick={() => {
                 sessionStorage.setItem('adminMode', 'true');
@@ -222,30 +275,27 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
           )}
 
-          {/* Freebox actions - Only show on Freebox page, to the right of tabs (after Analytics) */}
-          {currentPage === 'freebox' && (
+          {/* Freebox actions - Reboot/Logout only on main Freebox page */}
+          {['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage) && (
             <>
-              <button
-                onClick={() => onFreeboxOptions?.()}
-                className="flex items-center gap-2 px-4 py-2 btn-theme hover:bg-theme-tertiary text-theme-primary rounded-lg border-theme transition-colors"
-              >
-                <Settings size={18} />
-                <span className="hidden sm:inline text-sm font-medium">{t('nav.options')}</span>
-              </button>
-              <button
-                onClick={onReboot}
-                className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-200 hover:bg-red-900/30 rounded-lg transition-colors"
-              >
-                <Power size={18} />
-                <span className="hidden sm:inline text-sm font-medium">Reboot</span>
-              </button>
-              <button
-                onClick={onLogout}
-                className="flex items-center gap-2 px-4 py-2 border border-orange-500 text-orange-200 hover:bg-orange-900/30 rounded-lg transition-colors"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline text-sm font-medium">{t('common.disconnect')}</span>
-              </button>
+              {currentPage === 'freebox' && (
+                <>
+                  <button
+                    onClick={onReboot}
+                    className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-200 hover:bg-red-900/30 rounded-lg transition-colors"
+                  >
+                    <Power size={18} />
+                    <span className="hidden sm:inline text-sm font-medium">Reboot</span>
+                  </button>
+                  <button
+                    onClick={onLogout}
+                    className="flex items-center gap-2 px-4 py-2 border border-orange-500 text-orange-200 hover:bg-orange-900/30 rounded-lg transition-colors"
+                  >
+                    <LogOut size={18} />
+                    <span className="hidden sm:inline text-sm font-medium">{t('common.disconnect')}</span>
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

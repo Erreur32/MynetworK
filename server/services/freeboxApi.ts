@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {config, API_ENDPOINTS} from '../config.js';
+import { logger } from '../utils/logger.js';
 
 // Export the class for use in plugins
 export { FreeboxApiService };
@@ -25,7 +26,7 @@ const getInsecureAgent = (): any => {
         } catch (error) {
             // Fallback: if undici is not available, we'll use the global env var
             // This should not happen in Node.js 18+, but provides a fallback
-            console.warn('[FreeboxAPI] undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
+            logger.warn('FreeboxAPI', 'undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
             process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
             insecureAgent = {}; // Dummy object to avoid null checks
         }
@@ -119,35 +120,35 @@ class FreeboxApiService {
     // Load app_token from file
     private loadToken() {
         const tokenPath = this.getTokenPath();
-        console.log(`[FreeboxAPI] Token file path: ${tokenPath}`);
-        console.log(`[FreeboxAPI] File exists: ${fs.existsSync(tokenPath)}`);
-        
+        logger.debug('FreeboxAPI', `Token file path: ${tokenPath}`);
+        logger.debug('FreeboxAPI', `File exists: ${fs.existsSync(tokenPath)}`);
+
         if (fs.existsSync(tokenPath)) {
             try {
                 const fileContent = fs.readFileSync(tokenPath, 'utf-8');
-                console.log(`[FreeboxAPI] File content length: ${fileContent.length} bytes`);
+                logger.debug('FreeboxAPI', `File content length: ${fileContent.length} bytes`);
                 const data = JSON.parse(fileContent) as TokenData;
                 this.appToken = data.appToken;
-                console.log('[FreeboxAPI] Loaded app_token from file');
+                logger.debug('FreeboxAPI', 'Loaded app_token from file');
             } catch (error) {
-                console.log('[FreeboxAPI] Failed to load token file:', error);
+                logger.warn('FreeboxAPI', 'Failed to load token file:', error);
             }
         } else {
-            console.log('[FreeboxAPI] No token file found - registration required');
+            logger.debug('FreeboxAPI', 'No token file found - registration required');
             // List directory to help debug
             const dir = path.dirname(tokenPath);
             if (fs.existsSync(dir)) {
                 const files = fs.readdirSync(dir);
-                console.log(`[FreeboxAPI] Files in ${dir}:`, files);
+                logger.debug('FreeboxAPI', `Files in ${dir}:`, files);
             } else {
-                console.log(`[FreeboxAPI] Directory ${dir} does not exist`);
+                logger.debug('FreeboxAPI', `Directory ${dir} does not exist`);
             }
         }
     }
 
     // Reload token from file (useful after Docker restart or file changes)
     reloadToken(): void {
-        console.log('[FreeboxAPI] Reloading token from file...');
+        logger.debug('FreeboxAPI', 'Reloading token from file...');
         this.loadToken();
     }
 
@@ -170,7 +171,7 @@ class FreeboxApiService {
         }
         fs.writeFileSync(tokenPath, JSON.stringify({appToken}, null, 2), 'utf-8');
         this.appToken = appToken;
-        console.log(`[FreeboxAPI] Saved app_token to ${tokenPath}`);
+        logger.debug('FreeboxAPI', `Saved app_token to ${tokenPath}`);
     }
 
     // Reset/delete app_token (for re-registration when token is invalid)
@@ -178,13 +179,13 @@ class FreeboxApiService {
         const tokenPath = this.getTokenPath();
         if (fs.existsSync(tokenPath)) {
             fs.unlinkSync(tokenPath);
-            console.log(`[FreeboxAPI] Deleted token file: ${tokenPath}`);
+            logger.info('FreeboxAPI', `Deleted token file: ${tokenPath}`);
         }
         this.appToken = null;
         this.sessionToken = null;
         this.challenge = null;
         this.permissions = {};
-        console.log('[FreeboxAPI] Token reset - re-registration required');
+        logger.info('FreeboxAPI', 'Token reset - re-registration required');
     }
 
     // Build full API URL
@@ -248,7 +249,7 @@ class FreeboxApiService {
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
                 const text = await response.text();
-                console.error(`[FreeboxAPI] Non-JSON response: ${method} ${url}`, text.substring(0, 200));
+                logger.error('FreeboxAPI', `Non-JSON response: ${method} ${url}`, text.substring(0, 200));
                 return {
                     success: false,
                     error_code: 'invalid_response',
@@ -264,7 +265,7 @@ class FreeboxApiService {
             // #region agent log
             fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:207',message:'Request failed',data:{method,url,duration:requestDuration,isAbortError,errorName:error instanceof Error ? error.name : 'unknown',errorMsg:error instanceof Error ? error.message : String(error),timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
-            console.error(`[FreeboxAPI] Request failed: ${method} ${url}`, error);
+            logger.error('FreeboxAPI', `Request failed: ${method} ${url}`, error);
             // Return error response instead of throwing
             return {
                 success: false,
@@ -432,29 +433,29 @@ class FreeboxApiService {
     // Step 4: Open session
     async login(): Promise<SessionData> {
         if (!this.appToken) {
-            console.error('[FreeboxAPI] Login failed: No app_token available. Please register first.');
+            logger.error('FreeboxAPI', 'Login failed: No app_token available. Please register first.');
             throw new Error('No app_token available. Please register first.');
         }
 
-        console.log('[FreeboxAPI] Starting login process...');
-        console.log('[FreeboxAPI] Base URL:', this.baseUrl);
+        logger.debug('FreeboxAPI', 'Starting login process...');
+        logger.debug('FreeboxAPI', 'Base URL:', this.baseUrl);
 
         // Get fresh challenge
         try {
         await this.getChallenge();
         } catch (error) {
-            console.error('[FreeboxAPI] Failed to get challenge:', error);
+            logger.error('FreeboxAPI', 'Failed to get challenge:', error);
             throw new Error(`Failed to get challenge: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
 
         if (!this.challenge) {
-            console.error('[FreeboxAPI] Login failed: No challenge available after getChallenge()');
+            logger.error('FreeboxAPI', 'Login failed: No challenge available after getChallenge()');
             throw new Error('No challenge available');
         }
 
         const password = this.computePassword(this.challenge);
 
-        console.log('[FreeboxAPI] Sending login request...');
+        logger.debug('FreeboxAPI', 'Sending login request...');
         const response = await this.request<{
             session_token: string;
             challenge: string;
@@ -472,8 +473,8 @@ class FreeboxApiService {
 
         if (!response.success || !response.result) {
             const errorMsg = response.msg || response.error_code || 'Login failed';
-            console.error('[FreeboxAPI] Login failed:', errorMsg);
-            console.error('[FreeboxAPI] Response:', JSON.stringify(response, null, 2));
+            logger.error('FreeboxAPI', 'Login failed:', errorMsg);
+            logger.error('FreeboxAPI', 'Response:', JSON.stringify(response, null, 2));
             throw new Error(errorMsg);
         }
 
@@ -481,8 +482,8 @@ class FreeboxApiService {
         this.challenge = response.result.challenge;
         this.permissions = response.result.permissions;
 
-        console.log('[FreeboxAPI] Login successful');
-        console.log('[FreeboxAPI] Session token received, permissions:', Object.keys(this.permissions).length);
+        logger.info('FreeboxAPI', 'Login successful');
+        logger.debug('FreeboxAPI', 'Session token received, permissions:', Object.keys(this.permissions).length);
 
         return {
             sessionToken: this.sessionToken,
@@ -496,7 +497,7 @@ class FreeboxApiService {
         if (this.sessionToken) {
             await this.request('POST', API_ENDPOINTS.LOGIN_LOGOUT, undefined, true);
             this.sessionToken = null;
-            console.log('[FreeboxAPI] Logged out');
+            logger.debug('FreeboxAPI', 'Logged out');
         }
     }
 
@@ -512,7 +513,7 @@ class FreeboxApiService {
             // The /login/ endpoint returns logged_in status when called with session token
             const response = await this.request<{ logged_in: boolean }>('GET', API_ENDPOINTS.LOGIN, undefined, true);
             if (!response.success) {
-                console.log('[FreeboxAPI] checkSession failed:', response.msg || response.error_code);
+                logger.debug('FreeboxAPI', 'checkSession failed:', response.msg || response.error_code);
                 // If authentication fails, clear the session token
                 if (response.error_code === 'invalid_session' || response.msg?.includes('session')) {
                     this.sessionToken = null;
@@ -526,7 +527,7 @@ class FreeboxApiService {
             }
             return isLoggedIn;
         } catch (error) {
-            console.error('[FreeboxAPI] checkSession error:', error);
+            logger.error('FreeboxAPI', 'checkSession error:', error);
             // On error, assume session is invalid
             this.sessionToken = null;
             return false;
@@ -578,7 +579,7 @@ class FreeboxApiService {
             // api_version endpoint returns data directly, not wrapped in {success, result}
             return {success: true, result: data};
         } catch (error) {
-            console.error('[FreeboxAPI] Failed to get API version:', error);
+            logger.error('FreeboxAPI', 'Failed to get API version:', error);
             return {success: false, msg: 'Failed to get API version'};
         }
     }
@@ -646,18 +647,18 @@ class FreeboxApiService {
     }
 
     async reboot(): Promise<FreeboxApiResponse> {
-        console.log('[FreeboxAPI] Attempting reboot...');
+        logger.info('FreeboxAPI', 'Attempting reboot...');
         const result = await this.request('POST', API_ENDPOINTS.SYSTEM_REBOOT);
-        console.log('[FreeboxAPI] Reboot result:', {
+        logger.debug('FreeboxAPI', 'Reboot result:', {
             success: result.success,
             error_code: result.error_code,
             msg: result.msg
         });
 
         if (!result.success) {
-            console.error('[FreeboxAPI] Reboot failed:', result.msg || result.error_code);
+            logger.error('FreeboxAPI', `Reboot failed: ${result.msg || result.error_code}`);
         } else {
-            console.log('[FreeboxAPI] Reboot command sent successfully');
+            logger.info('FreeboxAPI', 'Reboot command sent successfully');
         }
 
         return result;
@@ -974,7 +975,7 @@ class FreeboxApiService {
             const data = await response.json() as FreeboxApiResponse;
             return data;
         } catch (error) {
-            console.error('[FreeboxAPI] addDownload error:', error);
+            logger.error('FreeboxAPI', 'addDownload error:', error);
             return { success: false, error_code: 'request_failed', msg: String(error) };
         }
     }
@@ -1019,8 +1020,8 @@ class FreeboxApiService {
             headers['X-Fbx-App-Auth'] = this.sessionToken;
         }
 
-        console.log('[FreeboxAPI] addDownloadFromFile URL:', url);
-        console.log('[FreeboxAPI] addDownloadFromFile headers:', headers);
+        logger.debug('FreeboxAPI', 'addDownloadFromFile URL:', url);
+        logger.debug('FreeboxAPI', 'addDownloadFromFile headers:', headers);
 
         try {
             // Use insecure agent for Freebox self-signed certificates
@@ -1037,8 +1038,8 @@ class FreeboxApiService {
             const response = await fetch(url, fetchOptions);
 
             const rawText = await response.text();
-            console.log('[FreeboxAPI] addDownloadFromFile response status:', response.status);
-            console.log('[FreeboxAPI] addDownloadFromFile raw response:', rawText.substring(0, 500));
+            logger.debug('FreeboxAPI', 'addDownloadFromFile response status:', response.status);
+            logger.debug('FreeboxAPI', 'addDownloadFromFile raw response:', rawText.substring(0, 500));
 
             // Find the start of the JSON object
             const jsonStart = rawText.indexOf('{');
@@ -1050,7 +1051,7 @@ class FreeboxApiService {
             const data = JSON.parse(jsonText) as FreeboxApiResponse;
             return data;
         } catch (error) {
-            console.error('[FreeboxAPI] addDownloadFromFile error:', error);
+            logger.error('FreeboxAPI', 'addDownloadFromFile error:', error);
             return { success: false, error_code: 'FETCH_ERROR', msg: String(error) };
         }
     }

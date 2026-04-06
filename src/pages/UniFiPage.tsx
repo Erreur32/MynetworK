@@ -7,7 +7,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router } from 'lucide-react';
+import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router, BarChart2, ArrowDown, ArrowUp } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { Card } from '../components/widgets/Card';
 import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
 import { NetworkEventsWidget } from '../components/widgets/NetworkEventsWidget';
@@ -21,7 +22,14 @@ interface UniFiPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
-type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'events' | 'debug' | 'switches';
+type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'bandwidth' | 'events' | 'debug' | 'switches';
+
+interface BandwidthPoint {
+    time: string;
+    timestamp: number;
+    download: number; // KB/s
+    upload: number;   // KB/s
+}
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
@@ -49,6 +57,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     // Traffic tab: toggle between "top N" and "all clients by throughput"
     const [showAllTrafficClients, setShowAllTrafficClients] = useState<boolean>(false);
+
+    // Bandwidth tab state
+    const [bandwidthHistory, setBandwidthHistory] = useState<BandwidthPoint[]>([]);
+    const [isLoadingBandwidth, setIsLoadingBandwidth] = useState(false);
+    const [wanInterfaces, setWanInterfaces] = useState<Array<{ id: string; name: string; ip?: string }>>([]);
+    const [selectedWan, setSelectedWan] = useState('wan1');
 
     const unifiPlugin = plugins.find(p => p.id === 'unifi');
     const unifiStats = pluginStats['unifi'];
@@ -109,6 +123,56 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     }, {
         enabled: isActive,
         interval: POLLING_INTERVALS.system
+    });
+
+    // Fetch WAN interfaces once when bandwidth tab becomes active
+    const fetchWanInterfaces = async () => {
+        if (!isActive) return;
+        try {
+            const res = await api.get<Array<{ id: string; name: string; ip?: string }>>('/api/plugins/unifi/wan-interfaces');
+            if (res.success && Array.isArray(res.result) && res.result.length > 0) {
+                setWanInterfaces(res.result);
+                // Auto-select first WAN if current selection no longer exists
+                if (!res.result.find(w => w.id === selectedWan)) {
+                    setSelectedWan(res.result[0].id);
+                }
+            }
+        } catch { /* ignore */ }
+    };
+
+    // Fetch bandwidth history from server
+    const fetchBandwidthHistory = async () => {
+        if (!isActive) return;
+        setIsLoadingBandwidth(true);
+        try {
+            const res = await api.get<BandwidthPoint[]>(`/api/plugins/unifi/bandwidth-history?wanId=${selectedWan}`);
+            if (res.success && Array.isArray(res.result)) {
+                setBandwidthHistory(res.result);
+            }
+        } catch { /* ignore */ } finally {
+            setIsLoadingBandwidth(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isActive && activeTab === 'bandwidth') {
+            fetchWanInterfaces();
+            fetchBandwidthHistory();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isActive, activeTab]);
+
+    // Re-fetch history when selected WAN changes
+    useEffect(() => {
+        if (isActive && activeTab === 'bandwidth') {
+            fetchBandwidthHistory();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedWan]);
+
+    usePolling(fetchBandwidthHistory, {
+        enabled: isActive && activeTab === 'bandwidth',
+        interval: POLLING_INTERVALS.system // 30s
     });
 
     // Compute approximate WAN bitrates from cumulative WAN bytes
@@ -177,9 +241,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         { id: 'clients', label: t('unifi.tabs.clients'), icon: Users },
         { id: 'switches', label: t('unifi.tabs.switches'), icon: Network },
         { id: 'analyse', label: t('unifi.tabs.analyse'), icon: Activity },
+        { id: 'bandwidth', label: t('unifi.tabs.bandwidth'), icon: BarChart2 },
         { id: 'traffic', label: t('unifi.tabs.traffic'), icon: TrendingUp },
         { id: 'events', label: t('unifi.tabs.events'), icon: AlertCircle },
-        { id: 'debug', label: t('unifi.tabs.debug'), icon: AlertCircle }
+        ...(import.meta.env.DEV ? [{ id: 'debug' as TabType, label: t('unifi.tabs.debug'), icon: AlertCircle }] : [])
     ];
 
     if (!unifiPlugin) {
@@ -2311,6 +2376,184 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     <div className="text-center py-8 text-gray-500">
                                         <Users size={32} className="mx-auto mb-2" />
                                         <p>{t('unifi.noDataAvailable')}</p>
+                                    </div>
+                                )}
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* Bandwidth Tab */}
+                    {activeTab === 'bandwidth' && (
+                        <div className="col-span-full space-y-4">
+                            {/* Current rates header */}
+                            {(() => {
+                                const last = bandwidthHistory[bandwidthHistory.length - 1];
+                                const dl = last?.download ?? 0;
+                                const ul = last?.upload ?? 0;
+                                const fmtKB = (kb: number) => kb >= 1024
+                                    ? `${(kb / 1024).toFixed(1)} MB/s`
+                                    : `${kb} KB/s`;
+                                const activeWan = wanInterfaces.find(w => w.id === selectedWan);
+                                const wanLabel = activeWan ? activeWan.name : selectedWan.toUpperCase();
+                                const wanIp = activeWan?.ip;
+                                return (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {/* Download card */}
+                                        <div className="col-span-1 md:col-span-2 flex items-center gap-4 p-5 bg-blue-950/40 border border-blue-700/30 rounded-xl">
+                                            <div className="p-3 bg-blue-900/50 rounded-xl">
+                                                <ArrowDown size={28} className="text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-blue-400/80 uppercase tracking-wider mb-0.5">
+                                                    {t('system.download')}
+                                                    <span className="ml-2 text-blue-600/70 normal-case">{wanLabel}{wanIp ? ` · ${wanIp}` : ''}</span>
+                                                </div>
+                                                <div className="text-3xl font-bold text-blue-300 font-mono">{fmtKB(dl)}</div>
+                                            </div>
+                                        </div>
+                                        {/* Upload card */}
+                                        <div className="col-span-1 md:col-span-2 flex items-center gap-4 p-5 bg-emerald-950/40 border border-emerald-700/30 rounded-xl">
+                                            <div className="p-3 bg-emerald-900/50 rounded-xl">
+                                                <ArrowUp size={28} className="text-emerald-400" />
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-emerald-400/80 uppercase tracking-wider mb-0.5">
+                                                    {t('system.upload')}
+                                                    <span className="ml-2 text-emerald-600/70 normal-case">{wanLabel}{wanIp ? ` · ${wanIp}` : ''}</span>
+                                                </div>
+                                                <div className="text-3xl font-bold text-emerald-300 font-mono">{fmtKB(ul)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Chart */}
+                            <Card title={t('unifi.bandwidth.chartTitle')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                    {/* Legend + WAN selector */}
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
+                                                {t('system.download')}
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                                                {t('system.upload')}
+                                            </span>
+                                        </div>
+                                        {/* WAN selector — always visible */}
+                                        <div className="flex items-center gap-1 bg-gray-900/80 border border-gray-700 rounded-lg p-0.5">
+                                            {(wanInterfaces.length > 0 ? wanInterfaces : [{ id: 'wan1', name: 'WAN 1' }]).map(wan => (
+                                                <button
+                                                    key={wan.id}
+                                                    onClick={() => setSelectedWan(wan.id)}
+                                                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                                                        selectedWan === wan.id
+                                                            ? 'bg-blue-600/80 text-white'
+                                                            : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                                                    }`}
+                                                >
+                                                    {wan.name}
+                                                    {wan.ip && (
+                                                        <span className={`ml-1.5 text-xs ${selectedWan === wan.id ? 'text-blue-200/70' : 'text-gray-600'}`}>
+                                                            {wan.ip}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                        <span>{bandwidthHistory.length} pts · ~30s</span>
+                                        <button
+                                            onClick={fetchBandwidthHistory}
+                                            disabled={isLoadingBandwidth}
+                                            className="p-1 hover:bg-gray-800 rounded transition-colors"
+                                            title={t('admin.refresh')}
+                                        >
+                                            <RefreshCw size={12} className={isLoadingBandwidth ? 'animate-spin text-blue-400' : 'text-gray-400'} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {bandwidthHistory.length >= 2 ? (
+                                    <ResponsiveContainer width="100%" height={320}>
+                                        <AreaChart data={bandwidthHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                                            <defs>
+                                                <linearGradient id="gradDl" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
+                                                </linearGradient>
+                                                <linearGradient id="gradUl" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                                            <XAxis
+                                                dataKey="time"
+                                                stroke="#374151"
+                                                tick={{ fill: '#6b7280', fontSize: 10 }}
+                                                interval="preserveStartEnd"
+                                                tickLine={false}
+                                            />
+                                            <YAxis
+                                                stroke="#374151"
+                                                tick={{ fill: '#6b7280', fontSize: 10 }}
+                                                tickLine={false}
+                                                axisLine={false}
+                                                tickFormatter={(v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v}K`}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '10px 14px' }}
+                                                labelStyle={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}
+                                                formatter={(value: number, name: string) => {
+                                                    const kb = value;
+                                                    const fmt = kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB/s` : `${kb} KB/s`;
+                                                    const color = name === t('system.download') ? '#60a5fa' : '#34d399';
+                                                    return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
+                                                }}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="download"
+                                                name={t('system.download')}
+                                                stroke="#3b82f6"
+                                                strokeWidth={2}
+                                                fill="url(#gradDl)"
+                                                dot={false}
+                                                activeDot={{ r: 4, fill: '#3b82f6' }}
+                                                isAnimationActive={false}
+                                            />
+                                            <Area
+                                                type="monotone"
+                                                dataKey="upload"
+                                                name={t('system.upload')}
+                                                stroke="#10b981"
+                                                strokeWidth={2}
+                                                fill="url(#gradUl)"
+                                                dot={false}
+                                                activeDot={{ r: 4, fill: '#10b981' }}
+                                                isAnimationActive={false}
+                                            />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                                        {isLoadingBandwidth ? (
+                                            <>
+                                                <RefreshCw size={32} className="animate-spin mb-3 opacity-50" />
+                                                <p className="text-sm">{t('unifi.bandwidth.loading')}</p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <BarChart2 size={40} className="mb-3 opacity-30" />
+                                                <p className="text-sm font-medium">{t('unifi.bandwidth.noData')}</p>
+                                                <p className="text-xs mt-1 text-gray-600">{t('unifi.bandwidth.noDataHint')}</p>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </Card>

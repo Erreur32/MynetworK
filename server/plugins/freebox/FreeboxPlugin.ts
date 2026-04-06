@@ -9,6 +9,7 @@ import { BasePlugin } from '../base/BasePlugin.js';
 import { freeboxApi } from '../../services/freeboxApi.js';
 import { freeboxFirmwareCheckService } from '../../services/freeboxFirmwareCheckService.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
+import { logger } from '../../utils/logger.js';
 
 export class FreeboxPlugin extends BasePlugin {
     // Use the singleton instance from freeboxApi service to share the same session
@@ -22,7 +23,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.27');
+        super('freebox', 'Freebox', '0.7.28');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -40,52 +41,52 @@ export class FreeboxPlugin extends BasePlugin {
         
         // Double check: don't proceed if not enabled
         if (!this.isEnabled()) {
-            console.log('[FreeboxPlugin] Plugin is not enabled, skipping connection');
+            logger.debug('FreeboxPlugin', 'Plugin is not enabled, skipping connection');
             return;
         }
-        
-        console.log('[FreeboxPlugin] Starting Freebox plugin...');
-        console.log('[FreeboxPlugin] Base URL:', this.apiService.getBaseUrl());
-        
+
+        logger.info('FreeboxPlugin', 'Starting Freebox plugin...');
+        logger.info('FreeboxPlugin', 'Base URL:', this.apiService.getBaseUrl());
+
         // Reload token from file (important after Docker restart or file changes)
         // freeboxApi singleton has reloadToken() method
         if (typeof this.apiService.reloadToken === 'function') {
-            console.log('[FreeboxPlugin] Reloading token from file...');
+            logger.debug('FreeboxPlugin', 'Reloading token from file...');
             this.apiService.reloadToken();
         }
-        
+
         // Check if already registered
         const isRegistered = this.apiService.isRegistered();
-        console.log('[FreeboxPlugin] Is registered:', isRegistered);
-        
+        logger.info('FreeboxPlugin', 'Is registered:', isRegistered);
+
         if (!isRegistered) {
-            console.log('[FreeboxPlugin] Not registered yet, skipping login. Register via /api/auth/register');
+            logger.info('FreeboxPlugin', 'Not registered yet, skipping login. Register via /api/auth/register');
             return;
         }
 
         // Always attempt to login on startup (session may have expired)
         // This ensures the plugin is connected after Docker restart or server restart
         try {
-            console.log('[FreeboxPlugin] Checking session status...');
+            logger.debug('FreeboxPlugin', 'Checking session status...');
             const isLoggedIn = await this.apiService.checkSession();
-            console.log('[FreeboxPlugin] Current session status:', isLoggedIn);
-            
+            logger.debug('FreeboxPlugin', 'Current session status:', isLoggedIn);
+
             if (!isLoggedIn) {
-                console.log('[FreeboxPlugin] Session not valid or expired, attempting to login...');
+                logger.info('FreeboxPlugin', 'Session not valid or expired, attempting to login...');
                 await this.apiService.login();
-                console.log('[FreeboxPlugin] Login successful - session restored');
+                logger.info('FreeboxPlugin', 'Login successful - session restored');
             } else {
-                console.log('[FreeboxPlugin] Session is valid, maintaining connection');
+                logger.info('FreeboxPlugin', 'Session is valid, maintaining connection');
             }
-            
+
             // Start keep-alive mechanism to maintain session
             this.startKeepAlive();
-            console.log('[FreeboxPlugin] Plugin started successfully');
-            
+            logger.info('FreeboxPlugin', 'Plugin started successfully');
+
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            console.error('[FreeboxPlugin] Login failed:', errorMessage);
-            console.error('[FreeboxPlugin] Plugin will continue but may not be fully functional. User can manually authenticate via UI.');
+            logger.error('FreeboxPlugin', 'Login failed:', errorMessage);
+            logger.error('FreeboxPlugin', 'Plugin will continue but may not be fully functional. User can manually authenticate via UI.');
             // Don't throw - allow plugin to continue, user can manually authenticate via UI
         }
     }
@@ -106,7 +107,7 @@ export class FreeboxPlugin extends BasePlugin {
         // Clear any existing interval
         this.stopKeepAlive();
 
-        console.log('[FreeboxPlugin] Starting session keep-alive (checking every 2 minutes)');
+        logger.info('FreeboxPlugin', 'Starting session keep-alive (checking every 2 minutes)');
 
         this.keepAliveInterval = setInterval(async () => {
             if (!this.isEnabled()) {
@@ -127,9 +128,9 @@ export class FreeboxPlugin extends BasePlugin {
                 
                 if (!isLoggedIn) {
                     // Session expired, renew it
-                    console.log('[FreeboxPlugin] Session expired, renewing...');
+                    logger.info('FreeboxPlugin', 'Session expired, renewing...');
                     await this.apiService.login();
-                    console.log('[FreeboxPlugin] Session renewed successfully');
+                    logger.info('FreeboxPlugin', 'Session renewed successfully');
                 } else {
                     // Session is valid, make a light request to keep it alive
                     // Using getSystemInfo as it's a lightweight endpoint
@@ -138,23 +139,23 @@ export class FreeboxPlugin extends BasePlugin {
                         // Silently succeed - session is maintained
                     } catch (error) {
                         // If request fails, session might be expired, try to renew
-                        console.log('[FreeboxPlugin] Keep-alive request failed, attempting to renew session...');
+                        logger.warn('FreeboxPlugin', 'Keep-alive request failed, attempting to renew session...');
                         try {
                             await this.apiService.login();
-                            console.log('[FreeboxPlugin] Session renewed after keep-alive failure');
+                            logger.info('FreeboxPlugin', 'Session renewed after keep-alive failure');
                         } catch (loginError) {
-                            console.error('[FreeboxPlugin] Failed to renew session:', loginError);
+                            logger.error('FreeboxPlugin', 'Failed to renew session:', loginError);
                         }
                     }
                 }
             } catch (error) {
-                console.error('[FreeboxPlugin] Keep-alive error:', error);
+                logger.error('FreeboxPlugin', 'Keep-alive error:', error);
                 // Try to renew session on error
                 try {
                     await this.apiService.login();
-                    console.log('[FreeboxPlugin] Session renewed after keep-alive error');
+                    logger.info('FreeboxPlugin', 'Session renewed after keep-alive error');
                 } catch (loginError) {
-                    console.error('[FreeboxPlugin] Failed to renew session after error:', loginError);
+                    logger.error('FreeboxPlugin', 'Failed to renew session after error:', loginError);
                 }
             }
         }, this.KEEP_ALIVE_INTERVAL_MS);
@@ -167,14 +168,14 @@ export class FreeboxPlugin extends BasePlugin {
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);
             this.keepAliveInterval = null;
-            console.log('[FreeboxPlugin] Stopped session keep-alive');
+            logger.debug('FreeboxPlugin', 'Stopped session keep-alive');
         }
     }
 
     async getStats(): Promise<PluginStats> {
         // Protection against concurrent calls: if a call is already in progress, return the same promise
         if (this.isGettingStats && this.statsPromise) {
-            console.log('[FreeboxPlugin] getStats() already in progress, reusing existing promise');
+            logger.debug('FreeboxPlugin', 'getStats() already in progress, reusing existing promise');
             return this.statsPromise;
         }
         
@@ -214,20 +215,20 @@ export class FreeboxPlugin extends BasePlugin {
         let isLoggedIn = await this.apiService.checkSession();
         if (!isLoggedIn) {
             try {
-                console.log('[FreeboxPlugin] Session expired in getStats(), attempting to reconnect...');
+                logger.info('FreeboxPlugin', 'Session expired in getStats(), attempting to reconnect...');
                 await this.apiService.login();
                 // Wait a bit for the session to be fully established
                 await new Promise(resolve => setTimeout(resolve, 100));
                 // Verify login was successful
                 isLoggedIn = await this.apiService.checkSession();
                 if (!isLoggedIn) {
-                    console.error('[FreeboxPlugin] Login succeeded but session verification failed - session token may be invalid');
+                    logger.error('FreeboxPlugin', 'Login succeeded but session verification failed - session token may be invalid');
                     throw new Error('Login appeared successful but session verification failed');
                 }
-                console.log('[FreeboxPlugin] Reconnection successful in getStats()');
+                logger.info('FreeboxPlugin', 'Reconnection successful in getStats()');
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                console.error('[FreeboxPlugin] Failed to reconnect in getStats():', errorMessage);
+                logger.error('FreeboxPlugin', 'Failed to reconnect in getStats():', errorMessage);
                 // Clear sensitive data (DHCP, Port Forwarding) when auth fails
                 // Return minimal stats without sensitive information
                 return {
@@ -293,7 +294,7 @@ export class FreeboxPlugin extends BasePlugin {
             // If session expired during calls, clear sensitive data
             const stillLoggedIn = await this.apiService.checkSession();
             if (!stillLoggedIn) {
-                console.warn('[FreeboxPlugin] Session expired during getStats() calls, clearing sensitive data');
+                logger.warn('FreeboxPlugin', 'Session expired during getStats() calls, clearing sensitive data');
             }
 
             // Normalize devices
@@ -456,18 +457,18 @@ export class FreeboxPlugin extends BasePlugin {
                 }
             } else {
                 // Session expired during API calls - don't include sensitive data
-                console.log('[FreeboxPlugin] Skipping DHCP and Port Forwarding data due to expired session');
+                logger.warn('FreeboxPlugin', 'Skipping DHCP and Port Forwarding data due to expired session');
             }
 
             // Extract WiFi networks (SSIDs) from BSS
             const wifiNetworks: Array<{ ssid: string; band: string; enabled: boolean }> = [];
             if (wifiBssResult.status === 'fulfilled' && wifiBssResult.value.success && Array.isArray(wifiBssResult.value.result)) {
                 const bssList = wifiBssResult.value.result as any[];
-                console.log('[FreeboxPlugin] WiFi BSS list:', bssList.length, 'items');
-                
+                logger.debug('FreeboxPlugin', 'WiFi BSS list:', bssList.length, 'items');
+
                 // Log full BSS data for debugging if no networks found
                 if (bssList.length > 0) {
-                    console.log('[FreeboxPlugin] First BSS item structure:', JSON.stringify(bssList[0], null, 2));
+                    logger.debug('FreeboxPlugin', 'First BSS item structure:', JSON.stringify(bssList[0], null, 2));
                 }
                 
                 for (const bss of bssList) {
@@ -501,7 +502,7 @@ export class FreeboxPlugin extends BasePlugin {
                         if (!macPattern.test(idStr) && idStr.length > 0) {
                             ssid = idStr;
                         } else {
-                            console.log('[FreeboxPlugin] Skipping BSS ID that looks like MAC:', idStr);
+                            logger.debug('FreeboxPlugin', 'Skipping BSS ID that looks like MAC:', idStr);
                         }
                     }
                     // Priority 5: Try other possible fields
@@ -516,8 +517,8 @@ export class FreeboxPlugin extends BasePlugin {
                     
                     // Log if SSID not found for debugging
                     if (!ssid) {
-                        console.log('[FreeboxPlugin] No SSID found in BSS item. Available fields:', Object.keys(bss));
-                        console.log('[FreeboxPlugin] BSS item content:', JSON.stringify(bss, null, 2));
+                        logger.debug('FreeboxPlugin', 'No SSID found in BSS item. Available fields:', Object.keys(bss));
+                        logger.debug('FreeboxPlugin', 'BSS item content:', JSON.stringify(bss, null, 2));
                     }
                     
                     // Only add if we have a valid SSID (not a MAC address)
@@ -561,19 +562,19 @@ export class FreeboxPlugin extends BasePlugin {
                 }
             } else {
                 if (wifiBssResult.status === 'rejected') {
-                    console.log('[FreeboxPlugin] WiFi BSS request failed:', wifiBssResult.reason);
+                    logger.warn('FreeboxPlugin', 'WiFi BSS request failed:', wifiBssResult.reason);
                 } else if (wifiBssResult.status === 'fulfilled' && !wifiBssResult.value.success) {
-                    console.log('[FreeboxPlugin] WiFi BSS API returned error:', wifiBssResult.value);
+                    logger.warn('FreeboxPlugin', 'WiFi BSS API returned error:', wifiBssResult.value);
                 } else {
-                    console.log('[FreeboxPlugin] WiFi BSS result is not an array:', wifiBssResult);
+                    logger.debug('FreeboxPlugin', 'WiFi BSS result is not an array:', wifiBssResult);
                 }
             }
             
             if (wifiNetworks.length > 0) {
                 systemStats.wifiNetworks = wifiNetworks;
-                console.log('[FreeboxPlugin] Added', wifiNetworks.length, 'WiFi networks to stats');
+                logger.debug('FreeboxPlugin', 'Added', wifiNetworks.length, 'WiFi networks to stats');
             } else {
-                console.log('[FreeboxPlugin] No WiFi networks found or enabled');
+                logger.debug('FreeboxPlugin', 'No WiFi networks found or enabled');
             }
 
             return {
@@ -582,7 +583,7 @@ export class FreeboxPlugin extends BasePlugin {
                 system: systemStats
             };
         } catch (error) {
-            console.error('[FreeboxPlugin] Failed to get stats:', error);
+            logger.error('FreeboxPlugin', 'Failed to get stats:', error);
             throw error;
         }
     }
@@ -597,18 +598,18 @@ export class FreeboxPlugin extends BasePlugin {
             let isLoggedIn = await this.apiService.checkSession();
             if (!isLoggedIn) {
                 try {
-                    console.log('[FreeboxPlugin] Session expired in testConnection(), attempting to reconnect...');
+                    logger.info('FreeboxPlugin', 'Session expired in testConnection(), attempting to reconnect...');
                     await this.apiService.login();
                     // Wait a bit for the session to be fully established
                     await new Promise(resolve => setTimeout(resolve, 100));
                     isLoggedIn = await this.apiService.checkSession();
                     if (!isLoggedIn) {
-                        console.error('[FreeboxPlugin] Login succeeded but session verification failed in testConnection()');
+                        logger.error('FreeboxPlugin', 'Login succeeded but session verification failed in testConnection()');
                         return false;
                     }
-                    console.log('[FreeboxPlugin] Reconnection successful in testConnection()');
+                    logger.info('FreeboxPlugin', 'Reconnection successful in testConnection()');
                 } catch (error) {
-                    console.error('[FreeboxPlugin] Failed to reconnect in testConnection():', error);
+                    logger.error('FreeboxPlugin', 'Failed to reconnect in testConnection():', error);
                     return false;
                 }
             }

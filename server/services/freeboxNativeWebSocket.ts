@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { freeboxApi } from './freeboxApi.js';
 import { connectionWebSocket } from './connectionWebSocket.js';
 import { pluginManager } from './pluginManager.js';
+import { logger } from '../utils/logger.js';
 
 // Freebox native WebSocket events (API v8+)
 type FreeboxEvent =
@@ -69,17 +70,14 @@ class FreeboxNativeWebSocketService {
    * Only starts if Freebox plugin is enabled
    */
   async start() {
-    // Check if Freebox plugin is enabled
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket connection');
+      logger.debug('FBX-WS', 'Freebox plugin is not enabled, skipping WebSocket connection');
       return;
     }
 
-    // Check API version - WebSocket events require v8+
     let versionInfo = freeboxApi.getVersionInfo();
 
-    // If not cached yet, fetch it
     if (!versionInfo) {
       const apiResponse = await freeboxApi.getApiVersion();
       if (apiResponse.success && apiResponse.result) {
@@ -92,8 +90,8 @@ class FreeboxNativeWebSocketService {
     }
 
     if (this.apiVersion < 8) {
-      console.log('[FBX-WS] Freebox API v8+ required for native WebSocket events. Current:', this.apiVersion);
-      console.log('[FBX-WS] Native WebSocket disabled for this Freebox model (Revolution/Mini 4K)');
+      logger.debug('FBX-WS', 'Freebox API v8+ required for native WebSocket events. Current:', this.apiVersion);
+      logger.debug('FBX-WS', 'Native WebSocket disabled for this Freebox model (Revolution/Mini 4K)');
       return;
     }
 
@@ -109,16 +107,15 @@ class FreeboxNativeWebSocketService {
       return;
     }
 
-    // Check if Freebox plugin is enabled
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket connection');
+      logger.debug('FBX-WS', 'Freebox plugin is not enabled, skipping WebSocket connection');
       this.shouldReconnect = false;
       return;
     }
 
     if (!freeboxApi.isLoggedIn()) {
-      console.log('[FBX-WS] Not logged in, skipping native WebSocket connection');
+      logger.debug('FBX-WS', 'Not logged in, skipping native WebSocket connection');
       return;
     }
 
@@ -127,22 +124,17 @@ class FreeboxNativeWebSocketService {
     try {
       const sessionToken = freeboxApi.getSessionToken();
       const freeboxHost = process.env.FREEBOX_HOST || 'mafreebox.freebox.fr';
-
-      // Build WebSocket URL - Freebox uses wss for HTTPS, ws for HTTP
-      // The WebSocket endpoint is /api/v{version}/ws/event
       const wsUrl = `wss://${freeboxHost}/api/v${this.apiVersion}/ws/event`;
 
-      console.log('[FBX-WS] Connecting to Freebox native WebSocket:', wsUrl);
+      logger.debug('FBX-WS', `Connecting to Freebox native WebSocket: ${wsUrl}`);
 
       this.ws = new WebSocket(wsUrl, {
-        headers: {
-          'X-Fbx-App-Auth': sessionToken || ''
-        },
-        rejectUnauthorized: false // Freebox uses self-signed certificates
+        headers: { 'X-Fbx-App-Auth': sessionToken || '' },
+        rejectUnauthorized: false
       });
 
       this.ws.on('open', () => {
-        console.log('[FBX-WS] Connected to Freebox native WebSocket');
+        logger.debug('FBX-WS', 'Connected to Freebox native WebSocket');
         this.isConnecting = false;
         this.registerEvents();
       });
@@ -152,19 +144,19 @@ class FreeboxNativeWebSocketService {
       });
 
       this.ws.on('close', (code, reason) => {
-        console.log('[FBX-WS] Disconnected:', code, reason.toString());
+        logger.debug('FBX-WS', `Disconnected: ${code} ${reason.toString()}`);
         this.isConnecting = false;
         this.ws = null;
         this.scheduleReconnect();
       });
 
       this.ws.on('error', (error) => {
-        console.error('[FBX-WS] WebSocket error:', error.message);
+        logger.error('FBX-WS', `WebSocket error: ${error.message}`);
         this.isConnecting = false;
       });
 
     } catch (error) {
-      console.error('[FBX-WS] Failed to connect:', error);
+      logger.error('FBX-WS', 'Failed to connect:', error);
       this.isConnecting = false;
       this.scheduleReconnect();
     }
@@ -188,7 +180,7 @@ class FreeboxNativeWebSocketService {
       ]
     };
 
-    console.log('[FBX-WS] Registering for events:', registerAction.events);
+    logger.debug('FBX-WS', 'Registering for events:', registerAction.events);
     this.ws.send(JSON.stringify(registerAction));
   }
 
@@ -201,9 +193,9 @@ class FreeboxNativeWebSocketService {
 
       if (message.action === 'register') {
         if (message.success) {
-          console.log('[FBX-WS] Successfully registered for events');
+          logger.debug('FBX-WS', 'Successfully registered for events');
         } else {
-          console.error('[FBX-WS] Failed to register for events');
+          logger.error('FBX-WS', 'Failed to register for events');
         }
         return;
       }
@@ -212,7 +204,7 @@ class FreeboxNativeWebSocketService {
         this.handleNotification(message);
       }
     } catch (error) {
-      console.error('[FBX-WS] Failed to parse message:', error);
+      logger.error('FBX-WS', 'Failed to parse message:', error);
     }
   }
 
@@ -223,7 +215,7 @@ class FreeboxNativeWebSocketService {
     const { source, event, result } = notification;
     const fullEvent = `${source}_${event}`;
 
-    console.log('[FBX-WS] Received event:', fullEvent);
+    logger.debug('FBX-WS', `Received event: ${fullEvent}`);
 
     switch (fullEvent) {
       case 'lan_host_l3addr_reachable':
@@ -239,17 +231,12 @@ class FreeboxNativeWebSocketService {
         this.handleVmDiskTaskDone(result as VmDiskTaskData);
         break;
       default:
-        console.log('[FBX-WS] Unknown event:', fullEvent);
+        logger.debug('FBX-WS', `Unknown event: ${fullEvent}`);
     }
   }
 
-  /**
-   * Handle LAN host became reachable (device connected)
-   */
   private handleLanHostReachable(host: LanHostEventData) {
-    console.log('[FBX-WS] Device connected:', host.primary_name || host.id);
-
-    // Broadcast to dashboard clients via our internal WebSocket
+    logger.debug('FBX-WS', `Device connected: ${host.primary_name || host.id}`);
     connectionWebSocket.broadcastFreeboxEvent('lan_host_reachable', {
       id: host.id,
       name: host.primary_name || 'Unknown',
@@ -260,13 +247,8 @@ class FreeboxNativeWebSocketService {
     });
   }
 
-  /**
-   * Handle LAN host became unreachable (device disconnected)
-   */
   private handleLanHostUnreachable(host: LanHostEventData) {
-    console.log('[FBX-WS] Device disconnected:', host.primary_name || host.id);
-
-    // Broadcast to dashboard clients via our internal WebSocket
+    logger.debug('FBX-WS', `Device disconnected: ${host.primary_name || host.id}`);
     connectionWebSocket.broadcastFreeboxEvent('lan_host_unreachable', {
       id: host.id,
       name: host.primary_name || 'Unknown',
@@ -277,12 +259,8 @@ class FreeboxNativeWebSocketService {
     });
   }
 
-  /**
-   * Handle VM state changed
-   */
   private handleVmStateChanged(vm: VmStateChangeData) {
-    console.log('[FBX-WS] VM state changed:', vm.id, '->', vm.status);
-
+    logger.debug('FBX-WS', `VM state changed: ${vm.id} -> ${vm.status}`);
     connectionWebSocket.broadcastFreeboxEvent('vm_state_changed', {
       id: vm.id,
       status: vm.status,
@@ -290,12 +268,8 @@ class FreeboxNativeWebSocketService {
     });
   }
 
-  /**
-   * Handle VM disk task done
-   */
   private handleVmDiskTaskDone(task: VmDiskTaskData) {
-    console.log('[FBX-WS] VM disk task done:', task.id, 'error:', task.error);
-
+    logger.debug('FBX-WS', `VM disk task done: ${task.id} error: ${task.error}`);
     connectionWebSocket.broadcastFreeboxEvent('vm_disk_task_done', {
       id: task.id,
       done: task.done,
@@ -304,16 +278,12 @@ class FreeboxNativeWebSocketService {
     });
   }
 
-  /**
-   * Schedule reconnection attempt
-   */
   private scheduleReconnect() {
     if (!this.shouldReconnect) return;
 
-    // Check if Freebox plugin is still enabled before reconnecting
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-      console.log('[FBX-WS] Freebox plugin disabled, stopping reconnection attempts');
+      logger.debug('FBX-WS', 'Freebox plugin disabled, stopping reconnection attempts');
       this.shouldReconnect = false;
       return;
     }
@@ -322,17 +292,14 @@ class FreeboxNativeWebSocketService {
       clearTimeout(this.reconnectTimeout);
     }
 
-    console.log('[FBX-WS] Reconnecting in 5 seconds...');
+    logger.debug('FBX-WS', 'Reconnecting in 5 seconds...');
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
     }, 5000);
   }
 
-  /**
-   * Stop the WebSocket connection
-   */
   stop() {
-    console.log('[FBX-WS] Stopping native WebSocket service');
+    logger.debug('FBX-WS', 'Stopping native WebSocket service');
     this.shouldReconnect = false;
 
     if (this.reconnectTimeout) {
@@ -346,23 +313,15 @@ class FreeboxNativeWebSocketService {
     }
   }
 
-  /**
-   * Called when user logs in
-   * Only starts WebSocket if Freebox plugin is enabled
-   */
   onLogin() {
-    // Check if Freebox plugin is enabled before starting WebSocket
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-      console.log('[FBX-WS] Freebox plugin is not enabled, skipping WebSocket start on login');
+      logger.debug('FBX-WS', 'Freebox plugin is not enabled, skipping WebSocket start on login');
       return;
     }
     this.start();
   }
 
-  /**
-   * Called when user logs out
-   */
   onLogout() {
     this.stop();
   }

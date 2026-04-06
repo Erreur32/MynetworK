@@ -195,7 +195,7 @@ export class FreeboxApiService {
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
                 const text = await response.text();
-                console.error(`[FreeboxAPI] Non-JSON response: ${method} ${url}`, text.substring(0, 200));
+                logger.error('FreeboxAPI', `Non-JSON response: ${method} ${url}`, text.substring(0, 200));
                 return {
                     success: false,
                     error_code: 'invalid_response',
@@ -206,7 +206,7 @@ export class FreeboxApiService {
             const data = await response.json() as FreeboxApiResponse<T>;
             return data;
         } catch (error) {
-            console.error(`[FreeboxAPI] Request failed: ${method} ${url}`, error);
+            logger.error('FreeboxAPI', `Request failed: ${method} ${url}`, error);
             // Return error response instead of throwing
             return {
                 success: false,
@@ -400,7 +400,7 @@ export class FreeboxApiService {
             // api_version endpoint returns data directly, not wrapped in {success, result}
             return {success: true, result: data};
         } catch (error) {
-            console.error('[FreeboxAPI] Failed to get API version:', error);
+            logger.error('FreeboxAPI', 'Failed to get API version:', error);
             return {success: false, msg: 'Failed to get API version'};
         }
     }
@@ -722,7 +722,7 @@ export class FreeboxApiService {
             const data = await response.json() as FreeboxApiResponse;
             return data;
         } catch (error) {
-            console.error('[FreeboxAPI] addDownload error:', error);
+            logger.error('FreeboxAPI', 'addDownload error:', error);
             return { success: false, error_code: 'request_failed', msg: String(error) };
         }
     }
@@ -767,8 +767,8 @@ export class FreeboxApiService {
             headers['X-Fbx-App-Auth'] = this.sessionToken;
         }
 
-        console.log('[FreeboxAPI] addDownloadFromFile URL:', url);
-        console.log('[FreeboxAPI] addDownloadFromFile headers:', headers);
+        logger.debug('FreeboxAPI', 'addDownloadFromFile URL:', url);
+        logger.debug('FreeboxAPI', 'addDownloadFromFile headers:', headers);
 
         try {
             // Use insecure agent for Freebox self-signed certificates
@@ -785,8 +785,8 @@ export class FreeboxApiService {
             const response = await fetch(url, fetchOptions);
 
             const rawText = await response.text();
-            console.log('[FreeboxAPI] addDownloadFromFile response status:', response.status);
-            console.log('[FreeboxAPI] addDownloadFromFile raw response:', rawText.substring(0, 500));
+            logger.debug('FreeboxAPI', 'addDownloadFromFile response status:', response.status);
+            logger.debug('FreeboxAPI', 'addDownloadFromFile raw response:', rawText.substring(0, 500));
 
             // Find the start of the JSON object
             const jsonStart = rawText.indexOf('{');
@@ -798,7 +798,7 @@ export class FreeboxApiService {
             const data = JSON.parse(jsonText) as FreeboxApiResponse;
             return data;
         } catch (error) {
-            console.error('[FreeboxAPI] addDownloadFromFile error:', error);
+            logger.error('FreeboxAPI', 'addDownloadFromFile error:', error);
             return { success: false, error_code: 'FETCH_ERROR', msg: String(error) };
         }
     }

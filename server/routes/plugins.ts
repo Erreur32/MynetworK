@@ -578,7 +578,7 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
         }
     } catch (error) {
         errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[PluginTest] Error testing ${pluginId}:`, error);
+        logger.error('PluginTest', `Error testing ${pluginId}:`, error);
         connectionStatus = false;
         // Error occurred - will restore in finally block if needed
     } finally {
@@ -718,6 +718,54 @@ router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequ
         throw createError(message, 500, 'NAT_RULES_ERROR');
     }
 }), autoLog('plugin.getNatRules', 'plugin', () => 'unifi'));
+
+/**
+ * GET /api/plugins/unifi/bandwidth-history
+ * Returns bandwidth history for the UniFi WAN interface
+ * Data points are computed from cumulative byte counters collected every ~30s
+ */
+router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi');
+
+    if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+        return res.json({ success: true, result: [] });
+    }
+
+    try {
+        const unifiPluginAny = unifiPlugin as any;
+        const wanId = (req.query.wanId as string) || 'wan1';
+        const history = typeof unifiPluginAny.getBandwidthHistory === 'function'
+            ? unifiPluginAny.getBandwidthHistory(wanId)
+            : [];
+        res.json({ success: true, result: history });
+    } catch (error) {
+        logger.error('UniFi', 'Failed to get bandwidth history:', error);
+        res.json({ success: true, result: [] });
+    }
+}));
+
+/**
+ * GET /api/plugins/unifi/wan-interfaces
+ * Returns detected WAN interfaces from the UniFi gateway device
+ */
+router.get('/unifi/wan-interfaces', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi');
+
+    if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+        return res.json({ success: true, result: [{ id: 'wan1', name: 'WAN' }] });
+    }
+
+    try {
+        const unifiPluginAny = unifiPlugin as any;
+        const interfaces = typeof unifiPluginAny.getWanInterfaces === 'function'
+            ? unifiPluginAny.getWanInterfaces()
+            : [{ id: 'wan1', name: 'WAN' }];
+        res.json({ success: true, result: interfaces });
+    } catch (error) {
+        logger.error('UniFi', 'Failed to get WAN interfaces:', error);
+        res.json({ success: true, result: [{ id: 'wan1', name: 'WAN' }] });
+    }
+}));
 
 export default router;
 

@@ -8,12 +8,16 @@ import { Router } from 'express';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
-import { 
-    getDatabaseConfig, 
-    saveDatabaseConfig, 
+import {
+    getDatabaseConfig,
+    saveDatabaseConfig,
     getDatabaseStats,
-    applyDatabaseConfig 
+    getDatabaseHealth,
+    runVacuum,
+    runIntegrityCheck,
+    applyDatabaseConfig
 } from '../database/dbConfig.js';
+import { checkpointWAL } from '../database/connection.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -108,6 +112,62 @@ router.post('/apply-config', requireAuth, requireAdmin, autoLog('database', 'app
     } catch (error: any) {
         logger.error('Database', 'Failed to apply database config:', error);
         throw createError(error.message || 'Failed to apply database config', 500, 'DB_CONFIG_APPLY_ERROR');
+    }
+}));
+
+/**
+ * GET /api/database/health
+ * Get database health report
+ */
+router.get('/health', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const health = getDatabaseHealth();
+        res.json({ success: true, result: health });
+    } catch (error: any) {
+        logger.error('Database', 'Failed to get health report:', error);
+        throw createError(error.message || 'Failed to get database health', 500, 'DB_HEALTH_ERROR');
+    }
+}));
+
+/**
+ * POST /api/database/vacuum
+ * Execute VACUUM to compact database
+ */
+router.post('/vacuum', requireAuth, requireAdmin, autoLog('database', 'vacuum'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const result = runVacuum();
+        res.json({ success: true, result });
+    } catch (error: any) {
+        logger.error('Database', 'VACUUM failed:', error);
+        throw createError(error.message || 'VACUUM failed', 500, 'DB_VACUUM_ERROR');
+    }
+}));
+
+/**
+ * POST /api/database/integrity-check
+ * Run SQLite integrity check
+ */
+router.post('/integrity-check', requireAuth, requireAdmin, autoLog('database', 'integrity-check'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const result = runIntegrityCheck();
+        res.json({ success: true, result });
+    } catch (error: any) {
+        logger.error('Database', 'Integrity check failed:', error);
+        throw createError(error.message || 'Integrity check failed', 500, 'DB_INTEGRITY_ERROR');
+    }
+}));
+
+/**
+ * POST /api/database/wal-checkpoint
+ * Force WAL checkpoint
+ */
+router.post('/wal-checkpoint', requireAuth, requireAdmin, autoLog('database', 'wal-checkpoint'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        checkpointWAL();
+        res.json({ success: true, message: 'WAL checkpoint effectué avec succès' });
+    } catch (error: any) {
+        logger.error('Database', 'WAL checkpoint failed:', error);
+        throw createError(error.message || 'WAL checkpoint failed', 500, 'DB_CHECKPOINT_ERROR');
     }
 }));
 

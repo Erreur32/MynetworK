@@ -23,6 +23,8 @@
     "info": "Informations",
     "version": "Version",
     "database": {
+      "healthToastWarning": "Base de données : des optimisations sont recommandées (fragmentation ou WAL). Consultez l'onglet Base de données.",
+      "healthToastCritical": "Base de données : des problèmes critiques ont été détectés (intégrité ou fragmentation élevée). Action requise dans l'onglet Base de données.",
       "retentionTitle": "Rétention des données de scan",
       "saveSuccess": "Configuration sauvegardée avec succès",
       "loadError": "Erreur lors du chargement de la configuration",
@@ -137,6 +139,11 @@
     "delete": "Supprimer",
     "moveUp": "Monter",
     "moveDown": "Descendre",
+    "backup": {
+      "tabApp": "Application",
+      "tabFreebox": "Freebox",
+      "tabUnifi": "UniFi"
+    },
     "backupImportantTitle": "Important : sauvegardes manuelles recommandées",
     "backupIntro": "Il est difficile de créer des sauvegardes automatiques via cette application pour les équipements réseau (Freebox, UniFi Controller). Les APIs de ces équipements ne fournissent pas d'endpoints officiels pour déclencher des exports de configuration de manière automatisée.",
     "backupRecommendationLabel": "Recommandation :",
@@ -338,6 +345,9 @@
     "security": {
       "sectionTitle": "Sécurité",
       "subtitle": "Paramètres de sécurité et authentification",
+      "tabAuth": "Auth & Protection",
+      "tabNetwork": "Réseau & CORS",
+      "tabLogs": "Journaux",
       "saveSuccess": "Paramètres de sécurité sauvegardés avec succès",
       "saveError": "Erreur lors de la sauvegarde",
       "unblockSuccess": "L'identifiant \"{{identifier}}\" a été débloqué avec succès",

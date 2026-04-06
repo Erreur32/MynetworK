@@ -7,9 +7,16 @@
       "clients": "Clients",
       "switches": "Switch",
       "analyse": "Analyse",
+      "bandwidth": "Bande passante",
       "traffic": "Trafic",
       "events": "Événements",
       "debug": "Debug"
+    },
+    "bandwidth": {
+      "chartTitle": "Bande passante WAN",
+      "loading": "Collecte des données en cours...",
+      "noData": "Données insuffisantes",
+      "noDataHint": "Les données s'accumulent à chaque actualisation (~30s). Revenez dans quelques minutes."
     },
     "pluginNotInstalled": "Le plugin UniFi n'est pas installé ou configuré.",
     "pluginNotConnectedDescription": "Le plugin UniFi n'est pas activé ou connecté.",
