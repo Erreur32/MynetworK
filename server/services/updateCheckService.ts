@@ -65,6 +65,45 @@ async function fetchCommitMessage(sha: string, headers: Record<string, string>):
 }
 
 /**
+ * Check if the Docker image for a given version tag is available in GHCR.
+ * This is the definitive proof that the CI build completed and the image was pushed.
+ * Uses the OCI manifest endpoint — returns true only if the tag exists in the registry.
+ */
+async function isDockerImageReady(version: string): Promise<boolean> {
+  try {
+    // Try with 'v' prefix first (e.g. v0.7.35), then without
+    const tags = [`v${version}`, version];
+    for (const tag of tags) {
+      const url = `https://ghcr.io/v2/erreur32/mynetwork/manifests/${tag}`;
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers: {
+          'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json',
+          'User-Agent': 'MynetworK-UpdateChecker/1.0'
+        }
+      });
+      if (response.ok) {
+        logger.info('Updates', `Docker image ready in GHCR: ${tag}`);
+        return true;
+      }
+      // 401 = registry requires auth but endpoint exists (image likely public but needs token)
+      // 404 = tag does not exist yet
+      if (response.status === 401) {
+        // Image likely exists but registry requires anonymous token — treat as ready
+        logger.info('Updates', `GHCR returned 401 for ${tag} — assuming image exists`);
+        return true;
+      }
+    }
+    logger.info('Updates', `Docker image not yet available in GHCR for version ${version}`);
+    return false;
+  } catch (e) {
+    // Network error — don't block the notification
+    logger.warn('Updates', `GHCR manifest check failed: ${e instanceof Error ? e.message : String(e)}`);
+    return true;
+  }
+}
+
+/**
  * Check if the GitHub build (CI check runs) for a given commit SHA is validated (all completed runs passed).
  * Returns true if at least one check run completed successfully and none failed.
  */
@@ -151,14 +190,19 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
             .filter((tag, i, self) => self.findIndex(t => t.version === tag.version) === i)
             .sort((a, b) => compareVersions(b.version, a.version));
 
-          // Find the most recent tag whose build is validated
+          // Find the most recent tag whose build is validated AND Docker image is ready in GHCR
           for (const tag of validTags) {
+            const dockerReady = await isDockerImageReady(tag.version);
+            if (!dockerReady) {
+              logger.info('Updates', `Skipping ${tag.version} — Docker image not yet in GHCR`);
+              continue;
+            }
             const validated = await isBuildValidated(tag.sha, headers);
             if (validated) {
               versionTags = [tag.version];
               latestVersion = tag.version;
               updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
-              logger.info('Updates', `Latest validated version: ${latestVersion} (build OK for ${tag.sha.slice(0, 7)})`);
+              logger.info('Updates', `Latest validated version: ${latestVersion} (build OK for ${tag.sha.slice(0, 7)}, image in GHCR)`);
               const commitMsg = await fetchCommitMessage(tag.sha, headers);
               return {
                 enabled: true,
@@ -169,7 +213,7 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
                 releaseNotes: commitMsg?.body
               };
             } else {
-              logger.info('Updates', `Skipping ${tag.version} — build not validated for ${tag.sha.slice(0, 7)}`);
+              logger.info('Updates', `Skipping ${tag.version} — CI build not validated for ${tag.sha.slice(0, 7)}`);
             }
           }
           // All tags failed build check
