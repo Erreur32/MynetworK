@@ -5,6 +5,7 @@ import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tool
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 import { BandwidthPoint } from './types';
+import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 
 interface TrafficTabProps {
     unifiStats: any;
@@ -32,6 +33,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     onNavigateToSearch,
 }) => {
     const { t } = useTranslation();
+    const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected } = useUnifiRealtimeStore();
 
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
         if (!ip || ip === '-' || ip === 'N/A') {
@@ -60,15 +62,18 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
         return <span className={className}>{ip}</span>;
     };
 
-    const last = bandwidthHistory[bandwidthHistory.length - 1];
-    const dl = last?.download ?? 0;
-    const ul = last?.upload ?? 0;
+    // Use realtime WebSocket data when available, fallback to HTTP history
+    const dl = wsConnected ? realtimeDl : (bandwidthHistory[bandwidthHistory.length - 1]?.download ?? 0);
+    const ul = wsConnected ? realtimeUl : (bandwidthHistory[bandwidthHistory.length - 1]?.upload ?? 0);
     const fmtKB = (kb: number) => kb >= 1024
         ? `${(kb / 1024).toFixed(1)} MB/s`
         : `${kb} KB/s`;
     const activeWan = wanInterfaces.find(w => w.id === selectedWan);
     const wanLabel = activeWan ? activeWan.name : selectedWan.toUpperCase();
     const wanIp = activeWan?.ip;
+
+    // Use realtime history for the chart when WebSocket is connected
+    const chartHistory = wsConnected && realtimeHistory.length > 1 ? realtimeHistory : bandwidthHistory;
 
     return (
         <div className="col-span-full space-y-4">
@@ -107,6 +112,11 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                 title={
                     <span className="flex items-center gap-1.5">
                         {t('unifi.bandwidth.chartTitle')}
+                        {wsConnected && (
+                            <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full animate-pulse">
+                                LIVE
+                            </span>
+                        )}
                         <RichTooltip
                             title="Graphique bande passante WAN"
                             description="Débit calculé par delta entre deux mesures successives des compteurs cumulatifs WAN du gateway UniFi."
@@ -170,7 +180,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
 
                 {bandwidthHistory.length >= 2 ? (
                     <ResponsiveContainer width="100%" height={320}>
-                        <AreaChart data={bandwidthHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <AreaChart data={chartHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                             <defs>
                                 <linearGradient id="gradDlTraffic" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
