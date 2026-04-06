@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Fixed
 - Removed duplicate "Analyse trafic UniFi" from Overview events sub-tab
 - BandwidthHistoryWidget defaults to Live mode when UniFi-only
+- Fix update-version.sh: scan-reseau name mismatch and README badge regex
 
 ---
 
