@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.39] - 2026-04-06
 
+### ✨ Added
+- Dedicated `/ws/unifi` WebSocket for real-time bandwidth (3s polling, independent of Freebox)
+- Lightweight `fetchWanBandwidth()` on UniFiPlugin (stat/dashboard only)
+- UniFi realtime Zustand store + `useUnifiWebSocket` hook
+- Time range selector on TrafficTab (Live / 1h / 6h / 24h / 7d)
+- Clickable legend toggle on bandwidth charts (show/hide download/upload)
+- Y-axis unit labels on bandwidth charts
+- LIVE badge indicator on TrafficTab when WebSocket is connected
+
+### 🔧 Changed
+- PluginSummaryCard, BandwidthHistoryWidget, TrafficTab now use WebSocket real-time data
+- Header displays UniFi realtime bandwidth when WebSocket connected
+- Plugin Status card and Bandwidth chart aligned on same dashboard row
+- Plugin Status card: fixed height, compact margins, scrollable content
+- Docker build optimized: drop arm/v7, improve layer caching, npm cache mount
+
+### 🐛 Fixed
+- Removed duplicate "Analyse trafic UniFi" from Overview events sub-tab
+- BandwidthHistoryWidget defaults to Live mode when UniFi-only
+
 ---
 
 ## [0.7.38] - 2026-04-06
