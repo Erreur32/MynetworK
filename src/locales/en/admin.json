@@ -259,7 +259,8 @@
       "lastCheck": "Last check",
       "checking": "Checking…",
       "upToDate": "Up to date",
-      "updateAvailableVersion": "Update available: {{version}}"
+      "updateAvailableVersion": "Update available: {{version}}",
+      "updateCommand": "docker-compose pull && docker-compose up -d"
     },
     "freeboxFirmwareCheck": {
       "sectionTitle": "Freebox firmware check",

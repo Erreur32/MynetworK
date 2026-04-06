@@ -82,7 +82,7 @@ const UpdateBanner: React.FC = () => {
         </div>
       </div>
       <code className="hidden lg:block text-xs text-amber-200/90 bg-black/20 px-2 py-1 rounded font-mono flex-shrink-0">
-        docker-compose pull && docker-compose up -d
+        {t('admin.updateCheck.updateCommand')}
       </code>
       <button
         type="button"
