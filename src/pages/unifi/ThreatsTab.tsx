@@ -235,10 +235,10 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                         <div key={r.country} className="flex justify-between items-center">
                                             <span className="inline-flex items-center gap-1.5 text-xs text-gray-300 truncate mr-2">
                                                 <img
-                                                    src={`/SVG/flag-${r.country.toLowerCase()}.svg`}
+                                                    src={`/svg/flag-${r.country.toLowerCase()}.svg`}
                                                     alt={r.country}
                                                     className="w-5 h-3.5 object-cover rounded-[2px] shrink-0"
-                                                    onError={(e) => { (e.target as HTMLImageElement).src = '/SVG/flag-xx.svg'; }}
+                                                    onError={(e) => { (e.target as HTMLImageElement).src = '/svg/flag-xx.svg'; }}
                                                 />
                                                 {r.country}
                                             </span>
@@ -344,10 +344,10 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                                                 {f.country ? (
                                                                     <span className="inline-flex items-center gap-1.5">
                                                                         <img
-                                                                            src={`/SVG/flag-${f.country.toLowerCase()}.svg`}
+                                                                            src={`/svg/flag-${f.country.toLowerCase()}.svg`}
                                                                             alt={f.country}
                                                                             className="w-5 h-3.5 object-cover rounded-[2px] shrink-0"
-                                                                            onError={(e) => { (e.target as HTMLImageElement).src = '/SVG/flag-xx.svg'; }}
+                                                                            onError={(e) => { (e.target as HTMLImageElement).src = '/svg/flag-xx.svg'; }}
                                                                         />
                                                                         <span>{f.country}</span>
                                                                     </span>

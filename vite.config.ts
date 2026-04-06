@@ -47,11 +47,6 @@ export default defineConfig({
       // So if you access via 192.168.1.150:3666, HMR will use ws://192.168.1.150:3666
     },
     proxy: {
-      '/SVG': {
-        target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
-        changeOrigin: true,
-        secure: false,
-      },
       '/api': {
         // Use localhost for proxy - Vite proxy runs on the same machine as the backend
         // When accessing via IP (192.168.1.150), the proxy still connects to localhost:3003

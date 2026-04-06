@@ -269,10 +269,6 @@ setTimeout(() => {
     }
 }, 7500);
 
-// Serve /SVG/ directory as static assets (flags, app icons, etc.)
-app.use('/SVG', express.static(path.join(__dirname, '..', 'SVG'), {
-    setHeaders: (res) => { res.setHeader('Cache-Control', 'public, max-age=604800'); }
-}));
 
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
