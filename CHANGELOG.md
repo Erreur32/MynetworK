@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.40] - 2026-04-06
+
+### 🔧 Changed
+- Bump vite from 6.4.1 to 6.4.2 (security fix: path traversal + server.fs check)
+
+---
+
 ## [0.7.39] - 2026-04-06
 
 ### ✨ Added
