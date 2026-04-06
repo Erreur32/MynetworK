@@ -17,11 +17,18 @@ RUN apk add --no-cache python3 make g++
 
 # Install all dependencies (including devDependencies) only to compile native modules.
 # devDependencies are removed in the final image (see npm prune --production below).
+# Layer caching: package*.json rarely changes, so npm ci is cached across builds.
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+# Copy config files first (rarely change = better cache hits)
+COPY tsconfig.json vite.config.ts index.html postcss.config.js tailwind.config.js ./
 
 # Copy source and build
-COPY . .
+# Separate COPY for server and src to maximize layer reuse
+COPY server ./server
+COPY src ./src
+COPY public ./public
 RUN npm run build
 
 # Prepare production node_modules (no devDependencies but with compiled binaries).
