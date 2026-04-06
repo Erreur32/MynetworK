@@ -150,6 +150,81 @@
     "filterCritical": "Critiques",
     "speedPort": "Vitesse port :",
     "onlineStatus": "En ligne",
-    "offlineStatus": "Hors ligne"
+    "offlineStatus": "Hors ligne",
+    "tooltip": {
+      "idsIps": {
+        "title": "IDS/IPS UniFi",
+        "desc": "Analyse du trafic réseau par le système de détection/prévention d'intrusions UniFi.",
+        "sourceLabel": "Source",
+        "updateLabel": "Mise à jour",
+        "updateValue": "toutes les 2 min",
+        "cacheLabel": "Cache serveur",
+        "cacheValue": "5 min",
+        "footer": "Nécessite IPS en mode Block dans UniFi → Security → Threat Management"
+      },
+      "levelLow": {
+        "title": "Niveau LOW",
+        "desc": "Trafic légèrement suspect — activité anormale détectée mais risque limité. Ex: scan de ports, tentatives de connexion isolées."
+      },
+      "levelSuspicious": {
+        "title": "Niveau SUSPICIOUS",
+        "desc": "Trafic suspect — comportement potentiellement malveillant. Ex: réputation IP négative, patterns d'attaque connus."
+      },
+      "levelConcerning": {
+        "title": "Niveau CONCERNING",
+        "desc": "Trafic préoccupant — attaque active ou intrusion confirmée. Ex: exploit connu, C2 botnet, malware signature."
+      },
+      "topPolicies": {
+        "title": "Politiques IPS déclenchées",
+        "desc": "Signatures IPS ou règles de politique UniFi ayant généré le plus de blocages. Un nom comme 'CINS Army' désigne une liste de réputation d'IP malveillantes."
+      },
+      "topClients": {
+        "title": "Clients les plus ciblés",
+        "desc": "Machines internes (destination) ayant reçu le plus de trafic bloqué. Un client souvent ciblé peut être exposé ou vulnérable."
+      },
+      "topRegions": {
+        "title": "Régions sources des attaques",
+        "desc": "Pays d'origine du trafic malveillant (basé sur la géolocalisation IP source). Permet d'identifier les zones géographiques à risque."
+      },
+      "connectionFilter": {
+        "title": "Filtre connexion",
+        "wirelessValue": "Wi-Fi (is_wired=false)",
+        "wiredValue": "Ethernet (is_wired=true)",
+        "allValue": "Tous types"
+      },
+      "statusFilter": {
+        "title": "Filtre statut",
+        "desc": "Un client est 'actif' s'il a échangé du trafic récemment (last_seen < 5 min ou uptime > 0).",
+        "activeValue": "connecté + trafic récent",
+        "inactiveValue": "connu mais idle"
+      },
+      "speed": {
+        "title": "Vitesse du lien",
+        "disconnected": "Port déconnecté ou inconnu"
+      },
+      "poe": {
+        "title": "Power over Ethernet",
+        "desc": "Alimentation électrique via le câble réseau — permet de brancher des appareils (AP, caméra, téléphone) sans adaptateur secteur.",
+        "autoValue": "PoE 802.3af/at actif",
+        "v24Value": "PoE passif 24V (propriétaire)",
+        "offValue": "PoE désactivé"
+      },
+      "errors": {
+        "title": "Erreurs réseau",
+        "desc": "Total des erreurs RX (réception) + TX (émission) sur ce port depuis le dernier redémarrage du switch.",
+        "noneValue": "Pas d'erreur détectée",
+        "presentValue": "Erreurs présentes — câble ou duplex mismatch ?"
+      },
+      "gateway": {
+        "title": "Passerelle & ports réseau",
+        "desc": "Résumé de la gateway UniFi : ports WAN (connexion internet) et ports LAN (réseau local). Les WAN affichent l'IP publique ou le statut de liaison."
+      },
+      "natRules": {
+        "title": "Règles NAT — Port Forwarding",
+        "desc": "Le NAT (Network Address Translation) redirige des ports entrants de votre IP publique vers des machines internes. Exemple : port 443 → serveur web local.",
+        "activeValue": "Règle en cours d'application",
+        "inactiveValue": "Règle désactivée (non appliquée)"
+      }
+    }
   }
 }

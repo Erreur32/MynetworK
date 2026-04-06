@@ -106,11 +106,11 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
             <span className="flex items-center gap-1.5">
                 {source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}
                 <RichTooltip
-                    title="Historique bande passante"
-                    description="Débit entrant (download) et sortant (upload) mesuré sur la période sélectionnée. Les données sont issues de la Freebox (RRD) ou de l'API UniFi selon la source active."
+                    title={t('dashboard.bandwidth.tooltip.title')}
+                    description={t('dashboard.bandwidth.tooltip.desc')}
                     rows={[
-                        { label: 'Download', value: 'Trafic reçu depuis internet', color: 'sky', dot: true },
-                        { label: 'Upload', value: 'Trafic envoyé vers internet', color: 'emerald', dot: true },
+                        { label: 'Download', value: t('dashboard.bandwidth.tooltip.downloadValue'), color: 'sky', dot: true },
+                        { label: 'Upload', value: t('dashboard.bandwidth.tooltip.uploadValue'), color: 'emerald', dot: true },
                     ]}
                     position="bottom"
                     width={290}

@@ -64,7 +64,13 @@
       "refreshHistory": "Refresh history via Freebox",
       "reconnectFreebox": "Try to reconnect to Freebox",
       "collectingData": "Collecting data...",
-      "chartWillFill": "The chart will fill automatically."
+      "chartWillFill": "The chart will fill automatically.",
+      "tooltip": {
+        "title": "Bandwidth history",
+        "desc": "Incoming (download) and outgoing (upload) throughput measured over the selected period. Data comes from Freebox (RRD) or the UniFi API depending on the active source.",
+        "downloadValue": "Traffic received from internet",
+        "uploadValue": "Traffic sent to internet"
+      }
     }
   }
 }

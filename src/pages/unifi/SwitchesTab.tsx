@@ -239,13 +239,13 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span className="flex items-center gap-1">
                                                         VITESSE
                                                         <RichTooltip
-                                                            title="Vitesse du lien"
+                                                            title={t('unifi.tooltip.speed.title')}
                                                             rows={[
                                                                 { label: '10G', value: '10 000 Mbps — SFP+/DAC', color: 'purple', dot: true },
                                                                 { label: '2.5G', value: '2 500 Mbps — multi-gig', color: 'sky', dot: true },
                                                                 { label: '1G', value: '1 000 Mbps — Gigabit', color: 'emerald', dot: true },
                                                                 { label: '100', value: '100 Mbps — Fast Ethernet', color: 'yellow', dot: true },
-                                                                { label: '—', value: 'Port déconnecté ou inconnu', color: 'gray', dot: true },
+                                                                { label: '—', value: t('unifi.tooltip.speed.disconnected'), color: 'gray', dot: true },
                                                             ]}
                                                             position="top"
                                                             width={260}
@@ -262,12 +262,12 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span className="flex items-center gap-1">
                                                         POE
                                                         <RichTooltip
-                                                            title="Power over Ethernet"
-                                                            description="Alimentation électrique via le câble réseau — permet de brancher des appareils (AP, caméra, téléphone) sans adaptateur secteur."
+                                                            title={t('unifi.tooltip.poe.title')}
+                                                            description={t('unifi.tooltip.poe.desc')}
                                                             rows={[
-                                                                { label: 'auto', value: 'PoE 802.3af/at actif', color: 'yellow', dot: true },
-                                                                { label: '24v', value: 'PoE passif 24V (propriétaire)', color: 'orange', dot: true },
-                                                                { label: 'off', value: 'PoE désactivé', color: 'gray', dot: true },
+                                                                { label: 'auto', value: t('unifi.tooltip.poe.autoValue'), color: 'yellow', dot: true },
+                                                                { label: '24v', value: t('unifi.tooltip.poe.v24Value'), color: 'orange', dot: true },
+                                                                { label: 'off', value: t('unifi.tooltip.poe.offValue'), color: 'gray', dot: true },
                                                             ]}
                                                             position="top"
                                                             width={270}
@@ -292,11 +292,11 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span className="flex items-center gap-1">
                                                         ERREURS
                                                         <RichTooltip
-                                                            title="Erreurs réseau"
-                                                            description="Total des erreurs RX (réception) + TX (émission) sur ce port depuis le dernier redémarrage du switch."
+                                                            title={t('unifi.tooltip.errors.title')}
+                                                            description={t('unifi.tooltip.errors.desc')}
                                                             rows={[
-                                                                { label: '0 / N/A', value: 'Pas d\'erreur détectée', color: 'emerald', dot: true },
-                                                                { label: '> 0', value: 'Erreurs présentes — câble ou duplex mismatch ?', color: 'red', dot: true },
+                                                                { label: '0 / N/A', value: t('unifi.tooltip.errors.noneValue'), color: 'emerald', dot: true },
+                                                                { label: '> 0', value: t('unifi.tooltip.errors.presentValue'), color: 'red', dot: true },
                                                             ]}
                                                             position="top"
                                                             width={280}

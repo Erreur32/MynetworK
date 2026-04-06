@@ -150,6 +150,81 @@
     "filterCritical": "Critical",
     "speedPort": "Port speed:",
     "onlineStatus": "Online",
-    "offlineStatus": "Offline"
+    "offlineStatus": "Offline",
+    "tooltip": {
+      "idsIps": {
+        "title": "IDS/IPS UniFi",
+        "desc": "Network traffic analysis by the UniFi intrusion detection/prevention system.",
+        "sourceLabel": "Source",
+        "updateLabel": "Update",
+        "updateValue": "every 2 min",
+        "cacheLabel": "Server cache",
+        "cacheValue": "5 min",
+        "footer": "Requires IPS in Block mode in UniFi → Security → Threat Management"
+      },
+      "levelLow": {
+        "title": "Level LOW",
+        "desc": "Slightly suspicious traffic — abnormal activity detected but limited risk. E.g.: port scan, isolated connection attempts."
+      },
+      "levelSuspicious": {
+        "title": "Level SUSPICIOUS",
+        "desc": "Suspicious traffic — potentially malicious behavior. E.g.: negative IP reputation, known attack patterns."
+      },
+      "levelConcerning": {
+        "title": "Level CONCERNING",
+        "desc": "Concerning traffic — active attack or confirmed intrusion. E.g.: known exploit, C2 botnet, malware signature."
+      },
+      "topPolicies": {
+        "title": "Triggered IPS Policies",
+        "desc": "IPS signatures or UniFi policy rules that generated the most blocks. A name like 'CINS Army' refers to a malicious IP reputation list."
+      },
+      "topClients": {
+        "title": "Most Targeted Clients",
+        "desc": "Internal machines (destination) that received the most blocked traffic. A frequently targeted client may be exposed or vulnerable."
+      },
+      "topRegions": {
+        "title": "Attack Source Regions",
+        "desc": "Country of origin of malicious traffic (based on source IP geolocation). Helps identify high-risk geographic areas."
+      },
+      "connectionFilter": {
+        "title": "Connection filter",
+        "wirelessValue": "Wi-Fi (is_wired=false)",
+        "wiredValue": "Ethernet (is_wired=true)",
+        "allValue": "All types"
+      },
+      "statusFilter": {
+        "title": "Status filter",
+        "desc": "A client is 'active' if it has exchanged traffic recently (last_seen < 5 min or uptime > 0).",
+        "activeValue": "connected + recent traffic",
+        "inactiveValue": "known but idle"
+      },
+      "speed": {
+        "title": "Link speed",
+        "disconnected": "Disconnected or unknown port"
+      },
+      "poe": {
+        "title": "Power over Ethernet",
+        "desc": "Electrical power via the network cable — allows connecting devices (AP, camera, phone) without a power adapter.",
+        "autoValue": "PoE 802.3af/at active",
+        "v24Value": "Passive PoE 24V (proprietary)",
+        "offValue": "PoE disabled"
+      },
+      "errors": {
+        "title": "Network errors",
+        "desc": "Total RX (receive) + TX (transmit) errors on this port since last switch reboot.",
+        "noneValue": "No error detected",
+        "presentValue": "Errors present — cable or duplex mismatch?"
+      },
+      "gateway": {
+        "title": "Gateway & network ports",
+        "desc": "UniFi gateway summary: WAN ports (internet connection) and LAN ports (local network). WAN ports show the public IP or link status."
+      },
+      "natRules": {
+        "title": "NAT Rules — Port Forwarding",
+        "desc": "NAT (Network Address Translation) redirects incoming ports from your public IP to internal machines. Example: port 443 → local web server.",
+        "activeValue": "Rule currently applied",
+        "inactiveValue": "Rule disabled (not applied)"
+      }
+    }
   }
 }

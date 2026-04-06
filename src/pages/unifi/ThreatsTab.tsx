@@ -42,14 +42,14 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                     <ShieldAlert size={16} className="text-red-400" />
                     {t('unifi.threats.title')}
                     <RichTooltip
-                        title="IDS/IPS UniFi"
-                        description="Analyse du trafic réseau par le système de détection/prévention d'intrusions UniFi."
+                        title={t('unifi.tooltip.idsIps.title')}
+                        description={t('unifi.tooltip.idsIps.desc')}
                         rows={[
-                            { label: 'Source', value: 'v2 traffic-flows API', color: 'sky', dot: true },
-                            { label: 'Mise à jour', value: 'toutes les 2 min', color: 'gray', dot: true },
-                            { label: 'Cache serveur', value: '5 min', color: 'gray', dot: true },
+                            { label: t('unifi.tooltip.idsIps.sourceLabel'), value: 'v2 traffic-flows API', color: 'sky', dot: true },
+                            { label: t('unifi.tooltip.idsIps.updateLabel'), value: t('unifi.tooltip.idsIps.updateValue'), color: 'gray', dot: true },
+                            { label: t('unifi.tooltip.idsIps.cacheLabel'), value: t('unifi.tooltip.idsIps.cacheValue'), color: 'gray', dot: true },
                         ]}
-                        footer="Nécessite IPS en mode Block dans UniFi → Security → Threat Management"
+                        footer={t('unifi.tooltip.idsIps.footer')}
                         position="bottom"
                         width={280}
                     />
@@ -158,9 +158,9 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {[
                             { label: t('unifi.threats.totalBlocked'), value: threatData.summary.total, color: 'text-white', bg: 'bg-red-900/30 border-red-800/50', tooltip: null },
-                            { label: t('unifi.threats.low'), value: threatData.summary.low, color: 'text-blue-300', bg: 'bg-blue-900/20 border-blue-800/30', tooltip: { title: 'Niveau LOW', desc: 'Trafic légèrement suspect — activité anormale détectée mais risque limité. Ex: scan de ports, tentatives de connexion isolées.' } },
-                            { label: t('unifi.threats.suspicious'), value: threatData.summary.suspicious, color: 'text-amber-300', bg: 'bg-amber-900/20 border-amber-800/30', tooltip: { title: 'Niveau SUSPICIOUS', desc: 'Trafic suspect — comportement potentiellement malveillant. Ex: réputation IP négative, patterns d\'attaque connus.' } },
-                            { label: t('unifi.threats.concerning'), value: threatData.summary.concerning, color: 'text-red-400', bg: 'bg-red-900/20 border-red-800/30', tooltip: { title: 'Niveau CONCERNING', desc: 'Trafic préoccupant — attaque active ou intrusion confirmée. Ex: exploit connu, C2 botnet, malware signature.' } },
+                            { label: t('unifi.threats.low'), value: threatData.summary.low, color: 'text-blue-300', bg: 'bg-blue-900/20 border-blue-800/30', tooltip: { title: t('unifi.tooltip.levelLow.title'), desc: t('unifi.tooltip.levelLow.desc') } },
+                            { label: t('unifi.threats.suspicious'), value: threatData.summary.suspicious, color: 'text-amber-300', bg: 'bg-amber-900/20 border-amber-800/30', tooltip: { title: t('unifi.tooltip.levelSuspicious.title'), desc: t('unifi.tooltip.levelSuspicious.desc') } },
+                            { label: t('unifi.threats.concerning'), value: threatData.summary.concerning, color: 'text-red-400', bg: 'bg-red-900/20 border-red-800/30', tooltip: { title: t('unifi.tooltip.levelConcerning.title'), desc: t('unifi.tooltip.levelConcerning.desc') } },
                         ].map(({ label, value, color, bg, tooltip }) => {
                             const pct = threatData.summary.total > 0 ? Math.round(value / threatData.summary.total * 1000) / 10 : 0;
                             return (
@@ -181,7 +181,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                     {/* Top section: Policies + Clients + Regions */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Top Policies */}
-                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topPolicies')}<RichTooltip title="Politiques IPS déclenchées" description="Signatures IPS ou règles de politique UniFi ayant généré le plus de blocages. Un nom comme 'CINS Army' désigne une liste de réputation d'IP malveillantes." position="top" width={270} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
+                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topPolicies')}<RichTooltip title={t('unifi.tooltip.topPolicies.title')} description={t('unifi.tooltip.topPolicies.desc')} position="top" width={270} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
                             {threatData.topPolicies.length === 0 ? (
                                 <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
                             ) : (
@@ -197,7 +197,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                         </Card>
 
                         {/* Top Clients */}
-                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topClients')}<RichTooltip title="Clients les plus ciblés" description="Machines internes (destination) ayant reçu le plus de trafic bloqué. Un client souvent ciblé peut être exposé ou vulnérable." position="top" width={260} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
+                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topClients')}<RichTooltip title={t('unifi.tooltip.topClients.title')} description={t('unifi.tooltip.topClients.desc')} position="top" width={260} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
                             {threatData.topClients.length === 0 ? (
                                 <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
                             ) : (
@@ -216,7 +216,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                         </Card>
 
                         {/* Top Regions */}
-                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topRegions')}<RichTooltip title="Régions sources des attaques" description="Pays d'origine du trafic malveillant (basé sur la géolocalisation IP source). Permet d'identifier les zones géographiques à risque." position="top" width={260} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
+                        <Card title={<span className="flex items-center gap-1.5">{t('unifi.threats.topRegions')}<RichTooltip title={t('unifi.tooltip.topRegions.title')} description={t('unifi.tooltip.topRegions.desc')} position="top" width={260} iconSize={12} /></span>} className="bg-unifi-card border border-gray-800 rounded-xl">
                             {threatData.topRegions.length === 0 ? (
                                 <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
                             ) : (

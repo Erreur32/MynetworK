@@ -64,7 +64,13 @@
       "refreshHistory": "Rafraîchir l'historique via Freebox",
       "reconnectFreebox": "Tenter de se reconnecter à la Freebox",
       "collectingData": "Collecte des données en cours...",
-      "chartWillFill": "Le graphique se remplira automatiquement."
+      "chartWillFill": "Le graphique se remplira automatiquement.",
+      "tooltip": {
+        "title": "Historique bande passante",
+        "desc": "Débit entrant (download) et sortant (upload) mesuré sur la période sélectionnée. Les données sont issues de la Freebox (RRD) ou de l'API UniFi selon la source active.",
+        "downloadValue": "Trafic reçu depuis internet",
+        "uploadValue": "Trafic envoyé vers internet"
+      }
     }
   }
 }

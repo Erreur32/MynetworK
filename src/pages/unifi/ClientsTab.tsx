@@ -299,11 +299,11 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                             <span className="text-[11px] text-gray-500 mr-1 flex items-center gap-1">
                                                 {t('unifi.connectionFilterLabel')}
                                                 <RichTooltip
-                                                    title="Filtre connexion"
+                                                    title={t('unifi.tooltip.connectionFilter.title')}
                                                     rows={[
-                                                        { label: 'Wireless', value: 'Wi-Fi (is_wired=false)', color: 'sky', dot: true },
-                                                        { label: 'Wired', value: 'Ethernet (is_wired=true)', color: 'emerald', dot: true },
-                                                        { label: 'Tous', value: 'Tous types', color: 'gray', dot: true },
+                                                        { label: 'Wireless', value: t('unifi.tooltip.connectionFilter.wirelessValue'), color: 'sky', dot: true },
+                                                        { label: 'Wired', value: t('unifi.tooltip.connectionFilter.wiredValue'), color: 'emerald', dot: true },
+                                                        { label: t('unifi.filterAll'), value: t('unifi.tooltip.connectionFilter.allValue'), color: 'gray', dot: true },
                                                     ]}
                                                     position="top" width={230} iconSize={11}
                                                 />
@@ -338,11 +338,11 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                             <span className="text-[11px] text-gray-500 mr-1 flex items-center gap-1">
                                                 {t('unifi.statusFilterLabel')}
                                                 <RichTooltip
-                                                    title="Filtre statut"
-                                                    description="Un client est 'actif' s'il a échangé du trafic récemment (last_seen < 5 min ou uptime > 0)."
+                                                    title={t('unifi.tooltip.statusFilter.title')}
+                                                    description={t('unifi.tooltip.statusFilter.desc')}
                                                     rows={[
-                                                        { label: 'Actif', value: 'connecté + trafic récent', color: 'green', dot: true },
-                                                        { label: 'Inactif', value: 'connu mais idle', color: 'amber', dot: true },
+                                                        { label: t('unifi.active'), value: t('unifi.tooltip.statusFilter.activeValue'), color: 'green', dot: true },
+                                                        { label: t('unifi.inactive'), value: t('unifi.tooltip.statusFilter.inactiveValue'), color: 'amber', dot: true },
                                                     ]}
                                                     position="top" width={240} iconSize={11}
                                                 />
