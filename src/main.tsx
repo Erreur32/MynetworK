@@ -9,7 +9,7 @@ import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.7.38';
+const APP_VERSION = '0.7.39';
 
 // Console log with colored background
 const logAppInfo = () => {
