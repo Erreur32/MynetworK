@@ -45,7 +45,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                         title={t('unifi.tooltip.idsIps.title')}
                         description={t('unifi.tooltip.idsIps.desc')}
                         rows={[
-                            { label: t('unifi.tooltip.idsIps.sourceLabel'), value: 'v2 traffic-flows API', color: 'sky', dot: true },
+                            { label: t('unifi.tooltip.idsIps.sourceLabel'), value: threatDebug?.deploymentType === 'unifios' ? 'v2 traffic-flows' : 'stat/ips/event', color: 'sky', dot: true },
                             { label: t('unifi.tooltip.idsIps.updateLabel'), value: t('unifi.tooltip.idsIps.updateValue'), color: 'gray', dot: true },
                             { label: t('unifi.tooltip.idsIps.cacheLabel'), value: t('unifi.tooltip.idsIps.cacheValue'), color: 'gray', dot: true },
                         ]}
@@ -53,6 +53,16 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                         position="bottom"
                         width={280}
                     />
+                    {/* Source badge based on deployment type */}
+                    {threatDebug?.deploymentType && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${
+                            threatDebug.deploymentType === 'unifios'
+                                ? 'text-blue-400 border-blue-800/60 bg-blue-900/20'
+                                : 'text-emerald-400 border-emerald-800/60 bg-emerald-900/20'
+                        }`}>
+                            {threatDebug.deploymentType === 'unifios' ? 'v2 API' : 'classic API'}
+                        </span>
+                    )}
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Severity filter */}

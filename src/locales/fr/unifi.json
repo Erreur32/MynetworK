@@ -151,6 +151,7 @@
     "speedPort": "Vitesse port :",
     "onlineStatus": "En ligne",
     "offlineStatus": "Hors ligne",
+    "deploymentTypeLabel": "Type de déploiement",
     "tooltip": {
       "idsIps": {
         "title": "IDS/IPS UniFi",
@@ -244,6 +245,24 @@
       "typeWireless": {
         "title": "Connexion sans fil (Wi-Fi)",
         "desc": "Client connecté via Wi-Fi (is_wired = false). La qualité dépend du RSSI et de la bande utilisée (2.4 / 5 / 6 GHz)."
+      },
+      "deployment": {
+        "unifios": {
+          "title": "UniFiOS Gateway",
+          "desc": "Matériel UniFi avec OS intégré (UDM Pro, UCG, CloudGateway Ultra). Toutes les fonctionnalités sont disponibles : API v2, traffic-flows IPS, port forwarding."
+        },
+        "controller": {
+          "title": "Network Application (classique)",
+          "desc": "Contrôleur UniFi logiciel installé sur serveur/PC. Fonctionnalités complètes sauf l'API v2 traffic-flows (remplacée par stat/ips/event)."
+        },
+        "cloud": {
+          "title": "Site Manager (Cloud)",
+          "desc": "API cloud UniFi (unifi.ui.com). Données agrégées via clé API. Certaines fonctionnalités locales comme le port forwarding ne sont pas disponibles."
+        },
+        "unknown": {
+          "title": "Type inconnu",
+          "desc": "Le type de déploiement n'a pas encore été détecté. Il sera déterminé lors de la première connexion."
+        }
       }
     }
   }

@@ -194,7 +194,7 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.33');
+        super('unifi', 'UniFi Controller', '0.7.34');
         this.apiService = new UniFiApiService();
     }
 
@@ -296,9 +296,10 @@ export class UniFiPlugin extends BasePlugin {
                         logger.warn('UniFiPlugin', 'Site Manager URL detected but no API key provided. For Site Manager (cloud), you must provide an API key. Get it from https://unifi.ui.com/api');
                     }
                 } else {
-                    // Local controller (UniFiOS or Classic) - will be auto-detected during login
-                    this.apiService.setConnection(url.trim(), username.trim(), password, site.trim() || 'default');
-                    logger.debug('UniFiPlugin', `Controller connection details set (site: ${site.trim() || 'default'})`);
+                    // Local controller (UniFiOS or Classic) - auto-detected unless forceDeploymentType is set
+                    const forceDeploymentType = (settings?.forceDeploymentType as 'auto' | 'unifios' | 'controller' | undefined) || 'auto';
+                    this.apiService.setConnection(url.trim(), username.trim(), password, site.trim() || 'default', undefined, forceDeploymentType);
+                    logger.debug('UniFiPlugin', `Controller connection set (site: ${site.trim() || 'default'}, forceDeployment: ${forceDeploymentType})`);
                 }
             } else if (apiKey && apiKey.trim()) {
                 // Priority 2: If only API key is present (without URL/username/password), use Site Manager
@@ -621,6 +622,14 @@ export class UniFiPlugin extends BasePlugin {
                 apiMode: apiMode,
                 // Deployment type (unifios, controller, cloud, unknown)
                 deploymentType: deploymentType,
+                // Feature capabilities based on deployment type
+                capabilities: {
+                    trafficFlowsV2: deploymentType === 'unifios',   // POST /v2/api/site/{site}/traffic-flows
+                    ipsEvents: deploymentType !== 'cloud',           // GET /api/s/{site}/stat/ips/event
+                    portForwarding: deploymentType !== 'cloud',      // REST portforward
+                    bandwidthHistory: true,                          // All modes
+                    wanInterfaces: deploymentType !== 'cloud',       // Requires gateway device
+                },
                 // DHCP enabled on UniFi (from rest/networkconf dhcpd_enabled)
                 dhcpEnabled: networkConf?.dhcpEnabled === true,
                 // DHCP range on UniFi (from rest/networkconf dhcpd_start/dhcpd_stop)

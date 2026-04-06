@@ -114,7 +114,7 @@ export class UniFiApiService {
      * Note: For Site Manager (cloud), use setSiteManagerConnection() instead
      * or provide apiKey parameter for auto-detection
      */
-    setConnection(url: string, username: string, password: string, site: string = 'default', apiKey?: string): void {
+    setConnection(url: string, username: string, password: string, site: string = 'default', apiKey?: string, forceDeploymentType?: 'auto' | 'unifios' | 'controller'): void {
         // Auto-detect Site Manager (cloud) if URL contains unifi.ui.com
         if (url && url.includes('unifi.ui.com')) {
             if (apiKey) {
@@ -125,10 +125,18 @@ export class UniFiApiService {
                 logger.warn('UniFi', 'Site Manager URL detected but no API key provided. Use setSiteManagerConnection() with API key.');
             }
         }
-        
-        // Local controller (UniFiOS or Classic) - will be auto-detected during login
-        this.apiMode = 'controller';
-        this.deploymentType = 'unknown'; // Will be detected during login
+
+        // Apply forced deployment type if provided (skips auto-detection)
+        if (forceDeploymentType && forceDeploymentType !== 'auto') {
+            this.deploymentType = forceDeploymentType;
+            this.apiMode = forceDeploymentType === 'unifios' ? 'unifios' as UniFiApiMode : 'controller';
+            logger.debug('UniFi', `Deployment type forced to: ${forceDeploymentType} (skipping auto-detection)`);
+        } else {
+            // Will be auto-detected during first login
+            this.deploymentType = 'unknown';
+            this.apiMode = 'controller';
+        }
+
         this.url = url;
         this.username = username;
         this.password = password;
@@ -435,7 +443,7 @@ export class UniFiApiService {
             throw new Error(`Invalid UniFi URL format: "${baseUrl}". URL must start with http:// or https://`);
         }
 
-        // Detect deployment type if not already detected
+        // Detect deployment type if not already detected (skip if forced)
         if (this.deploymentType === 'unknown') {
             this.deploymentType = await this.detectDeploymentType();
             if (this.deploymentType === 'unifios') {

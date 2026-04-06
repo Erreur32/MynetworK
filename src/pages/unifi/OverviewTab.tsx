@@ -170,6 +170,40 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                 </div>
                             </div>
 
+                            {/* Colonne 1b - Deployment type */}
+                            {(() => {
+                                const deploymentType = (controller?.deploymentType as string) || 'unknown';
+                                const caps = controller?.capabilities as any;
+                                const badge = deploymentType === 'unifios'
+                                    ? { label: 'UniFiOS', color: 'text-blue-300 bg-blue-900/30 border-blue-700/50' }
+                                    : deploymentType === 'controller'
+                                    ? { label: 'Network App', color: 'text-emerald-300 bg-emerald-900/30 border-emerald-700/50' }
+                                    : deploymentType === 'cloud'
+                                    ? { label: 'Cloud', color: 'text-purple-300 bg-purple-900/30 border-purple-700/50' }
+                                    : { label: '...', color: 'text-gray-400 bg-gray-800/30 border-gray-700/50' };
+                                return (
+                                    <div className="col-span-2 pt-1 border-t border-gray-800/60">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-gray-400 text-xs">{t('unifi.deploymentTypeLabel')}</span>
+                                            <RichTooltip
+                                                title={t(`unifi.tooltip.deployment.${deploymentType}.title`)}
+                                                description={t(`unifi.tooltip.deployment.${deploymentType}.desc`)}
+                                                rows={caps ? [
+                                                    { label: 'API v2 traffic-flows', color: caps.trafficFlowsV2 ? 'emerald' : 'red', dot: true, value: caps.trafficFlowsV2 ? '✓' : '✗' },
+                                                    { label: 'IPS events', color: caps.ipsEvents ? 'emerald' : 'red', dot: true, value: caps.ipsEvents ? '✓' : '✗' },
+                                                    { label: 'Port forwarding', color: caps.portForwarding ? 'emerald' : 'red', dot: true, value: caps.portForwarding ? '✓' : '✗' },
+                                                ] : undefined}
+                                                position="top" width={280}
+                                            >
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium cursor-help ${badge.color}`}>
+                                                    {badge.label}
+                                                </span>
+                                            </RichTooltip>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Colonne 2 - DHCP */}
                             <div className="space-y-1">
                                 <div className="flex justify-between">

@@ -151,6 +151,7 @@
     "speedPort": "Port speed:",
     "onlineStatus": "Online",
     "offlineStatus": "Offline",
+    "deploymentTypeLabel": "Deployment type",
     "tooltip": {
       "idsIps": {
         "title": "IDS/IPS UniFi",
@@ -244,6 +245,24 @@
       "typeWireless": {
         "title": "Wireless connection (Wi-Fi)",
         "desc": "Client connected via Wi-Fi (is_wired = false). Quality depends on RSSI signal and band (2.4 / 5 / 6 GHz)."
+      },
+      "deployment": {
+        "unifios": {
+          "title": "UniFiOS Gateway",
+          "desc": "UniFi hardware with integrated OS (UDM Pro, UCG, CloudGateway Ultra). All features available: v2 API, IPS traffic-flows, port forwarding."
+        },
+        "controller": {
+          "title": "Network Application (classic)",
+          "desc": "UniFi software controller installed on a server/PC. Full features except v2 traffic-flows API (replaced by stat/ips/event)."
+        },
+        "cloud": {
+          "title": "Site Manager (Cloud)",
+          "desc": "UniFi cloud API (unifi.ui.com). Aggregated data via API key. Some local features like port forwarding are not available."
+        },
+        "unknown": {
+          "title": "Unknown type",
+          "desc": "Deployment type not yet detected. It will be determined on the first connection."
+        }
       }
     }
   }
