@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDown, ArrowUp, RefreshCw, BarChart2, Activity, Users, Server, Link2 } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 import { BandwidthPoint } from './types';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
+import { api } from '../../api/client';
+
+type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800;
 
 interface TrafficTabProps {
     unifiStats: any;
@@ -34,6 +37,30 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
 }) => {
     const { t } = useTranslation();
     const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected } = useUnifiRealtimeStore();
+    const [selectedRange, setSelectedRange] = useState<BandwidthRange>(0);
+    const [rangeHistory, setRangeHistory] = useState<BandwidthPoint[]>([]);
+    const [isLoadingRange, setIsLoadingRange] = useState(false);
+    const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+
+    // Fetch historical data when range > 0
+    const fetchRangeHistory = useCallback(async () => {
+        if (selectedRange === 0) return;
+        setIsLoadingRange(true);
+        try {
+            const res = await api.get<BandwidthPoint[]>(`/api/plugins/unifi/bandwidth-history?wanId=${selectedWan}&range=${selectedRange}`);
+            if (res.success && Array.isArray(res.result)) {
+                setRangeHistory(res.result);
+            }
+        } catch { /* ignore */ } finally {
+            setIsLoadingRange(false);
+        }
+    }, [selectedRange, selectedWan]);
+
+    useEffect(() => {
+        if (selectedRange > 0) {
+            fetchRangeHistory();
+        }
+    }, [selectedRange, selectedWan, fetchRangeHistory]);
 
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
         if (!ip || ip === '-' || ip === 'N/A') {
@@ -72,8 +99,10 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     const wanLabel = activeWan ? activeWan.name : selectedWan.toUpperCase();
     const wanIp = activeWan?.ip;
 
-    // Use realtime history for the chart when WebSocket is connected
-    const chartHistory = wsConnected && realtimeHistory.length > 1 ? realtimeHistory : bandwidthHistory;
+    // Chart data: Live = WebSocket realtime, other ranges = HTTP fetched history
+    const chartHistory = selectedRange === 0
+        ? (wsConnected && realtimeHistory.length > 1 ? realtimeHistory : bandwidthHistory)
+        : (rangeHistory.length > 0 ? rangeHistory : bandwidthHistory);
 
     return (
         <div className="col-span-full space-y-4">
@@ -112,7 +141,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                 title={
                     <span className="flex items-center gap-1.5">
                         {t('unifi.bandwidth.chartTitle')}
-                        {wsConnected && (
+                        {selectedRange === 0 && wsConnected && (
                             <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full animate-pulse">
                                 LIVE
                             </span>
@@ -124,7 +153,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                 { label: 'Download', value: 'Octets reçus depuis Internet (KB/s)', color: 'blue', dot: true },
                                 { label: 'Upload', value: 'Octets envoyés vers Internet (KB/s)', color: 'emerald', dot: true },
                             ]}
-                            footer="Polling toutes les ~30s — non temps réel"
+                            footer={selectedRange === 0 && wsConnected ? "WebSocket temps réel (~3s)" : "Polling toutes les ~30s"}
                             position="bottom"
                             width={280}
                         />
@@ -134,16 +163,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
             >
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div className="flex items-center gap-3 flex-wrap">
-                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
-                                {t('system.download')}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-                                {t('system.upload')}
-                            </span>
-                        </div>
+                        {/* WAN selector */}
                         <div className="flex items-center gap-1 bg-gray-900/80 border border-gray-700 rounded-lg p-0.5">
                             {(wanInterfaces.length > 0 ? wanInterfaces : [{ id: 'wan1', name: 'WAN 1' }]).map(wan => (
                                 <button
@@ -165,20 +185,42 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                             ))}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>{bandwidthHistory.length} pts · ~30s</span>
+                    <div className="flex items-center gap-2">
+                        {/* Range selector */}
+                        <div className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800">
+                            {([
+                                { value: 0 as BandwidthRange, label: 'Live' },
+                                { value: 3600 as BandwidthRange, label: '1h' },
+                                { value: 21600 as BandwidthRange, label: '6h' },
+                                { value: 86400 as BandwidthRange, label: '24h' },
+                                { value: 604800 as BandwidthRange, label: '7j' },
+                            ]).map(r => (
+                                <button
+                                    key={r.value}
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+                                        selectedRange === r.value
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(r.value)}
+                                >
+                                    {r.label}
+                                </button>
+                            ))}
+                        </div>
                         <button
-                            onClick={fetchBandwidthHistory}
-                            disabled={isLoadingBandwidth}
+                            onClick={selectedRange === 0 ? fetchBandwidthHistory : fetchRangeHistory}
+                            disabled={isLoadingBandwidth || isLoadingRange}
                             className="p-1 hover:bg-gray-800 rounded transition-colors"
                             title={t('admin.refresh')}
                         >
-                            <RefreshCw size={12} className={isLoadingBandwidth ? 'animate-spin text-blue-400' : 'text-gray-400'} />
+                            <RefreshCw size={12} className={(isLoadingBandwidth || isLoadingRange) ? 'animate-spin text-blue-400' : 'text-gray-400'} />
                         </button>
                     </div>
                 </div>
 
-                {bandwidthHistory.length >= 2 ? (
+                {chartHistory.length >= 2 ? (
                     <ResponsiveContainer width="100%" height={320}>
                         <AreaChart data={chartHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                             <defs>
@@ -216,6 +258,21 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                     return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
                                 }}
                             />
+                            <Legend
+                                onClick={(e) => {
+                                    const key = e.dataKey as string;
+                                    setHiddenSeries((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(key)) next.delete(key); else next.add(key);
+                                        return next;
+                                    });
+                                }}
+                                formatter={(value, entry) => (
+                                    <span style={{ color: hiddenSeries.has((entry as any).dataKey) ? '#6b7280' : (entry as any).color, cursor: 'pointer', textDecoration: hiddenSeries.has((entry as any).dataKey) ? 'line-through' : 'none' }}>
+                                        {value}
+                                    </span>
+                                )}
+                            />
                             <Area
                                 type="monotone"
                                 dataKey="download"
@@ -226,6 +283,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                 dot={false}
                                 activeDot={{ r: 4, fill: '#3b82f6' }}
                                 isAnimationActive={false}
+                                hide={hiddenSeries.has('download')}
                             />
                             <Area
                                 type="monotone"
@@ -237,6 +295,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                 dot={false}
                                 activeDot={{ r: 4, fill: '#10b981' }}
                                 isAnimationActive={false}
+                                hide={hiddenSeries.has('upload')}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
