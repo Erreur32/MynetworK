@@ -191,7 +191,7 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
     private _bandwidthHistories: Map<string, BandwidthRawPoint[]> = new Map();
     private _wanInterfaces: WanInterface[] = [];
-    private readonly BANDWIDTH_MAX = 360; // 3h at 30s polling
+    private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
         super('unifi', 'UniFi Controller', '0.7.28');
@@ -217,19 +217,38 @@ export class UniFiPlugin extends BasePlugin {
         }
     }
 
-    getBandwidthHistory(wanId = 'wan1'): Array<{ time: string; timestamp: number; download: number; upload: number }> {
+    getBandwidthHistory(wanId = 'wan1', rangeSeconds = 0): Array<{ time: string; timestamp: number; download: number; upload: number }> {
         const history = this._bandwidthHistories.get(wanId) || [];
         if (history.length < 2) return [];
+
+        let filtered: BandwidthRawPoint[];
+        if (rangeSeconds > 0) {
+            const cutoff = Date.now() - rangeSeconds * 1000;
+            filtered = history.filter(p => p.timestamp >= cutoff);
+            // Need at least the point just before the cutoff to compute first rate
+            if (filtered.length < 2) {
+                const idxFirst = history.findIndex(p => p.timestamp >= cutoff);
+                filtered = idxFirst > 0 ? history.slice(idxFirst - 1) : history;
+            }
+        } else {
+            // Live: last 10 points (~5 min at 30s polling) — keeps it visually distinct from 1h range
+            filtered = history.slice(-10);
+        }
+
+        if (filtered.length < 2) return [];
         const result = [];
-        for (let i = 1; i < history.length; i++) {
-            const prev = history[i - 1];
-            const curr = history[i];
+        const showSeconds = rangeSeconds === 0 || rangeSeconds <= 3600;
+        for (let i = 1; i < filtered.length; i++) {
+            const prev = filtered[i - 1];
+            const curr = filtered[i];
             const dtSec = (curr.timestamp - prev.timestamp) / 1000;
             if (dtSec <= 0) continue;
             const download = Math.max(0, Math.round((curr.rx_bytes - prev.rx_bytes) / dtSec / 1024));
             const upload = Math.max(0, Math.round((curr.tx_bytes - prev.tx_bytes) / dtSec / 1024));
             const d = new Date(curr.timestamp);
-            const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const time = showSeconds
+                ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
             result.push({ time, timestamp: curr.timestamp, download, upload });
         }
         return result;
@@ -560,18 +579,26 @@ export class UniFiPlugin extends BasePlugin {
                 }
             }
 
-            // Primary WAN bytes for networkStats (wan1)
+            // Compute current WAN speed (bytes/s) from last two history points (wan1)
             const primaryHistory = this._bandwidthHistories.get('wan1') || [];
-            const lastPoint = primaryHistory[primaryHistory.length - 1];
-            const primaryRx = lastPoint?.rx_bytes || stats.wan?.rx_bytes || 0;
-            const primaryTx = lastPoint?.tx_bytes || stats.wan?.tx_bytes || 0;
+            let downloadBytesPerSec = 0;
+            let uploadBytesPerSec = 0;
+            if (primaryHistory.length >= 2) {
+                const prev = primaryHistory[primaryHistory.length - 2];
+                const curr = primaryHistory[primaryHistory.length - 1];
+                const dtSec = (curr.timestamp - prev.timestamp) / 1000;
+                if (dtSec > 0) {
+                    downloadBytesPerSec = Math.max(0, (curr.rx_bytes - prev.rx_bytes) / dtSec);
+                    uploadBytesPerSec = Math.max(0, (curr.tx_bytes - prev.tx_bytes) / dtSec);
+                }
+            }
 
-            // Normalize network stats
+            // Normalize network stats — download/upload in bytes/s for formatSpeed compatibility
             const networkStats = {
-                download: primaryRx,
-                upload: primaryTx,
-                totalDownload: primaryRx,
-                totalUpload: primaryTx
+                download: downloadBytesPerSec,
+                upload: uploadBytesPerSec,
+                totalDownload: primaryHistory[primaryHistory.length - 1]?.rx_bytes || 0,
+                totalUpload: primaryHistory[primaryHistory.length - 1]?.tx_bytes || 0
             };
 
             // Normalize system stats

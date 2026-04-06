@@ -4,7 +4,7 @@
  * Displays a summary card for a specific plugin with key statistics
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
@@ -15,7 +15,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { decodeHtmlEntities } from '../../utils/textUtils';
-import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, ArrowDown, ArrowUp, Link2 } from 'lucide-react';
+import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
+import { api } from '../../api/client';
 import type { SystemSensor, SystemFan } from '../../types/api';
 
 interface PluginSummaryCardProps {
@@ -86,7 +87,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const { networks: wifiStoreNetworks } = useWifiStore();
     const { isLoggedIn: isFreeboxLoggedIn } = useAuthStore();
     const { info: systemInfo } = useSystemStore();
-    
     const plugin = plugins.find(p => p.id === pluginId);
     const stats = pluginStats[pluginId];
 
@@ -94,6 +94,27 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
     const isActive = plugin.enabled && plugin.connectionStatus;
     const hasStats = stats && (stats.network || stats.devices || stats.system);
+
+    // UniFi bandwidth history for sparklines
+    const [unifiHistory, setUnifiHistory] = useState<Array<{ time: string; download: number; upload: number }>>([]);
+    const [unifiHistoryLoaded, setUnifiHistoryLoaded] = useState(false);
+    useEffect(() => {
+        if (pluginId !== 'unifi') return;
+        let cancelled = false;
+        const doFetch = async () => {
+            try {
+                const res = await api.get<Array<{ time: string; download: number; upload: number }>>('/api/plugins/unifi/bandwidth-history?wanId=wan1&limit=20');
+                if (!cancelled) {
+                    if (res.success && Array.isArray(res.result)) setUnifiHistory(res.result);
+                    setUnifiHistoryLoaded(true);
+                }
+            } catch { if (!cancelled) setUnifiHistoryLoaded(true); }
+        };
+        doFetch();
+        const id = setInterval(doFetch, 30000);
+        return () => { cancelled = true; clearInterval(id); };
+    // Run whenever pluginId changes; isActive not required — fetch regardless and let API return []
+    }, [pluginId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Helper function to render clickable IP addresses
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
@@ -152,6 +173,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     let unifiWlans: Array<{ name: string; enabled: boolean; ssid?: string }> = [];
 
     // Helpers for Freebox plugin: firmware / update status when exposed by backend
+    let freeboxModelName: string | undefined;
     let freeboxVersion: string | undefined;
     let freeboxPlayerVersion: string | undefined;
     let freeboxUpdateAvailable: boolean | undefined;
@@ -451,6 +473,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
     if (pluginId === 'freebox' && stats && (stats as any).system) {
         const sys: any = (stats as any).system;
+        // Box model name (e.g. "Freebox Ultra", "Freebox Pop")
+        freeboxModelName = sys.boxModelName as string | undefined;
+
         // Box firmware: prefer normalized field from backend, then raw system fields as fallback
         freeboxVersion =
             (sys.firmware as string | undefined) ||
@@ -608,30 +633,115 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 {/* Stats / résumé */}
                 {hasStats && isActive && stats ? (
                     <div className="space-y-3">
-                        {/* Network Stats (plugin-level, all plugins) */}
-                        {pluginId !== 'freebox' && stats.network && (stats.network.download > 0 || stats.network.upload > 0) && (
-                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2">
-                                <h4 className="text-xs text-gray-400">{t('pluginSummary.throughputPlugin')}</h4>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                        <span className="text-gray-500">↓</span>
-                                        <span className="ml-1 text-blue-400 font-semibold">
-                                            {formatSpeed(stats.network.download || 0)}
+                        {/* Devices (generic counter: total number of devices reported by the plugin)
+                            For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
+
+                        {/* UniFi controller / version / IP / type — mirrors Freebox firmware header */}
+                        {pluginId === 'unifi' && (unifiControllerVersion || unifiControllerIp) && (() => {
+                            const deploymentType = (stats as any)?.system?.deploymentType as string | undefined;
+                            const deploymentLabel = deploymentType === 'unifios' ? 'CloudGateway'
+                                : deploymentType === 'cloud' ? 'Cloud'
+                                : deploymentType === 'controller' ? 'Network'
+                                : 'Controller';
+                            return (
+                                <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
+                                    {unifiControllerUpdateAvailable && (
+                                        <div className="w-full flex items-center justify-end px-2 py-1 rounded bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
+                                            {t('admin.updateCheck.newVersionAvailable')}
+                                            {unifiControllerVersion && <> — v{unifiControllerVersion}</>}
+                                        </div>
+                                    )}
+                                    <div className="space-y-1">
+                                        <div className="grid grid-cols-4 gap-4 items-center">
+                                            <div><span className="text-gray-500 text-[10px] uppercase tracking-wide">UniFi</span></div>
+                                            {unifiControllerVersion ? <div><span className="text-[10px] text-gray-500 uppercase tracking-wide">Firmware</span></div> : <div />}
+                                            {unifiControllerIp ? <div><span className="text-[10px] text-gray-500 uppercase tracking-wide">Controller</span></div> : <div />}
+                                            <div className="flex justify-end"><span className="text-[10px] text-gray-500 uppercase tracking-wide">Type</span></div>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-4 items-center">
+                                            <div><span className="text-gray-400 text-xs">UniFi</span></div>
+                                            {unifiControllerVersion ? <div><span className="font-semibold text-gray-100">v{unifiControllerVersion}</span></div> : <div />}
+                                            {unifiControllerIp ? <div><span className="font-mono text-gray-300 text-[11px]">{unifiControllerIp}</span></div> : <div />}
+                                            <div className="flex justify-end">
+                                                <span className="text-purple-400 font-medium text-[11px]">{deploymentLabel}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* UniFi DHCP info — below firmware, same style as Freebox */}
+                        {pluginId === 'unifi' && isActive && stats.system && (stats.system as any).dhcpEnabled !== undefined && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-gray-400 shrink-0">DHCP</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                                            (stats.system as any).dhcpEnabled
+                                                ? 'bg-emerald-900/40 border border-emerald-700 text-emerald-300'
+                                                : 'bg-red-900/40 border border-red-700 text-red-300'
+                                        }`}>
+                                            {(stats.system as any).dhcpEnabled ? t('network.active') : t('network.inactive')}
                                         </span>
                                     </div>
-                                    <div>
-                                        <span className="text-gray-500">↑</span>
-                                        <span className="ml-1 text-green-400 font-semibold">
-                                            {formatSpeed(stats.network.upload || 0)}
-                                        </span>
-                                    </div>
+                                    {(stats.system as any).dhcpRange && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-gray-500 shrink-0 text-[10px] uppercase tracking-wide">Range</span>
+                                            <span className="font-mono text-gray-300 text-[10px]">{(stats.system as any).dhcpRange}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Devices (generic counter: total number of devices reported by the plugin)
-                            For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
-
+                        {/* UniFi bandwidth sparklines — same style as Freebox */}
+                        {pluginId === 'unifi' && isActive && (() => {
+                            if (unifiHistory.length > 1) {
+                                const last = unifiHistory[unifiHistory.length - 1];
+                                const currentDl = last ? formatSpeed(last.download * 1024) : '-- kb/s';
+                                const currentUl = last ? formatSpeed(last.upload * 1024) : '-- kb/s';
+                                return (
+                                    <div className="space-y-3">
+                                        <BarChart
+                                            data={unifiHistory}
+                                            dataKey="download"
+                                            color="#3b82f6"
+                                            title={t('freebox.downloadRealtime')}
+                                            currentValue={currentDl.split(' ')[0]}
+                                            unit={currentDl.split(' ')[1] || 'kb/s'}
+                                            trend="down"
+                                        />
+                                        <BarChart
+                                            data={unifiHistory}
+                                            dataKey="upload"
+                                            color="#10b981"
+                                            title={t('freebox.uploadRealtime')}
+                                            currentValue={currentUl.split(' ')[0]}
+                                            unit={currentUl.split(' ')[1] || 'kb/s'}
+                                            trend="up"
+                                        />
+                                    </div>
+                                );
+                            }
+                            // Show placeholder while data accumulates server-side (needs ≥2 polling cycles)
+                            return (
+                                <div className="bg-[#151515] rounded-xl p-4 border border-gray-800/50 space-y-3">
+                                    {['download', 'upload'].map(k => (
+                                        <div key={k} className="space-y-1">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs text-gray-400">{k === 'download' ? t('freebox.downloadRealtime') : t('freebox.uploadRealtime')}</span>
+                                                <span className="text-xs text-gray-600">{unifiHistoryLoaded ? t('unifi.bandwidth.noData') : '…'}</span>
+                                            </div>
+                                            <div className="h-6 bg-gray-800/40 rounded animate-pulse" />
+                                        </div>
+                                    ))}
+                                    {unifiHistoryLoaded && (
+                                        <p className="text-[10px] text-gray-600 text-center">{t('unifi.bandwidth.noDataHint')}</p>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* UniFi infrastructure details: Sites, APs, switches, clients, controller */}
                         {pluginId === 'unifi' && stats.devices && stats.devices.length > 0 && (
@@ -725,21 +835,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     return null;
                                 })()}
 
-                                {/* Clients stats - moved here after sites */}
-                                {!hideController && (unifiClientsTotal > 0 || unifiClientsConnected > 0) && (
-                                    <div className="flex items-center justify-between pt-2 border-t border-gray-800 text-[11px]">
-                                            <span className="text-gray-400">{t('unifi.clientsConnected')}</span>
-                                        <div className="flex items-center gap-2">
-                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
-                                                {unifiClientsConnected}
-                                            </span>
-                                            <span className="text-gray-500">/</span>
-                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
-                                                {unifiClientsTotal}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
 
                                 {/* APs with bands and channels - Dashboard and Analyse tab */}
                                 {(!hideController || showDeviceTables) && unifiApRows.length > 0 && (
@@ -1101,7 +1196,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {/* First line: Labels */}
                                     <div className="grid grid-cols-4 gap-4 items-center">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-[10px]">{t('freebox.label')}</span>
+                                            <span className="text-gray-500 text-[10px] uppercase tracking-wide">Freebox</span>
                                         </div>
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
@@ -1140,7 +1235,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {/* Second line: Data */}
                                     <div className="grid grid-cols-4 gap-4 items-center">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-xs">{t('freebox.label')}</span>
+                                            <span className="text-gray-400 text-xs">{freeboxModelName || 'Freebox'}</span>
                                         </div>
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
@@ -1200,72 +1295,40 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         </div>
                                     </div>
                                 </div>
-                                {/* DHCP and NAT summary - two columns layout */}
-                                {/* Only show DHCP and NAT data if plugin is active (authenticated) */}
-                                {/* Also show if WiFi networks are available even without DHCP */}
-                                {(isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding || freeboxWifiNetworks.length > 0)) && (
-                                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-800 mt-1 text-[11px]">
-                                        {/* DHCP column */}
-                                        {isActive && stats.system && ((stats.system as any).dhcp || freeboxWifiNetworks.length > 0) && (
-                                            <div className="flex flex-col gap-1">
-                                                {/* DHCP Status - only show if DHCP data exists */}
-                                                {(stats.system as any).dhcp && (
-                                                    <>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">DHCP</span>
-                                                    <span
-                                                        className={
-                                                            (stats.system as any).dhcp.enabled
-                                                                ? 'inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold'
-                                                                : 'inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-red-900/40 border border-red-700 text-red-300 font-semibold'
-                                                        }
-                                                    >
-                                                        {(stats.system as any).dhcp.enabled ? t('network.active') : t('network.inactive')}
-                                                    </span>
-                                                </div>
-                                                {((stats.system as any).dhcp.activeLeases != null ||
-                                                    (stats.system as any).dhcp.totalConfigured != null) && (
-                                                    <>
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.activeCount' : 'unifi.activeCount')}</span>
-                                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
-                                                                {(stats.system as any).dhcp.activeLeases ?? 0}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.total' : 'unifi.total')}</span>
-                                                            <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
-                                                                {(stats.system as any).dhcp.totalConfigured ?? 0}
-                                                            </span>
-                                                        </div>
-                                                    </>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
-                                        {/* NAT column (renamed from Port Forwarding) */}
-                                        {isActive && stats.system && (stats.system as any).portForwarding && (
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.nat' : 'unifi.nat')}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.activeRules' : 'unifi.activeRules')}</span>
-                                                    <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-emerald-900/40 border border-emerald-700 text-emerald-300 font-semibold">
-                                                        {(stats.system as any).portForwarding.enabledRules ?? 0}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-gray-400">{t(pluginId === 'freebox' ? 'freebox.total' : 'unifi.total')}</span>
-                                                    <span className="inline-flex items-center justify-end min-w-[2.75rem] px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700 text-gray-200 font-medium">
-                                                        {(stats.system as any).portForwarding.totalRules ?? 0}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                            </div>
+                        )}
+
+                        {/* Freebox DHCP + NAT — standalone block, same position as UniFi DHCP */}
+                        {pluginId === 'freebox' && isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding) && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
+                                <div className="grid grid-cols-2 gap-3">
+                                    {(stats.system as any).dhcp && (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-gray-400 shrink-0">DHCP</span>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                                                (stats.system as any).dhcp.enabled
+                                                    ? 'bg-emerald-900/40 border border-emerald-700 text-emerald-300'
+                                                    : 'bg-red-900/40 border border-red-700 text-red-300'
+                                            }`}>
+                                                {(stats.system as any).dhcp.enabled ? t('network.active') : t('network.inactive')}
+                                            </span>
+                                            {((stats.system as any).dhcp.activeLeases != null || (stats.system as any).dhcp.totalConfigured != null) && (
+                                                <span className="text-gray-300 shrink-0">
+                                                    <span className="text-emerald-300 font-semibold">{(stats.system as any).dhcp.activeLeases ?? 0}</span>
+                                                    <span className="text-gray-500"> / </span>
+                                                    <span className="text-gray-200">{(stats.system as any).dhcp.totalConfigured ?? 0}</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(stats.system as any).portForwarding && (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-gray-400 shrink-0">NAT</span>
+                                            <span className="text-emerald-300 font-semibold">{(stats.system as any).portForwarding.enabledRules ?? 0}</span>
+                                            <span className="text-gray-500 text-[10px]">/ {(stats.system as any).portForwarding.totalRules ?? 0} règles</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 

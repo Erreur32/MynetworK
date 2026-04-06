@@ -5,13 +5,14 @@
  * Follows Freebox aesthetic
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router, BarChart2, ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Wifi, Users, Activity, Server, AlertCircle, RefreshCw, CheckCircle, XCircle, TrendingUp, Network, Link2, Router, BarChart2, ArrowDown, ArrowUp, ShieldAlert } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { Card } from '../components/widgets/Card';
 import { PluginSummaryCard } from '../components/widgets/PluginSummaryCard';
 import { NetworkEventsWidget } from '../components/widgets/NetworkEventsWidget';
+import { RichTooltip } from '../components/ui/RichTooltip';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../utils/constants';
@@ -22,7 +23,7 @@ interface UniFiPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
-type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'bandwidth' | 'events' | 'debug' | 'switches';
+type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'threats' | 'debug' | 'switches';
 
 interface BandwidthPoint {
     time: string;
@@ -35,6 +36,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     const { t } = useTranslation();
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
     const [activeTab, setActiveTab] = useState<TabType>('overview');
+    const [overviewSubTab, setOverviewSubTab] = useState<'info' | 'events'>('info');
     const [isRefreshing, setIsRefreshing] = useState(false);
     // Sorting state for Clients tab (must be top-level hooks, not inside render branches)
     type ClientSortKey = 'name' | 'ip' | 'mac' | 'switch' | 'port' | 'speed' | 'ap' | 'ssid' | 'type';
@@ -51,9 +53,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     type EventFilter = 'all' | 'alerts' | 'system' | 'connections';
     const [eventFilter, setEventFilter] = useState<EventFilter>('all');
 
-    // WAN traffic rate estimation (instantaneous, based on UniFiPlugin.network totals)
-    const [wanRate, setWanRate] = useState<{ downBps: number; upBps: number } | null>(null);
-    const wanLastSampleRef = useRef<{ timestamp: number; downBytes: number; upBytes: number } | null>(null);
 
     // Traffic tab: toggle between "top N" and "all clients by throughput"
     const [showAllTrafficClients, setShowAllTrafficClients] = useState<boolean>(false);
@@ -63,6 +62,30 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     const [isLoadingBandwidth, setIsLoadingBandwidth] = useState(false);
     const [wanInterfaces, setWanInterfaces] = useState<Array<{ id: string; name: string; ip?: string }>>([]);
     const [selectedWan, setSelectedWan] = useState('wan1');
+
+    // Threats tab state
+    type ThreatRange = 3600 | 86400 | 604800;
+    type ThreatSeverity = 'ALL' | 'LOW' | 'SUSPICIOUS' | 'CONCERNING';
+    type ThreatSortKey = 'timestamp' | 'threatLevel' | 'policy' | 'srcIp' | 'dstIp' | 'country';
+    const [threatRange, setThreatRange] = useState<ThreatRange>(86400);
+    const [threatSeverity, setThreatSeverity] = useState<ThreatSeverity>('ALL');
+    const [threatIpSearch, setThreatIpSearch] = useState('');
+    const [threatSort, setThreatSort] = useState<{ key: ThreatSortKey; dir: 'asc' | 'desc' }>({ key: 'timestamp', dir: 'desc' });
+    const [threatData, setThreatData] = useState<{
+        available: boolean;
+        source: string;
+        summary: { total: number; low: number; suspicious: number; concerning: number };
+        topPolicies: Array<{ name: string; count: number }>;
+        topClients: Array<{ mac: string; name?: string; ip?: string; count: number }>;
+        topRegions: Array<{ country: string; count: number }>;
+        recentFlows: Array<{
+            timestamp: number; action: string; threatLevel: string;
+            policy: string; srcIp?: string; dstIp?: string;
+            clientMac?: string; clientName?: string; country?: string; proto?: string;
+        }>;
+    } | null>(null);
+    const [isLoadingThreats, setIsLoadingThreats] = useState(false);
+    const [threatDebug, setThreatDebug] = useState<{ deploymentType?: string; rangeSeconds?: number; source?: string } | null>(null);
 
     const unifiPlugin = plugins.find(p => p.id === 'unifi');
     const unifiStats = pluginStats['unifi'];
@@ -155,7 +178,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     };
 
     useEffect(() => {
-        if (isActive && activeTab === 'bandwidth') {
+        if (isActive && activeTab === 'traffic') {
             fetchWanInterfaces();
             fetchBandwidthHistory();
         }
@@ -164,39 +187,45 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     // Re-fetch history when selected WAN changes
     useEffect(() => {
-        if (isActive && activeTab === 'bandwidth') {
+        if (isActive && activeTab === 'traffic') {
             fetchBandwidthHistory();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedWan]);
 
     usePolling(fetchBandwidthHistory, {
-        enabled: isActive && activeTab === 'bandwidth',
+        enabled: isActive && activeTab === 'traffic',
         interval: POLLING_INTERVALS.system // 30s
     });
 
-    // Compute approximate WAN bitrates from cumulative WAN bytes
-    useEffect(() => {
-        const network = (unifiStats as any)?.network as { totalDownload?: number; totalUpload?: number } | undefined;
-        if (!network) {
-            return;
-        }
-        const now = Date.now();
-        const downBytes = typeof network.totalDownload === 'number' ? network.totalDownload : (network as any).download || 0;
-        const upBytes = typeof network.totalUpload === 'number' ? network.totalUpload : (network as any).upload || 0;
-
-        const last = wanLastSampleRef.current;
-        if (last) {
-            const dtSeconds = (now - last.timestamp) / 1000;
-            if (dtSeconds > 0.5 && downBytes >= last.downBytes && upBytes >= last.upBytes) {
-                const downBps = ((downBytes - last.downBytes) * 8) / dtSeconds;
-                const upBps = ((upBytes - last.upBytes) * 8) / dtSeconds;
-                setWanRate({ downBps, upBps });
+    // Threats tab: fetch flow insights
+    const fetchThreats = async () => {
+        if (!isActive) return;
+        setIsLoadingThreats(true);
+        try {
+            const res = await api.get<any>(`/api/plugins/unifi/threats?range=${threatRange}`);
+            if (res.success && res.result) {
+                setThreatData(res.result);
             }
+            if ((res as any)._debug) {
+                setThreatDebug((res as any)._debug);
+            }
+        } catch { /* ignore */ } finally {
+            setIsLoadingThreats(false);
         }
+    };
 
-        wanLastSampleRef.current = { timestamp: now, downBytes, upBytes };
-    }, [unifiStats]);
+    useEffect(() => {
+        if (isActive && activeTab === 'threats') {
+            fetchThreats();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isActive, activeTab, threatRange]);
+
+    usePolling(fetchThreats, {
+        enabled: isActive && activeTab === 'threats',
+        interval: 120_000 // 2 min (threat data doesn't change fast)
+    });
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
@@ -237,13 +266,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'overview', label: t('unifi.tabs.overview'), icon: Activity },
+        { id: 'traffic', label: t('unifi.tabs.traffic'), icon: TrendingUp },
+        { id: 'threats', label: t('unifi.tabs.threats'), icon: ShieldAlert },
+        { id: 'analyse', label: t('unifi.tabs.analyse'), icon: Activity },
         { id: 'nat', label: t('unifi.tabs.nat'), icon: Router },
         { id: 'clients', label: t('unifi.tabs.clients'), icon: Users },
         { id: 'switches', label: t('unifi.tabs.switches'), icon: Network },
-        { id: 'analyse', label: t('unifi.tabs.analyse'), icon: Activity },
-        { id: 'bandwidth', label: t('unifi.tabs.bandwidth'), icon: BarChart2 },
-        { id: 'traffic', label: t('unifi.tabs.traffic'), icon: TrendingUp },
-        { id: 'events', label: t('unifi.tabs.events'), icon: AlertCircle },
         ...(import.meta.env.DEV ? [{ id: 'debug' as TabType, label: t('unifi.tabs.debug'), icon: AlertCircle }] : [])
     ];
 
@@ -519,12 +547,48 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 return null;
                             })()}
 
+                            {/* Overview sub-tab navigation */}
+                            <div className="flex gap-1 border-b border-gray-800 mb-4">
+                                {([
+                                    { id: 'info' as const, label: t('unifi.tabs.overview') },
+                                    { id: 'events' as const, label: t('unifi.tabs.events') }
+                                ]).map(sub => (
+                                    <button
+                                        key={sub.id}
+                                        type="button"
+                                        onClick={() => setOverviewSubTab(sub.id)}
+                                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                                            overviewSubTab === sub.id
+                                                ? 'border-blue-500 text-white'
+                                                : 'border-transparent text-gray-400 hover:text-gray-200'
+                                        }`}
+                                    >
+                                        {sub.label}
+                                    </button>
+                                ))}
+                            </div>
+
                             {/* Alertes & Événements - layout inspiré du dashboard UniFi officiel */}
-                            <div className="space-y-6">
+                            <div className={`space-y-6 ${overviewSubTab === 'events' ? 'hidden' : ''}`}>
                                 {/* Ligne 1 : Info Système / Alertes Réseau */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                     <Card
-                                        title={t('unifi.infoSystem')}
+                                        title={
+                                            <span className="flex items-center gap-1.5">
+                                                {t('unifi.infoSystem')}
+                                                <RichTooltip
+                                                    title="Informations système"
+                                                    description="Résumé de l'état du contrôleur UniFi et du réseau."
+                                                    rows={[
+                                                        { label: 'Uptime', value: 'Temps depuis le dernier redémarrage', color: 'sky', dot: true },
+                                                        { label: 'Équipements', value: 'APs, switches, gateway (hors clients)', color: 'emerald', dot: true },
+                                                        { label: 'Clients', value: 'Appareils connectés au réseau WiFi/filaire', color: 'blue', dot: true },
+                                                        { label: 'Firmware', value: 'Version du contrôleur UniFiOS', color: 'gray', dot: true },
+                                                    ]}
+                                                    position="bottom"
+                                                />
+                                            </span>
+                                        }
                                         className="bg-unifi-card border border-gray-800 rounded-xl"
                                     >
                                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-300">
@@ -714,7 +778,22 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         </div>
                                     </Card>
                                     <Card
-                                        title={t('unifi.alertsNetwork')}
+                                        title={
+                                            <span className="flex items-center gap-1.5">
+                                                {t('unifi.alertsNetwork')}
+                                                <RichTooltip
+                                                    title="Alertes réseau"
+                                                    description="Alertes générées par l'état des équipements et du contrôleur."
+                                                    rows={[
+                                                        { label: 'Info', value: 'Informatif, aucune action requise', color: 'blue', dot: true },
+                                                        { label: 'Warning', value: 'Attention — équipement hors ligne ou mise à jour', color: 'amber', dot: true },
+                                                        { label: 'Critical', value: 'Problème sérieux — équipement non supporté', color: 'red', dot: true },
+                                                    ]}
+                                                    footer="Mis à jour à chaque polling (30s)"
+                                                    position="bottom"
+                                                />
+                                            </span>
+                                        }
                                         className="bg-unifi-card border border-gray-800 rounded-xl"
                                     >
                                         <div className="flex flex-col justify-center text-sm text-gray-300 space-y-3">
@@ -2382,8 +2461,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         </div>
                     )}
 
-                    {/* Bandwidth Tab */}
-                    {activeTab === 'bandwidth' && (
+                    {/* Traffic Tab */}
+                    {activeTab === 'traffic' && (
                         <div className="col-span-full space-y-4">
                             {/* Current rates header */}
                             {(() => {
@@ -2428,10 +2507,27 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 );
                             })()}
 
-                            {/* Chart */}
-                            <Card title={t('unifi.bandwidth.chartTitle')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                            {/* Bandwidth Chart */}
+                            <Card
+                                title={
+                                    <span className="flex items-center gap-1.5">
+                                        {t('unifi.bandwidth.chartTitle')}
+                                        <RichTooltip
+                                            title="Graphique bande passante WAN"
+                                            description="Débit calculé par delta entre deux mesures successives des compteurs cumulatifs WAN du gateway UniFi."
+                                            rows={[
+                                                { label: 'Download', value: 'Octets reçus depuis Internet (KB/s)', color: 'blue', dot: true },
+                                                { label: 'Upload', value: 'Octets envoyés vers Internet (KB/s)', color: 'emerald', dot: true },
+                                            ]}
+                                            footer="Polling toutes les ~30s — non temps réel"
+                                            position="bottom"
+                                            width={280}
+                                        />
+                                    </span>
+                                }
+                                className="bg-unifi-card border border-gray-800 rounded-xl"
+                            >
                                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                                    {/* Legend + WAN selector */}
                                     <div className="flex items-center gap-3 flex-wrap">
                                         <div className="flex items-center gap-3 text-xs text-gray-500">
                                             <span className="flex items-center gap-1.5">
@@ -2443,7 +2539,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 {t('system.upload')}
                                             </span>
                                         </div>
-                                        {/* WAN selector — always visible */}
                                         <div className="flex items-center gap-1 bg-gray-900/80 border border-gray-700 rounded-lg p-0.5">
                                             {(wanInterfaces.length > 0 ? wanInterfaces : [{ id: 'wan1', name: 'WAN 1' }]).map(wan => (
                                                 <button
@@ -2482,11 +2577,11 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     <ResponsiveContainer width="100%" height={320}>
                                         <AreaChart data={bandwidthHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                                             <defs>
-                                                <linearGradient id="gradDl" x1="0" y1="0" x2="0" y2="1">
+                                                <linearGradient id="gradDlTraffic" x1="0" y1="0" x2="0" y2="1">
                                                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
                                                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
                                                 </linearGradient>
-                                                <linearGradient id="gradUl" x1="0" y1="0" x2="0" y2="1">
+                                                <linearGradient id="gradUlTraffic" x1="0" y1="0" x2="0" y2="1">
                                                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
                                                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
                                                 </linearGradient>
@@ -2522,7 +2617,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 name={t('system.download')}
                                                 stroke="#3b82f6"
                                                 strokeWidth={2}
-                                                fill="url(#gradDl)"
+                                                fill="url(#gradDlTraffic)"
                                                 dot={false}
                                                 activeDot={{ r: 4, fill: '#3b82f6' }}
                                                 isAnimationActive={false}
@@ -2533,7 +2628,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                                 name={t('system.upload')}
                                                 stroke="#10b981"
                                                 strokeWidth={2}
-                                                fill="url(#gradUl)"
+                                                fill="url(#gradUlTraffic)"
                                                 dot={false}
                                                 activeDot={{ r: 4, fill: '#10b981' }}
                                                 isAnimationActive={false}
@@ -2557,12 +2652,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                     </div>
                                 )}
                             </Card>
-                        </div>
-                    )}
 
-                    {/* Traffic Tab */}
-                    {activeTab === 'traffic' && (
-                        <div className="col-span-full">
                             <Card title={t('unifi.trafficNetwork')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
                                     (() => {
@@ -2656,30 +2746,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         return (
                                             <div className="space-y-6">
                                                 {/* Ligne 1 : cartes synthétiques */}
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-gray-400">{t('unifi.currentWanRate')}</span>
-                                                            <Activity size={16} className="text-sky-400" />
-                                                        </div>
-                                                        <div className="mt-1 space-y-1 text-sm">
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-400">Descendant:</span>
-                                                                <span className="text-sky-300 font-semibold">
-                                                                    {formatBitsPerSecond(wanRate?.downBps)}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex justify-between">
-                                                                <span className="text-gray-400">Montant:</span>
-                                                                <span className="text-emerald-300 font-semibold">
-                                                                    {formatBitsPerSecond(wanRate?.upBps)}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-[11px] text-gray-500 mt-1">
-                                                                {t('unifi.wanRateDescription')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800 flex flex-col gap-2">
                                                         <div className="flex items-center justify-between">
                                                             <span className="text-xs text-gray-400">{t('unifi.activeClientsUniFi')}</span>
@@ -2871,11 +2938,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                 </div>
                                 )}
                             </Card>
+
                         </div>
                     )}
 
                     {/* Events Tab */}
-                    {activeTab === 'events' && (
+                    {(activeTab === 'overview' && overviewSubTab === 'events') && (
                         <div className="col-span-full">
                             <Card title={t('unifi.events')} className="bg-unifi-card border border-gray-800 rounded-xl">
                                 {unifiStats?.devices ? (
@@ -3095,6 +3163,309 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {/* NAT Tab */}
                     {activeTab === 'nat' && (
                         <NatTabContent isActive={activeTab === 'nat'} systemStats={unifiStats?.system as any} />
+                    )}
+
+                    {/* Threats Tab */}
+                    {activeTab === 'threats' && (
+                        <div className="col-span-full space-y-4">
+                            {/* Range + severity selectors */}
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                                    <ShieldAlert size={16} className="text-red-400" />
+                                    {t('unifi.threats.title')}
+                                </h2>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {/* Severity filter */}
+                                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                                        {([
+                                            { v: 'ALL' as ThreatSeverity, label: t('unifi.filterAll'), color: 'bg-gray-600' },
+                                            { v: 'LOW' as ThreatSeverity, label: t('unifi.threats.low'), color: 'bg-blue-600' },
+                                            { v: 'SUSPICIOUS' as ThreatSeverity, label: t('unifi.threats.suspicious'), color: 'bg-amber-600' },
+                                            { v: 'CONCERNING' as ThreatSeverity, label: t('unifi.threats.concerning'), color: 'bg-red-600' },
+                                        ]).map(({ v, label, color }) => (
+                                            <button
+                                                key={v}
+                                                type="button"
+                                                className={`px-3 py-0.5 rounded-full text-xs ${threatSeverity === v ? `${color} text-white` : 'text-gray-400 hover:text-gray-200'}`}
+                                                onClick={() => setThreatSeverity(v)}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {/* Range selector */}
+                                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                                        {([
+                                            { v: 3600, label: '1h' },
+                                            { v: 86400, label: '24h' },
+                                            { v: 604800, label: '7j' }
+                                        ] as { v: ThreatRange; label: string }[]).map(({ v, label }) => (
+                                            <button
+                                                key={v}
+                                                type="button"
+                                                className={`px-3 py-0.5 rounded-full text-xs ${threatRange === v ? 'bg-red-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                                onClick={() => setThreatRange(v)}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {isLoadingThreats && !threatData && (
+                                <div className="text-center py-12 text-gray-500">
+                                    <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
+                                    <p className="text-sm">{t('common.loading')}</p>
+                                </div>
+                            )}
+
+                            {threatData && !threatData.available && (
+                                <Card title={t('unifi.threats.unavailable')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                                    <div className="py-8 text-gray-500">
+                                        <div className="text-center mb-4">
+                                            <ShieldAlert size={36} className="mx-auto mb-3 opacity-40" />
+                                            <p className="text-sm">{t('unifi.threats.unavailableDesc')}</p>
+                                            <p className="text-xs mt-1 text-gray-600">{t('unifi.threats.requiresIps')}</p>
+                                        </div>
+                                        {threatDebug && (
+                                            <div className="text-left text-[11px] font-mono bg-black/40 rounded-lg p-3 space-y-1.5 border border-gray-800">
+                                                <p className="text-gray-400 font-sans text-[10px] uppercase tracking-wide mb-2">Diagnostic</p>
+                                                <p><span className="text-gray-600">deployment:</span> <span className="text-gray-300">{threatDebug.deploymentType}</span></p>
+                                                <p><span className="text-gray-600">range:</span> <span className="text-gray-300">{((threatDebug.rangeSeconds ?? 86400) / 3600).toFixed(0)}h</span></p>
+                                                <p><span className="text-gray-600">endpoints testés:</span></p>
+                                                <p className="text-amber-500/80 break-all">{threatData.source}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </Card>
+                            )}
+
+                            {threatData?.available && threatData.summary.total === 0 && (() => {
+                                const isIpsEmpty = (threatData.source || '').includes('ips-event-empty') || (threatData.source || '').includes('ips-empty');
+                                return (
+                                    <div className="bg-[#1a1a1a] rounded-xl border border-gray-800 p-6 space-y-4">
+                                        <div className="text-center text-gray-500">
+                                            {isIpsEmpty ? (
+                                                <ShieldAlert size={28} className="mx-auto mb-2 text-amber-600 opacity-60" />
+                                            ) : (
+                                                <CheckCircle size={28} className="mx-auto mb-2 text-green-600 opacity-60" />
+                                            )}
+                                            <p className="text-sm text-gray-400">{t('unifi.threats.noThreatsInRange')}</p>
+                                        </div>
+                                        {isIpsEmpty && (
+                                            <div className="bg-amber-950/30 border border-amber-800/40 rounded-lg p-4 space-y-2">
+                                                <p className="text-xs font-semibold text-amber-400">{t('unifi.threats.ipsEmptyTitle')}</p>
+                                                <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside">
+                                                    <li>{t('unifi.threats.ipsEmptyHint1')}</li>
+                                                    <li>{t('unifi.threats.ipsEmptyHint2')}</li>
+                                                    <li>{t('unifi.threats.ipsEmptyHint3')}</li>
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {threatDebug && (
+                                            <div className="text-[10px] font-mono text-gray-700 text-center space-y-0.5">
+                                                <p>source: {threatData.source} · {((threatDebug.rangeSeconds ?? 86400) / 3600).toFixed(0)}h · {threatDebug.deploymentType}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {threatData?.available && (
+                                <>
+                                    {/* Flow Summary */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {[
+                                            { label: t('unifi.threats.totalBlocked'), value: threatData.summary.total, color: 'text-white', bg: 'bg-red-900/30 border-red-800/50' },
+                                            { label: t('unifi.threats.low'), value: threatData.summary.low, color: 'text-blue-300', bg: 'bg-blue-900/20 border-blue-800/30' },
+                                            { label: t('unifi.threats.suspicious'), value: threatData.summary.suspicious, color: 'text-amber-300', bg: 'bg-amber-900/20 border-amber-800/30' },
+                                            { label: t('unifi.threats.concerning'), value: threatData.summary.concerning, color: 'text-red-400', bg: 'bg-red-900/20 border-red-800/30' },
+                                        ].map(({ label, value, color, bg }) => {
+                                            const pct = threatData.summary.total > 0 ? Math.round(value / threatData.summary.total * 1000) / 10 : 0;
+                                            return (
+                                                <div key={label} className={`rounded-xl border p-4 ${bg}`}>
+                                                    <div className={`text-2xl font-bold ${color}`}>{value.toLocaleString()}</div>
+                                                    <div className="text-xs text-gray-400 mt-1">{label}</div>
+                                                    {value !== threatData.summary.total && (
+                                                        <div className="text-[11px] text-gray-500 mt-0.5">{pct}%</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Top section: Policies + Clients + Regions */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Top Policies */}
+                                        <Card title={t('unifi.threats.topPolicies')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                                            {threatData.topPolicies.length === 0 ? (
+                                                <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {threatData.topPolicies.map((p) => (
+                                                        <div key={p.name} className="flex justify-between items-center">
+                                                            <span className="text-xs text-gray-300 truncate mr-2">{p.name}</span>
+                                                            <span className="text-xs font-mono font-semibold text-red-400 shrink-0">{p.count.toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </Card>
+
+                                        {/* Top Clients */}
+                                        <Card title={t('unifi.threats.topClients')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                                            {threatData.topClients.length === 0 ? (
+                                                <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {threatData.topClients.map((c) => (
+                                                        <div key={c.mac || c.ip} className="flex justify-between items-center">
+                                                            <div className="min-w-0 mr-2">
+                                                                <div className="text-xs text-gray-200 truncate">{c.name || c.mac || c.ip || '-'}</div>
+                                                                {c.ip && <div className="text-[10px] text-gray-500 font-mono">{c.ip}</div>}
+                                                            </div>
+                                                            <span className="text-xs font-mono font-semibold text-amber-400 shrink-0">{c.count.toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </Card>
+
+                                        {/* Top Regions */}
+                                        <Card title={t('unifi.threats.topRegions')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                                            {threatData.topRegions.length === 0 ? (
+                                                <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {threatData.topRegions.map((r) => (
+                                                        <div key={r.country} className="flex justify-between items-center">
+                                                            <span className="inline-flex items-center gap-1.5 text-xs text-gray-300 truncate mr-2">
+                                                                <img
+                                                                    src={`/SVG/flag-${r.country.toLowerCase()}.svg`}
+                                                                    alt={r.country}
+                                                                    className="w-5 h-3.5 object-cover rounded-[2px] shrink-0"
+                                                                    onError={(e) => { (e.target as HTMLImageElement).src = '/SVG/flag-xx.svg'; }}
+                                                                />
+                                                                {r.country}
+                                                            </span>
+                                                            <span className="text-xs font-mono font-semibold text-blue-400 shrink-0">{r.count.toLocaleString()}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </Card>
+                                    </div>
+
+                                    {/* Recent Flows */}
+                                    {(() => {
+                                        const ipQ = threatIpSearch.trim().toLowerCase();
+                                        const filtered = threatData.recentFlows.filter(f => {
+                                            if (threatSeverity !== 'ALL' && f.threatLevel !== threatSeverity) return false;
+                                            if (ipQ && !(
+                                                (f.srcIp || '').toLowerCase().includes(ipQ) ||
+                                                (f.dstIp || '').toLowerCase().includes(ipQ) ||
+                                                (f.clientMac || '').toLowerCase().includes(ipQ) ||
+                                                (f.clientName || '').toLowerCase().includes(ipQ)
+                                            )) return false;
+                                            return true;
+                                        });
+                                        const levelOrder = { 'CONCERNING': 3, 'SUSPICIOUS': 2, 'LOW': 1 } as Record<string, number>;
+                                        const sorted = [...filtered].sort((a, b) => {
+                                            const { key, dir } = threatSort;
+                                            let cmp = 0;
+                                            if (key === 'timestamp') cmp = (a.timestamp || 0) - (b.timestamp || 0);
+                                            else if (key === 'threatLevel') cmp = (levelOrder[a.threatLevel] || 0) - (levelOrder[b.threatLevel] || 0);
+                                            else cmp = ((a[key] as string) || '').localeCompare((b[key] as string) || '');
+                                            return dir === 'asc' ? cmp : -cmp;
+                                        });
+                                        const handleSort = (key: ThreatSortKey) => {
+                                            setThreatSort(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }));
+                                        };
+                                        const SortIcon = ({ k }: { k: ThreatSortKey }) => (
+                                            threatSort.key === k
+                                                ? <span className="ml-1 text-[9px]">{threatSort.dir === 'desc' ? '▼' : '▲'}</span>
+                                                : <span className="ml-1 text-[9px] text-gray-700">⇅</span>
+                                        );
+                                        const colTh = (k: ThreatSortKey, label: string) => (
+                                            <th
+                                                className="px-3 py-2 text-left cursor-pointer select-none hover:text-gray-300 transition-colors whitespace-nowrap"
+                                                onClick={() => handleSort(k)}
+                                            >
+                                                {label}<SortIcon k={k} />
+                                            </th>
+                                        );
+                                        return (
+                                            <Card
+                                                title={`${t('unifi.threats.recentFlows')} (${filtered.length}/${threatData.recentFlows.length})`}
+                                                className="bg-unifi-card border border-gray-800 rounded-xl"
+                                            >
+                                                {/* IP search */}
+                                                <div className="mb-3">
+                                                    <input
+                                                        type="text"
+                                                        value={threatIpSearch}
+                                                        onChange={e => setThreatIpSearch(e.target.value)}
+                                                        placeholder={t('unifi.threats.searchIpPlaceholder')}
+                                                        className="w-full bg-[#111] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+                                                    />
+                                                </div>
+                                                {sorted.length === 0 ? (
+                                                    <p className="text-xs text-gray-500 py-4 text-center">{t('unifi.threats.noData')}</p>
+                                                ) : (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="min-w-full text-xs text-gray-300">
+                                                            <thead className="text-gray-500 text-[11px] uppercase tracking-wide border-b border-gray-800">
+                                                                <tr>
+                                                                    {colTh('timestamp', t('unifi.threats.colTime'))}
+                                                                    {colTh('threatLevel', t('unifi.threats.colLevel'))}
+                                                                    {colTh('policy', t('unifi.threats.colPolicy'))}
+                                                                    {colTh('srcIp', t('unifi.threats.colSrc'))}
+                                                                    {colTh('dstIp', t('unifi.threats.colDst'))}
+                                                                    {colTh('country', t('unifi.threats.colCountry'))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {sorted.slice(0, 100).map((f, idx) => {
+                                                                    const ts = f.timestamp > 1e10 ? new Date(f.timestamp) : new Date(f.timestamp * 1000);
+                                                                    const levelColor = f.threatLevel === 'CONCERNING' ? 'text-red-400' : f.threatLevel === 'SUSPICIOUS' ? 'text-amber-400' : 'text-blue-400';
+                                                                    return (
+                                                                        <tr key={idx} className={idx % 2 === 0 ? 'bg-[#0f0f0f]' : ''}>
+                                                                            <td className="px-3 py-1.5 font-mono text-gray-500 whitespace-nowrap">
+                                                                                {ts.toLocaleTimeString()}
+                                                                            </td>
+                                                                            <td className="px-3 py-1.5">
+                                                                                <span className={`${levelColor} font-semibold text-[11px]`}>{f.threatLevel}</span>
+                                                                            </td>
+                                                                            <td className="px-3 py-1.5 max-w-[180px] truncate" title={f.policy}>{f.policy}</td>
+                                                                            <td className="px-3 py-1.5 font-mono text-gray-400">{f.srcIp || f.clientMac || '-'}</td>
+                                                                            <td className="px-3 py-1.5 font-mono text-gray-400">{f.dstIp || '-'}</td>
+                                                                            <td className="px-3 py-1.5 text-gray-400">
+                                                                                {f.country ? (
+                                                                                    <span className="inline-flex items-center gap-1.5">
+                                                                                        <img
+                                                                                            src={`/SVG/flag-${f.country.toLowerCase()}.svg`}
+                                                                                            alt={f.country}
+                                                                                            className="w-5 h-3.5 object-cover rounded-[2px] shrink-0"
+                                                                                            onError={(e) => { (e.target as HTMLImageElement).src = '/SVG/flag-xx.svg'; }}
+                                                                                        />
+                                                                                        <span>{f.country}</span>
+                                                                                    </span>
+                                                                                ) : '-'}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </Card>
+                                        );
+                                    })()}
+                                </>
+                            )}
+                        </div>
                     )}
 
                     {/* Debug Tab */}

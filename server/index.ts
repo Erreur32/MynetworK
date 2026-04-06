@@ -269,6 +269,11 @@ setTimeout(() => {
     }
 }, 7500);
 
+// Serve /SVG/ directory as static assets (flags, app icons, etc.)
+app.use('/SVG', express.static(path.join(__dirname, '..', 'SVG'), {
+    setHeaders: (res) => { res.setHeader('Cache-Control', 'public, max-age=604800'); }
+}));
+
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
 app.use('/api/logs', logsRoutes);
@@ -368,16 +373,43 @@ app.use(errorHandler);
 // Create HTTP server (needed for WebSocket)
 const server = http.createServer(app);
 
-// Log upgrade requests for debugging (only in verbose mode to reduce noise)
-if (process.env.DEBUG_UPGRADE === 'true') {
-server.on('upgrade', (request, socket, head) => {
-  console.log('[HTTP] Upgrade request received:', request.url);
-});
-}
-
-// Initialize WebSocket servers
+// Initialize WebSocket servers (noServer mode — routing handled below)
 connectionWebSocket.init(server);
 logsWebSocket.init(server);
+
+// Single upgrade handler that routes to the correct WebSocket server by path.
+// Using noServer:true on each WSS avoids the ws library calling socket.destroy()
+// when a path doesn't match, which caused "Invalid frame header" on the client.
+server.on('upgrade', (request, socket, head) => {
+  const url = request.url?.split('?')[0] ?? '';
+  if (process.env.DEBUG_UPGRADE === 'true') {
+    console.log('[HTTP] Upgrade request:', url);
+  }
+
+  if (url === '/ws/connection') {
+    const wss = connectionWebSocket.getWss();
+    if (wss) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  } else if (url === '/ws/logs') {
+    const wss = logsWebSocket.getWss();
+    if (wss) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  } else {
+    // Unknown WS path — reject cleanly
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+  }
+});
 
 // Helper function to get network IP address
 function getNetworkIP(): string | null {

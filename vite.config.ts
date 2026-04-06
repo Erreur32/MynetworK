@@ -47,6 +47,11 @@ export default defineConfig({
       // So if you access via 192.168.1.150:3666, HMR will use ws://192.168.1.150:3666
     },
     proxy: {
+      '/SVG': {
+        target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         // Use localhost for proxy - Vite proxy runs on the same machine as the backend
         // When accessing via IP (192.168.1.150), the proxy still connects to localhost:3003
@@ -154,6 +159,15 @@ export default defineConfig({
         }
       }
     }
+  },
+  // Expose backend port to the frontend so the WebSocket can connect directly
+  // in dev mode, bypassing Vite's WS server which conflicts with HMR on the same path.
+  // - npm dev:    PORT=3003, SERVER_PORT=3003  → browser connects to :3003
+  // - Docker dev: PORT=3003, SERVER_PORT=3668  → browser connects to :3668 (host-mapped port)
+  define: {
+    'import.meta.env.VITE_BACKEND_PORT': JSON.stringify(
+      process.env.SERVER_PORT || process.env.PORT || '3003'
+    ),
   },
   plugins: [react()],
   resolve: {

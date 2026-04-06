@@ -104,6 +104,7 @@ export class UniFiApiService {
      * The fields below keep the in-memory session state on the backend.
      */
     private sessionCookie: string | null = null;
+    private csrfToken: string | null = null; // UniFiOS v2 POST requests require X-Csrf-Token
     private lastLoginAt: number | null = null;
     private readonly sessionTtlMs: number = 15 * 60 * 1000; // 15 minutes
 
@@ -134,7 +135,7 @@ export class UniFiApiService {
         this.site = site;
         this.apiKey = '';
         this.isAuthenticated = false;
-        this.sessionCookie = null;
+        this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
     }
 
@@ -164,7 +165,7 @@ export class UniFiApiService {
         this.password = '';
         this.site = '';
         this.isAuthenticated = false;
-        this.sessionCookie = null;
+        this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
         logger.debug('UniFi', `Site Manager (cloud) connection configured (apiKeyLength: ${this.apiKey.length})`);
     }
@@ -257,7 +258,7 @@ export class UniFiApiService {
         }
 
         this.isAuthenticated = false;
-        this.sessionCookie = null;
+        this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
     }
 
@@ -562,7 +563,7 @@ export class UniFiApiService {
                 this.controllerLoginCooldownUntilMs = Date.now() + (backoffSeconds * 1000);
                 // Ensure we don't keep "thinking" we're authenticated during the cooldown.
                 this.isAuthenticated = false;
-                this.sessionCookie = null;
+                this.sessionCookie = null; this.csrfToken = null;
                 this.lastLoginAt = null;
                 const retryHint = retryAfterHeader ? ` Wait ${retryAfterHeader} seconds before retrying.` : ' Wait a few minutes before retrying.';
                 throw new Error(`UniFi login failed (429 Too Many Requests): You've reached the login attempt limit.${retryHint}${details}`);
@@ -606,6 +607,13 @@ export class UniFiApiService {
         this.lastLoginAt = Date.now();
         this.isAuthenticated = true;
         this.controllerLoginCooldownUntilMs = null;
+
+        // Capture CSRF token for UniFiOS v2 POST requests
+        const csrfToken = response.headers.get('x-csrf-token') || response.headers.get('X-Csrf-Token');
+        if (csrfToken) {
+            this.csrfToken = csrfToken;
+            logger.debug('UniFi', 'Captured CSRF token for v2 API');
+        }
 
         // Session stored successfully (logged at verbose level if needed)
     }
@@ -771,7 +779,7 @@ export class UniFiApiService {
             if (message.startsWith('UNIFI_SESSION_EXPIRED')) {
                 logger.debug('UniFi', 'Session appears to be expired, re-authenticating and retrying request...');
                 // Force a fresh login and retry once
-                this.sessionCookie = null;
+                this.sessionCookie = null; this.csrfToken = null;
                 this.isAuthenticated = false;
                 try {
                     await this.ensureControllerSession({ force: true });
@@ -784,6 +792,45 @@ export class UniFiApiService {
             // Re-throw network/connection errors as-is (they already have helpful messages)
             throw error;
         }
+    }
+
+    /**
+     * POST request to the UniFi controller API (same auth/session as controllerRequest).
+     */
+    private async controllerPost<T>(path: string, body: unknown): Promise<T> {
+        if (!this.url) throw new Error('UniFi controller URL not set');
+        await this.ensureControllerSession();
+        const baseUrl = this.url.replace(/\/+$/, '');
+        const apiBase = this.getApiBasePath();
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const url = `${baseUrl}${apiBase}${normalizedPath}`;
+        logger.debug('UniFi', `API POST: ${url}`);
+        const agent = getInsecureAgent();
+        const headers: Record<string, string> = {
+            'Cookie': this.sessionCookie as string,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        };
+        if (this.csrfToken) headers['X-Csrf-Token'] = this.csrfToken;
+        const opts: RequestInit = {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+        };
+        if (agent?.constructor?.name === 'Agent') (opts as any).dispatcher = agent;
+        const response = await fetch(url, opts);
+        if (response.status === 401 || response.status === 403) {
+            // Re-auth once and retry
+            this.sessionCookie = null; this.csrfToken = null; this.isAuthenticated = false;
+            await this.ensureControllerSession({ force: true });
+            const r2 = await fetch(url, opts);
+            if (!r2.ok) throw new Error(`UniFi POST ${r2.status} (${normalizedPath})`);
+            const j2: any = await r2.json();
+            return (j2.data ?? j2) as T;
+        }
+        if (!response.ok) throw new Error(`UniFi POST ${response.status} (${normalizedPath})`);
+        const json: any = await response.json();
+        return (json.data ?? json) as T;
     }
 
     /**
@@ -1402,6 +1449,376 @@ export class UniFiApiService {
             return 'cloud';
         }
         return this.deploymentType;
+    }
+
+    // ── Threat cache ──────────────────────────────────────────────────────────
+    // Cache threats per range bucket (3600/86400/604800) for 5 minutes to avoid
+    // hammering the UniFi controller on every tab open / refresh.
+    private _threatCache: Map<number, { ts: number; data: any }> = new Map();
+    private readonly THREAT_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+    /**
+     * Get threat flow insights from UniFi IDS/IPS.
+     *
+     * Tries multiple endpoints in order:
+     *  1. UniFiOS v2 API: GET /v2/api/site/{site}/insights/flows  (UDM/CloudGateway)
+     *  2. stat/ips/event with within / start-end / no filter
+     *  3. stat/ips (alternate path)
+     *  4. stat/alarm (IPS-tagged alarms)
+     *  5. stat/event (IPS-tagged events)
+     *
+     * Results are cached for 5 min per range bucket.
+     */
+    async getFlowInsights(rangeSeconds: number = 86400): Promise<{
+        available: boolean;
+        source: string;
+        summary: { total: number; low: number; suspicious: number; concerning: number };
+        topPolicies: Array<{ name: string; count: number }>;
+        topClients: Array<{ mac: string; name?: string; ip?: string; count: number }>;
+        topRegions: Array<{ country: string; count: number }>;
+        recentFlows: Array<{
+            timestamp: number;
+            action: string;
+            threatLevel: string;
+            policy: string;
+            srcIp?: string;
+            dstIp?: string;
+            clientMac?: string;
+            clientName?: string;
+            country?: string;
+            proto?: string;
+        }>;
+    }> {
+        await this.ensureLoggedIn();
+
+        // ── Cache check ───────────────────────────────────────────────────────
+        const cached = this._threatCache.get(rangeSeconds);
+        if (cached && Date.now() - cached.ts < this.THREAT_CACHE_TTL) {
+            logger.debug('UniFi', `getFlowInsights(${rangeSeconds}s) — serving from cache (age ${Math.round((Date.now() - cached.ts) / 1000)}s)`);
+            return cached.data;
+        }
+
+        const encodedSite = encodeURIComponent(this.site);
+        const endMs = Date.now();
+        const startMs = endMs - rangeSeconds * 1000;
+
+        // Helper: normalize raw response to array regardless of wrapper format.
+        // controllerRequest already extracts json.data, but some v2 endpoints
+        // return { data: [...], count: N } or just [...].
+        const toArray = (raw: any): any[] => {
+            if (Array.isArray(raw)) return raw;
+            if (raw && Array.isArray(raw.data)) return raw.data;
+            if (raw && Array.isArray(raw.flows)) return raw.flows;
+            if (raw && Array.isArray(raw.items)) return raw.items;
+            return [];
+        };
+
+        const withinHours = Math.ceil(rangeSeconds / 3600);
+        const startSec = Math.floor(startMs / 1000);
+        const endSec = Math.floor(endMs / 1000);
+
+        // Track attempts for debug output
+        const tried: string[] = [];
+        let ipsEndpointReachable = false;
+        let bestEmptySource = 'none';
+
+        const cache = (result: any) => {
+            this._threatCache.set(rangeSeconds, { ts: Date.now(), data: result });
+            return result;
+        };
+
+        // ── Attempt 0: UniFiOS v2 — POST traffic-flows (real IPS/threat data) ──
+        // The UniFi Network web app uses POST /v2/api/site/{site}/traffic-flows
+        // with a JSON body to fetch firewall/IPS flow data.
+        // controllerRequest auto-adds /proxy/network for unifios.
+        if (this.deploymentType === 'unifios') {
+            const trafficFlowPath = `/v2/api/site/${encodedSite}/traffic-flows`;
+            tried.push('v2:traffic-flows');
+            try {
+                // Exact body format used by UniFi Network web app
+                const body = {
+                    risk: [], action: ['blocked'], direction: [], protocol: [],
+                    policy: [], policy_type: [], service: [],
+                    source_host: [], source_mac: [], source_ip: [], source_port: [],
+                    source_network_id: [], source_domain: [], source_zone_id: [], source_region: [],
+                    destination_host: [], destination_mac: [], destination_ip: [], destination_port: [],
+                    destination_network_id: [], destination_domain: [], destination_zone_id: [], destination_region: [],
+                    in_network_id: [], out_network_id: [], next_ai_query: [], except_for: [],
+                    timestampFrom: startMs,
+                    timestampTo: endMs,
+                    pageNumber: 0,
+                    search_text: '',
+                    pageSize: 500,
+                    skip_count: false,
+                };
+                const raw = await this.controllerPost<any>(trafficFlowPath, body);
+                const events = toArray(raw);
+                logger.info('UniFi', `v2 traffic-flows → ${events.length} entries`);
+                logger.info('UniFi', `traffic-flows sample[0]: ${JSON.stringify(events[0] ?? null)}`);
+                if (events.length > 0) return cache(this._aggregateFlows(events, 'v2-traffic-flows'));
+                ipsEndpointReachable = true;
+                bestEmptySource = 'v2-traffic-flows-empty';
+            } catch (err) {
+                const msg = (err as Error).message;
+                logger[msg.includes('404') ? 'debug' : 'info']('UniFi', `v2 traffic-flows ERROR: ${msg.substring(0, 100)}`);
+            }
+
+            // ── Also try other v2 GET endpoints ──────────────────────────────
+            const v2GetPaths = [
+                `/v2/api/site/${encodedSite}/intrusion-prevention/events?start=${startMs}&end=${endMs}&limit=1000`,
+                `/v2/api/site/${encodedSite}/insights/flows?start=${startMs}&end=${endMs}&limit=1000`,
+            ];
+            if (!ipsEndpointReachable) {
+                for (const path of v2GetPaths) {
+                    const label = path.split('?')[0].split('/').slice(-2).join('/');
+                    tried.push(`v2:${label}`);
+                    try {
+                        const raw = await this.controllerRequest<any>(path);
+                        const events = toArray(raw);
+                        logger.info('UniFi', `v2 ${label} → ${events.length} events`);
+                        if (events.length > 0) return cache(this._aggregateFlows(events, `v2-${label.replace('/', '-')}`));
+                        ipsEndpointReachable = true;
+                        bestEmptySource = `v2-${label}-empty`;
+                        break;
+                    } catch (err) {
+                        logger.debug('UniFi', `v2 ${label} 404/error`);
+                    }
+                }
+            }
+        }
+
+        // ── Attempt 1: stat/ips/event — primary IPS endpoint (all controllers) ─
+        // On UniFiOS, controllerRequest auto-adds /proxy/network.
+        // Try three param variants: within (hours), start/end (unix sec), no filter.
+        const ipsEventVariants = [
+            `/api/s/${encodedSite}/stat/ips/event?within=${withinHours}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips/event?start=${startSec}&end=${endSec}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips/event?_limit=500`,
+        ];
+        for (const url of ipsEventVariants) {
+            tried.push(`ips/event:${url.split('?')[1]}`);
+            try {
+                const raw = await this.controllerRequest<any>(url);
+                const events = toArray(raw);
+                // Log raw type + sample to catch format mismatches
+                logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] → ${events.length} entries`);
+                ipsEndpointReachable = true;
+                if (events.length > 0) return cache(this._aggregateFlows(events, 'ips-event'));
+                bestEmptySource = 'ips-event-empty';
+            } catch (err) {
+                logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] ERROR: ${(err as Error).message}`);
+            }
+        }
+
+        // ── Attempt 2: stat/ips — shorter path (some firmware versions) ──────
+        if (!ipsEndpointReachable) {
+            const ipsVariants = [
+                `/api/s/${encodedSite}/stat/ips?within=${withinHours}&_limit=1000`,
+                `/api/s/${encodedSite}/stat/ips?start=${startSec}&end=${endSec}&_limit=1000`,
+                `/api/s/${encodedSite}/stat/ips?_limit=500`,
+            ];
+            for (const url of ipsVariants) {
+                tried.push(`stat/ips:${url.split('?')[1]}`);
+                try {
+                    const raw = await this.controllerRequest<any>(url);
+                    const events = toArray(raw);
+                    logger.info('UniFi', `stat/ips [${url.split('?')[1]}] → ${events.length} entries`);
+                    ipsEndpointReachable = true;
+                    if (events.length > 0) return cache(this._aggregateFlows(events, 'ips'));
+                    bestEmptySource = 'ips-empty';
+                } catch (err) {
+                    logger.debug('UniFi', `stat/ips [${url.split('?')[1]}] → ${(err as Error).message}`);
+                }
+            }
+        }
+
+        // ── Attempt 3: stat/alarm filtered to IPS subsystem ──────────────────
+        tried.push('stat/alarm');
+        try {
+            const raw = await this.controllerRequest<any>(
+                `/api/s/${encodedSite}/stat/alarm?_limit=1000&archived=false`
+            );
+            const list = toArray(raw);
+            const ipsAlarms = list.filter((e: any) =>
+                (e.subsystem || '') === 'ips' ||
+                (e.key || '').startsWith('EVT_IPS') ||
+                (e.key || '').startsWith('EVT_AD')
+            );
+            logger.info('UniFi', `stat/alarm → ${list.length} total, ${ipsAlarms.length} IPS alarms`);
+            if (ipsAlarms.length > 0) return cache(this._aggregateFlows(ipsAlarms, 'alarm'));
+            if (list.length > 0) {
+                ipsEndpointReachable = true;
+                if (bestEmptySource === 'none') bestEmptySource = 'alarm-no-ips';
+            }
+        } catch (err) {
+            logger.debug('UniFi', `stat/alarm → ${(err as Error).message}`);
+        }
+
+        // ── Attempt 4: stat/event filtered to IPS keys ───────────────────────
+        // Try several paths/param combos — on UniFiOS `within` causes 404
+        tried.push('stat/event');
+        let statEventRaw: any = null;
+        for (const evtUrl of [
+            `/api/s/${encodedSite}/stat/event?_limit=1000`,
+            `/api/s/${encodedSite}/stat/events?_limit=1000`,
+        ]) {
+            try {
+                statEventRaw = await this.controllerRequest<any>(evtUrl);
+                logger.info('UniFi', `stat/event hit on: ${evtUrl.split('?')[0].split('/').pop()}`);
+                break;
+            } catch (err) {
+                logger.debug('UniFi', `${evtUrl} → ${(err as Error).message.substring(0, 60)}`);
+            }
+        }
+        try {
+            const raw = statEventRaw;
+            const events = toArray(raw);
+            const allKeys = [...new Set(events.map((e: any) => e.key).filter(Boolean))].slice(0, 15);
+            const ipsEvents = events.filter((e: any) =>
+                (e.key || '').startsWith('EVT_IPS') ||
+                (e.key || '').startsWith('EVT_AD') ||
+                (e.subsystem || '') === 'ids' ||
+                (e.subsystem || '') === 'ips' ||
+                (e.subsystem || '') === 'threat'
+            );
+            logger.info('UniFi', `stat/event → ${events.length} total, ${ipsEvents.length} IPS, keys=[${allKeys.join(',')}]`);
+            if (ipsEvents.length > 0) return cache(this._aggregateFlows(ipsEvents, 'events'));
+            if (events.length > 0) {
+                ipsEndpointReachable = true;
+                if (bestEmptySource === 'none') bestEmptySource = `events-no-ips(${events.length}evts)`;
+            }
+        } catch (err) {
+            // Upgrade to info so we see the error even in production logs
+            logger.info('UniFi', `stat/event ERROR: ${(err as Error).message}`);
+        }
+
+        // ── All endpoints checked ─────────────────────────────────────────────
+        logger.info('UniFi', `getFlowInsights done — tried: [${tried.join(', ')}] reachable=${ipsEndpointReachable} source=${bestEmptySource}`);
+
+        const result = ipsEndpointReachable
+            ? { available: true, source: bestEmptySource, summary: { total: 0, low: 0, suspicious: 0, concerning: 0 }, topPolicies: [], topClients: [], topRegions: [], recentFlows: [] }
+            : { available: false, source: `none(tried:${tried.join('|')})`, summary: { total: 0, low: 0, suspicious: 0, concerning: 0 }, topPolicies: [], topClients: [], topRegions: [], recentFlows: [] };
+
+        return cache(result);
+    }
+
+    /**
+     * Normalize raw flow/event/threat entries into the common structure.
+     */
+    private _aggregateFlows(raw: any[], source: string): ReturnType<UniFiApiService['getFlowInsights']> extends Promise<infer T> ? T : never {
+        const policyMap = new Map<string, number>();
+        const clientMap = new Map<string, { mac: string; name?: string; ip?: string; count: number }>();
+        const regionMap = new Map<string, number>();
+
+        let low = 0; let suspicious = 0; let concerning = 0;
+
+        const recentFlows: any[] = [];
+
+        for (const item of raw) {
+            // ── Detect format: v2 traffic-flows vs classic IPS events ─────────
+            const isV2 = !!(item.source && typeof item.source === 'object' && 'ip' in item.source);
+
+            // ── Threat level ──────────────────────────────────────────────────
+            // v2: risk = "low" | "medium" | "high" | "critical" (string)
+            // classic: threat_level, severity, level
+            const rawLevel = (item.risk || item.threat_level || item.threatLevel || item.severity || item.level || '').toString().toUpperCase();
+            let threatLevel = 'LOW';
+            if (rawLevel === 'HIGH' || rawLevel === 'CRITICAL' || rawLevel.includes('CONCERN') || rawLevel === '3') {
+                threatLevel = 'CONCERNING'; concerning++;
+            } else if (rawLevel === 'MEDIUM' || rawLevel.includes('SUSPIC') || rawLevel === '2') {
+                threatLevel = 'SUSPICIOUS'; suspicious++;
+            } else {
+                threatLevel = 'LOW'; low++;
+            }
+
+            // ── Policy / rule name ────────────────────────────────────────────
+            // v2: policies[].name (array of objects), ips.signature (detailed)
+            // classic: policy string, rule_name, catname, key
+            const policy = isV2
+                ? (item.policies?.[0]?.name || item.ips?.signature || item.ips?.category_name || 'Unknown')
+                : ((Array.isArray(item.policy) ? item.policy[0] : item.policy)
+                    || item.rule_name || item.rule || item.catname || item.signature || item.msg || item.key || 'Unknown');
+            policyMap.set(policy, (policyMap.get(policy) || 0) + 1);
+
+            // ── Affected client (destination = internal target being attacked) ─
+            // v2: destination.mac, destination.client_name, destination.ip
+            // classic: client_mac, src_ip (the source that triggered IPS)
+            const mac = isV2
+                ? (item.destination?.mac || '')
+                : (item.client_mac || item.clientMac || item.src_mac || '');
+            const name = isV2
+                ? (item.destination?.client_name || item.destination?.host_name || '')
+                : (item.client_name || item.clientName || item.src_name || '');
+            const clientIp = isV2
+                ? (item.destination?.ip || '')
+                : (item.src_ip || item.srcIp || item.client_ip || '');
+            if (mac || clientIp) {
+                const key = mac || clientIp;
+                const existing = clientMap.get(key);
+                if (existing) {
+                    existing.count++;
+                    if (!existing.name && name) existing.name = name;
+                } else {
+                    clientMap.set(key, { mac, name: name || undefined, ip: clientIp || undefined, count: 1 });
+                }
+            }
+
+            // ── Attacker source IP & region ───────────────────────────────────
+            // v2: source.ip, source.region
+            // classic: src_ip, country, src_country
+            const srcIp = isV2
+                ? (item.source?.ip || '')
+                : (item.src_ip || item.srcIp || item.client_ip || '');
+            const country = isV2
+                ? (item.source?.region || '')
+                : (item.country || item.src_country || item.dst_country || item.geo_country || '');
+            if (country) regionMap.set(country, (regionMap.get(country) || 0) + 1);
+
+            // ── Timestamp ─────────────────────────────────────────────────────
+            // v2: flow_start_time or time (ms); classic: timestamp (s or ms)
+            const tsRaw = item.flow_start_time ?? item.time ?? item.timestamp ?? item.datetime;
+            const timestamp = tsRaw != null ? (tsRaw > 1e12 ? tsRaw / 1000 : tsRaw) : Date.now() / 1000;
+
+            // ── Recent flow entry ─────────────────────────────────────────────
+            if (recentFlows.length < 100) {
+                recentFlows.push({
+                    timestamp,
+                    action: typeof item.action === 'string' ? item.action.toUpperCase() : (item.blocked ? 'BLOCK' : 'DETECT'),
+                    threatLevel,
+                    policy,
+                    srcIp,
+                    dstIp: isV2 ? (item.destination?.ip || '') : (item.dst_ip || item.dstIp || item.server_ip || ''),
+                    clientMac: mac || undefined,
+                    clientName: name || undefined,
+                    country: country || undefined,
+                    proto: item.protocol || item.proto || ''
+                });
+            }
+        }
+
+        const topPolicies = [...policyMap.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([name, count]) => ({ name, count }));
+
+        const topClients = [...clientMap.values()]
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+        const topRegions = [...regionMap.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([country, count]) => ({ country, count }));
+
+        return {
+            available: true,
+            source,
+            summary: { total: raw.length, low, suspicious, concerning },
+            topPolicies,
+            topClients,
+            topRegions,
+            recentFlows: recentFlows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        };
     }
 }
 

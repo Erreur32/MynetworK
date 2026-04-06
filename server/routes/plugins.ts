@@ -734,8 +734,9 @@ router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: Aut
     try {
         const unifiPluginAny = unifiPlugin as any;
         const wanId = (req.query.wanId as string) || 'wan1';
+        const rangeSeconds = parseInt((req.query.range as string) || '0', 10) || 0;
         const history = typeof unifiPluginAny.getBandwidthHistory === 'function'
-            ? unifiPluginAny.getBandwidthHistory(wanId)
+            ? unifiPluginAny.getBandwidthHistory(wanId, rangeSeconds)
             : [];
         res.json({ success: true, result: history });
     } catch (error) {
@@ -764,6 +765,88 @@ router.get('/unifi/wan-interfaces', requireAuth, asyncHandler(async (_req: Authe
     } catch (error) {
         logger.error('UniFi', 'Failed to get WAN interfaces:', error);
         res.json({ success: true, result: [{ id: 'wan1', name: 'WAN' }] });
+    }
+}));
+
+/**
+ * GET /api/plugins/unifi/threats/raw?path=<api-path>
+ * Debug helper: proxies any GET request to the UniFi controller API and returns raw JSON.
+ * Only available; use sparingly.
+ */
+router.get('/unifi/threats/raw', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi') as any;
+    if (!unifiPlugin?.apiService) {
+        return res.json({ success: false, error: 'UniFi API service not available' });
+    }
+
+    const apiPath = (req.query.path as string) || '';
+    if (!apiPath) {
+        return res.json({ success: false, error: 'Missing ?path= parameter' });
+    }
+
+    try {
+        const raw = await (unifiPlugin.apiService as any).controllerRequest(apiPath);
+        res.json({ success: true, path: apiPath, raw, type: Array.isArray(raw) ? 'array' : typeof raw, length: Array.isArray(raw) ? raw.length : null });
+    } catch (error) {
+        res.json({ success: false, path: apiPath, error: error instanceof Error ? error.message : String(error) });
+    }
+}));
+
+/**
+ * GET /api/plugins/unifi/threats
+ * Returns threat flow insights (IDS/IPS data) from UniFi.
+ * Tries the v2 insights/flows endpoint (UniFiOS), then falls back to ips-threat-intel
+ * and finally to IPS events from stat/event.
+ */
+router.get('/unifi/threats', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi');
+
+    if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+        return res.json({
+            success: true,
+            result: {
+                available: false,
+                source: 'none',
+                summary: { total: 0, low: 0, suspicious: 0, concerning: 0 },
+                topPolicies: [],
+                topClients: [],
+                topRegions: [],
+                recentFlows: []
+            }
+        });
+    }
+
+    try {
+        const unifiPluginAny = unifiPlugin as any;
+        if (!unifiPluginAny.apiService) {
+            throw createError('UniFi API service not available', 500, 'API_SERVICE_UNAVAILABLE');
+        }
+
+        const rangeSeconds = parseInt((req.query.range as string) || '86400', 10) || 86400;
+        const deploymentType = unifiPluginAny.apiService.getDeploymentType?.() ?? 'unknown';
+        const data = await unifiPluginAny.apiService.getFlowInsights(rangeSeconds);
+
+        res.json({
+            success: true,
+            result: data,
+            _debug: { deploymentType, rangeSeconds, source: data.source, available: data.available }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to get threat flows';
+        logger.error('UniFi', 'Failed to get threat flows:', error);
+        res.json({
+            success: false,
+            error: message,
+            result: {
+                available: false,
+                source: 'error',
+                summary: { total: 0, low: 0, suspicious: 0, concerning: 0 },
+                topPolicies: [],
+                topClients: [],
+                topRegions: [],
+                recentFlows: []
+            }
+        });
     }
 }));
 
