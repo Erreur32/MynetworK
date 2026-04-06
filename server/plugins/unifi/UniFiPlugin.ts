@@ -258,6 +258,50 @@ export class UniFiPlugin extends BasePlugin {
         return this._wanInterfaces;
     }
 
+    /**
+     * Lightweight WAN bandwidth fetch for real-time WebSocket polling.
+     * Only calls getNetworkStats() (stat/dashboard) — much lighter than full getStats().
+     * Pushes new byte counters to history and returns computed KB/s rates for each WAN.
+     */
+    async fetchWanBandwidth(): Promise<Record<string, { download: number; upload: number }> | null> {
+        if (!this.isEnabled() || !this.config) return null;
+
+        try {
+            const stats = await this.apiService.getNetworkStats();
+
+            // Push primary WAN bytes to history
+            if (stats.wan && (stats.wan.rx_bytes > 0 || stats.wan.tx_bytes > 0)) {
+                this._pushToHistory('wan1', stats.wan.rx_bytes, stats.wan.tx_bytes);
+            }
+
+            // Compute rates for all WANs from history
+            const result: Record<string, { download: number; upload: number }> = {};
+            for (const wan of this._wanInterfaces.length > 0 ? this._wanInterfaces : [{ id: 'wan1', name: 'WAN' }]) {
+                const history = this._bandwidthHistories.get(wan.id) || [];
+                if (history.length >= 2) {
+                    const prev = history[history.length - 2];
+                    const curr = history[history.length - 1];
+                    const dtSec = (curr.timestamp - prev.timestamp) / 1000;
+                    if (dtSec > 0) {
+                        result[wan.id] = {
+                            download: Math.max(0, Math.round((curr.rx_bytes - prev.rx_bytes) / dtSec / 1024)),
+                            upload: Math.max(0, Math.round((curr.tx_bytes - prev.tx_bytes) / dtSec / 1024)),
+                        };
+                    } else {
+                        result[wan.id] = { download: 0, upload: 0 };
+                    }
+                } else {
+                    result[wan.id] = { download: 0, upload: 0 };
+                }
+            }
+
+            return result;
+        } catch (error) {
+            logger.debug('UniFiPlugin', 'fetchWanBandwidth failed:', error);
+            return null;
+        }
+    }
+
     async initialize(config: PluginConfig): Promise<void> {
         await super.initialize(config);
         
