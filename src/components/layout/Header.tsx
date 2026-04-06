@@ -27,6 +27,7 @@ import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { useFavicon } from '../../hooks/useFavicon';
 import { useUpdateStore } from '../../stores/updateStore';
 import { useFreeboxFirmwareStore } from '../../stores/freeboxFirmwareStore';
+import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { getVersionString } from '../../constants/version';
 import type { SystemInfo, ConnectionStatus, SystemSensor, SystemFan } from '../../types/api';
 import type { PageType } from './Footer';
@@ -301,6 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
+  const { download: unifiDl, upload: unifiUl, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
   // Get capabilities for model name (respects mock mode)
   const { getModel } = useCapabilitiesStore();
   
@@ -928,12 +930,12 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="flex items-center gap-4 bg-theme-secondary px-3 py-2 rounded-lg border border-theme mx-2">
                     <div className="flex items-center gap-2">
                       <ArrowDown size={16} className="text-blue-400" />
-                      <span className="text-sm font-medium">{formatSpeed(unifiStats.network.download || 0)}</span>
+                      <span className="text-sm font-medium">{unifiWsConnected ? formatSpeed(unifiDl * 1024) : formatSpeed(unifiStats.network.download || 0)}</span>
                     </div>
                     <div className="w-px h-4 bg-gray-700" />
                     <div className="flex items-center gap-2">
                       <ArrowUp size={16} className="text-green-400" />
-                      <span className="text-sm font-medium">{formatSpeed(unifiStats.network.upload || 0)}</span>
+                      <span className="text-sm font-medium">{unifiWsConnected ? formatSpeed(unifiUl * 1024) : formatSpeed(unifiStats.network.upload || 0)}</span>
                     </div>
                   </div>
                 )}
