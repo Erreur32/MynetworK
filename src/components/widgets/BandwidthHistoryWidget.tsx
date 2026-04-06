@@ -40,10 +40,10 @@ export const BandwidthHistoryWidget: React.FC<BandwidthHistoryWidgetProps> = ({
         fetchExtendedHistory,
         status
     } = useConnectionStore();
-const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
+const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvailable ? 3600 : 0);
     const [source, setSource] = useState<BandwidthSource>(freeboxAvailable ? 'freebox' : 'unifi');
     const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);
-    const { history: unifiRealtimeHistory } = useUnifiRealtimeStore();
+    const { history: unifiRealtimeHistory, download: unifiRealtimeDl, upload: unifiRealtimeUl, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
 
     // Reset source if availability changes
     useEffect(() => {
@@ -163,17 +163,21 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
                             </span>
                         </span>
                     )}
-                    {source === 'unifi' && unifiData.length > 0 && (() => {
-                        const last = unifiData[unifiData.length - 1];
+                    {source === 'unifi' && (() => {
+                        // Use realtime WebSocket data when in live mode and connected
+                        const useRealtime = selectedRange === 0 && unifiWsConnected && unifiRealtimeHistory.length > 0;
+                        const dlKBs = useRealtime ? unifiRealtimeDl : (unifiData[unifiData.length - 1]?.download ?? 0);
+                        const ulKBs = useRealtime ? unifiRealtimeUl : (unifiData[unifiData.length - 1]?.upload ?? 0);
+                        if (dlKBs === 0 && ulKBs === 0 && !useRealtime && unifiData.length === 0) return null;
                         return (
                             <span className="flex items-center gap-3 text-xs text-gray-500">
                                 <span className="flex items-center gap-1">
                                     <ArrowDown size={13} className="text-blue-400" />
-                                    <span className="font-medium text-gray-300">{formatSpeed(last.download * 1024)}</span>
+                                    <span className="font-medium text-gray-300">{formatSpeed(dlKBs * 1024)}</span>
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <ArrowUp size={13} className="text-green-400" />
-                                    <span className="font-medium text-gray-300">{formatSpeed(last.upload * 1024)}</span>
+                                    <span className="font-medium text-gray-300">{formatSpeed(ulKBs * 1024)}</span>
                                 </span>
                             </span>
                         );
