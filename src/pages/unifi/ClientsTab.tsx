@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Users, Link2 } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
+import { RichTooltip } from '../../components/ui/RichTooltip';
 import { ClientSortKey } from './types';
 
 interface ClientsTabProps {
@@ -295,7 +296,18 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                     </span>
                                     <div className="flex items-center gap-2">
                                         <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-gray-500 mr-1">{t('unifi.connectionFilterLabel')}</span>
+                                            <span className="text-[11px] text-gray-500 mr-1 flex items-center gap-1">
+                                                {t('unifi.connectionFilterLabel')}
+                                                <RichTooltip
+                                                    title="Filtre connexion"
+                                                    rows={[
+                                                        { label: 'Wireless', value: 'Wi-Fi (is_wired=false)', color: 'sky', dot: true },
+                                                        { label: 'Wired', value: 'Ethernet (is_wired=true)', color: 'emerald', dot: true },
+                                                        { label: 'Tous', value: 'Tous types', color: 'gray', dot: true },
+                                                    ]}
+                                                    position="top" width={230} iconSize={11}
+                                                />
+                                            </span>
                                             {(['wireless', 'wired', 'all'] as const).map((mode) => (
                                                 <button
                                                     key={mode}
@@ -323,7 +335,18 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                             ))}
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <span className="text-[11px] text-gray-500 mr-1">{t('unifi.statusFilterLabel')}</span>
+                                            <span className="text-[11px] text-gray-500 mr-1 flex items-center gap-1">
+                                                {t('unifi.statusFilterLabel')}
+                                                <RichTooltip
+                                                    title="Filtre statut"
+                                                    description="Un client est 'actif' s'il a échangé du trafic récemment (last_seen < 5 min ou uptime > 0)."
+                                                    rows={[
+                                                        { label: 'Actif', value: 'connecté + trafic récent', color: 'green', dot: true },
+                                                        { label: 'Inactif', value: 'connu mais idle', color: 'amber', dot: true },
+                                                    ]}
+                                                    position="top" width={240} iconSize={11}
+                                                />
+                                            </span>
                                             {(['active', 'inactive', 'all'] as const).map((mode) => (
                                                 <button
                                                     key={mode}

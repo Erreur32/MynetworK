@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Network } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
+import { RichTooltip } from '../../components/ui/RichTooltip';
 
 interface SwitchesTabProps {
     unifiStats: any;
@@ -235,7 +236,22 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                                                     </svg>
-                                                    <span>VITESSE</span>
+                                                    <span className="flex items-center gap-1">
+                                                        VITESSE
+                                                        <RichTooltip
+                                                            title="Vitesse du lien"
+                                                            rows={[
+                                                                { label: '10G', value: '10 000 Mbps — SFP+/DAC', color: 'purple', dot: true },
+                                                                { label: '2.5G', value: '2 500 Mbps — multi-gig', color: 'sky', dot: true },
+                                                                { label: '1G', value: '1 000 Mbps — Gigabit', color: 'emerald', dot: true },
+                                                                { label: '100', value: '100 Mbps — Fast Ethernet', color: 'yellow', dot: true },
+                                                                { label: '—', value: 'Port déconnecté ou inconnu', color: 'gray', dot: true },
+                                                            ]}
+                                                            position="top"
+                                                            width={260}
+                                                            iconSize={11}
+                                                        />
+                                                    </span>
                                                 </div>
                                             </th>
                                             <th className="px-4 py-3 text-left font-semibold" style={{ width: '10%' }}>
@@ -243,7 +259,21 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                                     </svg>
-                                                    <span>POE</span>
+                                                    <span className="flex items-center gap-1">
+                                                        POE
+                                                        <RichTooltip
+                                                            title="Power over Ethernet"
+                                                            description="Alimentation électrique via le câble réseau — permet de brancher des appareils (AP, caméra, téléphone) sans adaptateur secteur."
+                                                            rows={[
+                                                                { label: 'auto', value: 'PoE 802.3af/at actif', color: 'yellow', dot: true },
+                                                                { label: '24v', value: 'PoE passif 24V (propriétaire)', color: 'orange', dot: true },
+                                                                { label: 'off', value: 'PoE désactivé', color: 'gray', dot: true },
+                                                            ]}
+                                                            position="top"
+                                                            width={270}
+                                                            iconSize={11}
+                                                        />
+                                                    </span>
                                                 </div>
                                             </th>
                                             <th className="px-4 py-3 text-left font-semibold" style={{ width: '8%' }}>
@@ -259,7 +289,20 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                                     </svg>
-                                                    <span>ERREURS</span>
+                                                    <span className="flex items-center gap-1">
+                                                        ERREURS
+                                                        <RichTooltip
+                                                            title="Erreurs réseau"
+                                                            description="Total des erreurs RX (réception) + TX (émission) sur ce port depuis le dernier redémarrage du switch."
+                                                            rows={[
+                                                                { label: '0 / N/A', value: 'Pas d\'erreur détectée', color: 'emerald', dot: true },
+                                                                { label: '> 0', value: 'Erreurs présentes — câble ou duplex mismatch ?', color: 'red', dot: true },
+                                                            ]}
+                                                            position="top"
+                                                            width={280}
+                                                            iconSize={11}
+                                                        />
+                                                    </span>
                                                 </div>
                                             </th>
                                             <th className="px-4 py-3 text-left font-semibold" style={{ width: '25%' }}>

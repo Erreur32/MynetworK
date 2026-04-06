@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Network, Link2, RefreshCw, AlertCircle, CheckCircle, XCircle, Router } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
+import { RichTooltip } from '../../components/ui/RichTooltip';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS } from '../../utils/constants';
 import { api } from '../../api/client';
@@ -80,7 +81,10 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
         <div className="col-span-full space-y-6">
             {/* Gateway & WAN/LAN ports summary */}
             {hasGatewaySummary && (
-                <Card title={t('unifi.gatewayAndPorts')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                <Card
+                    title={<span className="flex items-center gap-1.5">{t('unifi.gatewayAndPorts')}<RichTooltip title="Passerelle & ports réseau" description="Résumé de la gateway UniFi : ports WAN (connexion internet) et ports LAN (réseau local). Les WAN affichent l'IP publique ou le statut de liaison." position="bottom" width={280} iconSize={12} /></span>}
+                    className="bg-unifi-card border border-gray-800 rounded-xl"
+                >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium">
@@ -146,7 +150,7 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
             )}
 
             <Card
-                title={t('unifi.natRules')}
+                title={<span className="flex items-center gap-1.5">{t('unifi.natRules')}<RichTooltip title="Règles NAT — Port Forwarding" description="Le NAT (Network Address Translation) redirige des ports entrants de votre IP publique vers des machines internes. Exemple : port 443 → serveur web local." rows={[{ label: 'Actif', value: 'Règle en cours d\'application', color: 'emerald', dot: true }, { label: 'Inactif', value: 'Règle désactivée (non appliquée)', color: 'gray', dot: true }]} position="top" width={300} iconSize={12} /></span>}
                 actions={
                     isRefreshing && !isInitialLoading ? (
                         <RefreshCw size={14} className="text-gray-400 animate-spin" />

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { Activity, ArrowDown, ArrowUp } from 'lucide-react';
 import { Card } from './Card';
+import { RichTooltip } from '../ui/RichTooltip';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
 import { usePolling } from '../../hooks/usePolling';
@@ -102,7 +103,20 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
 
     const cardTitle = (
         <span className="flex items-center gap-2">
-            <span>{source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}</span>
+            <span className="flex items-center gap-1.5">
+                {source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}
+                <RichTooltip
+                    title="Historique bande passante"
+                    description="Débit entrant (download) et sortant (upload) mesuré sur la période sélectionnée. Les données sont issues de la Freebox (RRD) ou de l'API UniFi selon la source active."
+                    rows={[
+                        { label: 'Download', value: 'Trafic reçu depuis internet', color: 'sky', dot: true },
+                        { label: 'Upload', value: 'Trafic envoyé vers internet', color: 'emerald', dot: true },
+                    ]}
+                    position="bottom"
+                    width={290}
+                    iconSize={12}
+                />
+            </span>
             {showSourceToggle && (
                 <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px] font-normal">
                     <button
