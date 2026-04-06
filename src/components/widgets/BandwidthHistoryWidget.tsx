@@ -8,6 +8,7 @@ import { useConnectionStore } from '../../stores/connectionStore';
 import { formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
 import { usePolling } from '../../hooks/usePolling';
 import { api } from '../../api/client';
+import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 
 const COLORS = {
     blue: '#3b82f6',
@@ -42,6 +43,7 @@ export const BandwidthHistoryWidget: React.FC<BandwidthHistoryWidgetProps> = ({
 const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
     const [source, setSource] = useState<BandwidthSource>(freeboxAvailable ? 'freebox' : 'unifi');
     const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);
+    const { history: unifiRealtimeHistory } = useUnifiRealtimeStore();
 
     // Reset source if availability changes
     useEffect(() => {
@@ -97,7 +99,9 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
             ? history
             : (extendedHistory.length > 0 ? extendedHistory : history);
 
-    const chartData = source === 'unifi' ? unifiData : freeboxChartData;
+    const chartData = source === 'unifi'
+        ? (selectedRange === 0 ? unifiRealtimeHistory : unifiData)
+        : freeboxChartData;
 
     const showSourceToggle = freeboxAvailable && unifiAvailable;
 
