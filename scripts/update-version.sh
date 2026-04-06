@@ -138,20 +138,20 @@ echo -e "${BLUE}  📝 Mise à jour des versions des plugins...${NC}"
 if command -v perl &> /dev/null; then
     perl -i -pe "s/super\('freebox', 'Freebox', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts
     perl -i -pe "s/super\('unifi', 'UniFi Controller', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts
-    perl -i -pe "s/super\('scan-reseau', 'Scan Réseau', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts
+    perl -i -pe "s/super\('scan-reseau',\s*'[^']+',\s*'[0-9]+\.[0-9]+\.[0-9]+'\)/super('scan-reseau', 'Network scan', '$NEW_VERSION')/" server/plugins/scan-reseau/ScanReseauPlugin.ts
 else
     # Fallback to sed with extended regex (GNU sed)
     sed -i -E "s/super\('freebox', 'Freebox', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts 2>/dev/null || \
     sed -i '' "s/super('freebox', 'Freebox', '[^']*');/super('freebox', 'Freebox', '$NEW_VERSION');/" server/plugins/freebox/FreeboxPlugin.ts
     sed -i -E "s/super\('unifi', 'UniFi Controller', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts 2>/dev/null || \
     sed -i '' "s/super('unifi', 'UniFi Controller', '[^']*');/super('unifi', 'UniFi Controller', '$NEW_VERSION');/" server/plugins/unifi/UniFiPlugin.ts
-    sed -i -E "s/super\('scan-reseau', 'Scan Réseau', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts 2>/dev/null || \
-    sed -i '' "s/super('scan-reseau', 'Scan Réseau', '[^']*');/super('scan-reseau', 'Scan Réseau', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts
+    sed -i -E "s/super\('scan-reseau', '[^']+', '[0-9]+\.[0-9]+\.[0-9]+'\);/super('scan-reseau', 'Network scan', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts 2>/dev/null || \
+    sed -i '' "s/super('scan-reseau', '[^']*', '[^']*');/super('scan-reseau', 'Network scan', '$NEW_VERSION');/" server/plugins/scan-reseau/ScanReseauPlugin.ts
 fi
 
-# 3. README.md (badge)
+# 3. README.md (badge — match any version, not just OLD_VERSION)
 echo -e "${BLUE}  📝 Mise à jour de README.md...${NC}"
-sed -i "s/MynetworK-$OLD_VERSION/MynetworK-$NEW_VERSION/g" README.md
+sed -i -E "s/MynetworK-[0-9]+\.[0-9]+\.[0-9]+/MynetworK-$NEW_VERSION/g" README.md
 
 # 4. CHANGELOG.md (ajout de la nouvelle entrée en haut)
 echo -e "${BLUE}  📝 Mise à jour de CHANGELOG.md...${NC}"
