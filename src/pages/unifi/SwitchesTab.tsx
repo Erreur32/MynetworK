@@ -337,15 +337,16 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className={
-                                                        row.poe === 'auto' || row.poe === 'passthrough' || row.poe === '24v'
-                                                            ? 'text-yellow-400'
-                                                            : row.poe === 'off' || row.poe === 'N/A'
-                                                            ? 'text-gray-500'
-                                                            : 'text-yellow-300'
-                                                    }>
-                                                        {row.poe === 'N/A' ? 'N/A' : row.poe}
-                                                    </span>
+                                                    {(() => {
+                                                        const poeColor = row.poe === 'auto' || row.poe === 'passthrough' || row.poe === '24v' ? 'text-yellow-400' : row.poe === 'off' || row.poe === 'N/A' ? 'text-gray-500' : 'text-yellow-300';
+                                                        const poeDesc = row.poe === 'auto' ? t('unifi.tooltip.poe.autoValue') : row.poe === '24v' ? t('unifi.tooltip.poe.v24Value') : row.poe === 'off' ? t('unifi.tooltip.poe.offValue') : undefined;
+                                                        if (!poeDesc) return <span className={poeColor}>{row.poe}</span>;
+                                                        return (
+                                                            <RichTooltip title={t('unifi.tooltip.poe.title')} description={poeDesc} position="top" width={220}>
+                                                                <span className={`${poeColor} cursor-help`}>{row.poe}</span>
+                                                            </RichTooltip>
+                                                        );
+                                                    })()}
                                                 </td>
                                                 <td className="px-4 py-3 text-white">{row.port}</td>
                                                 <td className="px-4 py-3">

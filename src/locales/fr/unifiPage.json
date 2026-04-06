@@ -11,7 +11,17 @@
       "traffic": "Trafic",
       "events": "Événements",
       "threats": "Menaces",
-      "debug": "Debug"
+      "debug": "Debug",
+      "desc": {
+        "overview": "État du contrôleur, équipements en ligne, sites UniFi, alertes actives et journal des événements réseau.",
+        "traffic": "Historique de bande passante WAN — débit entrant/sortant par interface sur 1h / 24h / 7j.",
+        "threats": "IDS/IPS — flux réseau bloqués, niveaux de risque (Low/Suspicious/Concerning) et origines géographiques des attaques.",
+        "analyse": "Détail des points d'accès — SSIDs diffusés, canaux, puissance radio et clients connectés par bande (2.4 / 5 / 6 GHz).",
+        "nat": "Passerelle UniFi — ports WAN/LAN et règles NAT de redirection de ports (port forwarding).",
+        "clients": "Appareils réseau connectés — filtrage par type (Wi-Fi / Ethernet), statut (actif/inactif) et recherche par IP, nom ou MAC.",
+        "switches": "Ports des switches UniFi — vitesse de liaison, état POE, erreurs RX/TX et nom de port.",
+        "debug": "Données brutes de l'API UniFi — utilisé pour le diagnostic technique et le développement."
+      }
     },
     "threats": {
       "title": "Analyse des menaces réseau",

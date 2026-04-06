@@ -318,7 +318,14 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                                                 {ts.toLocaleTimeString()}
                                                             </td>
                                                             <td className="px-3 py-1.5">
-                                                                <span className={`${levelColor} font-semibold text-[11px]`}>{f.threatLevel}</span>
+                                                                {(() => {
+                                                                    const lvlKey = f.threatLevel === 'CONCERNING' ? 'levelConcerning' : f.threatLevel === 'SUSPICIOUS' ? 'levelSuspicious' : 'levelLow';
+                                                                    return (
+                                                                        <RichTooltip title={t(`unifi.tooltip.${lvlKey}.title`)} description={t(`unifi.tooltip.${lvlKey}.desc`)} position="top" width={240}>
+                                                                            <span className={`${levelColor} font-semibold text-[11px] cursor-help`}>{f.threatLevel}</span>
+                                                                        </RichTooltip>
+                                                                    );
+                                                                })()}
                                                             </td>
                                                             <td className="px-3 py-1.5 max-w-[180px] truncate" title={f.policy}>{f.policy}</td>
                                                             <td className="px-3 py-1.5 font-mono text-gray-400">{f.srcIp || f.clientMac || '-'}</td>

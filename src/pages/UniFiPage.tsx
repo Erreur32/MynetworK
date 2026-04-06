@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, Router, ShieldAlert } from 'lucide-react';
+import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
@@ -201,15 +202,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         setTimeout(() => setIsRefreshing(false), 1000);
     };
 
-    const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
-        { id: 'overview', label: t('unifi.tabs.overview'), icon: Activity },
-        { id: 'traffic', label: t('unifi.tabs.traffic'), icon: TrendingUp },
-        { id: 'threats', label: t('unifi.tabs.threats'), icon: ShieldAlert },
-        { id: 'analyse', label: t('unifi.tabs.analyse'), icon: Activity },
-        { id: 'nat', label: t('unifi.tabs.nat'), icon: Router },
-        { id: 'clients', label: t('unifi.tabs.clients'), icon: Users },
-        { id: 'switches', label: t('unifi.tabs.switches'), icon: Network },
-        ...(import.meta.env.DEV ? [{ id: 'debug' as TabType, label: t('unifi.tabs.debug'), icon: AlertCircle }] : [])
+    const tabs: { id: TabType; label: string; desc: string; icon: React.ElementType }[] = [
+        { id: 'overview', label: t('unifi.tabs.overview'), desc: t('unifi.tabs.desc.overview'), icon: Activity },
+        { id: 'traffic',  label: t('unifi.tabs.traffic'),  desc: t('unifi.tabs.desc.traffic'),  icon: TrendingUp },
+        { id: 'threats',  label: t('unifi.tabs.threats'),  desc: t('unifi.tabs.desc.threats'),  icon: ShieldAlert },
+        { id: 'analyse',  label: t('unifi.tabs.analyse'),  desc: t('unifi.tabs.desc.analyse'),  icon: Activity },
+        { id: 'nat',      label: t('unifi.tabs.nat'),      desc: t('unifi.tabs.desc.nat'),      icon: Router },
+        { id: 'clients',  label: t('unifi.tabs.clients'),  desc: t('unifi.tabs.desc.clients'),  icon: Users },
+        { id: 'switches', label: t('unifi.tabs.switches'), desc: t('unifi.tabs.desc.switches'), icon: Network },
+        ...(import.meta.env.DEV ? [{ id: 'debug' as TabType, label: t('unifi.tabs.debug'), desc: t('unifi.tabs.desc.debug'), icon: AlertCircle }] : [])
     ];
 
     if (!unifiPlugin) {
@@ -401,19 +402,23 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                 <div className="flex border-b border-gray-800 mb-6 overflow-x-auto">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
-                        const isActive = activeTab === tab.id;
+                        const isTabActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap border-b-2 ${
-                                    isActive
+                                    isTabActive
                                         ? 'text-unifi-accent border-unifi-accent'
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-unifi-accent'
                                 }`}
                             >
-                                <Icon size={16} />
-                                {tab.label}
+                                <RichTooltip title={tab.label} description={tab.desc} position="bottom" width={240}>
+                                    <span className="flex items-center gap-2 pointer-events-none">
+                                        <Icon size={16} />
+                                        {tab.label}
+                                    </span>
+                                </RichTooltip>
                             </button>
                         );
                     })}

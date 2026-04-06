@@ -392,7 +392,10 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                 {renderSortHeader('IP', 'ip', 'left')}
                                             </th>
                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                {renderSortHeader('MAC', 'mac', 'left')}
+                                                <span className="flex items-center gap-1">
+                                                    {renderSortHeader('MAC', 'mac', 'left')}
+                                                    <RichTooltip title={t('unifi.tooltip.macAddress.title')} description={t('unifi.tooltip.macAddress.desc')} position="bottom" width={280} iconSize={11} />
+                                                </span>
                                             </th>
                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
                                                 {renderSortHeader('Switch', 'switch', 'left')}
@@ -410,7 +413,20 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                 {renderSortHeader(t('unifi.typeLabel').replace(/\s*:\s*$/, ''), 'type', 'left')}
                                             </th>
                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                <span className="text-xs text-gray-300">{t('unifi.signalPort')}</span>
+                                                <span className="flex items-center gap-1">
+                                                    <span className="text-xs text-gray-300">{t('unifi.signalPort')}</span>
+                                                    <RichTooltip
+                                                        title={t('unifi.tooltip.rssi.title')}
+                                                        description={t('unifi.tooltip.rssi.desc')}
+                                                        rows={[
+                                                            { label: t('unifi.tooltip.rssi.excellent'), color: 'emerald', dot: true },
+                                                            { label: t('unifi.tooltip.rssi.good'), color: 'yellow', dot: true },
+                                                            { label: t('unifi.tooltip.rssi.fair'), color: 'orange', dot: true },
+                                                            { label: t('unifi.tooltip.rssi.poor'), color: 'red', dot: true },
+                                                        ]}
+                                                        position="bottom" width={260} iconSize={11}
+                                                    />
+                                                </span>
                                             </th>
                                         </tr>
                                     </thead>
@@ -490,10 +506,16 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                             : 'bg-sky-900/40 border-sky-500 text-sky-300';
                                                         const icon = isWired ? '⟷' : '📶';
                                                         return (
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${badgeClass}`}>
-                                                                <span>{icon}</span>
-                                                                <span>{typeLabel}</span>
-                                                            </span>
+                                                            <RichTooltip
+                                                                title={isWired ? t('unifi.tooltip.typeWired.title') : t('unifi.tooltip.typeWireless.title')}
+                                                                description={isWired ? t('unifi.tooltip.typeWired.desc') : t('unifi.tooltip.typeWireless.desc')}
+                                                                position="top" width={260}
+                                                            >
+                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] cursor-help ${badgeClass}`}>
+                                                                    <span>{icon}</span>
+                                                                    <span>{typeLabel}</span>
+                                                                </span>
+                                                            </RichTooltip>
                                                         );
                                                     })()}
                                                 </td>
@@ -530,20 +552,32 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                         }
 
                                                         return (
-                                                            <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                                                                <span className={`w-2 h-2 rounded-full ${colorClass}`} />
-                                                                <span>
-                                                                    RSSI:&nbsp;
-                                                                    <span className="text-gray-200">
-                                                                        {signal.rssi} dBm
-                                                                    </span>
-                                                                    {signal.quality && (
-                                                                        <span className="ml-1 text-gray-500">
-                                                                            ({signal.quality})
+                                                            <RichTooltip
+                                                                title={t('unifi.tooltip.rssi.title')}
+                                                                description={t('unifi.tooltip.rssi.desc')}
+                                                                rows={[
+                                                                    { label: t('unifi.tooltip.rssi.excellent'), color: 'emerald', dot: true },
+                                                                    { label: t('unifi.tooltip.rssi.good'), color: 'yellow', dot: true },
+                                                                    { label: t('unifi.tooltip.rssi.fair'), color: 'orange', dot: true },
+                                                                    { label: t('unifi.tooltip.rssi.poor'), color: 'red', dot: true },
+                                                                ]}
+                                                                position="top" width={250}
+                                                            >
+                                                                <span className="text-[11px] text-gray-400 flex items-center gap-1 cursor-help">
+                                                                    <span className={`w-2 h-2 rounded-full ${colorClass}`} />
+                                                                    <span>
+                                                                        RSSI:&nbsp;
+                                                                        <span className="text-gray-200">
+                                                                            {signal.rssi} dBm
                                                                         </span>
-                                                                    )}
+                                                                        {signal.quality && (
+                                                                            <span className="ml-1 text-gray-500">
+                                                                                ({signal.quality})
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
                                                                 </span>
-                                                            </span>
+                                                            </RichTooltip>
                                                         );
                                                     })()}
                                                 </td>

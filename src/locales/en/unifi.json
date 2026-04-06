@@ -224,6 +224,26 @@
         "desc": "NAT (Network Address Translation) redirects incoming ports from your public IP to internal machines. Example: port 443 → local web server.",
         "activeValue": "Rule currently applied",
         "inactiveValue": "Rule disabled (not applied)"
+      },
+      "macAddress": {
+        "title": "MAC Address",
+        "desc": "Unique hardware identifier of the network card (48 bits). The first 3 bytes (OUI) identify the manufacturer. E.g.: DC:A6:32 = Raspberry Pi, 00:50:F2 = Microsoft."
+      },
+      "rssi": {
+        "title": "RSSI — Wi-Fi Signal Quality",
+        "desc": "Received Signal Strength Indicator — signal strength in dBm. The closer to 0, the better the signal.",
+        "excellent": "Excellent ≥ -60 dBm",
+        "good": "Good  -60 to -70 dBm",
+        "fair": "Fair  -70 to -80 dBm",
+        "poor": "Poor  < -80 dBm"
+      },
+      "typeWired": {
+        "title": "Wired connection (Ethernet)",
+        "desc": "Client connected via Ethernet cable (is_wired = true). Stable connection, no packet loss due to Wi-Fi."
+      },
+      "typeWireless": {
+        "title": "Wireless connection (Wi-Fi)",
+        "desc": "Client connected via Wi-Fi (is_wired = false). Quality depends on RSSI signal and band (2.4 / 5 / 6 GHz)."
       }
     }
   }
