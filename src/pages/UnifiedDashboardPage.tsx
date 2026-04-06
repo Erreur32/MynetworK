@@ -10,6 +10,7 @@ import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHist
 import { TrafficHistoryModal } from '../components/modals';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
+import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
 import { POLLING_INTERVALS } from '../utils/constants';
 
 interface UnifiedDashboardPageProps {
@@ -47,6 +48,8 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
 
     const activePlugins = plugins.filter(p => p.enabled && p.connectionStatus);
     const hasUniFi = activePlugins.some(p => p.id === 'unifi');
+    // Real-time WebSocket for UniFi bandwidth (independent of Freebox)
+    useUnifiWebSocket({ enabled: hasUniFi });
     // Freebox is available only if it's enabled AND connected (same condition as the Freebox card)
     const hasFreebox = activePlugins.some(p => p.id === 'freebox');
     // Scan-réseau n'a pas besoin de connexion externe, donc on vérifie seulement si activé

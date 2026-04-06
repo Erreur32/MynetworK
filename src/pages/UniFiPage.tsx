@@ -12,6 +12,7 @@ import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
+import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { OverviewTab } from './unifi/OverviewTab';
@@ -58,6 +59,9 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     const unifiPlugin = plugins.find(p => p.id === 'unifi');
     const unifiStats = pluginStats['unifi'];
     const isActive = unifiPlugin?.enabled && unifiPlugin?.connectionStatus;
+
+    // Real-time WebSocket for UniFi bandwidth
+    useUnifiWebSocket({ enabled: isActive });
 
     // Derived status flags for visual checks
     const hasConfig =
