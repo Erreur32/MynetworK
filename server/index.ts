@@ -12,6 +12,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { connectionWebSocket } from './services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from './services/freeboxNativeWebSocket.js';
 import { logsWebSocket } from './services/logsWebSocket.js';
+import { unifiWebSocket } from './services/unifiWebSocket.js';
 
 // Database
 import { initializeDatabase, getDatabase } from './database/connection.js';
@@ -372,6 +373,7 @@ const server = http.createServer(app);
 // Initialize WebSocket servers (noServer mode — routing handled below)
 connectionWebSocket.init(server);
 logsWebSocket.init(server);
+unifiWebSocket.init(server);
 
 // Single upgrade handler that routes to the correct WebSocket server by path.
 // Using noServer:true on each WSS avoids the ws library calling socket.destroy()
@@ -393,6 +395,15 @@ server.on('upgrade', (request, socket, head) => {
     }
   } else if (url === '/ws/logs') {
     const wss = logsWebSocket.getWss();
+    if (wss) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  } else if (url === '/ws/unifi') {
+    const wss = unifiWebSocket.getWss();
     if (wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
