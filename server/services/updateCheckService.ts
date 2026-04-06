@@ -71,7 +71,29 @@ async function fetchCommitMessage(sha: string, headers: Record<string, string>):
  */
 async function isDockerImageReady(version: string): Promise<boolean> {
   try {
-    // Try with 'v' prefix first (e.g. v0.7.35), then without
+    // Step 1: Get anonymous token from GHCR (required even for public images)
+    let token: string | null = null;
+    try {
+      const tokenRes = await fetch(
+        'https://ghcr.io/token?scope=repository:erreur32/mynetwork:pull',
+        { headers: { 'User-Agent': 'MynetworK-UpdateChecker/1.0' } }
+      );
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json() as { token?: string };
+        token = tokenData.token || null;
+      }
+    } catch {
+      // Cannot get token — cannot verify, assume not ready
+      logger.warn('Updates', 'Cannot get GHCR anonymous token');
+      return false;
+    }
+
+    if (!token) {
+      logger.warn('Updates', 'No GHCR token received — cannot verify image');
+      return false;
+    }
+
+    // Step 2: Check manifest with token — try 'v' prefix first, then without
     const tags = [`v${version}`, version];
     for (const tag of tags) {
       const url = `https://ghcr.io/v2/erreur32/mynetwork/manifests/${tag}`;
@@ -79,6 +101,7 @@ async function isDockerImageReady(version: string): Promise<boolean> {
         method: 'HEAD',
         headers: {
           'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json',
+          'Authorization': `Bearer ${token}`,
           'User-Agent': 'MynetworK-UpdateChecker/1.0'
         }
       });
@@ -86,20 +109,15 @@ async function isDockerImageReady(version: string): Promise<boolean> {
         logger.info('Updates', `Docker image ready in GHCR: ${tag}`);
         return true;
       }
-      // 401 = registry requires auth but endpoint exists (image likely public but needs token)
-      // 404 = tag does not exist yet
-      if (response.status === 401) {
-        // Image likely exists but registry requires anonymous token — treat as ready
-        logger.info('Updates', `GHCR returned 401 for ${tag} — assuming image exists`);
-        return true;
-      }
+      // 404 = tag does not exist yet (build not finished)
+      // 401 = token invalid (should not happen with fresh token)
     }
     logger.info('Updates', `Docker image not yet available in GHCR for version ${version}`);
     return false;
   } catch (e) {
-    // Network error — don't block the notification
+    // Network error — assume not ready (safer than false positive)
     logger.warn('Updates', `GHCR manifest check failed: ${e instanceof Error ? e.message : String(e)}`);
-    return true;
+    return false;
   }
 }
 
@@ -122,9 +140,15 @@ async function isBuildValidated(sha: string, headers: Record<string, string>): P
       logger.warn('Updates', `No CI check runs found for commit ${sha.slice(0, 7)} — skipping`);
       return false;
     }
-    const completed = data.check_runs.filter(r => r.status === 'completed');
-    const hasFailed = completed.some(r => r.conclusion === 'failure' || r.conclusion === 'cancelled');
-    const hasSuccess = completed.some(r => r.conclusion === 'success');
+    // ALL check runs must be completed (no in_progress or queued)
+    const allCompleted = data.check_runs.every(r => r.status === 'completed');
+    if (!allCompleted) {
+      const pending = data.check_runs.filter(r => r.status !== 'completed').map(r => r.name);
+      logger.info('Updates', `Build not finished for ${sha.slice(0, 7)} — pending: ${pending.join(', ')}`);
+      return false;
+    }
+    const hasFailed = data.check_runs.some(r => r.conclusion === 'failure' || r.conclusion === 'cancelled');
+    const hasSuccess = data.check_runs.some(r => r.conclusion === 'success');
     return hasSuccess && !hasFailed;
   } catch (e) {
     logger.warn('Updates', `Build validation check failed: ${e instanceof Error ? e.message : String(e)}`);

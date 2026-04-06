@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.41] - 2026-04-06
+
+### 🐛 Fixed
+- Update check: properly authenticate with GHCR anonymous token before checking manifest (was false positive on 401)
+- Update check: require ALL CI check runs to be completed before showing update notification (was triggering while build still in progress)
+
+---
+
 ## [0.7.40] - 2026-04-06
 
 ### 🔧 Changed
