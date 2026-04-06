@@ -4,7 +4,7 @@
  * Displays a summary card for a specific plugin with key statistics
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
@@ -13,10 +13,10 @@ import { usePluginStore } from '../../stores/pluginStore';
 import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
+import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { decodeHtmlEntities } from '../../utils/textUtils';
 import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
-import { api } from '../../api/client';
 import type { SystemSensor, SystemFan } from '../../types/api';
 
 interface PluginSummaryCardProps {
@@ -95,26 +95,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const isActive = plugin.enabled && plugin.connectionStatus;
     const hasStats = stats && (stats.network || stats.devices || stats.system);
 
-    // UniFi bandwidth history for sparklines
-    const [unifiHistory, setUnifiHistory] = useState<Array<{ time: string; download: number; upload: number }>>([]);
-    const [unifiHistoryLoaded, setUnifiHistoryLoaded] = useState(false);
-    useEffect(() => {
-        if (pluginId !== 'unifi') return;
-        let cancelled = false;
-        const doFetch = async () => {
-            try {
-                const res = await api.get<Array<{ time: string; download: number; upload: number }>>('/api/plugins/unifi/bandwidth-history?wanId=wan1&limit=20');
-                if (!cancelled) {
-                    if (res.success && Array.isArray(res.result)) setUnifiHistory(res.result);
-                    setUnifiHistoryLoaded(true);
-                }
-            } catch { if (!cancelled) setUnifiHistoryLoaded(true); }
-        };
-        doFetch();
-        const id = setInterval(doFetch, 30000);
-        return () => { cancelled = true; clearInterval(id); };
-    // Run whenever pluginId changes; isActive not required — fetch regardless and let API return []
-    }, [pluginId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // UniFi real-time bandwidth from WebSocket store
+    const { history: unifiHistory, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
+    const unifiHistoryLoaded = unifiWsConnected || unifiHistory.length > 0;
 
     // Helper function to render clickable IP addresses
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
