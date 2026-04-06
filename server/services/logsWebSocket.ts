@@ -19,10 +19,12 @@ class LogsWebSocketService {
   /**
    * Initialize the WebSocket server for logs
    */
+  getWss(): WebSocketServer | null { return this.wss; }
+
   init(server: import('http').Server) {
     logger.debug('LogsWS', 'Initializing Logs WebSocket server...');
 
-    this.wss = new WebSocketServer({ server, path: '/ws/logs' });
+    this.wss = new WebSocketServer({ noServer: true });
 
     logger.debug('LogsWS', 'Logs WebSocket server created on path /ws/logs');
 

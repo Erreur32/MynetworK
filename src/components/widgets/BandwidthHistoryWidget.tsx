@@ -4,9 +4,9 @@ import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tool
 import { Activity, ArrowDown, ArrowUp } from 'lucide-react';
 import { Card } from './Card';
 import { useConnectionStore } from '../../stores/connectionStore';
-import { useAuthStore } from '../../stores/authStore';
 import { formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
 import { usePolling } from '../../hooks/usePolling';
+import { api } from '../../api/client';
 
 const COLORS = {
     blue: '#3b82f6',
@@ -14,8 +14,23 @@ const COLORS = {
 };
 
 type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800; // 0 = temps réel (live)
+type BandwidthSource = 'freebox' | 'unifi';
 
-export const BandwidthHistoryWidget: React.FC = () => {
+interface BandwidthPoint {
+    time: string;
+    download: number;
+    upload: number;
+}
+
+interface BandwidthHistoryWidgetProps {
+    freeboxAvailable?: boolean;
+    unifiAvailable?: boolean;
+}
+
+export const BandwidthHistoryWidget: React.FC<BandwidthHistoryWidgetProps> = ({
+    freeboxAvailable = true,
+    unifiAvailable = false
+}) => {
     const { t } = useTranslation();
     const {
         history,
@@ -23,149 +38,254 @@ export const BandwidthHistoryWidget: React.FC = () => {
         fetchExtendedHistory,
         status
     } = useConnectionStore();
-    const { login, isLoggedIn } = useAuthStore();
+const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
+    const [source, setSource] = useState<BandwidthSource>(freeboxAvailable ? 'freebox' : 'unifi');
+    const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);
 
-    const [selectedRange, setSelectedRange] = useState<BandwidthRange>(3600);
-
+    // Reset source if availability changes
     useEffect(() => {
-        // Load history when widget mounts and when range changes (RRD only for non-zero ranges)
-        if (selectedRange > 0) {
-            fetchExtendedHistory(selectedRange).catch(() => {
-                // If RRD not available, we will fallback to live history
-            });
+        if (source === 'freebox' && !freeboxAvailable && unifiAvailable) {
+            setSource('unifi');
+        } else if (source === 'unifi' && !unifiAvailable && freeboxAvailable) {
+            setSource('freebox');
         }
-    }, [fetchExtendedHistory, selectedRange]);
+    }, [freeboxAvailable, unifiAvailable, source]);
 
-    // Keep 1h / 6h / 24h / 7j ranges updated over time (RRD is a rolling window)
-    // This ensures that even en mode historique the graph continues to move, like live mode.
+    // Freebox: load history when widget mounts and when range changes
+    useEffect(() => {
+        if (source === 'freebox' && selectedRange > 0) {
+            fetchExtendedHistory(selectedRange).catch(() => {});
+        }
+    }, [fetchExtendedHistory, selectedRange, source]);
+
+    // Freebox: keep history ranges updated over time
     usePolling(() => {
         if (selectedRange > 0) {
-            fetchExtendedHistory(selectedRange).catch(() => {
-                // If RRD not available, we will fallback to live history
-            });
+            fetchExtendedHistory(selectedRange).catch(() => {});
         }
     }, {
-        enabled: selectedRange > 0,
+        enabled: source === 'freebox' && selectedRange > 0,
         interval: POLLING_INTERVALS.system
     });
 
-    const chartData =
+    // UniFi: fetch bandwidth history
+    const fetchUnifiData = async () => {
+        try {
+            const response = await api.get<BandwidthPoint[]>(`/api/plugins/unifi/bandwidth-history?range=${selectedRange}`);
+            if (response.success && response.result) {
+                setUnifiData(response.result);
+            }
+        } catch {
+            // ignore
+        }
+    };
+
+    useEffect(() => {
+        if (source === 'unifi') {
+            fetchUnifiData();
+        }
+    }, [source, selectedRange]);
+
+    usePolling(fetchUnifiData, {
+        enabled: source === 'unifi',
+        interval: POLLING_INTERVALS.system
+    });
+
+    const freeboxChartData =
         selectedRange === 0
             ? history
             : (extendedHistory.length > 0 ? extendedHistory : history);
 
+    const chartData = source === 'unifi' ? unifiData : freeboxChartData;
+
+    const showSourceToggle = freeboxAvailable && unifiAvailable;
+
+    const cardTitle = (
+        <span className="flex items-center gap-2">
+            <span>{source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}</span>
+            {showSourceToggle && (
+                <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px] font-normal">
+                    <button
+                        type="button"
+                        className={`px-2 py-0.5 rounded-full ${
+                            source === 'freebox' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-gray-200'
+                        }`}
+                        onClick={() => setSource('freebox')}
+                    >
+                        Freebox
+                    </button>
+                    <button
+                        type="button"
+                        className={`px-2 py-0.5 rounded-full ${
+                            source === 'unifi' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                        }`}
+                        onClick={() => setSource('unifi')}
+                    >
+                        UniFi
+                    </button>
+                </span>
+            )}
+        </span>
+    );
+
     return (
         <Card
-            title={t('dashboard.bandwidth.title')}
+            title={cardTitle}
             actions={
-                status && (
-                    <span className="flex items-center gap-3 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                            <ArrowDown size={13} className="text-blue-400" />
-                            <span className="font-medium text-gray-300">{formatSpeed(status.rate_down)}</span>
+                <span className="flex items-center gap-3">
+{source === 'freebox' && status && (
+                        <span className="flex items-center gap-3 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                                <ArrowDown size={13} className="text-blue-400" />
+                                <span className="font-medium text-gray-300">{formatSpeed(status.rate_down)}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <ArrowUp size={13} className="text-green-400" />
+                                <span className="font-medium text-gray-300">{formatSpeed(status.rate_up)}</span>
+                            </span>
                         </span>
-                        <span className="flex items-center gap-1">
-                            <ArrowUp size={13} className="text-green-400" />
-                            <span className="font-medium text-gray-300">{formatSpeed(status.rate_up)}</span>
-                        </span>
-                    </span>
-                )
+                    )}
+                    {source === 'unifi' && unifiData.length > 0 && (() => {
+                        const last = unifiData[unifiData.length - 1];
+                        return (
+                            <span className="flex items-center gap-3 text-xs text-gray-500">
+                                <span className="flex items-center gap-1">
+                                    <ArrowDown size={13} className="text-blue-400" />
+                                    <span className="font-medium text-gray-300">{formatSpeed(last.download * 1024)}</span>
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <ArrowUp size={13} className="text-green-400" />
+                                    <span className="font-medium text-gray-300">{formatSpeed(last.upload * 1024)}</span>
+                                </span>
+                            </span>
+                        );
+                    })()}
+                </span>
             }
         >
             <div className="flex items-center justify-between mb-3 text-xs text-gray-500">
-                <span className="flex items-center gap-3">
-                    <span>
-                        {t('dashboard.bandwidth.period')}&nbsp;
-                        <span className="text-gray-300">
-                            {selectedRange === 0 && t('dashboard.bandwidth.realtime')}
-                            {selectedRange === 3600 && '1h'}
-                            {selectedRange === 21600 && '6h'}
-                            {selectedRange === 86400 && '24h'}
-                            {selectedRange === 604800 && '7j'}
+                {source === 'freebox' ? (
+                    <>
+                        <span className="flex items-center gap-3">
+                            <span>
+                                {t('dashboard.bandwidth.period')}&nbsp;
+                                <span className="text-gray-300">
+                                    {selectedRange === 0 && t('dashboard.bandwidth.realtime')}
+                                    {selectedRange === 3600 && '1h'}
+                                    {selectedRange === 21600 && '6h'}
+                                    {selectedRange === 86400 && '24h'}
+                                    {selectedRange === 604800 && '7j'}
+                                </span>
+                            </span>
+                            <span className="hidden sm:inline text-[11px] text-gray-500">
+                                {t('dashboard.bandwidth.scale')}&nbsp;
+                                <span className="text-gray-300">
+                                    {selectedRange === 0
+                                        ? t('dashboard.bandwidth.scaleRealtime')
+                                        : (extendedHistory.length > 0 ? t('dashboard.bandwidth.scaleHistory') : t('dashboard.bandwidth.scaleRealtime'))}
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                    <span className="hidden sm:inline text-[11px] text-gray-500">
-                        {t('dashboard.bandwidth.scale')}&nbsp;
-                        <span className="text-gray-300">
-                            {selectedRange === 0
-                                ? t('dashboard.bandwidth.scaleRealtime')
-                                : (extendedHistory.length > 0 ? t('dashboard.bandwidth.scaleHistory') : t('dashboard.bandwidth.scaleRealtime'))}
-                        </span>
-                    </span>
-                </span>
-                <div className="flex items-center gap-2">
-                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(0)}
-                        >
-                            {t('dashboard.bandwidth.live')}
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 3600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(3600)}
-                        >
-                            1h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 21600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(21600)}
-                        >
-                            6h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 86400 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(86400)}
-                        >
-                            24h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 604800 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(604800)}
-                        >
-                            7j
-                        </button>
+                        <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                                <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                        selectedRange === 0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(0)}
+                                >
+                                    {t('dashboard.bandwidth.live')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                        selectedRange === 3600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(3600)}
+                                >
+                                    1h
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                        selectedRange === 21600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(21600)}
+                                >
+                                    6h
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                        selectedRange === 86400 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(86400)}
+                                >
+                                    24h
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                        selectedRange === 604800 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    onClick={() => setSelectedRange(604800)}
+                                >
+                                    7j
+                                </button>
+                            </div>
+                    </>
+                ) : (
+                    // UniFi: same range selector
+                    <div className="flex items-center justify-end w-full">
+                        <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                            <button
+                                type="button"
+                                className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    selectedRange === 0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                                onClick={() => setSelectedRange(0)}
+                            >
+                                {t('dashboard.bandwidth.live')}
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    selectedRange === 3600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                                onClick={() => setSelectedRange(3600)}
+                            >
+                                1h
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    selectedRange === 21600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                                onClick={() => setSelectedRange(21600)}
+                            >
+                                6h
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    selectedRange === 86400 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                                onClick={() => setSelectedRange(86400)}
+                            >
+                                24h
+                            </button>
+                            <button
+                                type="button"
+                                className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    selectedRange === 604800 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                }`}
+                                onClick={() => setSelectedRange(604800)}
+                            >
+                                7j
+                            </button>
+                        </div>
                     </div>
-                    <button
-                        type="button"
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[#1b1b1b] border border-gray-800 text-gray-300 hover:bg-[#252525] hover:text-white"
-                        onClick={() => {
-                            // Manual trigger to refresh Freebox auth + reload history
-                            login().then(() => {
-                                if (selectedRange > 0) {
-                                    fetchExtendedHistory(selectedRange).catch(() => {});
-                                }
-                            }).catch(() => {
-                                if (selectedRange > 0) {
-                                    fetchExtendedHistory(selectedRange).catch(() => {});
-                                }
-                            });
-                        }}
-                        title={isLoggedIn ? t('dashboard.bandwidth.refreshHistory') : t('dashboard.bandwidth.reconnectFreebox')}
-                    >
-                        <span
-                            className={`w-2 h-2 rounded-full ${
-                                isLoggedIn ? 'bg-emerald-400' : 'bg-red-500'
-                            }`}
-                        />
-                        <span>{t('dashboard.bandwidth.auth')}</span>
-                    </button>
-                </div>
+                )}
             </div>
             <div className="w-full" style={{ height: '256px', minHeight: '256px' }}>
                 {chartData.length > 0 ? (
@@ -197,24 +317,24 @@ export const BandwidthHistoryWidget: React.FC = () => {
                             />
                             <Legend />
                             <Area
-                                type={selectedRange === 0 ? "linear" : "monotone"}
+                                type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="download"
                                 stackId="1"
                                 stroke={COLORS.blue}
                                 fill={COLORS.blue}
                                 fillOpacity={0.3}
                                 name={t('system.download')}
-                                isAnimationActive={selectedRange !== 0}
+                                isAnimationActive={source === 'unifi' || selectedRange !== 0}
                             />
                             <Area
-                                type={selectedRange === 0 ? "linear" : "monotone"}
+                                type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="upload"
                                 stackId="2"
                                 stroke={COLORS.green}
                                 fill={COLORS.green}
                                 fillOpacity={0.3}
                                 name={t('system.upload')}
-                                isAnimationActive={selectedRange !== 0}
+                                isAnimationActive={source === 'unifi' || selectedRange !== 0}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -229,4 +349,3 @@ export const BandwidthHistoryWidget: React.FC = () => {
         </Card>
     );
 };
-

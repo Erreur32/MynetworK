@@ -162,9 +162,9 @@ export const Footer: React.FC<FooterProps> = ({
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 bg-theme-footer backdrop-blur-md border-t border-theme p-3 z-50" style={{ backdropFilter: 'var(--backdrop-blur)' }}>
-      <div className="flex items-center justify-between w-full px-3">
+      <div className="relative flex items-center w-full px-3">
         {/* Navigation tabs + actions (left) */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1">
           {/* On Freebox pages: Home first, then Search + Admin icons, then remaining tabs */}
           {['freebox', 'tv', 'phone', 'files', 'vms', 'analytics'].includes(currentPage) ? (
             <>
@@ -300,8 +300,50 @@ export const Footer: React.FC<FooterProps> = ({
           )}
         </div>
 
-        {/* Actions (quick plugins, UniFi summary) */}
-        <div className="flex items-center gap-2 pl-4">
+        {/* Center: UniFi summary badge — absolutely centered in footer */}
+        {currentPage === 'unifi' && pluginStats && pluginStats['unifi'] && (() => {
+          const stats: any = pluginStats['unifi'];
+          const devices = Array.isArray(stats.devices) ? stats.devices : [];
+          const nonClientDevices = devices.filter((d: any) => (d.type || '').toLowerCase() !== 'client');
+          const apsOnline = nonClientDevices.filter((d: any) => {
+            const type = (d.type || '').toLowerCase();
+            return (type === 'uap' || type.includes('uap') || type === 'ap' || type.includes('ap')) && d.active !== false;
+          }).length;
+          const switchesOnline = nonClientDevices.filter((d: any) => {
+            const type = (d.type || '').toLowerCase();
+            return type.startsWith('usw') && d.active !== false;
+          }).length;
+          const anyUpgradable = nonClientDevices.some((d: any) => {
+            const hasUpgradeToFirmware = !!d.upgrade_to_firmware &&
+                                          d.upgrade_to_firmware !== d.version &&
+                                          d.upgrade_to_firmware !== d.firmware_version;
+            return d.upgradable === true || hasUpgradeToFirmware;
+          });
+
+          return (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg border border-theme bg-theme-secondary/60 absolute left-1/2 -translate-x-1/2 pointer-events-none">
+              {anyUpgradable && (
+                <span className="flex items-center gap-1 text-xs text-amber-300">
+                  <AlertTriangle size={14} className="text-amber-400" />
+                  <span>{t('nav.updateAvailable')}</span>
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-xs text-sky-300">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-3.5 h-3.5 text-sky-400">
+                  <path fill="currentColor" d="M12 18a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3m0-3.5a4.5 4.5 0 0 0-3.536 1.682a.75.75 0 1 0 1.156.948A3 3 0 0 1 12 15.5a3 3 0 0 1 2.38 1.63a.75.75 0 1 0 1.34-.66A4.5 4.5 0 0 0 12 14.5m0-4a8.5 8.5 0 0 0-6.47 3.004a.75.75 0 1 0 1.14.974A7 7 0 0 1 12 11.5a7 7 0 0 1 5.33 2.978a.75.75 0 1 0 1.2-.9A8.5 8.5 0 0 0 12 10.5m0-4a12.5 12.5 0 0 0-9.52 4.326a.75.75 0 1 0 1.116.996A11 11 0 0 1 12 7.5c3.27 0 6.25 1.422 8.404 3.822a.75.75 0 1 0 1.192-.92A12.5 12.5 0 0 0 12 6.5" />
+                </svg>
+                <span>{apsOnline} AP</span>
+              </span>
+              <span className="flex items-center gap-1 text-xs text-emerald-300">
+                <Server size={14} />
+                <span>{switchesOnline} switches</span>
+              </span>
+            </div>
+          );
+        })()}
+
+        {/* Actions (quick plugins) — right side */}
+        <div className="flex items-center gap-2 ml-auto flex-none">
           {/* Plugin buttons - always visible on the right for each active plugin, with custom SVG icons */}
           {(() => {
             const freeboxPlugin = plugins.find(p => p.id === 'freebox');
@@ -319,7 +361,7 @@ export const Footer: React.FC<FooterProps> = ({
             if (!showFreeboxButton && !showUniFiButton && !showScanReseauButton) {
               return null;
             }
-            
+
             return (
               <>
                 {showFreeboxButton && (
@@ -373,56 +415,6 @@ export const Footer: React.FC<FooterProps> = ({
                   </button>
                 )}
 
-                {/* UniFi summary badge in footer when on UniFi page */}
-                {currentPage === 'unifi' && pluginStats && pluginStats['unifi'] && (() => {
-                  const stats: any = pluginStats['unifi'];
-                  const devices = Array.isArray(stats.devices) ? stats.devices : [];
-                  const nonClientDevices = devices.filter((d: any) => (d.type || '').toLowerCase() !== 'client');
-                  const apsOnline = nonClientDevices.filter((d: any) => {
-                    const type = (d.type || '').toLowerCase();
-                    return (type === 'uap' || type.includes('uap') || type === 'ap' || type.includes('ap')) && d.active !== false;
-                  }).length;
-                  const switchesOnline = nonClientDevices.filter((d: any) => {
-                    const type = (d.type || '').toLowerCase();
-                    return type.startsWith('usw') && d.active !== false;
-                  }).length;
-                  // More precise check: upgradable must be explicitly true
-                  // OR upgrade_to_firmware must exist and be different from current version
-                  const anyUpgradable = nonClientDevices.some((d: any) => {
-                    const hasUpgradeToFirmware = !!d.upgrade_to_firmware && 
-                                                  d.upgrade_to_firmware !== d.version &&
-                                                  d.upgrade_to_firmware !== d.firmware_version;
-                    return d.upgradable === true || hasUpgradeToFirmware;
-                  });
-
-                  return (
-                    <div className="hidden sm:flex items-center gap-2 ml-2 px-3 py-2 rounded-lg border border-theme bg-theme-secondary/60">
-                      {anyUpgradable && (
-                        <span className="flex items-center gap-1 text-xs text-amber-300">
-                          <AlertTriangle size={14} className="text-amber-400" />
-                          <span>{t('nav.updateAvailable')}</span>
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1 text-xs text-sky-300">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          className="w-3.5 h-3.5 text-sky-400"
-                        >
-                          <path
-                            fill="currentColor"
-                            d="M12 18a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3m0-3.5a4.5 4.5 0 0 0-3.536 1.682a.75.75 0 1 0 1.156.948A3 3 0 0 1 12 15.5a3 3 0 0 1 2.38 1.63a.75.75 0 1 0 1.34-.66A4.5 4.5 0 0 0 12 14.5m0-4a8.5 8.5 0 0 0-6.47 3.004a.75.75 0 1 0 1.14.974A7 7 0 0 1 12 11.5a7 7 0 0 1 5.33 2.978a.75.75 0 1 0 1.2-.9A8.5 8.5 0 0 0 12 10.5m0-4a12.5 12.5 0 0 0-9.52 4.326a.75.75 0 1 0 1.116.996A11 11 0 0 1 12 7.5c3.27 0 6.25 1.422 8.404 3.822a.75.75 0 1 0 1.192-.92A12.5 12.5 0 0 0 12 6.5"
-                          />
-                        </svg>
-                        <span>{apsOnline} AP</span>
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-emerald-300">
-                        <Server size={14} />
-                        <span>{switchesOnline} switches</span>
-                      </span>
-                    </div>
-                  );
-                })()}
               </>
             );
           })()}

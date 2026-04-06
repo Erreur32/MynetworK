@@ -12,6 +12,8 @@ interface UpdateInfo {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  releaseTitle?: string;
+  releaseNotes?: string;
   error?: string;
   /** ISO date of last check (from backend 12h cache) */
   lastCheckAt?: string;

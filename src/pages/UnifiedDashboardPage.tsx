@@ -66,7 +66,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
             {/* Colonnes 2-3-4 - bande passante en haut, cartes Freebox / UniFi + évènements réseau en dessous */}
             <div className="md:col-span-1 xl:col-span-3 flex flex-col gap-6">
                 {/* Bande passante (ligne du haut, large) - uniquement si Freebox est actif et connecté (même condition que la carte Freebox) */}
-                {hasFreebox && <BandwidthHistoryWidget />}
+                {(hasFreebox || hasUniFi) && <BandwidthHistoryWidget freeboxAvailable={hasFreebox} unifiAvailable={hasUniFi} />}
 
                 {/* Message si aucun plugin configuré */}
                 {!hasAnyPlugin && (

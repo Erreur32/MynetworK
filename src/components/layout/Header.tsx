@@ -59,16 +59,29 @@ const UpdateBanner: React.FC = () => {
   return (
     <div
       role="alert"
-      className="flex items-center justify-between gap-4 w-full px-4 py-3 bg-amber-500/20 border-b-2 border-amber-500 text-amber-100 shadow-lg"
-      style={{ minHeight: '48px' }}
+      className="flex items-center justify-between gap-4 w-full px-4 py-2.5 bg-amber-500/20 border-b-2 border-amber-500 text-amber-100 shadow-lg"
     >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <Package size={20} className="text-amber-400 flex-shrink-0" />
-        <span className="font-semibold text-amber-100">
-          {t('admin.updateCheck.newVersionAvailable')} — v{updateInfo?.latestVersion}
-        </span>
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <Package size={18} className="text-amber-400 flex-shrink-0" />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-amber-100 whitespace-nowrap">
+              {t('admin.updateCheck.newVersionAvailable')} — v{updateInfo?.latestVersion}
+            </span>
+            {updateInfo?.releaseTitle && (
+              <span className="text-amber-200/80 text-sm truncate max-w-xs hidden md:block" title={updateInfo.releaseTitle}>
+                · {updateInfo.releaseTitle}
+              </span>
+            )}
+          </div>
+          {updateInfo?.releaseTitle && (
+            <div className="text-amber-200/70 text-xs mt-0.5 block md:hidden truncate">
+              {updateInfo.releaseTitle}
+            </div>
+          )}
+        </div>
       </div>
-      <code className="hidden sm:block text-xs text-amber-200/90 bg-black/20 px-2 py-1 rounded font-mono">
+      <code className="hidden lg:block text-xs text-amber-200/90 bg-black/20 px-2 py-1 rounded font-mono flex-shrink-0">
         docker-compose pull && docker-compose up -d
       </code>
       <button
@@ -77,7 +90,7 @@ const UpdateBanner: React.FC = () => {
         className="p-1.5 rounded-lg hover:bg-amber-500/30 text-amber-200 transition-colors flex-shrink-0"
         aria-label={t('common.close')}
       >
-        <X size={20} />
+        <X size={18} />
       </button>
     </div>
   );
@@ -899,7 +912,8 @@ export const Header: React.FC<HeaderProps> = ({
             const ssidCounts = new Map<string, number>();
             for (const c of clients) {
               const rawSsid = (c.ssid || c.essid || '') as string;
-              const ssid = rawSsid.trim() || 'SSID inconnu';
+              const ssid = rawSsid.trim();
+              if (!ssid) continue; // skip clients with no SSID (wired-on-wireless-bridge, partial data)
               ssidCounts.set(ssid, (ssidCounts.get(ssid) || 0) + 1);
             }
             const ssidEntries = Array.from(ssidCounts.entries()).sort(

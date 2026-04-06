@@ -53,7 +53,7 @@
       "statsUnavailable": "Statistiques non disponibles (voir logs backend)."
     },
     "bandwidth": {
-      "title": "Bande passante Freebox",
+      "title": "Bande passante",
       "period": "Période:",
       "realtime": "Temps réel",
       "scale": "Échelle:",

@@ -111,22 +111,20 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
     // Build WebSocket URL (include base path when under Ingress so WS stays same-origin)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const basePath = getBasePath();
+    const rawBase = getBasePath(); // '' or '/api/hassio_ingress/xxx/'
+    // Ensure the base path always ends with '/' so concatenating 'ws/connection' is valid
+    const basePath = rawBase.endsWith('/') ? rawBase : rawBase ? rawBase + '/' : '/';
+
     let wsUrl: string;
-
-    // In dev mode, check if we're accessing via IP (Docker dev) or localhost (npm dev)
-    // If accessing via IP (not localhost), connect directly to backend port 3668 to avoid Vite proxy issues
     if (import.meta.env.DEV) {
-      const host = window.location.hostname;
-      // If accessing via IP address (not localhost), connect directly to backend
-      const isRemoteAccess = host !== 'localhost' && host !== '127.0.0.1';
-
-      if (isRemoteAccess) {
-        wsUrl = `${protocol}//${host}:3668${basePath}ws/connection`;
-      } else {
-        wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
-      }
+      // In dev, Vite's WS server on port 5173 conflicts with HMR on the same /ws path,
+      // causing "Invalid frame header". Connect directly to the backend port instead.
+      // VITE_BACKEND_PORT is injected by vite.config.ts from SERVER_PORT (Docker host port)
+      // or PORT (local dev port), defaulting to 3003.
+      const backendPort = import.meta.env.VITE_BACKEND_PORT || '3003';
+      wsUrl = `${protocol}//${window.location.hostname}:${backendPort}${basePath}ws/connection`;
     } else {
+      // Production: same origin, reverse proxy forwards /ws/* to backend.
       wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
     }
 

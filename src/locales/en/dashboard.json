@@ -53,7 +53,7 @@
       "statsUnavailable": "Statistics unavailable (see backend logs)."
     },
     "bandwidth": {
-      "title": "Freebox bandwidth",
+      "title": "Bandwidth",
       "period": "Period:",
       "realtime": "Real time",
       "scale": "Scale:",

@@ -48,26 +48,19 @@ class ConnectionWebSocketService {
   /**
    * Initialize the WebSocket server
    */
+  getWss(): WebSocketServer | null { return this.wss; }
+
   init(server: import('http').Server) {
     logger.info('WS', 'Initializing WebSocket server...');
 
     // Configure WebSocket server with options to handle Docker/network issues
-    this.wss = new WebSocketServer({ 
-      server, 
-      path: '/ws/connection',
-      // Disable per-message deflate to avoid compression issues
+    this.wss = new WebSocketServer({
+      noServer: true,
       perMessageDeflate: false,
-      // Ensure client tracking is enabled
       clientTracking: true,
-      // Handle upgrade requests properly
-      verifyClient: (info) => {
-        // Log connection attempt for debugging
-        logger.debug('WS', `Verifying client connection from: ${info.origin || 'unknown'}`);
-        return true; // Accept all connections
-      }
     });
 
-    logger.info('WS', 'WebSocket server created on path /ws/connection');
+    logger.info('WS', 'WebSocket server created (noServer mode, path handled by index.ts)');
 
     this.wss.on('error', (error) => {
       logger.error('WS', 'Server error:', error);

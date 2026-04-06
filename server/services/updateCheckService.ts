@@ -23,6 +23,10 @@ export interface UpdateCheckResult {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  /** First line of the commit message for the latest tag */
+  releaseTitle?: string;
+  /** Full commit message body (minus first line) for the latest tag */
+  releaseNotes?: string;
   error?: string;
 }
 
@@ -38,6 +42,25 @@ function getCurrentVersion(): string {
   } catch (error) {
     logger.error('Updates', 'Error reading package.json');
     return '0.0.0';
+  }
+}
+
+/**
+ * Fetch commit message for a given SHA and split into title + body.
+ */
+async function fetchCommitMessage(sha: string, headers: Record<string, string>): Promise<{ title: string; body: string } | null> {
+  try {
+    const url = `https://api.github.com/repos/erreur32/MynetworK/git/commits/${sha}`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) return null;
+    const data = await response.json() as { message?: string };
+    const message = data.message || '';
+    const lines = message.split('\n');
+    const title = lines[0].trim();
+    const body = lines.slice(1).join('\n').trim();
+    return { title, body };
+  } catch {
+    return null;
   }
 }
 
@@ -136,7 +159,15 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
               latestVersion = tag.version;
               updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
               logger.info('Updates', `Latest validated version: ${latestVersion} (build OK for ${tag.sha.slice(0, 7)})`);
-              return { enabled: true, currentVersion, latestVersion, updateAvailable };
+              const commitMsg = await fetchCommitMessage(tag.sha, headers);
+              return {
+                enabled: true,
+                currentVersion,
+                latestVersion,
+                updateAvailable,
+                releaseTitle: commitMsg?.title,
+                releaseNotes: commitMsg?.body
+              };
             } else {
               logger.info('Updates', `Skipping ${tag.version} — build not validated for ${tag.sha.slice(0, 7)}`);
             }

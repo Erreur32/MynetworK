@@ -23,7 +23,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.28');
+        super('freebox', 'Freebox', '0.7.29');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -335,13 +335,15 @@ export class FreeboxPlugin extends BasePlugin {
                 networkStats.upload = conn.rate_up || 0;
             }
 
-            // Get API version info
+            // Get API version info (also extracts box model name)
             let apiVersion: string | undefined;
+            let boxModelName: string | undefined;
             try {
                 const apiVersionResult = await this.apiService.getApiVersion();
                 if (apiVersionResult.success && apiVersionResult.result) {
                     const versionInfo = apiVersionResult.result as any;
                     apiVersion = versionInfo.api_version || versionInfo.apiVersion;
+                    boxModelName = versionInfo.box_model_name || versionInfo.box_model || versionInfo.device_name;
                 }
             } catch {
                 // Silently fail if API version cannot be retrieved
@@ -383,6 +385,10 @@ export class FreeboxPlugin extends BasePlugin {
                     (systemStats as any).apiVersion = apiVersion;
                 } else if (sys.api_version) {
                     (systemStats as any).apiVersion = sys.api_version;
+                }
+                // Box model name (e.g. "Freebox Ultra", "Freebox Pop")
+                if (boxModelName) {
+                    (systemStats as any).boxModelName = boxModelName;
                 }
             }
 

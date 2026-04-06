@@ -1,9 +1,0 @@
-fix: CVE-2026-4926 and CVE-2026-4923 - path-to-regexp 8.3.0 → 8.4.0 (v0.7.26)
-
-## Security
-- path-to-regexp 8.3.0 → 8.4.0 (CVE-2026-4926, CVE-2026-4923)
-  - Restrict wildcard backtracking for repeated wildcards
-  - Reject large optional route combinations (> 256)
-
-## Version
-- Bump 0.7.25 → 0.7.26

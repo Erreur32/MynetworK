@@ -138,15 +138,15 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
         {/* Who manages the network */}
         <div className="flex justify-between items-center">
           <span className="text-gray-400 text-sm">{t('network.managedBy')}</span>
-          <span className="text-cyan-400 font-medium text-sm">{roleLabel}</span>
+          <span className="text-gray-300 font-medium text-sm">{roleLabel}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-400 text-sm">{t('network.gateway')}</span>
-          <span className="text-cyan-400 font-mono text-sm">{data.gateway}</span>
+          <span className="text-gray-300 font-mono text-sm">{data.gateway}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-400 text-sm">{t('network.subnet')}</span>
-          <span className="text-purple-400 font-mono text-sm">{data.subnet}</span>
+          <span className="text-gray-300 font-mono text-sm">{data.subnet}</span>
         </div>
 
         {/* Freebox section (if present) */}
@@ -155,7 +155,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
             <div className="pt-2 border-t border-gray-800" />
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">{t('network.freeboxLabel')}</span>
-              <span className="text-blue-400 font-mono text-sm">{data.freebox.ip || 'N/A'}</span>
+              <span className="text-gray-300 font-mono text-sm">{data.freebox.ip || 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">{t('network.modeLabel')}</span>
@@ -167,7 +167,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
               <span className="text-gray-400 text-sm">{t('network.dmz')}:</span>
               <span className="text-sm">
                 {data.freebox.dmz?.enabled ? (
-                  <span className="text-amber-400" title={`DMZ → ${data.freebox.dmz.ip || ''}`}>
+                  <span className="text-gray-300" title={`DMZ → ${data.freebox.dmz.ip || ''}`}>
                     {t('network.dmzActive')} {data.freebox.dmz.ip || '?'}
                   </span>
                 ) : (
@@ -184,7 +184,7 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
             <div className="pt-2 border-t border-gray-800" />
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">{t('network.unifiGateway')}</span>
-              <span className="text-indigo-400 font-mono text-sm">{data.unifi.gatewayIp}</span>
+              <span className="text-gray-300 font-mono text-sm">{data.unifi.gatewayIp}</span>
             </div>
             {data.unifi.gatewayName && data.unifi.gatewayName !== data.unifi.gatewayIp && (
               <div className="flex justify-between items-center">
@@ -195,54 +195,75 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           </>
         )}
 
-        {/* DHCP servers - Detailed section */}
+        {/* DHCP - consolidated section */}
         <div className="pt-2 border-t border-gray-800" />
-        <div className="text-gray-400 text-xs font-semibold mb-1">{t('network.dhcpLabel')}</div>
-        {data.dhcpServers.map((entry) => (
-          <div key={entry.source} className="flex justify-between items-center">
-            <span className="text-gray-400 text-sm capitalize">{entry.source}:</span>
-            <span
-              className={`text-sm font-medium ${entry.active ? 'text-green-400' : 'text-gray-500'}`}
-              title={entry.detail}
-            >
-              {entry.active ? t('network.active') : t('network.inactive')}
-              {entry.detail && entry.detail !== 'Actif' && entry.detail !== 'Inactif' && (
-                <span className="text-gray-500 font-normal ml-1">({entry.detail})</span>
-              )}
-            </span>
-          </div>
-        ))}
-
-        {/* DHCP UniFi - Detailed information */}
-        {data.unifi?.gatewayIp && data.unifi?.dhcpEnabled && (
-          <>
-            <div className="pt-2 border-t border-gray-800 space-y-2">
-              <div className="text-gray-400 text-xs font-semibold mb-2">{t('network.dhcpUnifi')}</div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">{t('network.statusLabel')}</span>
-                <span className="text-green-400 font-medium text-sm">{t('network.active')}</span>
+        <div className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">{t('network.dhcpLabel')}</div>
+        <div className="space-y-2">
+          {/* Freebox DHCP */}
+          {data.freebox && (
+            <div className="bg-[#1a1a1a] rounded-lg p-2.5 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-medium">Freebox</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                  data.freebox.dhcp?.enabled ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'
+                }`}>
+                  {data.freebox.dhcp?.enabled ? t('network.active') : t('network.inactive')}
+                </span>
               </div>
-              {data.unifi.clientsCount != null && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.clientsConnected')}</span>
-                  <span className="text-orange-400 font-mono text-sm font-semibold">{data.unifi.clientsCount}</span>
-                </div>
-              )}
-              {data.unifi.dhcpRange && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.ipRange')}</span>
-                  <span className="text-gray-300 font-mono text-sm">{data.unifi.dhcpRange}</span>
-                </div>
-              )}
-              {data.unifi.gatewayIp && (
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.gateway')}</span>
-                  <span className="text-indigo-400 font-mono text-sm">{data.unifi.gatewayIp}</span>
-                </div>
+              {data.freebox.dhcp?.enabled && (
+                <>
+                  {data.freebox.dhcp.usedIps != null && data.freebox.dhcp.totalIps != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">{t('network.ipv4Used')}</span>
+                      <span className="text-gray-300 font-mono">{data.freebox.dhcp.usedIps} / {data.freebox.dhcp.totalIps}</span>
+                    </div>
+                  )}
+                  {data.freebox.dhcp.range && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">{t('network.ipRange')}</span>
+                      <span className="text-gray-300 font-mono">{data.freebox.dhcp.range}</span>
+                    </div>
+                  )}
+                  {data.freebox.dhcp.usagePercentage != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">{t('network.usage')}</span>
+                      <span className="text-gray-300 font-mono">{data.freebox.dhcp.usagePercentage}%</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
-          </>
-        )}
+          )}
+          {/* UniFi DHCP */}
+          {data.unifi?.gatewayIp && (
+            <div className="bg-[#1a1a1a] rounded-lg p-2.5 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 font-medium">UniFi</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                  data.unifi.dhcpEnabled ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'
+                }`}>
+                  {data.unifi.dhcpEnabled ? t('network.active') : t('network.inactive')}
+                </span>
+              </div>
+              {data.unifi.dhcpEnabled && (
+                <>
+                  {data.unifi.clientsCount != null && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">{t('network.clientsConnected')}</span>
+                      <span className="text-gray-300 font-mono">{data.unifi.clientsCount}</span>
+                    </div>
+                  )}
+                  {data.unifi.dhcpRange && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">{t('network.ipRange')}</span>
+                      <span className="text-gray-300 font-mono">{data.unifi.dhcpRange}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* NAT rules - Freebox */}
         {data.freebox?.natRules && data.freebox.natRules.length > 0 && (
@@ -276,35 +297,6 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           </>
         )}
 
-        {/* Gestionnaire d'IPs - Freebox (quand le réseau est géré par Freebox) */}
-        {data.role === 'freebox' &&
-          data.freebox?.dhcp?.enabled &&
-          data.freebox.dhcp.totalIps != null &&
-          data.freebox.dhcp.usedIps != null && (
-            <>
-              <div className="pt-2 border-t border-gray-800 space-y-2">
-                <div className="text-gray-400 text-xs font-semibold mb-2">{t('network.ipManagerFreebox')}</div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.ipv4Free')}</span>
-                  <span className="text-emerald-400 font-mono text-sm font-semibold">
-                    {data.freebox.dhcp.freeIps ?? '-'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.ipv4Used')}</span>
-                  <span className="text-orange-400 font-mono text-sm font-semibold">
-                    {data.freebox.dhcp.usedIps}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-400 text-sm">{t('network.usage')}</span>
-                  <span className="text-yellow-400 font-mono text-sm font-semibold">
-                    {data.freebox.dhcp.usagePercentage ?? 0}%
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
       </div>
     </Card>
   );
