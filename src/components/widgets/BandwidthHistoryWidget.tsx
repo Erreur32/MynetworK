@@ -44,6 +44,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
     const [source, setSource] = useState<BandwidthSource>(freeboxAvailable ? 'freebox' : 'unifi');
     const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);
     const { history: unifiRealtimeHistory, download: unifiRealtimeDl, upload: unifiRealtimeUl, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
+    const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
     // Reset source if availability changes
     useEffect(() => {
@@ -338,7 +339,21 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                     ];
                                 }) as any}
                             />
-                            <Legend />
+                            <Legend
+                                onClick={(e) => {
+                                    const key = e.dataKey as string;
+                                    setHiddenSeries((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(key)) next.delete(key); else next.add(key);
+                                        return next;
+                                    });
+                                }}
+                                formatter={(value, entry) => (
+                                    <span style={{ color: hiddenSeries.has((entry as any).dataKey) ? '#6b7280' : (entry as any).color, cursor: 'pointer', textDecoration: hiddenSeries.has((entry as any).dataKey) ? 'line-through' : 'none' }}>
+                                        {value}
+                                    </span>
+                                )}
+                            />
                             <Area
                                 type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="download"
@@ -348,6 +363,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 fillOpacity={0.3}
                                 name={t('system.download')}
                                 isAnimationActive={source === 'unifi' || selectedRange !== 0}
+                                hide={hiddenSeries.has('download')}
                             />
                             <Area
                                 type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
@@ -358,6 +374,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 fillOpacity={0.3}
                                 name={t('system.upload')}
                                 isAnimationActive={source === 'unifi' || selectedRange !== 0}
+                                hide={hiddenSeries.has('upload')}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
