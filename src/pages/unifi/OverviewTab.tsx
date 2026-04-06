@@ -2,7 +2,6 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Wifi, Server, CheckCircle, XCircle, AlertCircle, Link2 } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
-import { NetworkEventsWidget } from '../../components/widgets/NetworkEventsWidget';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 import { AlertFilter, EventFilter } from './types';
 
@@ -1238,15 +1237,6 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                         )}
                     </Card>
                 </div>
-            )}
-
-            {/* NetworkEventsWidget for events sub-tab */}
-            {overviewSubTab === 'events' && (
-                <NetworkEventsWidget
-                    twoColumns={true}
-                    cardClassName="bg-unifi-card border border-gray-800 rounded-xl"
-                    onNavigateToSearch={onNavigateToSearch}
-                />
             )}
         </>
     );
