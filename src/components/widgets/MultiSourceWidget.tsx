@@ -47,7 +47,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                     </span>
                 </div>
             }
-            className={className}
+            className={`h-[356px] ${className}`}
         >
             {plugins.length === 0 ? (
                 <div className="text-center py-8">
@@ -58,7 +58,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                     </p>
                 </div>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
                     {/* Freebox Permission Warning */}
                     {showFreeboxPermissionWarning && (
                         <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
@@ -85,7 +85,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                         </div>
                     )}
                     <div>
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2">
                             {plugins.map((plugin) => {
                                 const stats = pluginStats[plugin.id] as PluginStats | null | undefined;
                                 const hasStats = !!stats;
@@ -155,7 +155,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                         return (
                                             <div
                                         key={plugin.id}
-                                                className={`rounded border border-gray-800 bg-[#111111] px-3 py-2 text-xs flex flex-col gap-1.5 ${
+                                                className={`rounded border border-gray-800 bg-[#111111] px-2.5 py-1.5 text-xs flex flex-col gap-1 ${
                                                     onPluginClick ? 'cursor-pointer' : ''
                                                 }`}
                                                 onClick={() => onPluginClick?.(plugin.id)}
@@ -223,10 +223,10 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                         </div>
 
                                         {/* Meta-information: API info, stats source and timing */}
-                                        <div className="flex flex-col gap-1 mt-1.5">
+                                        <div className="flex flex-col gap-1 mt-1">
                                             {/* Plugin-specific API information */}
                                             {isActive && (
-                                                <div className="flex flex-col gap-1.5 text-[11px] text-gray-400 mb-1 p-2 bg-gray-900/30 rounded border border-gray-800/50">
+                                                <div className="flex flex-col gap-1 text-[11px] text-gray-400 mb-0.5 px-2 py-1.5 bg-gray-900/30 rounded border border-gray-800/50">
                                                     {plugin.id === 'freebox' && (
                                                         <>
                                                     {(apiVersion || systemStats?.apiVersion) && (
