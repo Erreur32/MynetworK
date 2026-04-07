@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { Cpu, MemoryStick, CheckCircle, XCircle, Activity, Loader2, Database } from 'lucide-react';
+import { RichTooltip } from '../ui/RichTooltip';
 import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
@@ -109,6 +110,7 @@ export const SystemServerWidget: React.FC = () => {
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
     const [networkData, setNetworkData] = useState<SystemNetworkData | null>(null);
     const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
+    const [dbHealth, setDbHealth] = useState<{ status: 'good' | 'warning' | 'critical' } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isNetworkLoading, setIsNetworkLoading] = useState(true);
     const [isDbLoading, setIsDbLoading] = useState(false);
@@ -140,9 +142,15 @@ export const SystemServerWidget: React.FC = () => {
     const fetchDbStats = async () => {
         try {
             setIsDbLoading(true);
-            const response = await api.get<DatabaseStats>('/api/database/stats');
-            if (response.success && response.result) {
-                setDbStats(response.result);
+            const [statsRes, healthRes] = await Promise.all([
+                api.get<DatabaseStats>('/api/database/stats'),
+                api.get<{ status: 'good' | 'warning' | 'critical' }>('/api/database/health'),
+            ]);
+            if (statsRes.success && statsRes.result) {
+                setDbStats(statsRes.result);
+            }
+            if (healthRes.success && healthRes.result) {
+                setDbHealth(healthRes.result);
             }
         } catch (err) {
             // Silently fail - DB stats are optional
@@ -270,27 +278,26 @@ export const SystemServerWidget: React.FC = () => {
                                 <Database size={14} />
                                 <span className="font-semibold text-sm">{t('system.database')}</span>
                             </div>
-                            <div className="text-xs text-purple-300">
-                                {dbStats.journalMode}
-                            </div>
+                            {dbHealth ? (
+                                <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                    dbHealth.status === 'good'
+                                        ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-700/50'
+                                        : dbHealth.status === 'warning'
+                                            ? 'bg-amber-900/40 text-amber-400 border border-amber-700/50'
+                                            : 'bg-red-900/40 text-red-400 border border-red-700/50'
+                                }`}>
+                                    {dbHealth.status === 'good' ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                    {dbHealth.status === 'good' ? 'OK' : dbHealth.status === 'warning' ? 'Warning' : 'Critical'}
+                                </span>
+                            ) : (
+                                <span className="text-xs text-purple-300">{dbStats.journalMode}</span>
+                            )}
                         </div>
                         <div className="space-y-2">
                             <div className="flex items-center justify-between text-xs">
                                 <span className="text-gray-400">{t('system.size')}</span>
                                 <span className="text-gray-300 font-medium">
                                     {formatBytes(dbStats.dbSize)}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-400">{t('system.cache')}</span>
-                                <span className="text-gray-300">
-                                    {formatBytes(Math.abs(dbStats.cacheSize) * 1024)}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-400">{t('system.mode')}</span>
-                                <span className="text-gray-300">
-                                    {dbStats.synchronous === 0 ? 'OFF' : dbStats.synchronous === 1 ? 'NORMAL' : 'FULL'}
                                 </span>
                             </div>
                         </div>
@@ -353,24 +360,43 @@ export const SystemServerWidget: React.FC = () => {
                     </div>
                 )}
 
-                {/* Uptime en pied de carte (même format que les autres cartes) */}
-                {systemInfo.uptime && (
-                    <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
-                        <span>{t('system.uptime')}</span>
-                        <span className="text-gray-300 font-medium">
-                            {(() => {
-                                const uptimeSeconds = systemInfo.uptime;
-                                const hours = Math.floor(uptimeSeconds / 3600);
-                                const days = Math.floor(hours / 24);
-                                if (days > 0) {
-                                    const remainingHours = hours % 24;
-                                    return remainingHours > 0 ? `${days}j ${remainingHours}h` : `${days}j`;
-                                }
-                                return `${hours}h`;
-                            })()}
-                        </span>
-                    </div>
-                )}
+                {/* Uptime en pied de carte */}
+                {systemInfo.uptime && (() => {
+                    const uptimeSeconds = systemInfo.uptime;
+                    const hours = Math.floor(uptimeSeconds / 3600);
+                    const days = Math.floor(hours / 24);
+                    const label = days > 0
+                        ? (hours % 24 > 0 ? `${days}j ${hours % 24}h` : `${days}j`)
+                        : `${hours}h`;
+                    const badgeColor = days >= 30
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : days >= 7 ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : days >= 1 ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : 'bg-red-500/20 text-red-400 border-red-500/30';
+                    return (
+                        <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
+                            <span className="flex items-center gap-1">
+                                {t('system.uptime')}
+                                <RichTooltip
+                                    title={t('system.uptime')}
+                                    description={t('system.uptimeTooltipDesc')}
+                                    rows={[
+                                        { label: '30+ ' + t('system.uptimeDays'), value: t('system.uptimeStable'), color: 'emerald', dot: true },
+                                        { label: '7-30 ' + t('system.uptimeDays'), value: t('system.uptimeNormal'), color: 'blue', dot: true },
+                                        { label: '1-7 ' + t('system.uptimeDays'), value: t('system.uptimeRecent'), color: 'amber', dot: true },
+                                        { label: '< 24h', value: t('system.uptimeJustStarted'), color: 'red', dot: true },
+                                    ]}
+                                    position="top"
+                                    width={220}
+                                    iconSize={11}
+                                />
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${badgeColor}`}>
+                                {label}
+                            </span>
+                        </div>
+                    );
+                })()}
             </div>
         </Card>
     );

@@ -11,11 +11,18 @@
     "size": "Taille",
     "cache": "Cache",
     "mode": "Mode",
+    "health": "Santé",
     "hostname": "Hostname",
     "platform": "Platform",
     "networkTraffic": "Trafic Réseau",
     "uptime": "Uptime",
     "uptimeNow": "Maintenant",
-    "uptimeDaysData": "{{count}}j de données"
+    "uptimeDaysData": "{{count}}j de données",
+    "uptimeTooltipDesc": "La couleur du badge indique la durée de fonctionnement",
+    "uptimeDays": "jours",
+    "uptimeStable": "Stable",
+    "uptimeNormal": "Normal",
+    "uptimeRecent": "Redémarrage récent",
+    "uptimeJustStarted": "Démarré récemment"
   }
 }

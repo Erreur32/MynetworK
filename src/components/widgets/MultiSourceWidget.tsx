@@ -196,12 +196,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                                             <CheckCircle size={10} />
                                                             {t('dashboard.pluginsState.statusActive')}
                                                         </span>
-                                                        {hasStats ? (
-                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-900/30 border border-blue-700 text-blue-400">
-                                                                <CheckCircle size={10} />
-                                                                {t('dashboard.pluginsState.statusOk')}
-                                                            </span>
-                                                        ) : (
+                                                        {!hasStats && (
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700 text-yellow-400">
                                                                 <AlertCircle size={10} />
                                                                 {t('dashboard.pluginsState.statusUnavailable')}

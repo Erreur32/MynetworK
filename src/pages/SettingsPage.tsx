@@ -273,7 +273,7 @@ const DatabaseManagementSection: React.FC = () => {
   };
 
   const handleVacuum = async () => {
-    if (!confirm('Exécuter VACUUM ? La base sera compactée et l\'espace libéré. Cela peut prendre quelques secondes.')) return;
+    if (!confirm(t('admin.database.confirmVacuum'))) return;
     setIsVacuuming(true);
     setMessage(null);
     try {
@@ -284,10 +284,10 @@ const DatabaseManagementSection: React.FC = () => {
         await loadDbStats();
         setTimeout(() => setMessage(null), 5000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du VACUUM' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.vacuumError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors du VACUUM' });
+      setMessage({ type: 'error', text: t('admin.database.vacuumError') });
     } finally {
       setIsVacuuming(false);
     }
@@ -300,17 +300,17 @@ const DatabaseManagementSection: React.FC = () => {
       const response = await api.post<{ ok: boolean; messages: string[] }>('/api/database/integrity-check');
       if (response.success && response.result) {
         if (response.result.ok) {
-          setMessage({ type: 'success', text: 'Intégrité OK — aucun problème détecté' });
+          setMessage({ type: 'success', text: t('admin.database.integrityOk') });
         } else {
-          setMessage({ type: 'error', text: `Problèmes détectés : ${response.result.messages.join(', ')}` });
+          setMessage({ type: 'error', text: t('admin.database.integrityFailed', { messages: response.result.messages.join(', ') }) });
         }
         await loadHealth();
         setTimeout(() => setMessage(null), 6000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la vérification' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.integrityError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors de la vérification d\'intégrité' });
+      setMessage({ type: 'error', text: t('admin.database.integrityError') });
     } finally {
       setIsCheckingIntegrity(false);
     }
@@ -322,14 +322,14 @@ const DatabaseManagementSection: React.FC = () => {
     try {
       const response = await api.post('/api/database/wal-checkpoint');
       if (response.success) {
-        setMessage({ type: 'success', text: 'Checkpoint WAL effectué avec succès' });
+        setMessage({ type: 'success', text: t('admin.database.walCheckpointSuccess') });
         await loadHealth();
         setTimeout(() => setMessage(null), 3000);
       } else {
-        setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du checkpoint WAL' });
+        setMessage({ type: 'error', text: response.error?.message || t('admin.database.walCheckpointError') });
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erreur lors du checkpoint WAL' });
+      setMessage({ type: 'error', text: t('admin.database.walCheckpointError') });
     } finally {
       setIsCheckpointing(false);
     }
@@ -529,18 +529,18 @@ const DatabaseManagementSection: React.FC = () => {
   };
 
   const dbInnerTabs: { id: DbInnerTab; label: string }[] = [
-    { id: 'health', label: 'Santé & Actions' },
-    { id: 'data', label: 'Données & Rétention' },
-    { id: 'performance', label: 'Performance' },
-    { id: 'vendors', label: 'Vendors IEEE' },
+    { id: 'health', label: t('admin.database.tabHealth') },
+    { id: 'data', label: t('admin.database.tabRetention') },
+    { id: 'performance', label: t('admin.database.tabPerformance') },
+    { id: 'vendors', label: t('admin.database.tabVendors') },
   ];
 
   const healthBadge = health ? (
     health.status === 'good'
-      ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/40 text-emerald-400 border border-emerald-700/50">Bonne</span>
+      ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-900/40 text-emerald-400 border border-emerald-700/50">{t('admin.database.healthBadgeGood')}</span>
       : health.status === 'warning'
-        ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-900/40 text-amber-400 border border-amber-700/50">Avertissement</span>
-        : <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-900/40 text-red-400 border border-red-700/50">Critique</span>
+        ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-900/40 text-amber-400 border border-amber-700/50">{t('admin.database.healthBadgeWarning')}</span>
+        : <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-900/40 text-red-400 border border-red-700/50">{t('admin.database.healthBadgeCritical')}</span>
   ) : null;
 
   return (
@@ -555,7 +555,7 @@ const DatabaseManagementSection: React.FC = () => {
           <AlertCircle size={18} className={health.status === 'critical' ? 'text-red-400 mt-0.5 shrink-0' : 'text-amber-400 mt-0.5 shrink-0'} />
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-semibold mb-1 ${health.status === 'critical' ? 'text-red-300' : 'text-amber-300'}`}>
-              {health.status === 'critical' ? 'Problèmes détectés sur la base de données' : 'Avertissements sur la base de données'}
+              {health.status === 'critical' ? t('admin.database.healthBannerCritical') : t('admin.database.healthBannerWarning')}
             </p>
             <ul className={`text-xs space-y-0.5 ${health.status === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>
               {health.issues.map((issue, i) => <li key={i}>• {issue}</li>)}
@@ -566,7 +566,7 @@ const DatabaseManagementSection: React.FC = () => {
               </ul>
             )}
           </div>
-          <button onClick={() => setDbInnerTab('health')} className={`text-xs shrink-0 underline ${health.status === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>Voir</button>
+          <button onClick={() => setDbInnerTab('health')} className={`text-xs shrink-0 underline ${health.status === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>{t('admin.database.healthBannerSee')}</button>
         </div>
       )}
 
@@ -618,7 +618,7 @@ const DatabaseManagementSection: React.FC = () => {
               }`}>
                 {isLoadingHealth ? (
                   <div className="flex items-center gap-2 text-gray-400">
-                    <Loader2 size={16} className="animate-spin" /> Chargement du rapport de santé...
+                    <Loader2 size={16} className="animate-spin" /> {t('admin.database.healthLoadingReport')}
                   </div>
                 ) : health ? (
                   <div className="space-y-4">
@@ -633,34 +633,34 @@ const DatabaseManagementSection: React.FC = () => {
                       </div>
                       <div>
                         <div className="text-sm font-semibold text-gray-200">
-                          {health.status === 'good' ? 'Base de données saine' : health.status === 'warning' ? 'Avertissements détectés' : 'Problèmes critiques'}
+                          {health.status === 'good' ? t('admin.database.healthStatusGood') : health.status === 'warning' ? t('admin.database.healthStatusWarning') : t('admin.database.healthStatusCritical')}
                         </div>
                         <div className="text-xs text-gray-400">
-                          Fragmentation : {Math.round(health.fragmentationRatio * 100)}% · {health.freePages} pages libres / {health.pageCount} total
+                          {t('admin.database.healthFragmentation', { percent: Math.round(health.fragmentationRatio * 100), freePages: health.freePages, total: health.pageCount })}
                         </div>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">Taille DB</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('admin.database.healthCardDbSize')}</div>
                         <div className="text-sm font-semibold text-gray-200">{formatBytes(health.dbSize)}</div>
                       </div>
                       <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">Fichier WAL</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('admin.database.healthCardWal')}</div>
                         <div className={`text-sm font-semibold ${health.walFileSize > 50 * 1024 * 1024 ? 'text-red-400' : health.walFileSize > 10 * 1024 * 1024 ? 'text-amber-400' : 'text-gray-200'}`}>
-                          {health.walFileSize > 0 ? formatBytes(health.walFileSize) : 'Vide'}
+                          {health.walFileSize > 0 ? formatBytes(health.walFileSize) : t('admin.database.healthCardWalEmpty')}
                         </div>
                       </div>
                       <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">Fragmentation</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('admin.database.healthCardFragmentation')}</div>
                         <div className={`text-sm font-semibold ${health.fragmentationRatio >= 0.2 ? 'text-red-400' : health.fragmentationRatio >= 0.1 ? 'text-amber-400' : 'text-emerald-400'}`}>
                           {Math.round(health.fragmentationRatio * 100)}%
                         </div>
                       </div>
                       <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
-                        <div className="text-xs text-gray-500 mb-1">Intégrité</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('admin.database.healthCardIntegrity')}</div>
                         <div className={`text-sm font-semibold ${health.integrityOk === null ? 'text-gray-400' : health.integrityOk ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {health.integrityOk === null ? 'Non vérifiée' : health.integrityOk ? 'OK' : 'Erreur'}
+                          {health.integrityOk === null ? t('admin.database.healthCardIntegrityUnchecked') : health.integrityOk ? t('admin.database.healthCardIntegrityOk') : t('admin.database.healthCardIntegrityError')}
                         </div>
                         {health.lastIntegrityCheck && (
                           <div className="text-xs text-gray-600 mt-0.5">
@@ -685,96 +685,23 @@ const DatabaseManagementSection: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="text-sm text-gray-500">Impossible de charger le rapport de santé.</div>
+                  <div className="text-sm text-gray-500">{t('admin.database.healthLoadFailed')}</div>
                 )}
               </div>
 
-              {/* Actions — toutes regroupées ici */}
+              {/* Statistiques des données */}
               <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Actions</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* VACUUM */}
-                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={14} className="text-purple-400" />
-                      <span className="text-sm font-medium text-gray-200">VACUUM</span>
-                    </div>
-                    <p className="text-xs text-gray-500">Compacte la base, récupère les pages libres et réduit la fragmentation.</p>
-                    <button onClick={handleVacuum} disabled={isVacuuming}
-                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
-                      {isVacuuming ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                      {isVacuuming ? 'En cours...' : 'Exécuter VACUUM'}
-                    </button>
-                  </div>
-                  {/* Optimiser */}
-                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={14} className="text-blue-400" />
-                      <span className="text-sm font-medium text-gray-200">{t('admin.database.optimizeTitle')}</span>
-                    </div>
-                    <p className="text-xs text-gray-500">{t('admin.database.optimizeDesc')}</p>
-                    <button onClick={handleOptimize} disabled={isOptimizing}
-                      className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
-                      {isOptimizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                      {isOptimizing ? 'En cours...' : t('admin.database.optimizeDb')}
-                    </button>
-                  </div>
-                  {/* Intégrité */}
-                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Shield size={14} className="text-cyan-400" />
-                      <span className="text-sm font-medium text-gray-200">Vérification intégrité</span>
-                    </div>
-                    <p className="text-xs text-gray-500">Vérifie la cohérence interne de la base (PRAGMA integrity_check).</p>
-                    <button onClick={handleIntegrityCheck} disabled={isCheckingIntegrity}
-                      className="w-full px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
-                      {isCheckingIntegrity ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
-                      {isCheckingIntegrity ? 'Vérification...' : 'Vérifier intégrité'}
-                    </button>
-                  </div>
-                  {/* Checkpoint WAL */}
-                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <RefreshCw size={14} className="text-emerald-400" />
-                      <span className="text-sm font-medium text-gray-200">Checkpoint WAL</span>
-                    </div>
-                    <p className="text-xs text-gray-500">Force l'écriture du fichier WAL dans la base principale (recommandé Docker).</p>
-                    <button onClick={handleWalCheckpoint} disabled={isCheckpointing}
-                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
-                      {isCheckpointing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                      {isCheckpointing ? 'En cours...' : 'Checkpoint WAL'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button onClick={() => { loadHealth(); loadDbStats(); }} disabled={isLoadingHealth}
-                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-xs text-gray-300 flex items-center gap-1.5">
-                  {isLoadingHealth ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                  Actualiser
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB: Données & Rétention */}
-          {dbInnerTab === 'data' && (
-            <div className="space-y-6">
-              {/* Stats données scans */}
-              <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Statistiques des données</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('admin.database.dataStatsTitle')}</div>
                 {databaseStats ? (
                   <div className="space-y-3">
-                    {/* Compteurs principaux */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="flex items-center gap-3 p-3 bg-blue-950/30 border border-blue-800/30 rounded-lg">
                         <div className="p-2 bg-blue-900/40 rounded-lg flex-shrink-0">
                           <Database size={16} className="text-blue-400" />
                         </div>
                         <div className="min-w-0">
                           <div className="text-[11px] text-gray-500 truncate">{t('admin.database.scanEntries')}</div>
-                          <div className="text-xl font-bold text-blue-300">{databaseStats.scansCount.toLocaleString()}</div>
+                          <div className="text-lg font-bold text-blue-300">{databaseStats.scansCount.toLocaleString()}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg">
@@ -783,12 +710,9 @@ const DatabaseManagementSection: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                           <div className="text-[11px] text-gray-500 truncate">{t('admin.database.historyEntries')}</div>
-                          <div className="text-xl font-bold text-purple-300">{databaseStats.historyCount.toLocaleString()}</div>
+                          <div className="text-lg font-bold text-purple-300">{databaseStats.historyCount.toLocaleString()}</div>
                         </div>
                       </div>
-                    </div>
-                    {/* Dates */}
-                    <div className="grid grid-cols-2 gap-3">
                       <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
                         <div className="p-2 bg-gray-800 rounded-lg flex-shrink-0">
                           <Calendar size={14} className="text-gray-400" />
@@ -808,7 +732,6 @@ const DatabaseManagementSection: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    {/* Taille */}
                     {sizeEstimate && (
                       <div className="grid grid-cols-3 gap-3">
                         <div className="flex items-center gap-3 p-3 bg-[#1a1a1a] border border-gray-800 rounded-lg">
@@ -848,11 +771,81 @@ const DatabaseManagementSection: React.FC = () => {
                 )}
               </div>
 
-              <div className="border-t border-gray-800" />
+              {/* Actions — toutes regroupées ici */}
+              <div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('admin.database.actionsTitle')}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* VACUUM */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={14} className="text-purple-400" />
+                      <span className="text-sm font-medium text-gray-200">{t('admin.database.actionVacuum')}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('admin.database.actionVacuumDesc')}</p>
+                    <button onClick={handleVacuum} disabled={isVacuuming}
+                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isVacuuming ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      {isVacuuming ? t('admin.database.actionVacuumRunning') : t('admin.database.actionVacuumRun')}
+                    </button>
+                  </div>
+                  {/* Optimiser */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={14} className="text-blue-400" />
+                      <span className="text-sm font-medium text-gray-200">{t('admin.database.optimizeTitle')}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('admin.database.optimizeDesc')}</p>
+                    <button onClick={handleOptimize} disabled={isOptimizing}
+                      className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isOptimizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                      {isOptimizing ? 'En cours...' : t('admin.database.optimizeDb')}
+                    </button>
+                  </div>
+                  {/* Intégrité */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Shield size={14} className="text-cyan-400" />
+                      <span className="text-sm font-medium text-gray-200">{t('admin.database.actionIntegrity')}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('admin.database.actionIntegrityDesc')}</p>
+                    <button onClick={handleIntegrityCheck} disabled={isCheckingIntegrity}
+                      className="w-full px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isCheckingIntegrity ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
+                      {isCheckingIntegrity ? t('admin.database.actionIntegrityRunning') : t('admin.database.actionIntegrityRun')}
+                    </button>
+                  </div>
+                  {/* Checkpoint WAL */}
+                  <div className="p-3 bg-[#1a1a1a] rounded-xl border border-gray-800 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw size={14} className="text-emerald-400" />
+                      <span className="text-sm font-medium text-gray-200">{t('admin.database.actionWalCheckpoint')}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{t('admin.database.actionWalCheckpointDesc')}</p>
+                    <button onClick={handleWalCheckpoint} disabled={isCheckpointing}
+                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center justify-center gap-2">
+                      {isCheckpointing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      {isCheckpointing ? t('admin.database.actionWalCheckpointRunning') : t('admin.database.actionWalCheckpointRun')}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
+              <div className="flex justify-end">
+                <button onClick={() => { loadHealth(); loadDbStats(); }} disabled={isLoadingHealth}
+                  className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-xs text-gray-300 flex items-center gap-1.5">
+                  {isLoadingHealth ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {t('admin.database.refresh')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: Rétention */}
+          {dbInnerTab === 'data' && (
+            <div className="space-y-6">
               {/* Config rétention */}
               <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Rétention automatique</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('admin.database.retentionAutoTitle')}</div>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-0">
                   <div>
                     <SettingRow label={t('admin.database.retentionHistory')} description={t('admin.database.retentionHistoryDesc')}>
@@ -918,7 +911,7 @@ const DatabaseManagementSection: React.FC = () => {
 
               {/* Purge / nettoyage */}
               <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Nettoyage des données</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('admin.database.cleanupTitle')}</div>
                 <div className="p-3 bg-amber-900/20 border border-amber-700/50 rounded-lg mb-3">
                   <p className="text-xs text-amber-400"><strong>⚠️</strong> {t('admin.database.warningIrreversible')}</p>
                 </div>
@@ -949,7 +942,7 @@ const DatabaseManagementSection: React.FC = () => {
                 <button onClick={() => { loadDatabaseStats(); loadSizeEstimate(); }} disabled={isLoading}
                   className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded-lg text-xs text-gray-300 flex items-center gap-1.5">
                   {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                  Actualiser
+                  {t('admin.database.refresh')}
                 </button>
               </div>
             </div>
@@ -1052,6 +1045,7 @@ interface VendorUpdateResponse {
 
 // IEEE OUI Vendor Database Section Component
 const WiresharkVendorSection: React.FC = () => {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -1158,8 +1152,11 @@ const WiresharkVendorSection: React.FC = () => {
       )}
 
       <div className="p-4 bg-[#1a1a1a] rounded-lg border border-gray-800">
-        <p className="text-sm text-gray-400 mb-4">
-          Base de données complète des vendors depuis IEEE OUI. Mise à jour automatique tous les 7 jours depuis standards-oui.ieee.org.
+        <p className="text-sm text-gray-400 mb-2">
+          {t('admin.database.vendorDesc')}
+        </p>
+        <p className="text-xs text-gray-500 mb-4">
+          {t('admin.database.vendorUsage')}
         </p>
 
         {/* Stats */}
@@ -1559,113 +1556,32 @@ const DatabasePerformanceSection: React.FC = () => {
     );
   }
 
+  const syncLabel = dbConfig.synchronous === 0 ? 'OFF' : dbConfig.synchronous === 1 ? 'NORMAL' : 'FULL';
+
   return (
     <div className="space-y-6">
       {message && (
         <div className={`p-3 rounded-lg ${
-          message.type === 'success' 
-            ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400' 
+          message.type === 'success'
+            ? 'bg-emerald-900/20 border border-emerald-700/50 text-emerald-400'
             : 'bg-red-900/20 border border-red-700/50 text-red-400'
         }`}>
           {message.text}
         </div>
       )}
 
+      {/* Editable setting */}
+      <SettingRow
+        label={t('admin.database.perfDocker')}
+        description={t('admin.database.perfDockerDesc')}
+      >
+        <Toggle
+          enabled={dbConfig.optimizeForDocker}
+          onChange={(enabled) => setDbConfig({ ...dbConfig, optimizeForDocker: enabled })}
+        />
+      </SettingRow>
 
-      <div className="grid grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <SettingRow
-            label={t('admin.database.perfDocker')}
-            description={t('admin.database.perfDockerDesc')}
-          >
-            <Toggle
-              enabled={dbConfig.optimizeForDocker}
-              onChange={(enabled) => setDbConfig({ ...dbConfig, optimizeForDocker: enabled })}
-            />
-          </SettingRow>
-
-          <SettingRow
-            label={t('admin.database.walAutoCheckpoint')}
-            description={t('admin.database.walAutoCheckpointDesc')}
-          >
-            <Toggle
-              enabled={dbConfig.walAutoCheckpoint}
-              onChange={(enabled) => setDbConfig({ ...dbConfig, walAutoCheckpoint: enabled })}
-            />
-          </SettingRow>
-
-          <SettingRow
-            label={t('admin.database.walMode')}
-            description={t('admin.database.walModeDesc')}
-          >
-            <select
-              value={dbConfig.walMode}
-              onChange={(e) => setDbConfig({ ...dbConfig, walMode: e.target.value as any })}
-              className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="WAL">{t('admin.database.walRecommended')}</option>
-              <option value="DELETE">DELETE</option>
-              <option value="TRUNCATE">TRUNCATE</option>
-              <option value="PERSIST">PERSIST</option>
-              <option value="MEMORY">MEMORY</option>
-              <option value="OFF">OFF</option>
-            </select>
-          </SettingRow>
-        </div>
-
-        <div className="space-y-6">
-          <SettingRow
-            label={t('admin.database.syncModeLabel')}
-            description={t('admin.database.syncModeDesc')}
-          >
-            <select
-              value={dbConfig.synchronous}
-              onChange={(e) => setDbConfig({ ...dbConfig, synchronous: parseInt(e.target.value) as 0 | 1 | 2 })}
-              className="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-            >
-              <option value="0">{t('admin.database.syncOff')}</option>
-              <option value="1">{t('admin.database.syncNormal')}</option>
-              <option value="2">{t('admin.database.syncFull')}</option>
-            </select>
-          </SettingRow>
-
-          <SettingRow
-            label={t('admin.database.cacheSizeLabel')}
-            description={t('admin.database.cacheSizeDesc')}
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                value={dbConfig.cacheSize}
-                onChange={(e) => setDbConfig({ ...dbConfig, cacheSize: parseInt(e.target.value) || -64000 })}
-                className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-              />
-              <span className="text-sm text-gray-400">
-                ({formatBytes(Math.abs(dbConfig.cacheSize) * 1024)})
-              </span>
-            </div>
-          </SettingRow>
-
-          <SettingRow
-            label={t('admin.database.busyTimeoutLabel')}
-            description={t('admin.database.busyTimeoutDesc')}
-          >
-            <input
-              type="number"
-              min="1000"
-              max="60000"
-              step="1000"
-              value={dbConfig.busyTimeout}
-              onChange={(e) => setDbConfig({ ...dbConfig, busyTimeout: parseInt(e.target.value) || 5000 })}
-              className="w-32 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-blue-500"
-            />
-          </SettingRow>
-
- 
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
+      <div className="flex justify-end">
         <button
           onClick={handleSave}
           disabled={isSaving}
@@ -1674,6 +1590,29 @@ const DatabasePerformanceSection: React.FC = () => {
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
           {t('admin.database.save')}
         </button>
+      </div>
+
+      {/* Read-only SQLite configuration info */}
+      <div className="border-t border-gray-800 pt-4">
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{t('admin.database.sqliteConfig')}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+            <div className="text-[11px] text-gray-500 mb-1">Journal Mode</div>
+            <div className="text-sm font-mono font-medium text-gray-300">{dbConfig.walMode}</div>
+          </div>
+          <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+            <div className="text-[11px] text-gray-500 mb-1">Synchronous</div>
+            <div className="text-sm font-mono font-medium text-gray-300">{syncLabel}</div>
+          </div>
+          <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+            <div className="text-[11px] text-gray-500 mb-1">Cache Size</div>
+            <div className="text-sm font-mono font-medium text-gray-300">{formatBytes(Math.abs(dbConfig.cacheSize) * 1024)}</div>
+          </div>
+          <div className="p-3 bg-[#111] rounded-lg border border-gray-800">
+            <div className="text-[11px] text-gray-500 mb-1">Busy Timeout</div>
+            <div className="text-sm font-mono font-medium text-gray-300">{dbConfig.busyTimeout} ms</div>
+          </div>
+        </div>
       </div>
   </div>
   );

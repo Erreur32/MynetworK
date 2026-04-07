@@ -15,7 +15,7 @@ import {
   NetworkSummaryFreeboxWidget
 } from './components/widgets';
 import { ActionButton, UnsupportedFeature } from './components/ui';
-import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal } from './components/modals';
+import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal, PluginConfigModal } from './components/modals';
 import AnimatedBackground from './components/AnimatedBackground';
 
 // Lazy load pages for code splitting
@@ -202,6 +202,7 @@ const App: React.FC = () => {
   const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
   const [isWifiModalOpen, setIsWifiModalOpen] = useState(false);
   const [isCreateVmModalOpen, setIsCreateVmModalOpen] = useState(false);
+  const [pluginConfigId, setPluginConfigId] = useState<string | null>(null);
   const [wifiModalTab, setWifiModalTab] = useState<'filter' | 'planning' | 'wps'>('filter');
   const [deviceFilter, setDeviceFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [showAllDevices, setShowAllDevices] = useState(false);
@@ -819,19 +820,29 @@ const App: React.FC = () => {
             onNavigateToFreebox={() => setCurrentPage('freebox')}
             onNavigateToUniFi={() => setCurrentPage('unifi')}
             onNavigateToNetworkScan={() => setCurrentPage('network-scan')}
-            onNavigateToPlugins={() => {
-              // Set sessionStorage BEFORE changing page to ensure it's read
-              sessionStorage.setItem('adminMode', 'true');
-              sessionStorage.setItem('adminTab', 'plugins');
-              setCurrentPage('settings');
+            onNavigateToPlugins={(pluginId) => {
+              if (pluginId) {
+                setPluginConfigId(pluginId);
+              } else {
+                sessionStorage.setItem('adminMode', 'true');
+                sessionStorage.setItem('adminTab', 'plugins');
+                setCurrentPage('settings');
+              }
             }}
           />
           </Suspense>
         </main>
+        {pluginConfigId && (
+          <PluginConfigModal
+            isOpen={true}
+            onClose={() => setPluginConfigId(null)}
+            pluginId={pluginConfigId}
+          />
+        )}
       </>
     );
   }
-  
+
   // Render Freebox page if plugin is enabled and active (login will be handled by modal if needed)
   if (currentPage === 'freebox' && isFreeboxPluginActive) {
     return (
@@ -1206,6 +1217,13 @@ const App: React.FC = () => {
           isOpen={isCreateVmModalOpen}
           onClose={() => setIsCreateVmModalOpen(false)}
         />
+        {pluginConfigId && (
+          <PluginConfigModal
+            isOpen={true}
+            onClose={() => setPluginConfigId(null)}
+            pluginId={pluginConfigId}
+          />
+        )}
       </main>
 
       <Footer

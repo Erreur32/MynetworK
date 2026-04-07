@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.45] - 2026-04-07
+
+### ✨ Added
+- **Uptime badges**: color-coded uptime badges on Freebox, UniFi and Server cards (green 30d+, blue 7d+, orange 1d+, red <24h)
+- **Uptime RichTooltip**: structured tooltip explaining the color code on hover
+- **Plugin config modal**: clicking a plugin in "Plugin Status" opens its config modal directly
+- **UniFi historical bandwidth**: 1h/6h/24h/7d periods fetch from UniFi controller report API
+- **Freebox mode badge**: orange badge for bridge mode, green for router in Network Summary
+
+### 🔧 Changed
+- **Database Performance tab**: removed dangerous SQLite options (WAL mode, sync, cache, busy timeout), kept only Docker toggle + read-only config info
+- **Database tabs**: moved data stats to "Health & Actions" tab, renamed "Data & Retention" to "Retention"
+- **Database card (Server System)**: replaced WAL/Cache/Mode with health status badge (OK/Warning/Critical)
+- **Plugin Status**: removed "OK" badge next to "Active" — only shows error badge when stats unavailable
+- **Vendors IEEE**: added clear description explaining MAC address → manufacturer mapping (i18n EN+FR)
+- **i18n**: full internationalization of Database admin tabs (health, actions, buttons, messages) — EN + FR
+
+---
+
 ## [0.7.44] - 2026-04-07
 
 ### ✨ Added

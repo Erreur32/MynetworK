@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { StatusBadge } from '../ui';
+import { RichTooltip } from '../ui/RichTooltip';
 import { usePluginStore } from '../../stores/pluginStore';
 import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
@@ -1518,23 +1519,42 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 </div>
 
                 {/* Uptime unifié en pied de carte (Freebox / UniFi) */}
-                {stats?.system?.uptime && (
-                    <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
-                        <span>{t('system.uptime')}</span>
-                        <span className="text-gray-300 font-medium">
-                            {(() => {
-                                const uptimeSeconds = stats.system.uptime;
-                                const hours = Math.floor(uptimeSeconds / 3600);
-                                const days = Math.floor(hours / 24);
-                                if (days > 0) {
-                                    const remainingHours = hours % 24;
-                                    return remainingHours > 0 ? `${days}j ${remainingHours}h` : `${days}j`;
-                                }
-                                return `${hours}h`;
-                            })()}
-                        </span>
-                    </div>
-                )}
+                {stats?.system?.uptime && (() => {
+                    const uptimeSeconds = stats.system.uptime;
+                    const hours = Math.floor(uptimeSeconds / 3600);
+                    const days = Math.floor(hours / 24);
+                    const label = days > 0
+                        ? (hours % 24 > 0 ? `${days}j ${hours % 24}h` : `${days}j`)
+                        : `${hours}h`;
+                    const badgeColor = days >= 30
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : days >= 7 ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : days >= 1 ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : 'bg-red-500/20 text-red-400 border-red-500/30';
+                    return (
+                        <div className="mt-3 pt-2 border-t border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
+                            <span className="flex items-center gap-1">
+                                {t('system.uptime')}
+                                <RichTooltip
+                                    title={t('system.uptime')}
+                                    description={t('system.uptimeTooltipDesc')}
+                                    rows={[
+                                        { label: '30+ ' + t('system.uptimeDays'), value: t('system.uptimeStable'), color: 'emerald', dot: true },
+                                        { label: '7-30 ' + t('system.uptimeDays'), value: t('system.uptimeNormal'), color: 'blue', dot: true },
+                                        { label: '1-7 ' + t('system.uptimeDays'), value: t('system.uptimeRecent'), color: 'amber', dot: true },
+                                        { label: '< 24h', value: t('system.uptimeJustStarted'), color: 'red', dot: true },
+                                    ]}
+                                    position="top"
+                                    width={220}
+                                    iconSize={11}
+                                />
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${badgeColor}`}>
+                                {label}
+                            </span>
+                        </div>
+                    );
+                })()}
             </div>
         </Card>
     );

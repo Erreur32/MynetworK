@@ -61,7 +61,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
 
             {/* Row 1: Plugin Status (1 col) + Bandwidth chart (3 cols) — aligned heights */}
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                <MultiSourceWidget onPluginClick={() => onNavigateToPlugins?.()} />
+                <MultiSourceWidget onPluginClick={(pluginId) => onNavigateToPlugins?.(pluginId)} />
                 {(hasFreebox || hasUniFi) && (
                     <div className="xl:col-span-3">
                         <BandwidthHistoryWidget freeboxAvailable={hasFreebox} unifiAvailable={hasUniFi} />

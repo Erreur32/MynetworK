@@ -159,7 +159,11 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400 text-sm">{t('network.modeLabel')}</span>
-              <span className="text-gray-300 text-sm">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                data.freebox.mode === 'bridge'
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              }`}>
                 {data.freebox.mode === 'bridge' ? t('network.bridge') : t('network.router')}
               </span>
             </div>
