@@ -29,7 +29,10 @@ export interface RetentionConfig {
     
     // Keep IPs when purging (don't delete IPs, only history and old scan data)
     keepIpsOnPurge: boolean; // Default: true
-    
+
+    // Keep first and last history entry per IP (preserves initial and current state)
+    keepFirstLastPerIp: boolean; // Default: true
+
     // Enable automatic purge
     autoPurgeEnabled: boolean; // Default: true
     
@@ -43,6 +46,7 @@ const DEFAULT_RETENTION_CONFIG: RetentionConfig = {
     offlineRetentionDays: 7,
     latencyMeasurementsRetentionDays: 30,
     keepIpsOnPurge: true, // Keep IPs by default to monitor total network IPs
+    keepFirstLastPerIp: true, // Keep oldest + newest history entry per IP
     autoPurgeEnabled: false, // Disabled by default - must be enabled manually in admin
     purgeSchedule: '0 2 * * *' // Daily at 2 AM
 };
@@ -109,12 +113,18 @@ export function executePurge(): {
         scanRetentionDays: config.scanRetentionDays,
         offlineRetentionDays: config.offlineRetentionDays,
         latencyMeasurementsRetentionDays: config.latencyMeasurementsRetentionDays,
-        keepIpsOnPurge: config.keepIpsOnPurge
+        keepIpsOnPurge: config.keepIpsOnPurge,
+        keepFirstLastPerIp: config.keepFirstLastPerIp
     });
-    
+
     try {
-        // Always purge history entries (doesn't affect IPs)
-        const historyDeleted = NetworkScanRepository.purgeHistory(config.historyRetentionDays);
+        // Purge history: keep first & last per IP, or standard retention-based purge
+        let historyDeleted: number;
+        if (config.keepFirstLastPerIp) {
+            historyDeleted = NetworkScanRepository.purgeHistoryKeepBoundaries();
+        } else {
+            historyDeleted = NetworkScanRepository.purgeHistory(config.historyRetentionDays);
+        }
         
         let scansDeleted = 0;
         let offlineDeleted = 0;

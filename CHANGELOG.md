@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.46] - 2026-04-07
+
+### ✨ Added
+- **Smart history purge**: new "Keep first & last per IP" option — retains oldest and most recent history entry per device, deletes everything in between (massive DB size reduction while preserving initial and current state)
+- **Compound index** `network_scans(status, last_seen)` for faster offline IP purge queries
+
+### 🔧 Changed
+- **getStats() optimization**: replaced 4 separate COUNT queries with a single aggregated query (4x faster)
+- **getStatisticsBatch() optimization**: replaced N+1 per-IP loop (3 queries × N IPs) with a single batch query using GROUP BY (100x faster for large networks)
+- **History insert**: stopped writing redundant `ping_latency` to `network_scan_history` (already stored in `latency_measurements`)
+
+### 🐛 Fixed
+- **Database health toast**: fixed broken i18n keys `admin.db.*` → `admin.database.*` (critical/warning toasts were showing raw key names)
+
+---
+
 ## [0.7.45] - 2026-04-07
 
 ### ✨ Added

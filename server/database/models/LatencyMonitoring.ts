@@ -267,19 +267,33 @@ export class LatencyMonitoringRepository {
     }
 
     /**
-     * Get statistics for multiple IPs in batch
+     * Get statistics for multiple IPs in batch (single query instead of N+1)
      */
     static getStatisticsBatch(ips: string[]): Record<string, { avg1h: number | null; max: number | null }> {
+        if (ips.length === 0) return {};
+
+        const db = getDatabase();
+        const placeholders = ips.map(() => '?').join(',');
+
+        const stmt = db.prepare(`
+            SELECT
+                ip,
+                AVG(CASE WHEN measured_at >= datetime('now', '-1 hour') AND packet_loss = 0 AND latency IS NOT NULL THEN latency END) as avg1h,
+                MAX(CASE WHEN packet_loss = 0 AND latency IS NOT NULL THEN latency END) as max
+            FROM latency_measurements
+            WHERE ip IN (${placeholders})
+            GROUP BY ip
+        `);
+        const rows = stmt.all(...ips) as Array<{ ip: string; avg1h: number | null; max: number | null }>;
+
         const result: Record<string, { avg1h: number | null; max: number | null }> = {};
-        
-        ips.forEach(ip => {
-            const stats = this.getStatistics(ip);
-            result[ip] = {
-                avg1h: stats.avg1h,
-                max: stats.max
-            };
-        });
-        
+        // Initialize all IPs with null (in case they have no measurements)
+        for (const ip of ips) {
+            result[ip] = { avg1h: null, max: null };
+        }
+        for (const row of rows) {
+            result[row.ip] = { avg1h: row.avg1h, max: row.max };
+        }
         return result;
     }
 

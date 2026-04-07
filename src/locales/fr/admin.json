@@ -59,6 +59,8 @@
       "days": "jours",
       "keepIpsOnPurge": "Garder les IPs lors de la purge",
       "keepIpsOnPurgeDesc": "Conserver les IPs scannées même après purge pour surveiller le nombre total réel d'IPs du réseau",
+      "keepFirstLastPerIp": "Garder premier & dernier par IP",
+      "keepFirstLastPerIpDesc": "Conserver le plus ancien et le plus récent enregistrement historique par IP (état initial et actuel), supprimer tout entre les deux",
       "autoPurge": "Purge automatique",
       "autoPurgeDesc": "Activer la purge automatique selon la planification",
       "purgeSchedule": "Planification de la purge",

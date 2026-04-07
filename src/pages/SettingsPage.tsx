@@ -203,6 +203,7 @@ const DatabaseManagementSection: React.FC = () => {
     offlineRetentionDays: 7,
     latencyMeasurementsRetentionDays: 30,
     keepIpsOnPurge: true,
+    keepFirstLastPerIp: true,
     autoPurgeEnabled: true,
     purgeSchedule: '0 2 * * *' // Daily at 2 AM
   });
@@ -885,6 +886,9 @@ const DatabaseManagementSection: React.FC = () => {
                     <SettingRow label={t('admin.database.keepIpsOnPurge')} description={t('admin.database.keepIpsOnPurgeDesc')}>
                       <Toggle enabled={retentionConfig.keepIpsOnPurge} onChange={(v) => setRetentionConfig({ ...retentionConfig, keepIpsOnPurge: v })} />
                     </SettingRow>
+                    <SettingRow label={t('admin.database.keepFirstLastPerIp')} description={t('admin.database.keepFirstLastPerIpDesc')}>
+                      <Toggle enabled={retentionConfig.keepFirstLastPerIp} onChange={(v) => setRetentionConfig({ ...retentionConfig, keepFirstLastPerIp: v })} />
+                    </SettingRow>
                     <SettingRow label={t('admin.database.autoPurge')} description={t('admin.database.autoPurgeDesc')}>
                       <Toggle enabled={retentionConfig.autoPurgeEnabled} onChange={(v) => setRetentionConfig({ ...retentionConfig, autoPurgeEnabled: v })} />
                     </SettingRow>
@@ -988,6 +992,7 @@ interface RetentionConfigPayload {
   offlineRetentionDays: number;
   latencyMeasurementsRetentionDays: number;
   keepIpsOnPurge: boolean;
+  keepFirstLastPerIp: boolean;
   autoPurgeEnabled: boolean;
   purgeSchedule: string;
 }
@@ -3376,9 +3381,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           const status = res.result.status as 'good' | 'warning' | 'critical';
           setDbHealthStatus(status);
           if (status === 'critical') {
-            addToast('error', t('admin.db.healthToastCritical'), 0);
+            addToast('error', t('admin.database.healthToastCritical'), 0);
           } else if (status === 'warning') {
-            addToast('warning', t('admin.db.healthToastWarning'), 10000);
+            addToast('warning', t('admin.database.healthToastWarning'), 10000);
           }
         }
       } catch { /* silently ignore */ }

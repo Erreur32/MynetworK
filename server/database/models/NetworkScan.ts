@@ -485,24 +485,22 @@ export class NetworkScanRepository {
         unknown: number;
     } {
         const db = getDatabase();
-        
-        const totalStmt = db.prepare('SELECT COUNT(*) as count FROM network_scans');
-        const totalResult = totalStmt.get() as { count: number };
-        
-        const onlineStmt = db.prepare('SELECT COUNT(*) as count FROM network_scans WHERE status = ?');
-        const onlineResult = onlineStmt.get('online') as { count: number };
-        
-        const offlineStmt = db.prepare('SELECT COUNT(*) as count FROM network_scans WHERE status = ?');
-        const offlineResult = offlineStmt.get('offline') as { count: number };
-        
-        const unknownStmt = db.prepare('SELECT COUNT(*) as count FROM network_scans WHERE status = ?');
-        const unknownResult = unknownStmt.get('unknown') as { count: number };
-        
+
+        const stmt = db.prepare(`
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online,
+                SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline,
+                SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END) as unknown
+            FROM network_scans
+        `);
+        const row = stmt.get() as { total: number; online: number; offline: number; unknown: number };
+
         return {
-            total: totalResult.count,
-            online: onlineResult.count,
-            offline: offlineResult.count,
-            unknown: unknownResult.count
+            total: row.total,
+            online: row.online,
+            offline: row.offline,
+            unknown: row.unknown
         };
     }
 
@@ -594,10 +592,10 @@ export class NetworkScanRepository {
         const db = getDatabase();
         try {
             const stmt = db.prepare(`
-                INSERT INTO network_scan_history (ip, status, ping_latency, seen_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO network_scan_history (ip, status, seen_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
             `);
-            stmt.run(ip, status, pingLatency || null);
+            stmt.run(ip, status);
         } catch (error) {
             // Log error but don't throw - history is optional
             logger.error('NetworkScanRepository', `Failed to add history entry for ${ip}:`, error);
@@ -633,6 +631,32 @@ export class NetworkScanRepository {
             }
         } catch (error) {
             logger.error('NetworkScanRepository', `Failed to purge history:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Purge history entries keeping only the oldest and most recent per IP.
+     * This preserves the initial state and current state for each device.
+     * @returns Number of deleted entries
+     */
+    static purgeHistoryKeepBoundaries(): number {
+        const db = getDatabase();
+
+        try {
+            const stmt = db.prepare(`
+                DELETE FROM network_scan_history
+                WHERE id NOT IN (
+                    SELECT MIN(id) FROM network_scan_history GROUP BY ip
+                    UNION
+                    SELECT MAX(id) FROM network_scan_history GROUP BY ip
+                )
+            `);
+            const result = stmt.run();
+            logger.info('NetworkScanRepository', `Purged ${result.changes} history entries (kept first & last per IP)`);
+            return result.changes;
+        } catch (error) {
+            logger.error('NetworkScanRepository', `Failed to purge history (keep boundaries):`, error);
             throw error;
         }
     }

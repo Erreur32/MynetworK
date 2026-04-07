@@ -1106,6 +1106,7 @@ router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-sca
             offlineRetentionDays,
             latencyMeasurementsRetentionDays,
             keepIpsOnPurge,
+            keepFirstLastPerIp,
             autoPurgeEnabled,
             purgeSchedule
         } = req.body;
@@ -1116,6 +1117,7 @@ router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-sca
         if (offlineRetentionDays !== undefined) config.offlineRetentionDays = offlineRetentionDays;
         if (latencyMeasurementsRetentionDays !== undefined) config.latencyMeasurementsRetentionDays = latencyMeasurementsRetentionDays;
         if (keepIpsOnPurge !== undefined) config.keepIpsOnPurge = keepIpsOnPurge;
+        if (keepFirstLastPerIp !== undefined) config.keepFirstLastPerIp = keepFirstLastPerIp;
         if (autoPurgeEnabled !== undefined) config.autoPurgeEnabled = autoPurgeEnabled;
         if (purgeSchedule !== undefined) config.purgeSchedule = purgeSchedule;
 

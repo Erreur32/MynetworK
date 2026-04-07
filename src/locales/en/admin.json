@@ -59,6 +59,8 @@
       "days": "days",
       "keepIpsOnPurge": "Keep IPs on purge",
       "keepIpsOnPurgeDesc": "Keep scanned IPs even after purge to monitor actual total network IP count",
+      "keepFirstLastPerIp": "Keep first & last per IP",
+      "keepFirstLastPerIpDesc": "Keep the oldest and most recent history entry per IP (initial and current state), delete everything in between",
       "autoPurge": "Automatic purge",
       "autoPurgeDesc": "Enable automatic purge on schedule",
       "purgeSchedule": "Purge schedule",

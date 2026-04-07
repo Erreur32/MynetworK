@@ -270,6 +270,7 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_network_scans_ip ON network_scans(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scans_last_seen ON network_scans(last_seen);
         CREATE INDEX IF NOT EXISTS idx_network_scans_status ON network_scans(status);
+        CREATE INDEX IF NOT EXISTS idx_network_scans_status_last_seen ON network_scans(status, last_seen);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_ip ON network_scan_history(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_seen_at ON network_scan_history(seen_at);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_status ON network_scan_history(status);
