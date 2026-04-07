@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.42] - 2026-04-07
+
+### ✨ Added
+- **Threats table**: new columns — Action, Service, Direction, Signature, Dst Port, Flow Count (matching UniFi OS layout)
+- **Threat Map**: Leaflet dark map with clustered attack origin markers, GeoIP resolution, country sidebar filter
+- **Threat Map Live mode**: animated attack arcs with pulsing origin dots, color-coded by severity
+- **Time range filters**: added 12h, 48h, 30d periods (was only 1h/24h/7d)
+- **GeoIP endpoints**: `/api/plugins/unifi/threats/geo/:ip`, batch resolve, server-geo for attack arcs
+- **Table/Map toggle**: switch between table and map views within the Threats tab
+
+### 🔧 Changed
+- v2 traffic-flows API now paginates automatically (up to 20k entries for 30d, was capped at 500)
+- recentFlows limit scales with time range (200 for 1h → 2000 for 30d)
+- Backend extracts service, direction, signature, ports, flowCount from UniFi API responses
+
+---
+
 ## [0.7.41] - 2026-04-06
 
 ### 🐛 Fixed

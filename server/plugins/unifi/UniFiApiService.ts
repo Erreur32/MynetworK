@@ -1495,6 +1495,12 @@ export class UniFiApiService {
             clientName?: string;
             country?: string;
             proto?: string;
+            service?: string;
+            direction?: string;
+            signature?: string;
+            dstPort?: number;
+            srcPort?: number;
+            flowCount?: number;
         }>;
     }> {
         await this.ensureLoggedIn();
@@ -1539,31 +1545,61 @@ export class UniFiApiService {
         // The UniFi Network web app uses POST /v2/api/site/{site}/traffic-flows
         // with a JSON body to fetch firewall/IPS flow data.
         // controllerRequest auto-adds /proxy/network for unifios.
+        // Supports pagination: pageNumber + pageSize, response includes count field.
         if (this.deploymentType === 'unifios') {
             const trafficFlowPath = `/v2/api/site/${encodedSite}/traffic-flows`;
             tried.push('v2:traffic-flows');
             try {
-                // Exact body format used by UniFi Network web app
-                const body = {
-                    risk: [], action: ['blocked'], direction: [], protocol: [],
-                    policy: [], policy_type: [], service: [],
-                    source_host: [], source_mac: [], source_ip: [], source_port: [],
-                    source_network_id: [], source_domain: [], source_zone_id: [], source_region: [],
-                    destination_host: [], destination_mac: [], destination_ip: [], destination_port: [],
-                    destination_network_id: [], destination_domain: [], destination_zone_id: [], destination_region: [],
-                    in_network_id: [], out_network_id: [], next_ai_query: [], except_for: [],
-                    timestampFrom: startMs,
-                    timestampTo: endMs,
-                    pageNumber: 0,
-                    search_text: '',
-                    pageSize: 500,
-                    skip_count: false,
-                };
-                const raw = await this.controllerPost<any>(trafficFlowPath, body);
-                const events = toArray(raw);
-                logger.info('UniFi', `v2 traffic-flows → ${events.length} entries`);
-                logger.info('UniFi', `traffic-flows sample[0]: ${JSON.stringify(events[0] ?? null)}`);
-                if (events.length > 0) return cache(this._aggregateFlows(events, 'v2-traffic-flows'));
+                const PAGE_SIZE = 500;
+                // Scale safety cap with range: short ranges need less, 30d may have a lot
+                const MAX_ENTRIES = rangeSeconds <= 86400 ? 5000
+                    : rangeSeconds <= 604800 ? 10000
+                    : 20000;
+                const allEvents: any[] = [];
+                let pageNumber = 0;
+                let totalCount = Infinity; // Will be set from first response
+
+                // Paginate through all results
+                while (allEvents.length < MAX_ENTRIES) {
+                    const body = {
+                        risk: [], action: ['blocked'], direction: [], protocol: [],
+                        policy: [], policy_type: [], service: [],
+                        source_host: [], source_mac: [], source_ip: [], source_port: [],
+                        source_network_id: [], source_domain: [], source_zone_id: [], source_region: [],
+                        destination_host: [], destination_mac: [], destination_ip: [], destination_port: [],
+                        destination_network_id: [], destination_domain: [], destination_zone_id: [], destination_region: [],
+                        in_network_id: [], out_network_id: [], next_ai_query: [], except_for: [],
+                        timestampFrom: startMs,
+                        timestampTo: endMs,
+                        pageNumber,
+                        search_text: '',
+                        pageSize: PAGE_SIZE,
+                        skip_count: pageNumber > 0, // Only need count on first page
+                    };
+                    const raw = await this.controllerPost<any>(trafficFlowPath, body);
+
+                    // Extract total count from first response (raw.count or raw.totalCount)
+                    if (pageNumber === 0) {
+                        totalCount = raw?.count ?? raw?.totalCount ?? raw?.total ?? Infinity;
+                    }
+
+                    const events = toArray(raw);
+                    if (events.length === 0) break; // No more results
+                    allEvents.push(...events);
+
+                    logger.info('UniFi', `v2 traffic-flows page ${pageNumber} → ${events.length} entries (total so far: ${allEvents.length}/${totalCount})`);
+
+                    // Stop if we got all entries or this page was not full
+                    if (allEvents.length >= totalCount || events.length < PAGE_SIZE) break;
+                    pageNumber++;
+                }
+
+                if (pageNumber === 0 && allEvents.length > 0) {
+                    logger.info('UniFi', `traffic-flows sample[0]: ${JSON.stringify(allEvents[0] ?? null)}`);
+                }
+                logger.info('UniFi', `v2 traffic-flows total → ${allEvents.length} entries (${pageNumber + 1} page(s), server count: ${totalCount === Infinity ? '?' : totalCount})`);
+
+                if (allEvents.length > 0) return cache(this._aggregateFlows(allEvents, 'v2-traffic-flows', rangeSeconds));
                 ipsEndpointReachable = true;
                 bestEmptySource = 'v2-traffic-flows-empty';
             } catch (err) {
@@ -1584,7 +1620,7 @@ export class UniFiApiService {
                         const raw = await this.controllerRequest<any>(path);
                         const events = toArray(raw);
                         logger.info('UniFi', `v2 ${label} → ${events.length} events`);
-                        if (events.length > 0) return cache(this._aggregateFlows(events, `v2-${label.replace('/', '-')}`));
+                        if (events.length > 0) return cache(this._aggregateFlows(events, `v2-${label.replace('/', '-')}`, rangeSeconds));
                         ipsEndpointReachable = true;
                         bestEmptySource = `v2-${label}-empty`;
                         break;
@@ -1611,7 +1647,7 @@ export class UniFiApiService {
                 // Log raw type + sample to catch format mismatches
                 logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] → ${events.length} entries`);
                 ipsEndpointReachable = true;
-                if (events.length > 0) return cache(this._aggregateFlows(events, 'ips-event'));
+                if (events.length > 0) return cache(this._aggregateFlows(events, 'ips-event', rangeSeconds));
                 bestEmptySource = 'ips-event-empty';
             } catch (err) {
                 logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] ERROR: ${(err as Error).message}`);
@@ -1632,7 +1668,7 @@ export class UniFiApiService {
                     const events = toArray(raw);
                     logger.info('UniFi', `stat/ips [${url.split('?')[1]}] → ${events.length} entries`);
                     ipsEndpointReachable = true;
-                    if (events.length > 0) return cache(this._aggregateFlows(events, 'ips'));
+                    if (events.length > 0) return cache(this._aggregateFlows(events, 'ips', rangeSeconds));
                     bestEmptySource = 'ips-empty';
                 } catch (err) {
                     logger.debug('UniFi', `stat/ips [${url.split('?')[1]}] → ${(err as Error).message}`);
@@ -1653,7 +1689,7 @@ export class UniFiApiService {
                 (e.key || '').startsWith('EVT_AD')
             );
             logger.info('UniFi', `stat/alarm → ${list.length} total, ${ipsAlarms.length} IPS alarms`);
-            if (ipsAlarms.length > 0) return cache(this._aggregateFlows(ipsAlarms, 'alarm'));
+            if (ipsAlarms.length > 0) return cache(this._aggregateFlows(ipsAlarms, 'alarm', rangeSeconds));
             if (list.length > 0) {
                 ipsEndpointReachable = true;
                 if (bestEmptySource === 'none') bestEmptySource = 'alarm-no-ips';
@@ -1690,7 +1726,7 @@ export class UniFiApiService {
                 (e.subsystem || '') === 'threat'
             );
             logger.info('UniFi', `stat/event → ${events.length} total, ${ipsEvents.length} IPS, keys=[${allKeys.join(',')}]`);
-            if (ipsEvents.length > 0) return cache(this._aggregateFlows(ipsEvents, 'events'));
+            if (ipsEvents.length > 0) return cache(this._aggregateFlows(ipsEvents, 'events', rangeSeconds));
             if (events.length > 0) {
                 ipsEndpointReachable = true;
                 if (bestEmptySource === 'none') bestEmptySource = `events-no-ips(${events.length}evts)`;
@@ -1713,7 +1749,12 @@ export class UniFiApiService {
     /**
      * Normalize raw flow/event/threat entries into the common structure.
      */
-    private _aggregateFlows(raw: any[], source: string): ReturnType<UniFiApiService['getFlowInsights']> extends Promise<infer T> ? T : never {
+    private _aggregateFlows(raw: any[], source: string, rangeSeconds: number = 86400): ReturnType<UniFiApiService['getFlowInsights']> extends Promise<infer T> ? T : never {
+        // Scale recentFlows limit: short ranges keep less, longer ranges keep more
+        const RECENT_FLOWS_LIMIT = rangeSeconds <= 3600 ? 200
+            : rangeSeconds <= 86400 ? 500
+            : rangeSeconds <= 604800 ? 1000
+            : 2000;
         const policyMap = new Map<string, number>();
         const clientMap = new Map<string, { mac: string; name?: string; ip?: string; count: number }>();
         const regionMap = new Map<string, number>();
@@ -1787,8 +1828,26 @@ export class UniFiApiService {
             const tsRaw = item.flow_start_time ?? item.time ?? item.timestamp ?? item.datetime;
             const timestamp = tsRaw != null ? (tsRaw > 1e12 ? tsRaw / 1000 : tsRaw) : Date.now() / 1000;
 
+            // ── Service / direction / signature / ports / flow count ─────────
+            const service = isV2
+                ? (item.service || item.ips?.category_name || '')
+                : (item.catname || item.category || item.app_proto || '');
+            const direction = isV2
+                ? (item.direction || '')
+                : (item.direction || item.flow_direction || '');
+            const signature = isV2
+                ? (item.ips?.signature || item.policies?.[0]?.description || '')
+                : (item.inner_alert_signature || item.signature || item.msg || '');
+            const dstPort = isV2
+                ? (item.destination?.port ?? item.dest_port ?? undefined)
+                : (item.dest_port ?? item.dst_port ?? item.dstPort ?? undefined);
+            const srcPort = isV2
+                ? (item.source?.port ?? item.src_port ?? undefined)
+                : (item.src_port ?? item.srcPort ?? undefined);
+            const flowCount = item.flow_count ?? item.flowCount ?? item.count ?? 1;
+
             // ── Recent flow entry ─────────────────────────────────────────────
-            if (recentFlows.length < 100) {
+            if (recentFlows.length < RECENT_FLOWS_LIMIT) {
                 recentFlows.push({
                     timestamp,
                     action: typeof item.action === 'string' ? item.action.toUpperCase() : (item.blocked ? 'BLOCK' : 'DETECT'),
@@ -1799,7 +1858,13 @@ export class UniFiApiService {
                     clientMac: mac || undefined,
                     clientName: name || undefined,
                     country: country || undefined,
-                    proto: item.protocol || item.proto || ''
+                    proto: item.protocol || item.proto || '',
+                    service: service || undefined,
+                    direction: direction || undefined,
+                    signature: signature || undefined,
+                    dstPort: typeof dstPort === 'number' ? dstPort : (dstPort ? parseInt(dstPort, 10) || undefined : undefined),
+                    srcPort: typeof srcPort === 'number' ? srcPort : (srcPort ? parseInt(srcPort, 10) || undefined : undefined),
+                    flowCount: typeof flowCount === 'number' ? flowCount : 1,
                 });
             }
         }

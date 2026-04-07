@@ -9,9 +9,9 @@ export interface BandwidthPoint {
     upload: number;   // KB/s
 }
 
-export type ThreatRange = 3600 | 86400 | 604800;
+export type ThreatRange = 3600 | 43200 | 86400 | 172800 | 604800 | 2592000;
 export type ThreatSeverity = 'ALL' | 'LOW' | 'SUSPICIOUS' | 'CONCERNING';
-export type ThreatSortKey = 'timestamp' | 'threatLevel' | 'policy' | 'srcIp' | 'dstIp' | 'country';
+export type ThreatSortKey = 'timestamp' | 'threatLevel' | 'policy' | 'srcIp' | 'dstIp' | 'country' | 'action' | 'service' | 'direction' | 'dstPort' | 'flowCount';
 export type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'threats' | 'debug' | 'switches';
 export type ClientSortKey = 'name' | 'ip' | 'mac' | 'switch' | 'port' | 'speed' | 'ap' | 'ssid' | 'type';
 export type AlertFilter = 'all' | 'info' | 'warning' | 'critical';
@@ -28,6 +28,8 @@ export interface ThreatData {
         timestamp: number; action: string; threatLevel: string;
         policy: string; srcIp?: string; dstIp?: string;
         clientMac?: string; clientName?: string; country?: string; proto?: string;
+        service?: string; direction?: string; signature?: string;
+        dstPort?: number; srcPort?: number; flowCount?: number;
     }>;
 }
 

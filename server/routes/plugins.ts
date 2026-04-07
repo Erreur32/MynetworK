@@ -852,5 +852,134 @@ router.get('/unifi/threats', requireAuth, asyncHandler(async (req: Authenticated
     }
 }));
 
+// ── GeoIP resolution for threat map ──────────────────────────────────────────
+// In-memory cache: IP → geo data (30 min TTL)
+const geoCache = new Map<string, { ts: number; data: any }>();
+const GEO_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+/**
+ * GET /api/plugins/unifi/threats/geo/:ip
+ * Resolves an IP to geolocation data using ip-api.com (free tier).
+ * Results are cached in memory for 30 minutes.
+ */
+router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ip = req.params.ip;
+    if (!ip || !/^[\d.]+$/.test(ip)) {
+        return res.json({ success: true, result: { ok: false, error: 'Invalid IP' } });
+    }
+
+    // Check cache
+    const cached = geoCache.get(ip);
+    if (cached && Date.now() - cached.ts < GEO_CACHE_TTL) {
+        return res.json({ success: true, result: { ok: true, ...cached.data } });
+    }
+
+    try {
+        const response = await fetch(
+            `http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,org,lat,lon`
+        );
+        const json = await response.json();
+
+        if (json.status === 'success') {
+            const data = {
+                lat: json.lat,
+                lng: json.lon,
+                country: json.country || '',
+                countryCode: json.countryCode || '',
+                region: json.regionName || json.region || '',
+                city: json.city || '',
+                org: json.org || '',
+            };
+            geoCache.set(ip, { ts: Date.now(), data });
+            return res.json({ success: true, result: { ok: true, ...data } });
+        }
+        return res.json({ success: true, result: { ok: false, error: 'Geo lookup failed' } });
+    } catch (error) {
+        logger.error('GeoIP', `Failed to resolve ${ip}:`, error);
+        return res.json({ success: true, result: { ok: false, error: 'Geo service unavailable' } });
+    }
+}));
+
+/**
+ * POST /api/plugins/unifi/threats/geo/batch
+ * Batch-resolve multiple IPs at once (max 15 per request to respect ip-api rate limits).
+ */
+router.post('/unifi/threats/geo/batch', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ips: string[] = (req.body?.ips || []).filter((ip: string) => /^[\d.]+$/.test(ip)).slice(0, 15);
+    const results: Record<string, any> = {};
+
+    // Return cached first
+    const toResolve: string[] = [];
+    for (const ip of ips) {
+        const cached = geoCache.get(ip);
+        if (cached && Date.now() - cached.ts < GEO_CACHE_TTL) {
+            results[ip] = { ok: true, ...cached.data };
+        } else {
+            toResolve.push(ip);
+        }
+    }
+
+    // Resolve remaining via ip-api.com batch endpoint
+    if (toResolve.length > 0) {
+        try {
+            const response = await fetch('http://ip-api.com/batch?fields=status,query,country,countryCode,region,regionName,city,org,lat,lon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(toResolve),
+            });
+            const batch: any[] = await response.json();
+            for (const item of batch) {
+                if (item.status === 'success') {
+                    const data = {
+                        lat: item.lat,
+                        lng: item.lon,
+                        country: item.country || '',
+                        countryCode: item.countryCode || '',
+                        region: item.regionName || item.region || '',
+                        city: item.city || '',
+                        org: item.org || '',
+                    };
+                    geoCache.set(item.query, { ts: Date.now(), data });
+                    results[item.query] = { ok: true, ...data };
+                } else {
+                    results[item.query] = { ok: false };
+                }
+            }
+        } catch (error) {
+            logger.error('GeoIP', 'Batch resolve failed:', error);
+            for (const ip of toResolve) {
+                if (!results[ip]) results[ip] = { ok: false };
+            }
+        }
+    }
+
+    return res.json({ success: true, result: results });
+}));
+
+/**
+ * GET /api/plugins/unifi/threats/server-geo
+ * Returns the server's own public IP geolocation (for attack arc destination).
+ */
+let serverGeoCache: { ts: number; data: any } | null = null;
+router.get('/unifi/threats/server-geo', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    if (serverGeoCache && Date.now() - serverGeoCache.ts < 24 * 60 * 60 * 1000) {
+        return res.json({ success: true, result: { ok: true, ...serverGeoCache.data } });
+    }
+
+    try {
+        const response = await fetch('http://ip-api.com/json/?fields=status,country,countryCode,city,lat,lon,query');
+        const json = await response.json();
+        if (json.status === 'success') {
+            const data = { lat: json.lat, lng: json.lon, country: json.country || '', city: json.city || '', ip: json.query || '' };
+            serverGeoCache = { ts: Date.now(), data };
+            return res.json({ success: true, result: { ok: true, ...data } });
+        }
+        // Fallback: Paris
+        return res.json({ success: true, result: { ok: true, lat: 48.8566, lng: 2.3522, country: 'France', city: 'Paris', ip: '' } });
+    } catch {
+        return res.json({ success: true, result: { ok: true, lat: 48.8566, lng: 2.3522, country: 'France', city: 'Paris', ip: '' } });
+    }
+}));
+
 export default router;
 

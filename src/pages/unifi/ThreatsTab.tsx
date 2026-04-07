@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ShieldAlert, RefreshCw, CheckCircle } from 'lucide-react';
+import { ShieldAlert, RefreshCw, CheckCircle, Table2, Map as MapIcon } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 import { ThreatRange, ThreatSeverity, ThreatSortKey, ThreatData, ThreatDebug } from './types';
+import { ThreatMapTab } from './ThreatMapTab';
+
+type ThreatsView = 'table' | 'map';
 
 interface ThreatsTabProps {
     threatRange: ThreatRange;
@@ -33,6 +36,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
     threatDebug,
 }) => {
     const { t } = useTranslation();
+    const [view, setView] = useState<ThreatsView>('table');
 
     return (
         <div className="col-span-full space-y-4">
@@ -65,6 +69,25 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                     )}
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
+                    {/* View toggle: Table / Map */}
+                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                        <button
+                            type="button"
+                            className={`px-3 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${view === 'table' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                            onClick={() => setView('table')}
+                        >
+                            <Table2 size={12} />
+                            {t('unifi.threats.viewTable')}
+                        </button>
+                        <button
+                            type="button"
+                            className={`px-3 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${view === 'map' ? 'bg-sky-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                            onClick={() => setView('map')}
+                        >
+                            <MapIcon size={12} />
+                            {t('unifi.threats.viewMap')}
+                        </button>
+                    </div>
                     {/* Severity filter */}
                     <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
                         {([
@@ -87,8 +110,11 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                     <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
                         {([
                             { v: 3600, label: '1h' },
+                            { v: 43200, label: '12h' },
                             { v: 86400, label: '24h' },
-                            { v: 604800, label: '7j' }
+                            { v: 172800, label: '48h' },
+                            { v: 604800, label: '7d' },
+                            { v: 2592000, label: '30d' },
                         ] as { v: ThreatRange; label: string }[]).map(({ v, label }) => (
                             <button
                                 key={v}
@@ -188,6 +214,13 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                         })}
                     </div>
 
+                    {/* Map view */}
+                    {view === 'map' && (
+                        <ThreatMapTab threatData={threatData} />
+                    )}
+
+                    {/* Table view */}
+                    {view === 'table' && <>
                     {/* Top section: Policies + Clients + Regions */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {/* Top Policies */}
@@ -264,12 +297,13 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                             return true;
                         });
                         const levelOrder = { 'CONCERNING': 3, 'SUSPICIOUS': 2, 'LOW': 1 } as Record<string, number>;
+                        const numericSortKeys = new Set<ThreatSortKey>(['timestamp', 'dstPort', 'flowCount']);
                         const sorted = [...filtered].sort((a, b) => {
                             const { key, dir } = threatSort;
                             let cmp = 0;
-                            if (key === 'timestamp') cmp = (a.timestamp || 0) - (b.timestamp || 0);
-                            else if (key === 'threatLevel') cmp = (levelOrder[a.threatLevel] || 0) - (levelOrder[b.threatLevel] || 0);
-                            else cmp = ((a[key] as string) || '').localeCompare((b[key] as string) || '');
+                            if (key === 'threatLevel') cmp = (levelOrder[a.threatLevel] || 0) - (levelOrder[b.threatLevel] || 0);
+                            else if (numericSortKeys.has(key)) cmp = ((a as any)[key] || 0) - ((b as any)[key] || 0);
+                            else cmp = ((a as any)[key] as string || '').localeCompare(((b as any)[key] as string) || '');
                             return dir === 'asc' ? cmp : -cmp;
                         });
                         const handleSort = (key: ThreatSortKey) => {
@@ -312,16 +346,23 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                                 <tr>
                                                     {colTh('timestamp', t('unifi.threats.colTime'))}
                                                     {colTh('threatLevel', t('unifi.threats.colLevel'))}
-                                                    {colTh('policy', t('unifi.threats.colPolicy'))}
+                                                    {colTh('action', t('unifi.threats.colAction'))}
+                                                    {colTh('service', t('unifi.threats.colService'))}
+                                                    {colTh('direction', t('unifi.threats.colDirection'))}
+                                                    {colTh('policy', t('unifi.threats.colSignature'))}
                                                     {colTh('srcIp', t('unifi.threats.colSrc'))}
                                                     {colTh('dstIp', t('unifi.threats.colDst'))}
+                                                    {colTh('dstPort', t('unifi.threats.colDstPort'))}
                                                     {colTh('country', t('unifi.threats.colCountry'))}
+                                                    {colTh('flowCount', t('unifi.threats.colFlowCount'))}
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {sorted.slice(0, 100).map((f, idx) => {
+                                                {sorted.slice(0, 500).map((f, idx) => {
                                                     const ts = f.timestamp > 1e10 ? new Date(f.timestamp) : new Date(f.timestamp * 1000);
                                                     const levelColor = f.threatLevel === 'CONCERNING' ? 'text-red-400' : f.threatLevel === 'SUSPICIOUS' ? 'text-amber-400' : 'text-blue-400';
+                                                    const actionColor = f.action === 'BLOCK' ? 'text-red-400 bg-red-900/20' : 'text-amber-400 bg-amber-900/20';
+                                                    const dirIcon = (f.direction || '').toLowerCase().includes('in') ? '↓' : (f.direction || '').toLowerCase().includes('out') ? '↑' : '↔';
                                                     return (
                                                         <tr key={idx} className={idx % 2 === 0 ? 'bg-[#0f0f0f]' : ''}>
                                                             <td className="px-3 py-1.5 font-mono text-gray-500 whitespace-nowrap">
@@ -337,9 +378,21 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                                                     );
                                                                 })()}
                                                             </td>
-                                                            <td className="px-3 py-1.5 max-w-[180px] truncate" title={f.policy}>{f.policy}</td>
+                                                            <td className="px-3 py-1.5">
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${actionColor}`}>
+                                                                    {f.action || '-'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-3 py-1.5 text-gray-400 text-[11px] max-w-[120px] truncate" title={f.service}>{f.service || '-'}</td>
+                                                            <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">
+                                                                <span className="text-[11px]">{dirIcon} {f.direction || '-'}</span>
+                                                            </td>
+                                                            <td className="px-3 py-1.5 max-w-[200px] truncate" title={f.signature || f.policy}>
+                                                                <span className="text-gray-300">{f.signature || f.policy}</span>
+                                                            </td>
                                                             <td className="px-3 py-1.5 font-mono text-gray-400">{f.srcIp || f.clientMac || '-'}</td>
                                                             <td className="px-3 py-1.5 font-mono text-gray-400">{f.dstIp || '-'}</td>
+                                                            <td className="px-3 py-1.5 font-mono text-gray-500">{f.dstPort || '-'}</td>
                                                             <td className="px-3 py-1.5 text-gray-400">
                                                                 {f.country ? (
                                                                     <span className="inline-flex items-center gap-1.5">
@@ -353,6 +406,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                                                                     </span>
                                                                 ) : '-'}
                                                             </td>
+                                                            <td className="px-3 py-1.5 font-mono text-gray-500 text-center">{f.flowCount ?? '-'}</td>
                                                         </tr>
                                                     );
                                                 })}
@@ -363,6 +417,7 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                             </Card>
                         );
                     })()}
+                    </>}
                 </>
             )}
         </div>
