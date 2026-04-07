@@ -34,8 +34,7 @@ class LogsWebSocketService {
     });
 
     this.wss.on('connection', (ws: ClientWebSocket, req) => {
-      logger.info('LogsWS', `Client connected from: ${req.socket.remoteAddress}`);
-      logger.debug('LogsWS', `Connection URL: ${req.url}, Headers:`, req.headers);
+      logger.debug('LogsWS', `Client connected from ${req.socket.remoteAddress}`);
       ws.isAlive = true;
 
       // Send recent logs immediately (limited to 50 to prevent memory issues)
@@ -71,7 +70,7 @@ class LogsWebSocketService {
       });
 
       ws.on('close', (code, reason) => {
-        logger.info('LogsWS', `Client disconnected (code: ${code}, reason: ${reason.toString()})`);
+        logger.debug('LogsWS', `Client disconnected (code: ${code})`);
         // Stop listening if no more clients
         if (this.wss && this.wss.clients.size === 0) {
           this.stopListening();

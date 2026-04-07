@@ -112,8 +112,7 @@ class NetworkScanSchedulerService {
             const unifiedConfigStr = AppConfigRepository.get('network_scan_unified_auto');
             if (unifiedConfigStr) {
                 const unifiedConfig: UnifiedAutoScanConfig = JSON.parse(unifiedConfigStr);
-                logger.info('NetworkScanScheduler', `Loading unified config from database: enabled=${unifiedConfig.enabled}, fullScan=${unifiedConfig.fullScan?.enabled || false}, refresh=${unifiedConfig.refresh?.enabled || false}`);
-                logger.info('NetworkScanScheduler', `Unified config details: ${JSON.stringify(unifiedConfig)}`);
+                logger.info('NetworkScanScheduler', `Loaded config: enabled=${unifiedConfig.enabled}, fullScan=${unifiedConfig.fullScan?.enabled || false}, refresh=${unifiedConfig.refresh?.enabled || false}`);
                 this.updateUnifiedConfig(unifiedConfig);
                 
                 // Note: Initial scan on startup is disabled by default to avoid unexpected scans after Docker restart

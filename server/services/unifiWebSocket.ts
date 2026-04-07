@@ -29,14 +29,14 @@ class UnifiWebSocketService {
 
     this.wss.on('connection', (ws: ClientWebSocket, req) => {
       const clientAddress = req.socket.remoteAddress || 'unknown';
-      logger.info('WS-UniFi', `Client connected from: ${clientAddress}, total: ${this.wss?.clients.size || 0}`);
+      logger.debug('WS-UniFi', `Client connected from ${clientAddress} (total: ${this.wss?.clients.size || 0})`);
 
       ws.isAlive = true;
 
       ws.on('pong', () => { ws.isAlive = true; });
 
       ws.on('close', () => {
-        logger.info('WS-UniFi', `Client disconnected, remaining: ${this.wss?.clients.size || 0}`);
+        logger.debug('WS-UniFi', `Client disconnected (remaining: ${this.wss?.clients.size || 0})`);
         if (this.wss && this.wss.clients.size === 0) {
           this.stopPolling();
         }
@@ -57,7 +57,7 @@ class UnifiWebSocketService {
               if (client.readyState === WebSocket.OPEN) hasOpenClient = true;
             });
             if (hasOpenClient) {
-              logger.info('WS-UniFi', 'Starting bandwidth polling (3s)');
+              logger.debug('WS-UniFi', 'Starting bandwidth polling (3s)');
               this.startPolling();
             }
           }
@@ -73,7 +73,7 @@ class UnifiWebSocketService {
           const client = ws as ClientWebSocket;
           if (client.readyState !== WebSocket.OPEN) return;
           if (client.isAlive === false) {
-            logger.info('WS-UniFi', 'Terminating stale client');
+            logger.debug('WS-UniFi', 'Terminating stale client');
             return client.terminate();
           }
           client.isAlive = false;

@@ -23,7 +23,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.42');
+        super('freebox', 'Freebox', '0.7.43');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -76,7 +76,7 @@ export class FreeboxPlugin extends BasePlugin {
                 await this.apiService.login();
                 logger.info('FreeboxPlugin', 'Login successful - session restored');
             } else {
-                logger.info('FreeboxPlugin', 'Session is valid, maintaining connection');
+                logger.debug('FreeboxPlugin', 'Session valid');
             }
 
             // Start keep-alive mechanism to maintain session
@@ -107,7 +107,7 @@ export class FreeboxPlugin extends BasePlugin {
         // Clear any existing interval
         this.stopKeepAlive();
 
-        logger.info('FreeboxPlugin', 'Starting session keep-alive (checking every 2 minutes)');
+        logger.debug('FreeboxPlugin', 'Starting session keep-alive (every 2 min)');
 
         this.keepAliveInterval = setInterval(async () => {
             if (!this.isEnabled()) {
@@ -130,7 +130,7 @@ export class FreeboxPlugin extends BasePlugin {
                     // Session expired, renew it
                     logger.info('FreeboxPlugin', 'Session expired, renewing...');
                     await this.apiService.login();
-                    logger.info('FreeboxPlugin', 'Session renewed successfully');
+                    logger.debug('FreeboxPlugin', 'Session renewed successfully');
                 } else {
                     // Session is valid, make a light request to keep it alive
                     // Using getSystemInfo as it's a lightweight endpoint
@@ -142,7 +142,7 @@ export class FreeboxPlugin extends BasePlugin {
                         logger.warn('FreeboxPlugin', 'Keep-alive request failed, attempting to renew session...');
                         try {
                             await this.apiService.login();
-                            logger.info('FreeboxPlugin', 'Session renewed after keep-alive failure');
+                            logger.debug('FreeboxPlugin', 'Session renewed after keep-alive failure');
                         } catch (loginError) {
                             logger.error('FreeboxPlugin', 'Failed to renew session:', loginError);
                         }
@@ -153,7 +153,7 @@ export class FreeboxPlugin extends BasePlugin {
                 // Try to renew session on error
                 try {
                     await this.apiService.login();
-                    logger.info('FreeboxPlugin', 'Session renewed after keep-alive error');
+                    logger.debug('FreeboxPlugin', 'Session renewed after keep-alive error');
                 } catch (loginError) {
                     logger.error('FreeboxPlugin', 'Failed to renew session after error:', loginError);
                 }
@@ -225,7 +225,7 @@ export class FreeboxPlugin extends BasePlugin {
                     logger.error('FreeboxPlugin', 'Login succeeded but session verification failed - session token may be invalid');
                     throw new Error('Login appeared successful but session verification failed');
                 }
-                logger.info('FreeboxPlugin', 'Reconnection successful in getStats()');
+                logger.debug('FreeboxPlugin', 'Reconnection successful in getStats()');
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 logger.error('FreeboxPlugin', 'Failed to reconnect in getStats():', errorMessage);

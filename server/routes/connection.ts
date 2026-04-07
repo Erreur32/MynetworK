@@ -31,18 +31,6 @@ router.get('/history', asyncHandler(async (req, res) => {
   // Request all net fields - the API will return rate_down, rate_up, bw_down, bw_up
   const result = await freeboxApi.getRrdData('net', dateStart, dateEnd);
 
-  // Log for debugging
-  const rrdResult = result.result as { data?: unknown[] } | undefined;
-  if (result.success && rrdResult?.data && rrdResult.data.length > 0) {
-    const sample = rrdResult.data[0] as Record<string, unknown>;
-    console.log('[RRD] Net history - points:', rrdResult.data.length);
-    console.log('[RRD] Net history - sample keys:', Object.keys(sample));
-    console.log('[RRD] Net history - sample values:', JSON.stringify(sample));
-  } else {
-    const errorResult = result.result as { error_code?: string } | undefined;
-    console.log('[RRD] Net history failed or empty:', result.success, result.msg || errorResult?.error_code);
-  }
-
   res.json(result);
 }));
 
@@ -53,18 +41,6 @@ router.get('/temp-history', asyncHandler(async (req, res) => {
   const dateEnd = end ? parseInt(end as string, 10) : undefined;
 
   const result = await freeboxApi.getRrdData('temp', dateStart, dateEnd);
-
-  // Log for debugging temperature fields by model
-  const rrdResult = result.result as { data?: unknown[] } | undefined;
-  if (result.success && rrdResult?.data && rrdResult.data.length > 0) {
-    const sample = rrdResult.data[0] as Record<string, unknown>;
-    console.log('[RRD] Temp history - points:', rrdResult.data.length);
-    console.log('[RRD] Temp history - sample keys:', Object.keys(sample));
-    console.log('[RRD] Temp history - sample values:', JSON.stringify(sample));
-  } else {
-    const errorResult = result.result as { error_code?: string } | undefined;
-    console.log('[RRD] Temp history failed or empty:', result.success, result.msg || errorResult?.error_code);
-  }
 
   res.json(result);
 }));

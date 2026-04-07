@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.43] - 2026-04-07
+
+### 🔧 Changed
+- Reduce Docker log noise: downgrade verbose WebSocket, polling, and keep-alive logs from info to debug
+- Remove RRD console.log sample dumps from connection routes
+- Remove JSON.stringify config dumps from network-scan and scheduler logs
+- Downgrade UniFi IPS per-endpoint attempt logs to debug (only final result stays info)
+- Downgrade Freebox session keep-alive routine logs to debug (errors/renewals still logged)
+
+---
+
 ## [0.7.42] - 2026-04-07
 
 ### ✨ Added

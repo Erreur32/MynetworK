@@ -70,31 +70,14 @@ class ConnectionWebSocketService {
       const clientAddress = req.socket.remoteAddress || 'unknown';
       const headers = req.headers;
       
-      // Log connection details with headers for debugging
-      logger.info('WS', `Client connected from: ${clientAddress}`);
-      logger.info('WS', `Total clients: ${this.wss?.clients.size || 0}`);
-      logger.info('WS', `Request URL: ${req.url}`);
-      logger.info('WS', `Request method: ${req.method}`);
-      logger.info('WS', `WebSocket readyState: ${ws.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)`);
-      logger.info('WS', `Headers:`, JSON.stringify({
-        'upgrade': headers.upgrade,
-        'connection': headers.connection,
-        'sec-websocket-key': headers['sec-websocket-key'] ? 'present' : 'missing',
-        'sec-websocket-version': headers['sec-websocket-version'],
-        'sec-websocket-protocol': headers['sec-websocket-protocol'],
-        'origin': headers.origin,
-        'host': headers.host,
-        'user-agent': headers['user-agent']?.substring(0, 50) + '...'
-      }, null, 2));
+      logger.debug('WS', `Client connected from ${clientAddress} (total: ${this.wss?.clients.size || 0})`);
       
       ws.isAlive = true;
       
-      // Wait a bit and verify connection is still open before doing anything
+      // Verify connection is still open after handshake
       setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          logger.info('WS', `Connection from ${clientAddress} is stable after initial delay`);
-        } else {
-          logger.warn('WS', `Connection from ${clientAddress} is not open (state: ${ws.readyState})`);
+        if (ws.readyState !== WebSocket.OPEN) {
+          logger.warn('WS', `Connection from ${clientAddress} not open (state: ${ws.readyState})`);
         }
       }, 100);
 
@@ -104,7 +87,7 @@ class ConnectionWebSocketService {
       });
 
       ws.on('close', (code, reason) => {
-        logger.info('WS', `Client disconnected from ${clientAddress}: code=${code}, reason=${reason.toString()}, remaining clients: ${this.wss?.clients.size || 0}`);
+        logger.debug('WS', `Client disconnected from ${clientAddress} (code=${code}, remaining: ${this.wss?.clients.size || 0})`);
         // Stop polling if no more clients
         if (this.wss && this.wss.clients.size === 0) {
           this.stopPolling();
@@ -139,7 +122,7 @@ class ConnectionWebSocketService {
               }
             });
             if (hasOpenClient) {
-              logger.info('WS', 'Starting polling after connection stabilization');
+              logger.debug('WS', 'Starting polling after connection stabilization');
         this.startPolling();
             } else {
               logger.warn('WS', 'No open clients found, skipping polling start');
@@ -163,7 +146,7 @@ class ConnectionWebSocketService {
             return;
           }
         if (client.isAlive === false) {
-            logger.info('WS', 'Terminating stale client connection');
+            logger.debug('WS', 'Terminating stale client connection');
           return client.terminate();
         }
         client.isAlive = false;

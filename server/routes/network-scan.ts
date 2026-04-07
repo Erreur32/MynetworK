@@ -940,7 +940,7 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         if (unifiedConfigStr) {
             try {
             unifiedConfig = JSON.parse(unifiedConfigStr);
-                logger.info('NetworkScan', `Parsed unified config: ${JSON.stringify(unifiedConfig)}`);
+                logger.debug('NetworkScan', 'Parsed unified config from DB');
             } catch (e) {
                 logger.error('NetworkScan', `Failed to parse unified config: ${e}`);
                 unifiedConfig = null;
@@ -1009,9 +1009,7 @@ router.get('/auto-status', requireAuth, asyncHandler(async (req: AuthenticatedRe
         // This ensures the status reflects the actual state of the schedulers
         const isEnabled = unifiedConfig.enabled && (fullScanConfig.enabled || refreshConfig.enabled);
         
-        // Log the calculation for debugging (use info level so it's always visible)
-        logger.info('NetworkScan', `Auto-status calculation: master=${unifiedConfig.enabled}, fullScan=${fullScanConfig.enabled}, refresh=${refreshConfig.enabled}, result=${isEnabled}`);
-        logger.info('NetworkScan', `Full unified config: ${JSON.stringify(unifiedConfig)}`);
+        logger.debug('NetworkScan', `Auto-status: master=${unifiedConfig.enabled}, fullScan=${fullScanConfig.enabled}, refresh=${refreshConfig.enabled}`);
         
         const result = {
             enabled: isEnabled,

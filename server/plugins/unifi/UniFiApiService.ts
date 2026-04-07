@@ -1587,17 +1587,14 @@ export class UniFiApiService {
                     if (events.length === 0) break; // No more results
                     allEvents.push(...events);
 
-                    logger.info('UniFi', `v2 traffic-flows page ${pageNumber} → ${events.length} entries (total so far: ${allEvents.length}/${totalCount})`);
+                    logger.debug('UniFi', `v2 traffic-flows page ${pageNumber} → ${events.length} entries (${allEvents.length}/${totalCount})`);
 
                     // Stop if we got all entries or this page was not full
                     if (allEvents.length >= totalCount || events.length < PAGE_SIZE) break;
                     pageNumber++;
                 }
 
-                if (pageNumber === 0 && allEvents.length > 0) {
-                    logger.info('UniFi', `traffic-flows sample[0]: ${JSON.stringify(allEvents[0] ?? null)}`);
-                }
-                logger.info('UniFi', `v2 traffic-flows total → ${allEvents.length} entries (${pageNumber + 1} page(s), server count: ${totalCount === Infinity ? '?' : totalCount})`);
+                logger.info('UniFi', `v2 traffic-flows → ${allEvents.length} entries (${pageNumber + 1} page(s))`);
 
                 if (allEvents.length > 0) return cache(this._aggregateFlows(allEvents, 'v2-traffic-flows', rangeSeconds));
                 ipsEndpointReachable = true;
@@ -1619,7 +1616,7 @@ export class UniFiApiService {
                     try {
                         const raw = await this.controllerRequest<any>(path);
                         const events = toArray(raw);
-                        logger.info('UniFi', `v2 ${label} → ${events.length} events`);
+                        logger.debug('UniFi', `v2 ${label} → ${events.length} events`);
                         if (events.length > 0) return cache(this._aggregateFlows(events, `v2-${label.replace('/', '-')}`, rangeSeconds));
                         ipsEndpointReachable = true;
                         bestEmptySource = `v2-${label}-empty`;
@@ -1645,12 +1642,12 @@ export class UniFiApiService {
                 const raw = await this.controllerRequest<any>(url);
                 const events = toArray(raw);
                 // Log raw type + sample to catch format mismatches
-                logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] → ${events.length} entries`);
+                logger.debug('UniFi', `stat/ips/event [${url.split('?')[1]}] → ${events.length} entries`);
                 ipsEndpointReachable = true;
                 if (events.length > 0) return cache(this._aggregateFlows(events, 'ips-event', rangeSeconds));
                 bestEmptySource = 'ips-event-empty';
             } catch (err) {
-                logger.info('UniFi', `stat/ips/event [${url.split('?')[1]}] ERROR: ${(err as Error).message}`);
+                logger.debug('UniFi', `stat/ips/event [${url.split('?')[1]}] error: ${(err as Error).message}`);
             }
         }
 
@@ -1666,7 +1663,7 @@ export class UniFiApiService {
                 try {
                     const raw = await this.controllerRequest<any>(url);
                     const events = toArray(raw);
-                    logger.info('UniFi', `stat/ips [${url.split('?')[1]}] → ${events.length} entries`);
+                    logger.debug('UniFi', `stat/ips [${url.split('?')[1]}] → ${events.length} entries`);
                     ipsEndpointReachable = true;
                     if (events.length > 0) return cache(this._aggregateFlows(events, 'ips', rangeSeconds));
                     bestEmptySource = 'ips-empty';
@@ -1688,7 +1685,7 @@ export class UniFiApiService {
                 (e.key || '').startsWith('EVT_IPS') ||
                 (e.key || '').startsWith('EVT_AD')
             );
-            logger.info('UniFi', `stat/alarm → ${list.length} total, ${ipsAlarms.length} IPS alarms`);
+            logger.debug('UniFi', `stat/alarm → ${list.length} total, ${ipsAlarms.length} IPS alarms`);
             if (ipsAlarms.length > 0) return cache(this._aggregateFlows(ipsAlarms, 'alarm', rangeSeconds));
             if (list.length > 0) {
                 ipsEndpointReachable = true;
@@ -1708,7 +1705,7 @@ export class UniFiApiService {
         ]) {
             try {
                 statEventRaw = await this.controllerRequest<any>(evtUrl);
-                logger.info('UniFi', `stat/event hit on: ${evtUrl.split('?')[0].split('/').pop()}`);
+                logger.debug('UniFi', `stat/event hit on: ${evtUrl.split('?')[0].split('/').pop()}`);
                 break;
             } catch (err) {
                 logger.debug('UniFi', `${evtUrl} → ${(err as Error).message.substring(0, 60)}`);
@@ -1725,7 +1722,7 @@ export class UniFiApiService {
                 (e.subsystem || '') === 'ips' ||
                 (e.subsystem || '') === 'threat'
             );
-            logger.info('UniFi', `stat/event → ${events.length} total, ${ipsEvents.length} IPS, keys=[${allKeys.join(',')}]`);
+            logger.debug('UniFi', `stat/event → ${events.length} total, ${ipsEvents.length} IPS`);
             if (ipsEvents.length > 0) return cache(this._aggregateFlows(ipsEvents, 'events', rangeSeconds));
             if (events.length > 0) {
                 ipsEndpointReachable = true;
@@ -1733,11 +1730,11 @@ export class UniFiApiService {
             }
         } catch (err) {
             // Upgrade to info so we see the error even in production logs
-            logger.info('UniFi', `stat/event ERROR: ${(err as Error).message}`);
+            logger.debug('UniFi', `stat/event error: ${(err as Error).message}`);
         }
 
         // ── All endpoints checked ─────────────────────────────────────────────
-        logger.info('UniFi', `getFlowInsights done — tried: [${tried.join(', ')}] reachable=${ipsEndpointReachable} source=${bestEmptySource}`);
+        logger.debug('UniFi', `getFlowInsights done — tried: [${tried.join(', ')}] reachable=${ipsEndpointReachable} source=${bestEmptySource}`);
 
         const result = ipsEndpointReachable
             ? { available: true, source: bestEmptySource, summary: { total: 0, low: 0, suspicious: 0, concerning: 0 }, topPolicies: [], topClients: [], topRegions: [], recentFlows: [] }
