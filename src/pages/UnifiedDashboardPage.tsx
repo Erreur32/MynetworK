@@ -1,6 +1,6 @@
 /**
  * Unified Dashboard Page
- * 
+ *
  * Main dashboard showing overview of all active plugins + system info
  */
 
@@ -95,19 +95,19 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                 {hasAnyPlugin && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {activePlugins.find(p => p.id === 'freebox') && (
-                        <PluginSummaryCard 
-                            pluginId="freebox" 
+                        <PluginSummaryCard
+                            pluginId="freebox"
                             onViewDetails={onNavigateToFreebox}
                         />
                     )}
                     {hasUniFi && (
-                        <PluginSummaryCard 
-                            pluginId="unifi" 
+                        <PluginSummaryCard
+                            pluginId="unifi"
                             onViewDetails={onNavigateToUniFi}
                         />
                     )}
                     {hasScanReseau && (
-                        <NetworkScanWidget 
+                        <NetworkScanWidget
                             onViewDetails={onNavigateToNetworkScan}
                         />
                     )}

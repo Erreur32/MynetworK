@@ -735,10 +735,20 @@ router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: Aut
         const unifiPluginAny = unifiPlugin as any;
         const wanId = (req.query.wanId as string) || 'wan1';
         const rangeSeconds = parseInt((req.query.range as string) || '0', 10) || 0;
-        const history = typeof unifiPluginAny.getBandwidthHistory === 'function'
-            ? unifiPluginAny.getBandwidthHistory(wanId, rangeSeconds)
-            : [];
-        res.setHeader('Cache-Control', 'private, max-age=20');
+
+        let history: any[] = [];
+
+        if (rangeSeconds > 0 && typeof unifiPluginAny.getBandwidthReport === 'function') {
+            // For historical ranges, use the controller's built-in report (has persistent data)
+            history = await unifiPluginAny.getBandwidthReport(rangeSeconds);
+        }
+
+        // Fallback to in-memory history (live mode or if report returned nothing)
+        if (history.length === 0 && typeof unifiPluginAny.getBandwidthHistory === 'function') {
+            history = unifiPluginAny.getBandwidthHistory(wanId, rangeSeconds);
+        }
+
+        res.setHeader('Cache-Control', rangeSeconds === 0 ? 'no-store' : 'private, max-age=20');
         res.json({ success: true, result: history });
     } catch (error) {
         logger.error('UniFi', 'Failed to get bandwidth history:', error);
@@ -767,6 +777,42 @@ router.get('/unifi/wan-interfaces', requireAuth, asyncHandler(async (_req: Authe
     } catch (error) {
         logger.error('UniFi', 'Failed to get WAN interfaces:', error);
         res.json({ success: true, result: [{ id: 'wan1', name: 'WAN' }] });
+    }
+}));
+
+/**
+ * GET /api/plugins/unifi/bandwidth-realtime
+ * Returns the current WAN bandwidth rates (KB/s) — lightweight endpoint for HTTP polling fallback
+ */
+router.get('/unifi/bandwidth-realtime', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    const unifiPlugin = pluginManager.getPlugin('unifi');
+
+    if (!unifiPlugin || !unifiPlugin.isEnabled()) {
+        return res.json({ success: true, result: null });
+    }
+
+    try {
+        const pluginAny = unifiPlugin as any;
+        if (typeof pluginAny.fetchWanBandwidth !== 'function') {
+            return res.json({ success: true, result: null });
+        }
+        const wanData = await pluginAny.fetchWanBandwidth();
+        if (!wanData) return res.json({ success: true, result: null });
+
+        const primaryWan = wanData['wan1'] || { download: 0, upload: 0 };
+        res.setHeader('Cache-Control', 'no-store');
+        res.json({
+            success: true,
+            result: {
+                timestamp: Date.now(),
+                download: primaryWan.download,
+                upload: primaryWan.upload,
+                wans: wanData,
+            }
+        });
+    } catch (error) {
+        logger.error('UniFi', 'Failed to get realtime bandwidth:', error);
+        res.json({ success: true, result: null });
     }
 }));
 

@@ -355,25 +355,25 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 )}
                             />
                             <Area
-                                type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
+                                type={selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="download"
                                 stackId="1"
                                 stroke={COLORS.blue}
                                 fill={COLORS.blue}
                                 fillOpacity={0.3}
                                 name={t('system.download')}
-                                isAnimationActive={source === 'unifi' || selectedRange !== 0}
+                                isAnimationActive={selectedRange !== 0}
                                 hide={hiddenSeries.has('download')}
                             />
                             <Area
-                                type={source === 'freebox' && selectedRange === 0 ? "linear" : "monotone"}
+                                type={selectedRange === 0 ? "linear" : "monotone"}
                                 dataKey="upload"
                                 stackId="2"
                                 stroke={COLORS.green}
                                 fill={COLORS.green}
                                 fillOpacity={0.3}
                                 name={t('system.upload')}
-                                isAnimationActive={source === 'unifi' || selectedRange !== 0}
+                                isAnimationActive={selectedRange !== 0}
                                 hide={hiddenSeries.has('upload')}
                             />
                         </AreaChart>

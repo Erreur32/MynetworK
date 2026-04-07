@@ -1132,6 +1132,65 @@ export class UniFiApiService {
     }
 
     /**
+     * Get WAN bandwidth report from the UniFi controller's built-in RRD-style stats.
+     * Uses /api/s/<site>/stat/report/5minutes.site for ranges up to 24h,
+     * and /api/s/<site>/stat/report/hourly.site for longer ranges.
+     * Returns array of { time, download, upload } in KB/s.
+     */
+    async getBandwidthReport(rangeSeconds: number): Promise<Array<{ time: string; timestamp: number; download: number; upload: number }>> {
+        await this.ensureLoggedIn();
+
+        if (this.apiMode === 'site-manager') {
+            // Site Manager API doesn't support stat/report — return empty
+            return [];
+        }
+
+        const encodedSite = encodeURIComponent(this.site);
+        const now = Date.now();
+        const start = now - rangeSeconds * 1000;
+
+        // Use 5-minute granularity for ≤24h, hourly for longer
+        const interval = rangeSeconds <= 86400 ? '5minutes' : 'hourly';
+        const path = `/api/s/${encodedSite}/stat/report/${interval}.site`;
+
+        try {
+            const data = await this.controllerPost<any[]>(path, {
+                attrs: ['wan-tx_bytes', 'wan-rx_bytes'],
+                start: start,
+                end: now,
+            });
+
+            if (!Array.isArray(data) || data.length === 0) return [];
+
+            // UniFi stat/report returns average bytes per bucket (not cumulative).
+            // No timestamp field — buckets are ordered chronologically, each covering bucketSec.
+            const bucketSec = rangeSeconds <= 86400 ? 300 : 3600;
+            const showSeconds = rangeSeconds <= 3600;
+            const result: Array<{ time: string; timestamp: number; download: number; upload: number }> = [];
+
+            for (let i = 0; i < data.length; i++) {
+                const entry = data[i];
+                // Compute timestamp from start + bucket index
+                const ts = start + i * bucketSec * 1000;
+                // Values are average bytes per bucket period — convert to KB/s
+                const dlKBs = Math.max(0, Math.round((entry['wan-rx_bytes'] || 0) / bucketSec / 1024));
+                const ulKBs = Math.max(0, Math.round((entry['wan-tx_bytes'] || 0) / bucketSec / 1024));
+
+                const d = new Date(ts);
+                const time = d.toLocaleTimeString('fr-FR', {
+                    hour: '2-digit', minute: '2-digit', ...(showSeconds ? { second: '2-digit' } : {})
+                });
+
+                result.push({ time, timestamp: ts, download: dlKBs, upload: ulKBs });
+            }
+            return result;
+        } catch (error) {
+            logger.debug('UniFi', `getBandwidthReport(${interval}) failed:`, error);
+            return [];
+        }
+    }
+
+    /**
      * Get network statistics
      */
     async getNetworkStats(): Promise<UniFiStats> {

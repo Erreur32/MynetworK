@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.44] - 2026-04-07
+
+### ✨ Added
+- **UniFi real-time mini graph**: dashboard card now shows live bandwidth immediately on page load (no more 5s cold start)
+- **UniFi historical bandwidth**: 1h/6h/24h/7d periods now fetch data from the UniFi controller's built-in report API (persistent data, like Freebox RRD)
+- **HTTP bandwidth-realtime endpoint**: new `/api/plugins/unifi/bandwidth-realtime` for lightweight polling fallback
+
+### 🔧 Changed
+- UniFi live graph: removed animation fade effect in live mode for both Freebox and UniFi (clean real-time updates like Freebox)
+- UniFi WebSocket polling interval reduced from 3s to 1s for true real-time bandwidth
+- `fetchWanBandwidth()` now fetches fresh device data each call instead of using stale cached gateway object
+- `_pushToHistory()` skips duplicate entries when controller hasn't refreshed counters yet (eliminates zero-rate noise)
+- Background bandwidth sampling starts at server boot (data ready before first client connects)
+- WebSocket reconnect attempts increased from 1 to 5 in production
+
+### 🐛 Fixed
+- UniFi mini graph always showing 0: was using stale cached gateway device with frozen byte counters
+- UniFi live bandwidth alternating real/zero values: caused by background and WebSocket polling interleaving
+
+---
+
 ## [0.7.43] - 2026-04-07
 
 ### 🔧 Changed

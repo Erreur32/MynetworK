@@ -4,7 +4,7 @@
  * Displays a summary card for a specific plugin with key statistics
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
@@ -14,6 +14,7 @@ import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
+import { api } from '../../api/client';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { decodeHtmlEntities } from '../../utils/textUtils';
 import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
@@ -96,8 +97,25 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const hasStats = stats && (stats.network || stats.devices || stats.system);
 
     // UniFi real-time bandwidth from WebSocket store
-    const { history: unifiHistory, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
+    const { history: unifiHistory, isConnected: unifiWsConnected, pushPoint: pushUnifiPoint } = useUnifiRealtimeStore();
     const unifiHistoryLoaded = unifiWsConnected || unifiHistory.length > 0;
+
+    // Pre-fetch UniFi bandwidth via HTTP so mini graph shows data immediately (don't wait for WebSocket)
+    const [unifiHttpFetched, setUnifiHttpFetched] = useState(false);
+    useEffect(() => {
+        if (pluginId === 'unifi' && isActive && !unifiHttpFetched && unifiHistory.length === 0) {
+            api.get<Array<{ time: string; download: number; upload: number }>>('/api/plugins/unifi/bandwidth-history?range=0')
+                .then(res => {
+                    if (res.success && res.result && res.result.length > 0) {
+                        for (const pt of res.result) {
+                            pushUnifiPoint(pt.download, pt.upload);
+                        }
+                    }
+                })
+                .catch(() => {})
+                .finally(() => setUnifiHttpFetched(true));
+        }
+    }, [pluginId, isActive, unifiHttpFetched, unifiHistory.length, pushUnifiPoint]);
 
     // Helper function to render clickable IP addresses
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {

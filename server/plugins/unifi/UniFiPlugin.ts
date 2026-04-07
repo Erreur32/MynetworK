@@ -191,10 +191,11 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
     private _bandwidthHistories: Map<string, BandwidthRawPoint[]> = new Map();
     private _wanInterfaces: WanInterface[] = [];
+    private _cachedGatewayDevice: any = null;
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.43');
+        super('unifi', 'UniFi Controller', '0.7.44');
         this.apiService = new UniFiApiService();
     }
 
@@ -208,13 +209,18 @@ export class UniFiPlugin extends BasePlugin {
     private _pushToHistory(wanId: string, rxBytes: number, txBytes: number): void {
         const history = this._getOrCreateHistory(wanId);
         const last = history[history.length - 1];
-        if (!last || (rxBytes >= last.rx_bytes && txBytes >= last.tx_bytes)) {
+        if (!last) {
             history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
-            if (history.length > this.BANDWIDTH_MAX) history.shift();
-        } else {
+        } else if (rxBytes < last.rx_bytes || txBytes < last.tx_bytes) {
             // Counter reset (reboot) – clear history and start fresh
             this._bandwidthHistories.set(wanId, [{ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes }]);
+        } else if (rxBytes > last.rx_bytes || txBytes > last.tx_bytes) {
+            // Only push when bytes actually changed — avoids zero-rate entries
+            // when the controller hasn't updated its counters yet
+            history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
+            if (history.length > this.BANDWIDTH_MAX) history.shift();
         }
+        // If bytes are identical to last entry → skip (controller hasn't refreshed yet)
     }
 
     getBandwidthHistory(wanId = 'wan1', rangeSeconds = 0): Array<{ time: string; timestamp: number; download: number; upload: number }> {
@@ -254,6 +260,18 @@ export class UniFiPlugin extends BasePlugin {
         return result;
     }
 
+    /**
+     * Get bandwidth history: for range > 0, try the controller's built-in report first
+     * (has data from before server start), then fall back to in-memory history.
+     */
+    async getBandwidthReport(rangeSeconds: number): Promise<Array<{ time: string; timestamp: number; download: number; upload: number }>> {
+        try {
+            return await this.apiService.getBandwidthReport(rangeSeconds);
+        } catch {
+            return [];
+        }
+    }
+
     getWanInterfaces(): WanInterface[] {
         return this._wanInterfaces;
     }
@@ -267,16 +285,55 @@ export class UniFiPlugin extends BasePlugin {
         if (!this.isEnabled() || !this.config) return null;
 
         try {
-            const stats = await this.apiService.getNetworkStats();
+            const wans = this._wanInterfaces.length > 0 ? this._wanInterfaces : [{ id: 'wan1', name: 'WAN' }];
 
-            // Push primary WAN bytes to history
-            if (stats.wan && (stats.wan.rx_bytes > 0 || stats.wan.tx_bytes > 0)) {
-                this._pushToHistory('wan1', stats.wan.rx_bytes, stats.wan.tx_bytes);
+            // Fetch fresh device data to get current byte counters
+            // (getNetworkStats/dashboard API returns 0 on many controllers,
+            //  and cached gateway device has stale counters)
+            let freshGateway: any = null;
+            try {
+                const devices = await this.apiService.getDevices();
+                freshGateway = devices.find((d: any) => {
+                    const type = (d.type || '').toString().toLowerCase();
+                    const model = (d.model || '').toString().toLowerCase();
+                    return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
+                        || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
+                });
+            } catch { /* ignore — will fall back to networkStats */ }
+
+            for (const wan of wans) {
+                const wanIdx = (parseInt(wan.id.replace('wan', ''), 10) || 1) as 1 | 2;
+                let rxBytes = 0;
+                let txBytes = 0;
+
+                // Priority 1: fresh gateway device (live byte counters)
+                if (freshGateway) {
+                    const deviceWan = extractWanBytesFromGatewayDevice(freshGateway, wanIdx);
+                    if (deviceWan) {
+                        rxBytes = deviceWan.rx_bytes;
+                        txBytes = deviceWan.tx_bytes;
+                    }
+                }
+
+                // Priority 2: networkStats (dashboard API — works on some controllers)
+                if (rxBytes === 0 && txBytes === 0) {
+                    try {
+                        const stats = await this.apiService.getNetworkStats();
+                        if (wanIdx === 1 && stats.wan && (stats.wan.rx_bytes > 0 || stats.wan.tx_bytes > 0)) {
+                            rxBytes = stats.wan.rx_bytes;
+                            txBytes = stats.wan.tx_bytes || 0;
+                        }
+                    } catch { /* ignore */ }
+                }
+
+                if (rxBytes > 0 || txBytes > 0) {
+                    this._pushToHistory(wan.id, rxBytes, txBytes);
+                }
             }
 
             // Compute rates for all WANs from history
             const result: Record<string, { download: number; upload: number }> = {};
-            for (const wan of this._wanInterfaces.length > 0 ? this._wanInterfaces : [{ id: 'wan1', name: 'WAN' }]) {
+            for (const wan of wans) {
                 const history = this._bandwidthHistories.get(wan.id) || [];
                 if (history.length >= 2) {
                     const prev = history[history.length - 2];
@@ -587,6 +644,8 @@ export class UniFiPlugin extends BasePlugin {
                 return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
                     || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
             });
+            // Cache gateway device for real-time bandwidth fallback (used by fetchWanBandwidth)
+            if (gatewayDevice) this._cachedGatewayDevice = gatewayDevice;
             const gatewaySummary = buildGatewayNatSummary(gatewayDevice, portForwardRules);
 
             // Detect WAN interfaces from gateway device and update cached list
