@@ -107,45 +107,44 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
     const showSourceToggle = freeboxAvailable && unifiAvailable;
 
     const cardTitle = (
-        <span className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5">
-                {source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}
-                <RichTooltip
-                    title={t('dashboard.bandwidth.tooltip.title')}
-                    description={t('dashboard.bandwidth.tooltip.desc')}
-                    rows={[
-                        { label: 'Download', value: t('dashboard.bandwidth.tooltip.downloadValue'), color: 'sky', dot: true },
-                        { label: 'Upload', value: t('dashboard.bandwidth.tooltip.uploadValue'), color: 'emerald', dot: true },
-                    ]}
-                    position="bottom"
-                    width={290}
-                    iconSize={12}
-                />
-            </span>
-            {showSourceToggle && (
-                <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px] font-normal">
-                    <button
-                        type="button"
-                        className={`px-2 py-0.5 rounded-full ${
-                            source === 'freebox' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                        }`}
-                        onClick={() => setSource('freebox')}
-                    >
-                        Freebox
-                    </button>
-                    <button
-                        type="button"
-                        className={`px-2 py-0.5 rounded-full ${
-                            source === 'unifi' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                        }`}
-                        onClick={() => setSource('unifi')}
-                    >
-                        UniFi
-                    </button>
-                </span>
-            )}
+        <span className="flex items-center gap-1.5">
+            {source === 'freebox' ? 'Freebox' : 'UniFi'} {t('dashboard.bandwidth.title')}
+            <RichTooltip
+                title={t('dashboard.bandwidth.tooltip.title')}
+                description={t('dashboard.bandwidth.tooltip.desc')}
+                rows={[
+                    { label: 'Download', value: t('dashboard.bandwidth.tooltip.downloadValue'), color: 'sky', dot: true },
+                    { label: 'Upload', value: t('dashboard.bandwidth.tooltip.uploadValue'), color: 'emerald', dot: true },
+                ]}
+                position="bottom"
+                width={290}
+                iconSize={12}
+            />
         </span>
     );
+
+    const sourceToggle = showSourceToggle ? (
+        <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px] font-normal">
+            <button
+                type="button"
+                className={`px-2 py-0.5 rounded-full ${
+                    source === 'freebox' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+                onClick={() => setSource('freebox')}
+            >
+                Freebox
+            </button>
+            <button
+                type="button"
+                className={`px-2 py-0.5 rounded-full ${
+                    source === 'unifi' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+                onClick={() => setSource('unifi')}
+            >
+                UniFi
+            </button>
+        </span>
+    ) : null;
 
     return (
         <Card
@@ -187,6 +186,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
             }
         >
             <div className="flex items-center justify-between mb-3 text-xs text-gray-500">
+                {sourceToggle && <div>{sourceToggle}</div>}
                 {source === 'freebox' ? (
                     <>
                         <span className="flex items-center gap-3">
