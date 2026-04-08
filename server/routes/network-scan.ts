@@ -199,7 +199,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
         
         if (error.message?.includes('too large') || error.message?.includes('Maximum 1000 IPs')) {
             // Extract IP from range and suggest /24
-            const ipMatch = scanRange.match(/(\d+\.\d+\.\d+)\./);
+            const ipMatch = scanRange.slice(0, 50).match(/(\d+\.\d+\.\d+)\./);
             if (ipMatch) {
                 const suggestedRange = `${ipMatch[1]}.0/24`;
                 errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;

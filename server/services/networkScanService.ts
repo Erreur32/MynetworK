@@ -2867,7 +2867,8 @@ export class NetworkScanService {
                     const { stdout } = await execAsync(`timeout 2 avahi-browse -atr 2>/dev/null | grep "${ip}" | head -1`, { timeout: 3000 });
                     if (stdout.trim()) {
                         // Format: hostname [IP] port ...
-                        const escapedIp = ip.replace(/\./g, '\\.');
+                        // Escape all regex special characters in IP, not just dots
+                        const escapedIp = ip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         const match = stdout.match(new RegExp(`([a-zA-Z0-9.-]+)\\s+\\[${escapedIp}\\]`));
                         if (match && match[1]) {
                             const hostname = match[1].trim();
