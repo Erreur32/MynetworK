@@ -198,16 +198,6 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                             {selectedRange === 604800 && '7j'}
                         </span>
                     </span>
-                    {source === 'freebox' && (
-                        <span className="hidden sm:inline text-[11px] text-gray-500">
-                            {t('dashboard.bandwidth.scale')}&nbsp;
-                            <span className="text-gray-300">
-                                {selectedRange === 0
-                                    ? t('dashboard.bandwidth.scaleRealtime')
-                                    : (extendedHistory.length > 0 ? t('dashboard.bandwidth.scaleHistory') : t('dashboard.bandwidth.scaleRealtime'))}
-                            </span>
-                        </span>
-                    )}
                 </span>
                 {source === 'freebox' ? (
                     <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
