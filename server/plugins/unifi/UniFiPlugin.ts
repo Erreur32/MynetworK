@@ -388,7 +388,7 @@ export class UniFiPlugin extends BasePlugin {
             // This prevents auto-switching to Site Manager when local credentials are configured
             if (url && url.trim() && username && username.trim() && password && password.trim()) {
                 // Check if URL is Site Manager (unifi.ui.com) - requires API key
-                if (url.includes('unifi.ui.com')) {
+                if ((() => { try { return new URL(url).hostname === 'unifi.ui.com'; } catch { return false; } })()) {
                     if (apiKey && apiKey.trim()) {
                         // Site Manager URL with valid API key -> use Site Manager
                         logger.debug('UniFiPlugin', 'Site Manager URL detected with API key - auto-switching to Site Manager (cloud) mode');

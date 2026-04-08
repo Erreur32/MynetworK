@@ -293,6 +293,11 @@ setTimeout(() => {
 }, 7500);
 
 
+// Rate limiting
+import { apiLimiter, scanLimiter } from './middleware/rateLimiter.js';
+app.use('/api/', apiLimiter);
+app.use('/api/network-scan', scanLimiter);
+
 app.use('/api/users', usersRoutes);
 app.use('/api/plugins', pluginsRoutes);
 app.use('/api/logs', logsRoutes);

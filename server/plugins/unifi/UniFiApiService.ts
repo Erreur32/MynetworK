@@ -115,8 +115,8 @@ export class UniFiApiService {
      * or provide apiKey parameter for auto-detection
      */
     setConnection(url: string, username: string, password: string, site: string = 'default', apiKey?: string, forceDeploymentType?: 'auto' | 'unifios' | 'controller'): void {
-        // Auto-detect Site Manager (cloud) if URL contains unifi.ui.com
-        if (url && url.includes('unifi.ui.com')) {
+        // Auto-detect Site Manager (cloud) if URL hostname is unifi.ui.com
+        if (url && new URL(url).hostname === 'unifi.ui.com') {
             if (apiKey) {
                 logger.debug('UniFi', 'Auto-detected Site Manager (cloud) - URL contains unifi.ui.com and API key provided');
                 this.setSiteManagerConnection(apiKey);
