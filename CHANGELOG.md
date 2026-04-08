@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.50] - 2026-04-08
+
+### 🛡️ Security
+- **CORS restriction**: replaced permissive `origin: true` with whitelist — `*.myoueb.fr`, localhost, and private networks (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+
+### 🐛 Fixed
+- **CodeQL badge**: use GitHub native badge URL for dynamic workflow (shields.io doesn't support workflow IDs)
+
+---
+
 ## [0.7.49] - 2026-04-08
 
 ### ✨ Added
