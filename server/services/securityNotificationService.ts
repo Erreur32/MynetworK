@@ -93,7 +93,7 @@ class SecurityNotificationService {
                 level: level,
                 details: fullNotification.metadata
             }).catch(err => {
-                console.error('[SecurityNotification] Failed to log to database:', err);
+                logger.error('SecurityNotification', 'Failed to log to database:', err);
             });
         }
 

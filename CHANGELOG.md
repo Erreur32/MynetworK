@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.47] - 2026-04-08
+
+### ✨ Added
+- **URL-based routing**: React Router with clean URLs (`/settings`, `/network-scan`, `/unifi`, etc.) — browser back/forward, bookmarkable pages
+- **WebSocket authentication**: JWT token verification on all WS upgrade requests (`/ws/connection`, `/ws/logs`, `/ws/unifi`)
+- **Security headers**: Helmet.js middleware (CSP, X-Frame-Options, X-Content-Type-Options, HSTS)
+- **Gzip compression**: `compression` middleware for API responses and static assets
+- **Graceful SIGINT shutdown**: proper cleanup handler for Ctrl+C (matches existing SIGTERM handler)
+- **CLAUDE.md**: project context file for Claude Code
+
+### 🔧 Changed
+- **JWT hardening**: explicit `algorithm: 'HS256'` in `jwt.sign()` and `algorithms: ['HS256']` in `jwt.verify()` to prevent algorithm confusion attacks
+- **Register endpoint**: role whitelist (`user`, `viewer` only) — prevents passing arbitrary role values
+- **Console cleanup**: replaced 60+ raw `console.log/error/warn` calls with structured `logger` service across all backend files
+- **Source maps disabled** in production build — prevents exposing TypeScript source code
+
+### 🛡️ Security
+- **Command injection fixes**: strict IP validation before all shell commands in `networkScanService`, `portScanService`, `speedtest` routes
+- **Input validation**: `isValidPingTarget()` for speedtest target, `isValidPortRange()` for nmap port ranges
+- **Sensitive files**: added `CLAUDE.md`, `.claude/` to `.gitignore`
+
+### 🗑️ Removed
+- Unused `flag-icons` dependency
+- Stale `App.tsx.backup` file
+
+---
+
 ## [0.7.46] - 2026-04-07
 
 ### ✨ Added

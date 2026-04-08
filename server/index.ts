@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
+import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import http from 'http';
@@ -188,6 +190,26 @@ function getCorsConfig() {
   };
 }
 
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'self'"],
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Allow loading external images
+}));
+
+// Gzip/deflate compression for API responses and static assets
+app.use(compression());
+
 app.use(cors(getCorsConfig()));
 app.use(express.json({ limit: '10mb' }));
 
@@ -375,13 +397,39 @@ connectionWebSocket.init(server);
 logsWebSocket.init(server);
 unifiWebSocket.init(server);
 
+// Verify JWT token from WebSocket upgrade request (query param or Authorization header)
+async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
+  try {
+    const urlObj = new URL(request.url || '', `http://${request.headers.host}`);
+    const token = urlObj.searchParams.get('token')
+      || request.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      logger.warn('WebSocket', 'Connection attempt without authentication token');
+      return false;
+    }
+    await authService.verifyToken(token);
+    return true;
+  } catch (error) {
+    logger.warn('WebSocket', `Authentication failed: ${error instanceof Error ? error.message : error}`);
+    return false;
+  }
+}
+
 // Single upgrade handler that routes to the correct WebSocket server by path.
 // Using noServer:true on each WSS avoids the ws library calling socket.destroy()
 // when a path doesn't match, which caused "Invalid frame header" on the client.
-server.on('upgrade', (request, socket, head) => {
+server.on('upgrade', async (request, socket, head) => {
   const url = request.url?.split('?')[0] ?? '';
   if (process.env.DEBUG_UPGRADE === 'true') {
-    console.log('[HTTP] Upgrade request:', url);
+    logger.debug('HTTP', 'Upgrade request:', url);
+  }
+
+  // Authenticate WebSocket connections
+  const authenticated = await verifyWsToken(request);
+  if (!authenticated) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+    return;
   }
 
   if (url === '/ws/connection') {
@@ -746,7 +794,7 @@ server.listen(port, host, () => {
     appVersion = packageJson.version || appVersion;
   } catch (error) {
     // If package.json can't be read, use default version
-    console.warn('[Server] Could not read package.json version, using default');
+    logger.warn('Server', 'Could not read package.json version, using default');
   }
 
   // Calculate content widths for all lines
@@ -877,12 +925,11 @@ ${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
   });
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('Server', 'SIGTERM received, shutting down gracefully...');
+// Graceful shutdown handler
+function gracefulShutdown(signal: string) {
+  logger.info('Server', `${signal} received, shutting down gracefully...`);
   server.close(() => {
     logger.info('Server', 'HTTP server closed');
-    // Close database connection
     const db = getDatabase();
     if (db) {
       db.close();
@@ -890,6 +937,9 @@ process.on('SIGTERM', () => {
     }
     process.exit(0);
   });
-});
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

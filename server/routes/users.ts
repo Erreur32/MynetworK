@@ -31,8 +31,9 @@ router.post('/register', asyncHandler(async (req, res) => {
         throw createError('Password must be at least 8 characters long', 400, 'WEAK_PASSWORD');
     }
 
-    // Only allow 'user' role for self-registration (admin can create admins via admin route)
-    const userRole = role === 'admin' ? 'user' : (role || 'user');
+    // Only allow 'user' or 'viewer' roles for self-registration (admin can create admins via admin route)
+    const allowedRoles = ['user', 'viewer'];
+    const userRole = (role && allowedRoles.includes(role)) ? role : 'user';
 
     const user = await authService.register({
         username,

@@ -3,12 +3,23 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { freeboxApi } from '../services/freeboxApi.js';
+import { logger } from '../utils/logger.js';
 
 const execAsync = promisify(exec);
 const router = Router();
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
+
+// Strict validation: only allow IPs or safe hostnames (no shell metacharacters)
+function isValidPingTarget(target: string): boolean {
+  // Allow IPv4 addresses
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(target)) {
+    return target.split('.').map(Number).every(p => p >= 0 && p <= 255);
+  }
+  // Allow safe hostnames (alphanumeric, dots, hyphens only)
+  return /^[a-zA-Z0-9][a-zA-Z0-9.\-]{0,253}[a-zA-Z0-9]$/.test(target);
+}
 
 interface PingResult {
   target: string;
@@ -102,8 +113,13 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
 
 // GET /api/speedtest/ping - Run ping test to measure latency and jitter
 router.get('/ping', asyncHandler(async (req, res) => {
-  const target = (req.query.target as string) || '8.8.8.8'; // Google DNS as default
-  const count = Math.min(parseInt(req.query.count as string) || 10, 20); // Max 20 pings
+  const target = (req.query.target as string) || '8.8.8.8';
+  const count = Math.min(parseInt(req.query.count as string) || 10, 20);
+
+  if (!isValidPingTarget(target)) {
+    res.status(400).json({ success: false, error: { code: 'invalid_target', message: 'Invalid ping target' } });
+    return;
+  }
 
   // Check if request is still active before processing
   if (req.socket.destroyed) {
@@ -137,7 +153,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
       packetLoss: stats.loss
     };
 
-    console.log('[Speedtest] Ping result:', result, 'raw stats:', stats);
+    logger.info('Speedtest', 'Ping result:', result, 'raw stats:', stats);
 
     // Check again before sending response
     if (!res.headersSent && !req.socket.destroyed) {
@@ -152,7 +168,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
       return;
     }
 
-    console.error('[Speedtest] Ping failed:', error);
+    logger.error('Speedtest', 'Ping failed:', error);
     
     // Handle specific error types
     const errorMessage = error.message || 'Unable to measure latency';
@@ -201,7 +217,7 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
       });
     }
   } catch (error) {
-    console.error('[Speedtest] Bandwidth check failed:', error);
+    logger.error('Speedtest', 'Bandwidth check failed:', error);
     res.json({
       success: false,
       error: {
@@ -215,6 +231,11 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
 // POST /api/speedtest/run - Run a full speedtest
 router.post('/run', asyncHandler(async (req, res) => {
   const { pingTarget = '8.8.8.8', samples = 10 } = req.body;
+
+  if (!isValidPingTarget(pingTarget)) {
+    res.status(400).json({ success: false, error: { code: 'invalid_target', message: 'Invalid ping target' } });
+    return;
+  }
 
   try {
     // Step 1: Ping test
@@ -235,7 +256,7 @@ router.post('/run', asyncHandler(async (req, res) => {
         packetLoss: stats.loss
       };
     } catch {
-      console.log('[Speedtest] Ping failed, continuing with bandwidth test');
+      logger.debug('Speedtest', 'Ping failed, continuing with bandwidth test');
     }
 
     // Step 2: Collect bandwidth samples
@@ -306,7 +327,7 @@ router.post('/run', asyncHandler(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[Speedtest] Test failed:', error);
+    logger.error('Speedtest', 'Test failed:', error);
     res.json({
       success: false,
       error: {

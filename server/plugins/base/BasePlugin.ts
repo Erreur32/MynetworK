@@ -5,6 +5,7 @@
  */
 
 import type { IPlugin, PluginConfig, PluginStats } from './PluginInterface.js';
+import { logger } from '../../utils/logger.js';
 
 export abstract class BasePlugin implements IPlugin {
     protected id: string;
@@ -32,7 +33,7 @@ export abstract class BasePlugin implements IPlugin {
 
     async initialize(config: PluginConfig): Promise<void> {
         this.config = config;
-        console.log(`[Plugin:${this.id}] Initialized`);
+        logger.info(`Plugin:${this.id}`, 'Initialized');
     }
 
     async start(): Promise<void> {
@@ -44,11 +45,11 @@ export abstract class BasePlugin implements IPlugin {
             // PluginManager will only call start() if enabled, but this provides extra safety
             return;
         }
-        console.log(`[Plugin:${this.id}] Started`);
+        logger.info(`Plugin:${this.id}`, 'Started');
     }
 
     async stop(): Promise<void> {
-        console.log(`[Plugin:${this.id}] Stopped`);
+        logger.info(`Plugin:${this.id}`, 'Stopped');
     }
 
     isEnabled(): boolean {

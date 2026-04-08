@@ -1,5 +1,6 @@
-import React, { useEffect, useState, Suspense, lazy, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, Suspense, lazy, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Header, Footer, type PageType } from './components/layout';
 import {
   Card,
@@ -197,8 +198,55 @@ const App: React.FC = () => {
   // Settings must show the "All" transition rules (cycle duration, random, pause), not the currently displayed animation's params.
   const animationParameters = useAnimationParameters(fullAnimationId);
 
+  // URL-based routing: derive currentPage from pathname
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const pageRoutes: Record<string, PageType> = useMemo(() => ({
+    '/': 'dashboard',
+    '/freebox': 'freebox',
+    '/unifi': 'unifi',
+    '/tv': 'tv',
+    '/phone': 'phone',
+    '/files': 'files',
+    '/vms': 'vms',
+    '/analytics': 'analytics',
+    '/settings': 'settings',
+    '/plugins': 'plugins',
+    '/users': 'users',
+    '/logs': 'logs',
+    '/search': 'search',
+    '/network-scan': 'network-scan',
+  }), []);
+
+  const routePaths: Record<PageType, string> = useMemo(() => ({
+    'dashboard': '/',
+    'freebox': '/freebox',
+    'unifi': '/unifi',
+    'tv': '/tv',
+    'phone': '/phone',
+    'files': '/files',
+    'vms': '/vms',
+    'analytics': '/analytics',
+    'settings': '/settings',
+    'plugins': '/plugins',
+    'users': '/users',
+    'logs': '/logs',
+    'search': '/search',
+    'network-scan': '/network-scan',
+  }), []);
+
+  const currentPage: PageType = pageRoutes[location.pathname] || 'dashboard';
+
+  const setCurrentPage = useCallback((page: PageType | ((prev: PageType) => PageType)) => {
+    if (typeof page === 'function') {
+      // For functional updates (e.g. setCurrentPage(prev => prev)), just stay on current page
+      return;
+    }
+    navigate(routePaths[page] || '/');
+  }, [navigate, routePaths]);
+
   // Local state
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
   const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
   const [isWifiModalOpen, setIsWifiModalOpen] = useState(false);
   const [isCreateVmModalOpen, setIsCreateVmModalOpen] = useState(false);
@@ -229,45 +277,30 @@ const App: React.FC = () => {
       window.history.replaceState(null, '', window.location.pathname);
       sessionStorage.setItem('adminMode', 'true');
     }
-    
+
     // Check for search parameter 's' in URL and navigate to search page
     const urlParams = new URLSearchParams(window.location.search);
     const searchParam = urlParams.get('s');
-    if (searchParam) {
-      setCurrentPage('search');
-      // Keep the URL parameter while on search page for bookmarking/sharing
+    if (searchParam && currentPage !== 'search') {
+      navigate('/search' + window.location.search);
     }
-    
+
     checkUserAuth();
-    
+    fetchEnvironmentInfo();
+
     // Listen for theme changes to force re-render
     const handleThemeChange = () => {
-      // Force component re-render when theme changes by updating a dummy state
-      setCurrentPage(prev => prev);
+      // Theme changes don't require navigation, just re-render
+      window.dispatchEvent(new Event('resize'));
     };
-    
-    // Listen for URL changes (browser back/forward buttons or manual URL changes)
-    const handlePopState = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const searchParam = urlParams.get('s');
-      if (searchParam) {
-        setCurrentPage('search');
-      }
-    };
-    
+
     window.addEventListener('themechange', handleThemeChange);
     window.addEventListener('themeupdate', handleThemeChange);
-    window.addEventListener('popstate', handlePopState);
-    
+
     return () => {
       window.removeEventListener('themechange', handleThemeChange);
       window.removeEventListener('themeupdate', handleThemeChange);
-      window.removeEventListener('popstate', handlePopState);
     };
-    
-    // Fetch environment info on mount
-    fetchEnvironmentInfo();
-    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
@@ -490,17 +523,10 @@ const App: React.FC = () => {
 
   // Clean up URL parameter 's' when leaving search page
   useEffect(() => {
-    if (currentPage !== 'search') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('s')) {
-        urlParams.delete('s');
-        const newUrl = urlParams.toString() 
-          ? `${window.location.pathname}?${urlParams.toString()}`
-          : window.location.pathname;
-        window.history.replaceState(null, '', newUrl);
-      }
+    if (currentPage !== 'search' && location.search.includes('s=')) {
+      navigate(location.pathname, { replace: true });
     }
-  }, [currentPage]);
+  }, [currentPage, location.pathname, location.search, navigate]);
 
   const handlePageChange = (page: PageType) => {
     setCurrentPage(page);
@@ -742,12 +768,10 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader t={t} />}>
-      <UniFiPage 
-        onBack={() => setCurrentPage('dashboard')} 
+      <UniFiPage
+        onBack={() => setCurrentPage('dashboard')}
         onNavigateToSearch={(ip) => {
-          // URL is already updated in UniFiPage, just navigate to search page
-          // The SearchPage will read the 's' parameter from URL
-          setCurrentPage('search');
+          navigate(`/search?s=${encodeURIComponent(ip)}`);
         }}
       />
           </Suspense>
@@ -774,12 +798,10 @@ const App: React.FC = () => {
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader t={t} />}>
-            <NetworkScanPage 
-              onBack={() => setCurrentPage('dashboard')} 
+            <NetworkScanPage
+              onBack={() => setCurrentPage('dashboard')}
               onNavigateToSearch={(ip) => {
-                // URL is already updated in NetworkScanPage, just navigate to search page
-                // The SearchPage will read the 's' parameter from URL
-                setCurrentPage('search');
+                navigate(`/search?s=${encodeURIComponent(ip)}`);
               }}
             />
           </Suspense>

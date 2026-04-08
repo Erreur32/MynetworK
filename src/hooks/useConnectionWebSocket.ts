@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useConnectionStore } from '../stores/connectionStore';
 import { useSystemStore } from '../stores/systemStore';
+import { useUserAuthStore } from '../stores/userAuthStore';
 import type { ConnectionStatus } from '../types/api';
 import { getBasePath } from '../utils/ingress';
 
@@ -126,6 +127,12 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     } else {
       // Production: same origin, reverse proxy forwards /ws/* to backend.
       wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
+    }
+
+    // Append JWT token for WebSocket authentication
+    const token = useUserAuthStore.getState().getToken();
+    if (token) {
+      wsUrl += `${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
     }
 
     if (import.meta.env.DEV) {

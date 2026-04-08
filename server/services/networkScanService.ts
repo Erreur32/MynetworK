@@ -1131,7 +1131,7 @@ export class NetworkScanService {
 
             for (const iface of interfaces[name] || []) {
                 const fam = iface.family;
-                const isV4 = fam === 'IPv4' || fam === 4;
+                const isV4 = fam === 'IPv4' || (fam as unknown) === 4;
                 if (!isV4 || iface.internal) {
                     continue;
                 }
@@ -1618,8 +1618,12 @@ export class NetworkScanService {
      * @returns MAC address or null if not found
      */
     async getMacAddress(ip: string): Promise<string | null> {
+        if (!this.isValidIp(ip)) {
+            logger.error('NetworkScanService', `[MAC] Invalid IP address: ${ip}`);
+            return null;
+        }
         logger.info('NetworkScanService', `[MAC] Starting MAC detection for ${ip}`);
-        
+
         try {
             // Step 1: Try plugins first (if any are enabled) according to priority configuration
             // This ensures plugins are used before system methods, which may fail in Docker
@@ -1998,6 +2002,10 @@ export class NetworkScanService {
      * @returns Object with hostname and source, or null if not found
      */
     async getHostnameWithSource(ip: string, existingScan?: NetworkScan): Promise<{ hostname: string; source: string } | null> {
+        if (!this.isValidIp(ip)) {
+            logger.error('NetworkScanService', `[HOSTNAME] Invalid IP address: ${ip}`);
+            return null;
+        }
         const config = PluginPriorityConfigService.getConfig();
         const priority = config.hostnamePriority;
         const overwrite = config.overwriteExisting.hostname;

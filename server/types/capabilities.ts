@@ -1,6 +1,8 @@
 // Freebox model types and capabilities
 // Used for automatic feature detection and UI adaptation
 
+import { logger } from '../utils/logger.js';
+
 export type FreeboxModel = 'ultra' | 'delta' | 'pop' | 'revolution' | 'unknown';
 
 export type VmSupport = 'full' | 'limited' | 'none';
@@ -139,36 +141,36 @@ export function detectModelFromName(modelName: string): FreeboxModel {
 
   // Ultra / v9
   if (lower.includes('v9') || lower.includes('ultra')) {
-    console.log('[ModelDetection] Detected Ultra (v9)');
+    logger.debug('ModelDetection', 'Detected Ultra (v9)');
     return 'ultra';
   }
 
   // Pop / v8 - MUST be checked before Delta
   // Pop identifiers: "pop", "v8", "Freebox Pop", "Freebox v8", etc.
   if (lower.includes('pop') || lower.includes('v8')) {
-    console.log('[ModelDetection] Detected Pop (v8)');
+    logger.debug('ModelDetection', 'Detected Pop (v8)');
     return 'pop';
   }
 
   // Delta / v7
   if (lower.includes('v7') || lower.includes('delta')) {
-    console.log('[ModelDetection] Detected Delta (v7)');
+    logger.debug('ModelDetection', 'Detected Delta (v7)');
     return 'delta';
   }
 
   // Revolution / v6
   if (lower.includes('v6') || lower.includes('revolution') || lower.includes('révolution') || lower.includes('fbxgw1')) {
-    console.log('[ModelDetection] Detected Revolution (v6)');
+    logger.debug('ModelDetection', 'Detected Revolution (v6)');
     return 'revolution';
   }
 
   // Mini 4K / v6 - same as Revolution
   if (lower.includes('mini') || lower.includes('fbxgw7')) {
-    console.log('[ModelDetection] Detected Mini 4K (v6)');
+    logger.debug('ModelDetection', 'Detected Mini 4K (v6)');
     return 'revolution';
   }
 
-  console.log('[ModelDetection] Unknown model:', modelName);
+  logger.debug('ModelDetection', 'Unknown model:', modelName);
   return 'unknown';
 }
 

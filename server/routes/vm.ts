@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { modelDetection } from '../services/modelDetection.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -81,7 +82,7 @@ router.get('/info', asyncHandler(async (_req, res) => {
     res.json(result);
   } catch {
     // Fallback to mock data if API not available
-    console.log('[VM] VmInfo API not available, using mock data');
+    logger.debug('VM', 'VmInfo API not available, using mock data');
     res.json({
       success: true,
       result: mockVmInfo
@@ -124,7 +125,7 @@ router.get('/', asyncHandler(async (_req, res) => {
     res.json(result);
   } catch {
     // Fallback to mock data if API not available
-    console.log('[VM] Real API not available, using mock data');
+    logger.debug('VM', 'Real API not available, using mock data');
     res.json({
       success: true,
       result: mockVms
@@ -249,7 +250,7 @@ router.post('/', asyncHandler(async (req, res) => {
       }
     } catch {
       // Continue anyway if we can't check
-      console.log('[VM] Could not check VM count for limit');
+      logger.warn('VM', 'Could not check VM count for limit');
     }
   }
 
@@ -281,7 +282,7 @@ router.post('/', asyncHandler(async (req, res) => {
     const result = await freeboxApi.createVm(req.body);
     res.json(result);
   } catch (error) {
-    console.error('[VM] Create VM error:', error);
+    logger.error('VM', 'Create VM error:', error);
     res.status(500).json({
       success: false,
       error: {

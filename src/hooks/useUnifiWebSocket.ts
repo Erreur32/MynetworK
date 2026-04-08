@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useUnifiRealtimeStore } from '../stores/unifiRealtimeStore';
+import { useUserAuthStore } from '../stores/userAuthStore';
 import { getBasePath } from '../utils/ingress';
 
 interface UnifiBandwidthMessage {
@@ -55,6 +56,12 @@ export function useUnifiWebSocket(options: UseUnifiWebSocketOptions = {}) {
       wsUrl = `${protocol}//${window.location.hostname}:${backendPort}${basePath}ws/unifi`;
     } else {
       wsUrl = `${protocol}//${window.location.host}${basePath}ws/unifi`;
+    }
+
+    // Append JWT token for WebSocket authentication
+    const token = useUserAuthStore.getState().getToken();
+    if (token) {
+      wsUrl += `${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
     }
 
     if (import.meta.env.DEV) {

@@ -8,6 +8,7 @@ import { authService } from '../services/authService.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
+import { logger } from '../utils/logger.js';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
@@ -50,7 +51,7 @@ router.get('/', asyncHandler(async (_req, res) => {
     // Update the result with normalized data
     systemResult.result = normalized;
 
-    console.log('[System] Normalized data - sensors:', normalized.sensors?.length || 0, 'fans:', normalized.fans?.length || 0);
+    logger.debug('System', 'Normalized data - sensors:', normalized.sensors?.length || 0, 'fans:', normalized.fans?.length || 0);
   }
 
   res.json(systemResult);

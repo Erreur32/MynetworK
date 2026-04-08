@@ -165,6 +165,7 @@ export class AuthService {
         };
 
         const token = jwt.sign(payload, this.jwtSecret, {
+            algorithm: 'HS256',
             expiresIn: this.jwtExpiresIn
         } as jwt.SignOptions);
 
@@ -181,7 +182,7 @@ export class AuthService {
      */
     async verifyToken(token: string): Promise<TokenPayload> {
         try {
-            const payload = jwt.verify(token, this.jwtSecret) as TokenPayload;
+            const payload = jwt.verify(token, this.jwtSecret, { algorithms: ['HS256'] }) as TokenPayload;
             return payload;
         } catch (error) {
             if (error instanceof jwt.TokenExpiredError) {

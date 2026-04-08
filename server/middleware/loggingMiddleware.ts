@@ -9,6 +9,7 @@ import { loggingService } from '../services/loggingService.js';
 import type { AuthenticatedRequest } from './authMiddleware.js';
 import { getClientIp } from '../utils/getClientIp.js';
 import { metricsCollector } from '../services/metricsCollector.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Create middleware to automatically log an action
@@ -48,7 +49,7 @@ export const autoLog = (
                         level: res.statusCode >= 400 ? 'error' : 'info'
                     }
                 ).catch(err => {
-                    console.error('[Logging] Failed to log action:', err);
+                    logger.error('Logging', 'Failed to log action:', err);
                 });
             }
 
@@ -83,7 +84,7 @@ export const logAllRequests = (
                 level: 'info'
             }
         ).catch(err => {
-            console.error('[Logging] Failed to log request:', err);
+            logger.error('Logging', 'Failed to log request:', err);
         });
     }
 

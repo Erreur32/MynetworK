@@ -11,6 +11,7 @@ import { metricsCollector } from './metricsCollector.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { getDatabase } from '../database/connection.js';
 import { bruteForceProtection } from './bruteForceProtection.js';
+import { logger } from '../utils/logger.js';
 
 export interface MetricsConfig {
     prometheus: {
@@ -156,9 +157,9 @@ export async function generatePrometheusMetrics(): Promise<string> {
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch system stats:', error);
+        logger.error('MetricsService', 'Failed to fetch system stats:', error);
     }
-    
+
     // Network stats
     try {
         const networkResponse = await fetch(`http://localhost:${process.env.PORT || 3003}/api/system/server/network`);
@@ -166,21 +167,21 @@ export async function generatePrometheusMetrics(): Promise<string> {
             const networkData = await networkResponse.json();
             if (networkData.success && networkData.result) {
                 const net = networkData.result;
-                
+
                 const netDownload = toPrometheusNumber(net.download);
                 const netUpload = toPrometheusNumber(net.upload);
-                
+
                 lines.push(`# HELP mynetwork_network_download Download speed in bytes per second`);
                 lines.push(`# TYPE mynetwork_network_download gauge`);
                 lines.push(`mynetwork_network_download ${netDownload}`);
-                
+
                 lines.push(`# HELP mynetwork_network_upload Upload speed in bytes per second`);
                 lines.push(`# TYPE mynetwork_network_upload gauge`);
                 lines.push(`mynetwork_network_upload ${netUpload}`);
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch network stats:', error);
+        logger.error('MetricsService', 'Failed to fetch network stats:', error);
     }
     
     // Plugin stats
@@ -354,13 +355,13 @@ export async function generatePrometheusMetrics(): Promise<string> {
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch plugin stats:', error);
+        logger.error('MetricsService', 'Failed to fetch plugin stats:', error);
     }
-    
+
     // Application metrics (aggregated, no high cardinality)
     try {
         const appMetrics = metricsCollector.getAllMetrics();
-        
+
         // Scan metrics (performance metrics, calculated AFTER scan)
         if (appMetrics.scan.scanCount > 0) {
             lines.push(`# HELP mynetwork_scan_duration_seconds Duration of last scan in seconds`);
@@ -525,9 +526,9 @@ export async function generatePrometheusMetrics(): Promise<string> {
         lines.push(`# TYPE mynetwork_scan_scheduler_runs_total counter`);
         lines.push(`mynetwork_scan_scheduler_runs_total ${appMetrics.scheduler.runsTotal}`);
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch application metrics:', error);
+        logger.error('MetricsService', 'Failed to fetch application metrics:', error);
     }
-    
+
     return lines.join('\n') + '\n';
 }
 
@@ -593,9 +594,9 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch system stats:', error);
+        logger.error('MetricsService', 'Failed to fetch system stats:', error);
     }
-    
+
     // Network stats
     try {
         const networkResponse = await fetch(`http://localhost:${process.env.PORT || 3003}/api/system/server/network`);
@@ -609,7 +610,7 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch network stats:', error);
+        logger.error('MetricsService', 'Failed to fetch network stats:', error);
     }
     
     // Plugin stats
@@ -758,14 +759,14 @@ export async function generateInfluxDBMetrics(): Promise<string> {
             }
         }
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch plugin stats:', error);
+        logger.error('MetricsService', 'Failed to fetch plugin stats:', error);
     }
-    
+
     // Application metrics (aggregated, no high cardinality)
     try {
         const appMetrics = metricsCollector.getAllMetrics();
         const timestamp = Date.now() * 1000000; // Nanoseconds
-        
+
         // Scan metrics
         if (appMetrics.scan.scanCount > 0) {
             lines.push(`mynetwork,type=scan_metrics duration_seconds=${(appMetrics.scan.lastScanDuration / 1000).toFixed(3)},last_timestamp=${appMetrics.scan.lastScanTimestamp}i,ips_scanned=${appMetrics.scan.lastScanScanned}i,ips_found=${appMetrics.scan.lastScanFound}i,runs_total=${appMetrics.scan.scanCount}i ${timestamp}`);
@@ -843,7 +844,7 @@ export async function generateInfluxDBMetrics(): Promise<string> {
         }
         lines.push(`mynetwork,type=scan_scheduler ${schedulerFields.join(',')} ${timestamp}`);
     } catch (error) {
-        console.error('[MetricsService] Failed to fetch application metrics:', error);
+        logger.error('MetricsService', 'Failed to fetch application metrics:', error);
     }
     
     return lines.join('\n') + '\n';

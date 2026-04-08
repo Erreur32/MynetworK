@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { PluginConfigRepository } from '../database/models/PluginConfig.js';
 import { pluginManager } from './pluginManager.js';
+import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,13 +242,13 @@ export async function synchronizeConfig(mode: 'auto' | 'import' | 'export' = 'au
     
     if (mode === 'export' || (!fileExists && mode === 'auto')) {
         // Export mode: always export DB to file
-        console.log('[ConfigService] Exporting current configuration to file...');
+        logger.info('ConfigService', 'Exporting current configuration to file...');
         try {
             const content = exportConfigToFile();
             writeConfigToFile(content);
-            console.log(`[ConfigService] Configuration exported to: ${configFilePath}`);
+            logger.info('ConfigService', `Configuration exported to: ${configFilePath}`);
         } catch (error) {
-            console.error('[ConfigService] Failed to export configuration:', error);
+            logger.error('ConfigService', 'Failed to export configuration:', error);
         }
         return;
     }
@@ -260,25 +261,25 @@ export async function synchronizeConfig(mode: 'auto' | 'import' | 'export' = 'au
         
         if (hasExistingConfigs && mode === 'auto') {
             // DB has configs, don't overwrite - export DB to file instead
-            console.log('[ConfigService] Database has existing configurations, exporting to file instead of importing...');
+            logger.info('ConfigService', 'Database has existing configurations, exporting to file instead of importing...');
             try {
                 const content = exportConfigToFile();
                 writeConfigToFile(content);
-                console.log(`[ConfigService] Configuration exported to: ${configFilePath}`);
+                logger.info('ConfigService', `Configuration exported to: ${configFilePath}`);
             } catch (error) {
-                console.error('[ConfigService] Failed to export configuration:', error);
+                logger.error('ConfigService', 'Failed to export configuration:', error);
             }
         } else {
             // DB is empty or import explicitly requested - import from file
-            console.log('[ConfigService] Configuration file found, importing...');
+            logger.info('ConfigService', 'Configuration file found, importing...');
             try {
                 const result = await importConfigFromFile();
-                console.log(`[ConfigService] Imported ${result.imported} plugin configurations`);
+                logger.info('ConfigService', `Imported ${result.imported} plugin configurations`);
                 if (result.errors.length > 0) {
-                    console.warn('[ConfigService] Import errors:', result.errors);
+                    logger.warn('ConfigService', 'Import errors:', result.errors);
                 }
             } catch (error) {
-                console.error('[ConfigService] Failed to import configuration:', error);
+                logger.error('ConfigService', 'Failed to import configuration:', error);
             }
         }
     }

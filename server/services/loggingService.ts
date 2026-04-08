@@ -5,6 +5,7 @@
  */
 
 import { LogRepository, type CreateLogInput } from '../database/models/Log.js';
+import { logger } from '../utils/logger.js';
 
 export interface LogParams {
     userId?: number;
@@ -44,11 +45,11 @@ export class LoggingService {
             if (process.env.NODE_ENV !== 'production') {
                 const level = params.level || 'info';
                 const prefix = `[${level.toUpperCase()}]`;
-                console.log(`${prefix} ${params.action} on ${params.resource}`, params.details || '');
+                logger.info('Logging', `${prefix} ${params.action} on ${params.resource}`, params.details || '');
             }
         } catch (error) {
             // Don't throw - logging should never break the application
-            console.error('[Logging] Failed to create log entry:', error);
+            logger.error('Logging', 'Failed to create log entry:', error);
         }
     }
 

@@ -10,6 +10,7 @@ import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddle
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
 import { getCheckResult, getCheckResultForce, startScheduler, stopScheduler } from '../services/updateCheckService.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.get('/config', requireAuth, asyncHandler(async (_req: AuthenticatedReques
     try {
       config = JSON.parse(row.value);
     } catch (error) {
-      console.error('[Updates] Error parsing update_check_config:', error);
+      logger.error('Updates', 'Error parsing update_check_config:', error);
     }
   }
 

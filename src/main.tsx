@@ -1,6 +1,7 @@
 import './i18n';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
@@ -9,7 +10,7 @@ import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.7.46';
+const APP_VERSION = '0.7.47';
 
 // Console log with colored background
 const logAppInfo = () => {
@@ -71,8 +72,10 @@ initTheme().catch(err => console.warn('Theme initialization error:', err));
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </BrowserRouter>
   </React.StrictMode>
 );

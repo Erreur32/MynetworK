@@ -2047,12 +2047,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             {onNavigateToSearch ? (
                                                 <button
                                                     onClick={() => {
-                                                        // Update URL with search parameter 's' instead of using sessionStorage
-                                                        const urlParams = new URLSearchParams(window.location.search);
-                                                        urlParams.set('s', scan.ip);
-                                                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
-                                                        window.history.pushState(null, '', newUrl);
-                                                        // Navigate to search page (App.tsx will detect the 's' parameter)
+                                                        // Navigate to search page with search parameter
                                                         onNavigateToSearch(scan.ip);
                                                     }}
                                                     className="text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5"

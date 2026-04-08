@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { logger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -701,7 +702,7 @@ const getDockerStats = async (): Promise<{
     
     return stats;
   } catch (error) {
-    console.error(`[SystemServer] Error getting Docker stats:`, error);
+    logger.error('SystemServer', 'Error getting Docker stats:', error);
     return null;
   }
 };
@@ -856,7 +857,7 @@ router.get('/server', async (_req, res) => {
       result: systemInfo
     });
   } catch (error) {
-    console.error('[SystemServer] Error getting system info:', error);
+    logger.error('SystemServer', 'Error getting system info:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -926,7 +927,7 @@ const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } |
       }
       
       if (validInterfaces > 0 && (totalRxBytes > 0 || totalTxBytes > 0)) {
-        console.log(`[Network] Successfully read from ${path}, found ${validInterfaces} interfaces`);
+        logger.debug('Network', `Successfully read from ${path}, found ${validInterfaces} interfaces`);
         return { rxBytes: totalRxBytes, txBytes: totalTxBytes };
       }
     } catch (error) {
@@ -977,7 +978,7 @@ const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } |
         }
         
         if (validInterfaces > 0 && (totalRxBytes > 0 || totalTxBytes > 0)) {
-          console.log(`[Network] Successfully read via command: ${cmd}, found ${validInterfaces} interfaces`);
+          logger.debug('Network', `Successfully read via command: ${cmd}, found ${validInterfaces} interfaces`);
           return { rxBytes: totalRxBytes, txBytes: totalTxBytes };
         }
       } catch {
@@ -985,10 +986,10 @@ const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } |
       }
     }
   } catch (error) {
-    console.log('[Network] Command fallback also failed');
+    logger.debug('Network', 'Command fallback also failed');
   }
   
-  console.log('[Network] Could not read network stats from any source');
+  logger.debug('Network', 'Could not read network stats from any source');
   return null;
 };
 
@@ -1003,7 +1004,7 @@ router.get('/network', async (_req, res) => {
     
     if (!currentStats) {
       // Return empty data if stats unavailable (but still return success)
-      console.log('[Network] No network stats available, returning empty data');
+      logger.debug('Network', 'No network stats available, returning empty data');
       return res.json({
         success: true,
         result: {
@@ -1039,12 +1040,12 @@ router.get('/network', async (_req, res) => {
         }
       } else {
         // Time difference too large, reset history
-        console.log('[Network] Time difference too large, resetting history');
+        logger.debug('Network', 'Time difference too large, resetting history');
         networkHistory.length = 0;
       }
     } else {
       // First call, initialize but don't calculate speed yet
-      console.log('[Network] First call, initializing stats');
+      logger.debug('Network', 'First call, initializing stats');
     }
     
     // Update previous stats
@@ -1067,7 +1068,7 @@ router.get('/network', async (_req, res) => {
       result: networkData
     });
   } catch (error) {
-    console.error('[SystemServer] Error getting network data:', error);
+    logger.error('SystemServer', 'Error getting network data:', error);
     // Return empty data instead of error to prevent frontend crashes
     res.json({
       success: true,
@@ -1111,7 +1112,7 @@ router.get('/server/docker', async (_req, res) => {
           dockerInfo.version = dockerInfo.stats.version;
         }
       } catch (error) {
-        console.error('[SystemServer] Error getting Docker info:', error);
+        logger.error('SystemServer', 'Error getting Docker info:', error);
         // Try fallback version detection
         dockerInfo.version = await getDockerVersion();
       }
@@ -1122,7 +1123,7 @@ router.get('/server/docker', async (_req, res) => {
       result: dockerInfo
     });
   } catch (error) {
-    console.error('[SystemServer] Error getting Docker info:', error);
+    logger.error('SystemServer', 'Error getting Docker info:', error);
     res.status(500).json({
       success: false,
       error: {

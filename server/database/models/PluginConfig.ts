@@ -5,6 +5,7 @@
  */
 
 import { getDatabase } from '../connection.js';
+import { logger } from '../../utils/logger.js';
 
 export interface PluginConfig {
     id: number;
@@ -71,7 +72,7 @@ export class PluginConfigRepository {
         try {
             settings = JSON.parse(row.settings);
         } catch (parseError) {
-            console.error(`[PluginConfig] Failed to parse settings JSON for plugin ${pluginId}:`, parseError);
+            logger.error('PluginConfig', `Failed to parse settings JSON for plugin ${pluginId}:`, parseError);
             settings = {};
         }
         
@@ -79,8 +80,8 @@ export class PluginConfigRepository {
         if (pluginId === 'unifi' && settings) {
             const apiKey = settings.apiKey as string;
             const apiMode = settings.apiMode as string;
-            console.log(`[PluginConfig] Loaded UniFi config - apiMode: ${apiMode}, apiKey type: ${typeof apiKey}, apiKey length: ${apiKey?.length || 0}, apiKey preview: ${apiKey ? (apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***') : 'N/A'}`);
-            console.log(`[PluginConfig] Raw settings keys: ${Object.keys(settings).join(', ')}`);
+            logger.debug('PluginConfig', `Loaded UniFi config - apiMode: ${apiMode}, apiKey type: ${typeof apiKey}, apiKey length: ${apiKey?.length || 0}, apiKey preview: ${apiKey ? (apiKey.length > 8 ? `${apiKey.substring(0, 8)}...` : '***') : 'N/A'}`);
+            logger.debug('PluginConfig', `Raw settings keys: ${Object.keys(settings).join(', ')}`);
         }
         
         return {

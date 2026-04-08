@@ -45,10 +45,6 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
             return (
                 <button
                     onClick={() => {
-                        const urlParams = new URLSearchParams(window.location.search);
-                        urlParams.set('s', ip);
-                        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
-                        window.history.pushState(null, '', newUrl);
                         onNavigateToSearch(ip);
                     }}
                     className={`text-left hover:text-cyan-400 transition-colors cursor-pointer inline-flex items-baseline gap-0.5 ${className}`}

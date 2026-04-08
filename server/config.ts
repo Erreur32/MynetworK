@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,7 +39,7 @@ const getTokenFilePath = (): string => {
     
     // Force absolute path from project root
     const tokenPath = path.resolve(projectRoot, 'data', 'freebox_token.json');
-    console.log(`[Config] Development mode - Token path: ${tokenPath} (projectRoot: ${projectRoot})`);
+    logger.debug('Config', `Development mode - Token path: ${tokenPath} (projectRoot: ${projectRoot})`);
     return tokenPath;
   }
   

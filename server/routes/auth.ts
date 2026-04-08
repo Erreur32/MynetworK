@@ -5,6 +5,7 @@ import { connectionWebSocket } from '../services/connectionWebSocket.js';
 import { freeboxNativeWebSocket } from '../services/freeboxNativeWebSocket.js';
 import { pluginManager } from '../services/pluginManager.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.post('/login', asyncHandler(async (_req, res) => {
     }
   } catch (error) {
     // Log but don't fail the login if plugin restart fails
-    console.error('[Auth] Failed to restart Freebox plugin after login:', error);
+    logger.error('Auth', 'Failed to restart Freebox plugin after login:', error);
   }
 
   res.json({

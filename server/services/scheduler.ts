@@ -3,6 +3,7 @@ import path from 'path';
 import cron from 'node-cron';
 import { freeboxApi } from './freeboxApi.js';
 import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 export interface RebootSchedule {
   enabled: boolean;
@@ -51,7 +52,7 @@ class RebootSchedulerService {
           mapping
         };
       } catch (error) {
-        console.error('[Scheduler] Failed to load schedule:', error);
+        logger.error('Scheduler', 'Failed to load schedule:', error);
       }
     }
     return { ...DEFAULT_SCHEDULE };
@@ -60,9 +61,9 @@ class RebootSchedulerService {
   private saveSchedule() {
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.schedule, null, 2), 'utf-8');
-      console.log(`[Scheduler] Saved schedule to ${this.configPath}`);
+      logger.info('Scheduler', `Saved schedule to ${this.configPath}`);
     } catch (error) {
-      console.error('[Scheduler] Failed to save schedule:', error);
+      logger.error('Scheduler', 'Failed to save schedule:', error);
     }
   }
 
@@ -88,7 +89,7 @@ class RebootSchedulerService {
     this.tasks = [];
 
     if (!this.schedule.enabled) {
-      console.log('[Scheduler] Reboot schedule disabled');
+      logger.info('Scheduler', 'Reboot schedule disabled');
       return;
     }
 
@@ -101,17 +102,17 @@ class RebootSchedulerService {
       const cronExpression = `${minute} ${hour} * * ${day}`;
 
       if (cron.validate(cronExpression)) {
-        console.log(`[Scheduler] Scheduling reboot for day ${day} at ${time} (${cronExpression})`);
+        logger.info('Scheduler', `Scheduling reboot for day ${day} at ${time} (${cronExpression})`);
         this.tasks.push(cron.schedule(cronExpression, async () => {
-          console.log(`[Scheduler] Executing scheduled reboot (Day ${day})...`);
+          logger.info('Scheduler', `Executing scheduled reboot (Day ${day})...`);
           try {
             await freeboxApi.reboot();
           } catch (error) {
-            console.error('[Scheduler] Scheduled reboot failed:', error);
+            logger.error('Scheduler', 'Scheduled reboot failed:', error);
           }
         }));
       } else {
-        console.error(`[Scheduler] Invalid cron expression for day ${day}: ${cronExpression}`);
+        logger.error('Scheduler', `Invalid cron expression for day ${day}: ${cronExpression}`);
       }
     });
   }
