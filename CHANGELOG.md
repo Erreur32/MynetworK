@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.48] - 2026-04-08
+
+### 🛡️ Security
+- **Rate limiting**: `express-rate-limit` middleware — 100 req/min API, 10 req/min network scans
+- **Regex injection fix**: full regex character escape in dynamic `new RegExp()` (networkScanService avahi-browse)
+- **ReDoS prevention**: truncate user input before regex match in network-scan route
+- **URL validation fix**: replace `url.includes('unifi.ui.com')` with proper `new URL(url).hostname` check in UniFi plugin
+
+### 🔧 Changed
+- **`.gitignore` cleanup**: removed 13 redundant entries, reorganized sections, added AI tools patterns (Cursor, Copilot, Gemini)
+- **GitHub repo**: disabled unused Projects feature, added 20 SEO topics
+- **CodeQL alerts**: resolved 21/24 alerts (dismissed false positives with documented reasons)
+
+---
+
 ## [0.7.47] - 2026-04-08
 
 ### ✨ Added
