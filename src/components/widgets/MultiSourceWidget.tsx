@@ -221,7 +221,7 @@ export const MultiSourceWidget: React.FC<MultiSourceWidgetProps> = ({ className 
                                         <div className="flex flex-col gap-1 mt-1">
                                             {/* Plugin-specific API information */}
                                             {isActive && (
-                                                <div className="flex flex-col gap-1 text-[11px] text-gray-400 mb-0.5 px-2 py-1.5 bg-gray-900/30 rounded border border-gray-800/50">
+                                                <div className="flex flex-col gap-1 text-[11px] text-gray-400 mb-0.5 px-2 py-1.5">
                                                     {plugin.id === 'freebox' && (
                                                         <>
                                                     {(apiVersion || systemStats?.apiVersion) && (

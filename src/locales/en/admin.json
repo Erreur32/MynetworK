@@ -303,7 +303,9 @@
     "updateCheck": {
       "autoCheckLabel": "Automatic update check",
       "autoCheckDescription": "Enable checking for new versions on GitHub Container Registry",
+      "frequency": "Frequency",
       "currentVersion": "Current version",
+      "latestVersion": "Latest version (GitHub)",
       "latestVersionAvailable": "Latest version available",
       "newVersionAvailable": "New version available!",
       "updateAvailableHint": "An update is available. To update, use:",
@@ -313,8 +315,11 @@
       "lastCheck": "Last check",
       "checking": "Checking…",
       "upToDate": "Up to date",
-      "updateAvailableVersion": "Update available: {{version}}",
-      "updateCommand": "docker-compose pull && docker-compose up -d"
+      "updateAvailableVersion": "Update available — v{{version}}",
+      "updateCommand": "docker compose pull && docker compose up -d",
+      "dockerReady": "Available",
+      "dockerBuilding": "Build in progress",
+      "viewChangelog": "View full changelog"
     },
     "freeboxFirmwareCheck": {
       "sectionTitle": "Freebox firmware check",

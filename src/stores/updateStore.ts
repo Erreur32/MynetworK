@@ -12,15 +12,17 @@ interface UpdateInfo {
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  dockerReady?: boolean;
   releaseTitle?: string;
   releaseNotes?: string;
   error?: string;
-  /** ISO date of last check (from backend 12h cache) */
+  /** ISO date of last check (from backend cache) */
   lastCheckAt?: string;
 }
 
 interface UpdateConfig {
   enabled: boolean;
+  frequency: number; // hours: 1, 6, 12, 24, 168
 }
 
 interface UpdateStore {
@@ -34,7 +36,7 @@ interface UpdateStore {
   /** Force a fresh check (bypass 12h cache). Returns result for inline notification. */
   checkForUpdatesForce: () => Promise<UpdateInfo | null>;
   loadConfig: () => Promise<void>;
-  setConfig: (enabled: boolean) => Promise<void>;
+  setConfig: (enabled: boolean, frequency?: number) => Promise<void>;
 }
 
 export const useUpdateStore = create<UpdateStore>((set, get) => ({
@@ -96,12 +98,13 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
     }
   },
   
-  setConfig: async (enabled: boolean) => {
+  setConfig: async (enabled: boolean, frequency?: number) => {
     try {
-      const response = await api.post<UpdateConfig>('/api/updates/config', { enabled });
+      const body: { enabled: boolean; frequency?: number } = { enabled };
+      if (frequency !== undefined) body.frequency = frequency;
+      const response = await api.post<UpdateConfig>('/api/updates/config', body);
       if (response.success && response.result) {
         set({ updateConfig: response.result });
-        // If enabling, check for updates immediately
         if (enabled) {
           get().checkForUpdates();
         }

@@ -54,7 +54,7 @@ router.get('/config', requireAuth, asyncHandler(async (_req: AuthenticatedReques
  * Update update check configuration. Starts/stops 12h scheduler.
  */
 router.post('/config', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const { enabled } = req.body;
+  const { enabled, frequency } = req.body;
 
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({
@@ -66,6 +66,9 @@ router.post('/config', requireAuth, asyncHandler(async (req: AuthenticatedReques
     });
   }
 
+  const allowedFrequencies = [1, 6, 12, 24, 168];
+  const freq = (typeof frequency === 'number' && allowedFrequencies.includes(frequency)) ? frequency : 24;
+
   const db = getDatabase();
   const stmt = db.prepare(`
     INSERT INTO app_config (key, value, updated_at)
@@ -75,7 +78,7 @@ router.post('/config', requireAuth, asyncHandler(async (req: AuthenticatedReques
       updated_at = CURRENT_TIMESTAMP
   `);
 
-  const config = { enabled };
+  const config = { enabled, frequency: freq };
   stmt.run('update_check_config', JSON.stringify(config));
 
   if (enabled) {

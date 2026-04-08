@@ -15,14 +15,29 @@ import { logger } from '../utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
-const SCHEDULER_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const DEFAULT_FREQUENCY_HOURS = 24;
+
+function getFrequencyMs(): number {
+  try {
+    const db = getDatabase();
+    const row = db.prepare('SELECT value FROM app_config WHERE key = ?').get('update_check_config') as { value: string } | undefined;
+    if (row) {
+      const config = JSON.parse(row.value);
+      if (typeof config.frequency === 'number' && config.frequency > 0) {
+        return config.frequency * 60 * 60 * 1000;
+      }
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_FREQUENCY_HOURS * 60 * 60 * 1000;
+}
 
 export interface UpdateCheckResult {
   enabled: boolean;
   currentVersion: string;
   latestVersion: string | null;
   updateAvailable: boolean;
+  /** Whether the Docker image is available in GHCR for the latest version */
+  dockerReady?: boolean;
   /** First line of the commit message for the latest tag */
   releaseTitle?: string;
   /** Full commit message body (minus first line) for the latest tag */
@@ -233,6 +248,7 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
                 currentVersion,
                 latestVersion,
                 updateAvailable,
+                dockerReady,
                 releaseTitle: commitMsg?.title,
                 releaseNotes: commitMsg?.body
               };
@@ -335,7 +351,7 @@ export async function getCheckResult(): Promise<CheckResultWithTime> {
     return disabledResult;
   }
 
-  if (cachedResult && (now - cachedAt) < CACHE_TTL_MS) {
+  if (cachedResult && (now - cachedAt) < getFrequencyMs()) {
     return {
       ...cachedResult,
       lastCheckAt: new Date(cachedAt).toISOString()
@@ -389,7 +405,9 @@ export async function getCheckResultForce(): Promise<CheckResultWithTime> {
  */
 export function startScheduler(): void {
   stopScheduler();
-  logger.info('Updates', 'Starting update check scheduler (every 12h)');
+  const intervalMs = getFrequencyMs();
+  const intervalLabel = intervalMs >= 86400000 ? `${intervalMs / 86400000}d` : `${intervalMs / 3600000}h`;
+  logger.info('Updates', `Starting update check scheduler (every ${intervalLabel})`);
   performUpdateCheck().then((result) => {
     cachedResult = result;
     cachedAt = Date.now();
@@ -402,7 +420,7 @@ export function startScheduler(): void {
         logger.info('Updates', `New version available: ${result.latestVersion} (current: ${result.currentVersion})`);
       }
     }).catch((err) => logger.error('Updates', 'Scheduled check failed: ' + (err instanceof Error ? err.message : String(err))));
-  }, SCHEDULER_INTERVAL_MS);
+  }, intervalMs);
 }
 
 /**

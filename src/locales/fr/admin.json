@@ -303,7 +303,9 @@
     "updateCheck": {
       "autoCheckLabel": "Vérification automatique des mises à jour",
       "autoCheckDescription": "Active la vérification des nouvelles versions disponibles sur GitHub Container Registry",
+      "frequency": "Fréquence",
       "currentVersion": "Version actuelle",
+      "latestVersion": "Dernière version (GitHub)",
       "latestVersionAvailable": "Dernière version disponible",
       "newVersionAvailable": "Nouvelle version disponible !",
       "updateAvailableHint": "Une mise à jour est disponible. Pour mettre à jour, utilisez :",
@@ -313,8 +315,11 @@
       "lastCheck": "Dernière vérification",
       "checking": "Vérification…",
       "upToDate": "À jour",
-      "updateAvailableVersion": "Mise à jour disponible : {{version}}",
-      "updateCommand": "docker-compose pull && docker-compose up -d"
+      "updateAvailableVersion": "Mise à jour disponible — v{{version}}",
+      "updateCommand": "docker compose pull && docker compose up -d",
+      "dockerReady": "Disponible",
+      "dockerBuilding": "Build en cours",
+      "viewChangelog": "Voir le changelog complet"
     },
     "freeboxFirmwareCheck": {
       "sectionTitle": "Vérification firmware Freebox",
