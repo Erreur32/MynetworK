@@ -261,7 +261,8 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
         }
       } else if (tagsResponse.status === 403) {
         const reset = tagsResponse.headers.get('x-ratelimit-reset');
-        lastError = `GitHub API rate limit. Reset: ${reset ? new Date(parseInt(reset) * 1000).toISOString() : 'unknown'}. Set GITHUB_TOKEN to avoid.`;
+        const resetTime = reset ? new Date(parseInt(reset) * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '?';
+        lastError = `GitHub API rate limit exceeded (resets at ${resetTime}). Set GITHUB_TOKEN env var to increase limit.`;
       } else {
         lastError = `GitHub API: ${tagsResponse.status} ${tagsResponse.statusText}`;
       }
@@ -293,9 +294,10 @@ export async function performUpdateCheck(): Promise<UpdateCheckResult> {
           }
         }
       } else if (dockerResponse.status === 401) {
-        error = 'Registry requires authentication.';
+        // Don't overwrite a more specific error from GitHub API (e.g. rate limit)
+        if (!lastError) error = 'Docker registry requires authentication.';
       } else {
-        error = `Registry: ${dockerResponse.status} ${dockerResponse.statusText}`;
+        if (!lastError) error = `Docker registry: ${dockerResponse.status} ${dockerResponse.statusText}`;
       }
     } catch (e) {
       if (!error) error = e instanceof Error ? e.message : 'Registry request failed';
