@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.49] - 2026-04-08
+
+### ✨ Added
+- **OSSF Scorecard** workflow — weekly supply chain security scoring with public dashboard
+- **Dependency Review** workflow — blocks PRs introducing high-severity vulnerable dependencies
+- **Security badges** on both READMEs (CodeQL, OSSF Scorecard)
+
+---
+
 ## [0.7.48] - 2026-04-08
 
 ### 🛡️ Security
