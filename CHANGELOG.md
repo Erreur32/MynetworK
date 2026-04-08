@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.52] - 2026-04-08
+
+### 🐛 Fixed
+- **Update check error messages**: show actual GitHub rate limit error instead of misleading "Registry requires authentication" — includes reset time and GITHUB_TOKEN hint
+
+---
+
 ## [0.7.51] - 2026-04-08
 
 ### ✨ Added
