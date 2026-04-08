@@ -12,16 +12,26 @@ dist
 dist-ssr
 *.local
 
-# Claude Code
+# AI tools & dev assistants
 CLAUDE.md
 .claude/
 .claude.*
+.cursorrules
+.cursorignore
+.cursor/
+.copilot/
+.copilot*
+.gemini/
+GEMINI.md
+AGENTS.md
+.planning/
+.superpowers/
+docs/superpowers/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.cursor
 *.code-workspace
 .DS_Store
 *.suo
