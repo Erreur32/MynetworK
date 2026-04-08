@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.51] - 2026-04-08
+
+### ✨ Added
+- **Update check frequency selector**: configurable check interval (1h/6h/12h/24h/7d) in administration settings
+- **Docker GHCR status**: shows build availability (green/orange) when update available, with `docker compose pull` command
+- **Release notes**: display changelog excerpt and link when update available
+
+### 🔧 Changed
+- **Bandwidth chart toggle**: Freebox/UniFi source switch moved to period filter bar, blue for both (was orange for Freebox)
+- **Bandwidth legend**: removed "Scale: history (RRD)" label — period label now shown for both sources
+- **Plugin Status cards**: removed borders from firmware/last scan sub-cards for cleaner look
+- **CodeQL badge**: switched to shields.io static badge (consistent style)
+
+---
+
 ## [0.7.50] - 2026-04-08
 
 ### 🛡️ Security
