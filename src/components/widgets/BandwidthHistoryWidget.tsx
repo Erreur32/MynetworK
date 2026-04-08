@@ -127,7 +127,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                     <button
                         type="button"
                         className={`px-2 py-0.5 rounded-full ${
-                            source === 'freebox' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-gray-200'
+                            source === 'freebox' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
                         }`}
                         onClick={() => setSource('freebox')}
                     >
