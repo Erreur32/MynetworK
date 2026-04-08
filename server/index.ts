@@ -172,17 +172,15 @@ function getCorsConfig() {
   }
   
   // Default CORS configuration
-  // In production (Docker), allow all origins since frontend is served from same server
-  // In development, allow localhost and common network IPs
-  const corsOrigin = process.env.NODE_ENV === 'production'
-    ? true  // Allow all origins in production (frontend served from same origin)
-    : [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        /^http:\/\/192\.168\.\d+\.\d+:5173$/,  // Allow any 192.168.x.x:5173
-        /^http:\/\/192\.168\.\d+\.\d+:3000$/,  // Allow any 192.168.x.x:3000
-        /^http:\/\/127\.0\.0\.1:\d+$/           // Allow 127.0.0.1 with any port
-      ];
+  // Allow same domain + all subdomains + local network
+  const corsOrigin = [
+    /^https?:\/\/([a-z0-9-]+\.)*myoueb\.fr(:\d+)?$/,  // *.myoueb.fr (any subdomain, any port)
+    /^https?:\/\/localhost(:\d+)?$/,                     // localhost (any port)
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/,                  // 127.0.0.1 (any port)
+    /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/,            // 192.168.x.x (any port)
+    /^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,             // 10.x.x.x (any port)
+    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$/  // 172.16-31.x.x (any port)
+  ];
   
   return {
     origin: corsOrigin,
