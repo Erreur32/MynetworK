@@ -118,7 +118,8 @@ const app = express();
 
 // Trust proxy - Required for correct IP detection in Docker/reverse proxy environments
 // This allows Express to use X-Forwarded-For and X-Real-IP headers
-app.set('trust proxy', true);
+// Use 1 (single hop) instead of true to avoid express-rate-limit ERR_ERL_PERMISSIVE_TRUST_PROXY
+app.set('trust proxy', 1);
 
 // Middleware - CORS Configuration
 // Get CORS config from database, fallback to defaults
