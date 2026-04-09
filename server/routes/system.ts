@@ -10,8 +10,8 @@ import { securityNotificationService } from '../services/securityNotificationSer
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { logger } from '../utils/logger.js';
 import fsSync from 'fs';
-import path from 'path';
 import os from 'os';
+import pkg from '../../package.json';
 
 const router = Router();
 
@@ -107,15 +107,8 @@ router.get('/environment', asyncHandler(async (_req, res) => {
     containerName = 'NPM DEV';
   }
   
-  // Read app version
-  let appVersion = '0.1.0';
-  try {
-    const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
-    const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
-    appVersion = packageJson.version || appVersion;
-  } catch {
-    // Use default
-  }
+  // App version from package.json (loaded at module init)
+  const appVersion: string = pkg.version;
   
   // Determine version label
   let versionLabel: string;

@@ -21,6 +21,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       # Dépréciation Node.js 20 sur GitHub Actions : on force Node.js 24 pour
       # éviter les avertissements sur les actions tournant encore sur Node 20.
