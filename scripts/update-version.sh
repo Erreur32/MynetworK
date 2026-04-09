@@ -219,24 +219,24 @@ CHANGELOG_CONTENT=$(awk -v version="$NEW_VERSION" '
 if [ -n "$CHANGELOG_CONTENT" ] && echo "$CHANGELOG_CONTENT" | grep -qE "^###|^\-"; then
     # Formater les sections avec les emojis appropriés (format commit-message.txt)
     FORMATTED_CONTENT=$(echo "$CHANGELOG_CONTENT" | \
-        sed 's/^### 🐛 Corrigé/🐛 Corrigé/' | \
-        sed 's/^### 🔧 Modifié/🔧 Modifié/' | \
+        sed 's/^### 🐛 Corrigé/🐛 Fixed/' | \
+        sed 's/^### 🔧 Modifié/🔧 Changed/' | \
         sed 's/^### 📝 Documentation/📝 Documentation/' | \
-        sed 's/^### ✨ Ajouté/✨ Ajouté/' | \
-        sed 's/^### 🐛/🐛 Corrigé/' | \
-        sed 's/^### 🔧/🔧 Modifié/' | \
+        sed 's/^### ✨ Ajouté/✨ Added/' | \
+        sed 's/^### 🐛/🐛 Fixed/' | \
+        sed 's/^### 🔧/🔧 Changed/' | \
         sed 's/^### 📝/📝 Documentation/' | \
-        sed 's/^### ✨/✨ Ajouté/')
+        sed 's/^### ✨/✨ Added/')
     
     cat > "$COMMIT_MESSAGE_FILE" << EOF
-feat: Version $NEW_VERSION - Mise à jour
+feat: Version $NEW_VERSION - Update
 
 $FORMATTED_CONTENT
 EOF
 else
     # Message minimal si le CHANGELOG est vide
     cat > "$COMMIT_MESSAGE_FILE" << EOF
-feat: Version $NEW_VERSION - Mise à jour
+feat: Version $NEW_VERSION - Update
 EOF
 fi
 
@@ -310,7 +310,7 @@ else
     echo -e "${CYAN}git add -A && git commit -F $COMMIT_MESSAGE_FILE && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
     echo ""
     echo -e "${CYAN}${BOLD}Option 2 - Avec message inline:${NC}"
-    COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Mise à jour")
+    COMMIT_MESSAGE_INLINE=$(head -n 1 "$COMMIT_MESSAGE_FILE" 2>/dev/null || echo "feat: Version $NEW_VERSION - Update")
     echo -e "${CYAN}git add -A && git commit -m \"$COMMIT_MESSAGE_INLINE\" && git tag -a v$NEW_VERSION -m \"Version $NEW_VERSION\" && git push origin main && git push origin v$NEW_VERSION${NC}"
     echo ""
 fi
