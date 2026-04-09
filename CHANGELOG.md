@@ -2,11 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.65] - 2026-04-09
+
+### Technical
+
+#### Documentation
+
+- **CHANGELOG.md** — Backfilled missing changelog entries for v0.7.63 (disable Rybbit session replay) and v0.7.64 (Scorecard Token-Permissions fix)
+
+---
+
 ## [0.7.64] - 2026-04-09
+
+### Technical
+
+#### CI
+
+- **snyk.yml** — Replaced top-level `permissions: { contents: read, security-events: write }` with `permissions: {}` to fix Scorecard Token-Permissions alert #206 (permissions already defined at job level)
 
 ---
 
 ## [0.7.63] - 2026-04-09
+
+### Technical
+
+#### Frontend
+
+- **App.tsx** — Disabled Rybbit session replay (`data-disable-session-replay="true"`) to fix 413 Content Too Large errors flooding the console
 
 ---
 
