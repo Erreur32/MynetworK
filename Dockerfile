@@ -18,8 +18,10 @@ RUN apk add --no-cache python3 make g++
 # Install all dependencies (including devDependencies) only to compile native modules.
 # devDependencies are removed in the final image (see npm prune --production below).
 # Layer caching: package*.json rarely changes, so npm ci is cached across builds.
+# Cache is keyed per TARGETPLATFORM to avoid ETXTBSY race between amd64/arm64 esbuild binaries.
 COPY package*.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+ARG TARGETPLATFORM
+RUN --mount=type=cache,target=/root/.npm,id=npm-${TARGETPLATFORM} npm ci
 
 # Copy config files first (rarely change = better cache hits)
 COPY tsconfig.json vite.config.ts index.html postcss.config.js tailwind.config.js ./
