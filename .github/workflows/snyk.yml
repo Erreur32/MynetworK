@@ -8,9 +8,7 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  security-events: write
+permissions: {}
 
 jobs:
   snyk-code:
