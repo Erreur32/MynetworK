@@ -84,6 +84,7 @@ if (analyticsHost && analyticsSiteId && !document.querySelector('script[data-sit
   const s = document.createElement('script');
   s.src = `${analyticsHost}/api/script.js`;
   s.dataset.siteId = analyticsSiteId;
+  s.dataset.disableSessionReplay = 'true';
   s.defer = true;
   document.head.appendChild(s);
 }
@@ -248,7 +249,10 @@ const App: React.FC = () => {
     'network-scan': '/network-scan',
   }), []);
 
-  const currentPage: PageType = pageRoutes[location.pathname] || 'dashboard';
+  // Support sub-paths: /unifi/traffic → 'unifi', /settings/general → 'settings'
+  const currentPage: PageType = pageRoutes[location.pathname]
+    || pageRoutes['/' + location.pathname.split('/')[1]]
+    || 'dashboard';
 
   const setCurrentPage = useCallback((page: PageType | ((prev: PageType) => PageType)) => {
     if (typeof page === 'function') {

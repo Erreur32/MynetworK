@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Thermometer,
@@ -61,8 +62,13 @@ interface AnalyticsPageProps {
   onBack: () => void;
 }
 
+type AnalyticsTab = 'bandwidth' | 'temperature' | 'wifi' | 'system';
+const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['bandwidth', 'temperature', 'wifi', 'system'];
+
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { status, history, extendedHistory, temperatureHistory, rrdPermissionDenied, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
   const { info, temperatureHistory: systemTempHistory } = useSystemStore();
   const { networks } = useWifiStore();
@@ -218,7 +224,12 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
     return Math.round((upDays / uptimeHistory.length) * 100);
   }, [uptimeHistory]);
 
-  const [activeTab, setActiveTab] = useState<'bandwidth' | 'temperature' | 'wifi' | 'system'>('bandwidth');
+  // Derive active tab from URL: /analytics/wifi → 'wifi'
+  const urlTab = location.pathname.split('/')[2] as AnalyticsTab | undefined;
+  const activeTab: AnalyticsTab = urlTab && VALID_ANALYTICS_TABS.includes(urlTab) ? urlTab : 'bandwidth';
+  const setActiveTab = useCallback((tab: AnalyticsTab) => {
+    navigate(`/analytics/${tab}`);
+  }, [navigate]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
 
   // Fetch extended history on mount and when time range changes

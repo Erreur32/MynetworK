@@ -1,5 +1,6 @@
 import React, {useEffect, useState, useRef, useCallback} from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
     Tv,
     Video,
@@ -1375,8 +1376,13 @@ const RecordingFormModal: React.FC<{
     );
 };
 
+type TvTab = 'guide' | 'recordings' | 'programmed';
+const VALID_TV_TABS: TvTab[] = ['guide', 'recordings', 'programmed'];
+
 export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
     const { t } = useTranslation();
+    const location = useLocation();
+    const navigate = useNavigate();
     const {info: systemInfo} = useSystemStore();
     const {
         channels,
@@ -1406,7 +1412,12 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
     const {permissions, freeboxUrl} = useAuthStore();
     const hasPvrPermission = permissions.pvr === true;
 
-    const [activeTab, setActiveTab] = useState<'guide' | 'recordings' | 'programmed'>('recordings');
+    // Derive active tab from URL: /tv/guide → 'guide'
+    const urlTab = location.pathname.split('/')[2] as TvTab | undefined;
+    const activeTab: TvTab = urlTab && VALID_TV_TABS.includes(urlTab) ? urlTab : 'recordings';
+    const setActiveTab = useCallback((tab: TvTab) => {
+        navigate(`/tv/${tab}`);
+    }, [navigate]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [showRecordingForm, setShowRecordingForm] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);

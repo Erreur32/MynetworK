@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Folder,
   File,
@@ -489,8 +490,13 @@ interface FilesPageProps {
   initialDownloadId?: string;
 }
 
+type FilesTab = 'files' | 'downloads' | 'shares';
+const VALID_FILES_TABS: FilesTab[] = ['files', 'downloads', 'shares'];
+
 export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initialDownloadId }) => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     files,
     currentPath,
@@ -538,7 +544,12 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
   const { info: systemInfo } = useSystemStore();
   const boxName = getDisplayName(systemInfo?.board_name || '');
 
-  const [activeTab, setActiveTab] = useState<'files' | 'downloads' | 'shares'>(initialTab || 'files');
+  // Derive active tab from URL: /files/downloads → 'downloads'
+  const urlTab = location.pathname.split('/')[2] as FilesTab | undefined;
+  const activeTab: FilesTab = urlTab && VALID_FILES_TABS.includes(urlTab) ? urlTab : (initialTab || 'files');
+  const setActiveTab = useCallback((tab: FilesTab) => {
+    navigate(`/files/${tab}`);
+  }, [navigate]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);

@@ -5,8 +5,9 @@
  * Follows Freebox aesthetic
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, Router, ShieldAlert } from 'lucide-react';
 import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
@@ -30,11 +31,27 @@ interface UniFiPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
+const VALID_UNIFI_TABS: TabType[] = ['overview', 'nat', 'analyse', 'clients', 'traffic', 'threats', 'debug', 'switches'];
+
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
+    const location = useLocation();
+    const navigate = useNavigate();
     const { plugins, pluginStats, fetchPlugins, fetchPluginStats } = usePluginStore();
-    const [activeTab, setActiveTab] = useState<TabType>('overview');
-    const [overviewSubTab, setOverviewSubTab] = useState<'info' | 'events'>('info');
+
+    // Derive active tab from URL path: /unifi/traffic → 'traffic'
+    const urlTab = location.pathname.split('/')[2] as TabType | undefined;
+    const activeTab: TabType = urlTab && VALID_UNIFI_TABS.includes(urlTab) ? urlTab : 'overview';
+    const setActiveTab = useCallback((tab: TabType) => {
+        navigate(`/unifi/${tab}`);
+    }, [navigate]);
+
+    // Derive overview sub-tab from URL: /unifi/overview/events → 'events'
+    const urlSubTab = location.pathname.split('/')[3] as 'info' | 'events' | undefined;
+    const overviewSubTab: 'info' | 'events' = urlSubTab === 'events' ? 'events' : 'info';
+    const setOverviewSubTab = useCallback((sub: 'info' | 'events') => {
+        navigate(`/unifi/overview/${sub}`);
+    }, [navigate]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [clientSortKey, setClientSortKey] = useState<ClientSortKey>('ip');
     const [clientSortDir, setClientSortDir] = useState<'asc' | 'desc'>('asc');

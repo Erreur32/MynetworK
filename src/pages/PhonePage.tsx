@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Phone,
   PhoneIncoming,
@@ -403,8 +404,13 @@ interface PhonePageProps {
   onBack: () => void;
 }
 
+type PhoneTab = 'calls' | 'contacts';
+const VALID_PHONE_TABS: PhoneTab[] = ['calls', 'contacts'];
+
 export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     calls,
     contacts,
@@ -425,7 +431,12 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
   const hasCallsPermission = permissions.calls === true;
   const hasContactsPermission = permissions.contacts === true;
 
-  const [activeTab, setActiveTab] = useState<'calls' | 'contacts'>('calls');
+  // Derive active tab from URL: /phone/contacts → 'contacts'
+  const urlTab = location.pathname.split('/')[2] as PhoneTab | undefined;
+  const activeTab: PhoneTab = urlTab && VALID_PHONE_TABS.includes(urlTab) ? urlTab : 'calls';
+  const setActiveTab = useCallback((tab: PhoneTab) => {
+    navigate(`/phone/${tab}`);
+  }, [navigate]);
   const [searchQuery, setSearchQuery] = useState('');
   const [callFilter, setCallFilter] = useState<'all' | 'missed' | 'incoming' | 'outgoing'>('all');
   const [showContactForm, setShowContactForm] = useState(false);

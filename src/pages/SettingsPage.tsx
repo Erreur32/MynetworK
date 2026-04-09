@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -83,6 +84,8 @@ interface SettingsPageProps {
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system' | 'backup';
 type AdminTab = 'general' | 'plugins' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
+const VALID_SETTINGS_TABS: SettingsTab[] = ['network', 'wifi', 'dhcp', 'storage', 'security', 'system', 'backup'];
+const VALID_ADMIN_TABS: AdminTab[] = ['general', 'plugins', 'security', 'exporter', 'theme', 'debug', 'info', 'backup', 'database'];
 
 // Toggle component
 const Toggle: React.FC<{
@@ -3404,10 +3407,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onLogout
 }) => {
   const { t, i18n } = useTranslation();
+  const location = useLocation();
+  const navigateTo = useNavigate();
   const { format: timeFormat, setFormat: setTimeFormat } = useTimeFormat();
   const { user: currentUser } = useUserAuthStore();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('network');
-  // Check sessionStorage on mount in case initialAdminTab wasn't passed correctly
+
+  // Derive active tab from URL: /settings/wifi → 'wifi'
+  const urlTab = location.pathname.split('/')[2] || '';
+  const activeTab: SettingsTab = (VALID_SETTINGS_TABS as readonly string[]).includes(urlTab)
+    ? urlTab as SettingsTab : 'network';
+  const setActiveTab = useCallback((tab: SettingsTab) => {
+    navigateTo(`/settings/${tab}`);
+  }, [navigateTo]);
+
+  // Admin tab: derive from URL, with sessionStorage + initialAdminTab fallback
   const storedAdminTabRaw = sessionStorage.getItem('adminTab') as string | null;
   const storedAdminTab = (
     storedAdminTabRaw === 'logs' ? 'security' : storedAdminTabRaw === 'users' ? 'general' : storedAdminTabRaw
@@ -3415,28 +3428,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const initialTab = (
     initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab
   ) as AdminTab;
-  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(storedAdminTab || initialTab);
+  const adminDefault = storedAdminTab || initialTab;
+  const activeAdminTab: AdminTab = (VALID_ADMIN_TABS as readonly string[]).includes(urlTab)
+    ? urlTab as AdminTab : adminDefault;
+  const setActiveAdminTab = useCallback((tab: AdminTab) => {
+    navigateTo(`/settings/${tab}`);
+  }, [navigateTo]);
 
-  // Update activeAdminTab when initialAdminTab changes (e.g., from navigation)
-  // Also check sessionStorage on mount (legacy 'logs' tab is now inside Security)
+  // Handle sessionStorage cleanup and legacy hash on mount
   useEffect(() => {
     const tabFromStorageRaw = sessionStorage.getItem('adminTab') as string | null;
-    const tabFromStorage = (
-      tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw === 'users' ? 'general' : tabFromStorageRaw
-    ) as AdminTab | null;
-    if (tabFromStorage) {
-      setActiveAdminTab(tabFromStorage);
-      sessionStorage.removeItem('adminTab'); // Clear after reading
-    } else if (initialAdminTab && initialAdminTab !== 'general') {
-      setActiveAdminTab(
-        initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab
-      );
+    if (tabFromStorageRaw) {
+      const tabFromStorage = (
+        tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw === 'users' ? 'general' : tabFromStorageRaw
+      ) as AdminTab;
+      sessionStorage.removeItem('adminTab');
+      navigateTo(`/settings/${tabFromStorage}`, { replace: true });
+    } else if (initialAdminTab && initialAdminTab !== 'general' && !urlTab) {
+      const resolved = initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab;
+      navigateTo(`/settings/${resolved}`, { replace: true });
     }
-    // Clean URL hash if present
     if (window.location.hash === '#admin') {
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, [initialAdminTab]);
+  }, [initialAdminTab, navigateTo, urlTab]);
 
   // Auto-check DB health on admin mount, show toast if issues detected
   useEffect(() => {

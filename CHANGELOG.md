@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.62] - 2026-04-09
+
+### For users
+
+> Every page and tab now has its own URL — better browser history and more detailed analytics.
+
+- **URL-based tab navigation** — Each tab on every page (UniFi, Analytics, Settings, TV, Files, Phone) now updates the browser URL. You can bookmark or share a direct link to any tab (e.g. `/unifi/traffic`, `/settings/plugins`). Browser back/forward buttons work between tabs.
+- **Snyk badge fixed** — The Snyk security badge on the README now displays correctly.
+
+---
+
+### Technical
+
+#### Frontend — URL sub-tab routing
+
+- **App.tsx** — `currentPage` derivation now handles sub-paths (`/unifi/traffic` → `'unifi'`) via fallback to first URL segment
+- **UniFiPage.tsx** — 8 tabs + overview sub-tab (`/unifi/overview/events`) derived from `location.pathname`, `setActiveTab` uses `navigate()`
+- **AnalyticsPage.tsx** — 4 tabs (bandwidth, temperature, wifi, system) derived from URL
+- **SettingsPage.tsx** — Freebox tabs (7) and Admin tabs (9) both derived from URL, sessionStorage fallback preserved for backward compat
+- **TvPage.tsx** — 3 tabs (recordings, guide, programmed) derived from URL
+- **FilesPage.tsx** — 3 tabs (files, downloads, shares) derived from URL, `initialTab` prop still respected as fallback
+- **PhonePage.tsx** — 2 tabs (calls, contacts) derived from URL
+- All tab changes trigger `pushState` via react-router `navigate()`, which Rybbit analytics script captures automatically
+
+#### CI / README
+
+- **README.md** — Snyk badge switched from `shields.io/snyk/vulnerabilities` (requires snyk.io web monitoring) to GitHub Actions workflow status badge
+
+---
+
 ## [0.7.61] - 2026-04-09
 
 ---
