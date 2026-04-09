@@ -40,10 +40,10 @@ export const writeLimiter = rateLimit({
     message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests, please try again later' } }
 });
 
-/** Network scan limiter — 10 scans per minute per IP (scans are resource-heavy) */
+/** Network scan limiter — 60 requests per minute per IP (read endpoints + polling) */
 export const scanLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 10,
+    max: 60,
     keyGenerator,
     standardHeaders: true,
     legacyHeaders: false,

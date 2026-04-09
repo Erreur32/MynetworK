@@ -294,7 +294,11 @@ setTimeout(() => {
 
 // Rate limiting
 import { apiLimiter, scanLimiter } from './middleware/rateLimiter.js';
-app.use('/api/', apiLimiter);
+// Apply API rate limiter to all routes except network-scan (has its own limiter)
+app.use('/api/', (req, res, next) => {
+    if (req.path.startsWith('/network-scan')) return next();
+    return apiLimiter(req, res, next);
+});
 app.use('/api/network-scan', scanLimiter);
 
 app.use('/api/users', usersRoutes);

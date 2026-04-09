@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.67] - 2026-04-09
+
+### For users
+
+- **Sub-route refresh fixed** — Pages like `/settings/debug` or `/unifi/traffic` no longer show a blank page on browser refresh
+- **Network scan loads instantly** — Fixed rate limiter blocking the initial page load of the network scan page
+
+---
+
+### Technical
+
+#### Frontend
+
+- **vite.config.ts** — Changed `base: './'` to `base: '/'` so asset paths are absolute. Relative paths caused CSS/JS 404s on multi-segment URLs (`/settings/assets/` instead of `/assets/`)
+
+#### Backend
+
+- **server/index.ts** — Excluded `/api/network-scan` from global `apiLimiter` (300 req/min) since it has its own dedicated limiter
+- **rateLimiter.ts** — Increased `scanLimiter` from 10 to 60 req/min (page fires 7+ requests on mount, 10 was too low)
+
+---
+
 ## [0.7.66] - 2026-04-09
 
 ### For users
