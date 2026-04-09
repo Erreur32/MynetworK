@@ -73,6 +73,9 @@ services:
       # The corresponding filesystem mount is configured in the volumes section below.
       - HOST_ROOT_PATH=${HOST_ROOT_PATH:-/host}
       - TZ=${TZ:-Europe/Paris}
+      # Anonymous usage analytics (Rybbit) — disabled by default in dev
+      - VITE_ANALYTICS_HOST=${VITE_ANALYTICS_HOST:-}
+      - VITE_ANALYTICS_SITE_ID=${VITE_ANALYTICS_SITE_ID:-}
     volumes:
       # Mount source code for hot reload
       - .:/app
