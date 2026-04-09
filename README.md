@@ -4,13 +4,15 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.7.58-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.7.59-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 [![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
 [![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
 [![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
 [![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
+[![SonarCloud](https://img.shields.io/sonar/quality_gate/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Sonar)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Snyk](https://img.shields.io/snyk/vulnerabilities/github/Erreur32/MynetworK?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk)](https://snyk.io/test/github/Erreur32/MynetworK)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa)
 ![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white)
