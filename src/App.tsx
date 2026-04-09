@@ -34,7 +34,6 @@ const UnifiedDashboardPage = lazy(() => import('./pages/UnifiedDashboardPage').t
 const UniFiPage = lazy(() => import('./pages/UniFiPage').then(m => ({ default: m.UniFiPage })));
 const SearchPage = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })));
 const NetworkScanPage = lazy(() => import('./pages/NetworkScanPage').then(m => ({ default: m.NetworkScanPage })));
-import rybbit from '@rybbit/js';
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { useBackgroundAnimation } from './hooks/useBackgroundAnimation';
@@ -78,21 +77,15 @@ import {
   ExternalLink
 } from 'lucide-react';
 
-// Initialize Rybbit analytics (opt-in: only active when env vars are set)
+// Initialize Rybbit analytics via script tag (opt-in: only active when env vars are set)
 const analyticsHost = import.meta.env.VITE_ANALYTICS_HOST;
 const analyticsSiteId = import.meta.env.VITE_ANALYTICS_SITE_ID;
-if (analyticsHost && analyticsSiteId) {
-  rybbit.init({ analyticsHost, siteId: analyticsSiteId });
-}
-
-/** Track page navigations for anonymous usage analytics */
-function usePageTracking() {
-  const location = useLocation();
-  useEffect(() => {
-    if (analyticsHost && analyticsSiteId) {
-      rybbit.pageview();
-    }
-  }, [location.pathname]);
+if (analyticsHost && analyticsSiteId && !document.querySelector('script[data-site-id]')) {
+  const s = document.createElement('script');
+  s.src = `${analyticsHost}/api/script.js`;
+  s.dataset.siteId = analyticsSiteId;
+  s.defer = true;
+  document.head.appendChild(s);
 }
 
 // Freebox firmware update banner (shown on Freebox page when update available)
@@ -184,7 +177,7 @@ const PageLoader = ({ t }: { t: (key: string) => string }) => (
 
 const App: React.FC = () => {
   const { t } = useTranslation();
-  usePageTracking();
+  // Rybbit script tag handles page tracking automatically
   // User authentication (JWT) - New system
   const { isAuthenticated: isUserAuthenticated, isLoading: userAuthLoading, checkAuth: checkUserAuth, logout: userLogout, user } = useUserAuthStore();
   
