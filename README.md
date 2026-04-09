@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.7.53-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.7.54-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 [![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
@@ -447,6 +447,27 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 
 
 
+
+## Analytics (Privacy)
+
+MynetworK includes **anonymous usage analytics** powered by [Rybbit](https://github.com/rybbit-io/rybbit), a privacy-focused, open-source analytics platform. This helps the maintainers understand how the application is used (page views only) without collecting any personal data.
+
+- **No cookies** — Rybbit is cookie-free
+- **No personal data** — no IP addresses, no user identifiers, no tracking across sites
+- **Page views only** — only page navigation events are recorded
+- **Self-hosted** — the analytics server is self-hosted, data never reaches third parties
+- **Opt-out at build time** — set `VITE_ANALYTICS_SITE_ID=""` to disable completely:
+  ```bash
+  docker build --build-arg VITE_ANALYTICS_SITE_ID="" .
+  ```
+
+Analytics are baked into the frontend at Docker build time via these build args (defined in `Dockerfile`):
+```
+VITE_ANALYTICS_HOST=https://way.myoueb.fr
+VITE_ANALYTICS_SITE_ID=b537d015834e
+```
+
+If both variables are empty or unset, **no analytics code runs at all**.
 
 ## Security
 
