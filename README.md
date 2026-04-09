@@ -12,7 +12,7 @@
 [![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
 [![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
 [![SonarCloud](https://img.shields.io/sonar/quality_gate/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Sonar)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
-[![Snyk](https://img.shields.io/snyk/vulnerabilities/github/Erreur32/MynetworK?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk)](https://snyk.io/test/github/Erreur32/MynetworK)
+[![Snyk](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/snyk.yml?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/snyk.yml)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa)
 ![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white)
