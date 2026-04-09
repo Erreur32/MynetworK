@@ -194,7 +194,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://way.myoueb.fr"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://way.myoueb.fr", "https://static.cloudflareinsights.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'", "ws:", "wss:", "https://way.myoueb.fr"],
