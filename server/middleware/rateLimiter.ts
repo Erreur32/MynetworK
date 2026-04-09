@@ -6,11 +6,25 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import type { Request } from 'express';
 
-/** General API rate limiter — 100 requests per minute per IP */
+/**
+ * Key generator that uses CF-Connecting-IP (Cloudflare) or X-Real-IP
+ * before falling back to req.ip. This prevents all users behind a
+ * reverse proxy from sharing the same rate limit bucket.
+ */
+const keyGenerator = (req: Request): string => {
+    return (req.headers['cf-connecting-ip'] as string)
+        || (req.headers['x-real-ip'] as string)
+        || req.ip
+        || 'unknown';
+};
+
+/** General API rate limiter — 300 requests per minute per IP */
 export const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 100,
+    max: 300,
+    keyGenerator,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests, please try again later' } }
@@ -20,6 +34,7 @@ export const apiLimiter = rateLimit({
 export const writeLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
+    keyGenerator,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests, please try again later' } }
@@ -29,6 +44,7 @@ export const writeLimiter = rateLimit({
 export const scanLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 10,
+    keyGenerator,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many scan requests, please try again later' } }
