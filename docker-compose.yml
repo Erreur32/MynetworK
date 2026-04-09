@@ -63,11 +63,6 @@ services:
       # Uncomment and set if accessing via domain name instead of IP:port
       # PUBLIC_URL: https://dashboard.example.com
 
-      # Anonymous usage analytics (Rybbit) — helps improve the project
-      # Remove or comment out to disable tracking entirely
-      VITE_ANALYTICS_HOST: ${VITE_ANALYTICS_HOST:-https://way.myoueb.fr}
-      VITE_ANALYTICS_SITE_ID: ${VITE_ANALYTICS_SITE_ID:-b537d015834e}
-
     volumes:
       # Persistent storage for:
       # - Freebox authentication token (freebox_token.json)

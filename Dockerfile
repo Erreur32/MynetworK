@@ -24,6 +24,11 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 # Copy config files first (rarely change = better cache hits)
 COPY tsconfig.json vite.config.ts index.html postcss.config.js tailwind.config.js ./
 
+# Anonymous usage analytics (Rybbit) — baked into the frontend at build time
+# Override with: docker build --build-arg VITE_ANALYTICS_SITE_ID="" to disable
+ARG VITE_ANALYTICS_HOST=https://way.myoueb.fr
+ARG VITE_ANALYTICS_SITE_ID=b537d015834e
+
 # Copy source and build
 # Separate COPY for server and src to maximize layer reuse
 COPY server ./server
