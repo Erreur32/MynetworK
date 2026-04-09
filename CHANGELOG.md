@@ -64,37 +64,129 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.61] - 2026-04-09
 
+### Technical
+
+#### CI
+
+- **snyk.yml** — Added SARIF upload condition (`hashFiles`), pinned actions to SHA
+- **sonarcloud.yml** — Pinned action to SHA, added permissions
+- **README.md** — Added SonarCloud quality gate + Snyk vulnerability badges
+
 ---
 
 ## [0.7.60] - 2026-04-09
+
+### Technical
+
+#### CI
+
+- **sonarcloud.yml** — Re-triggered SonarCloud after disabling automatic analysis in project settings
 
 ---
 
 ## [0.7.59] - 2026-04-09
 
+### For users
+
+- **Security scanning** — SonarCloud (code quality) and Snyk (vulnerability scanning) now run automatically on every push
+
+---
+
+### Technical
+
+#### CI
+
+- **sonarcloud.yml** — New workflow for SonarCloud SAST analysis via `sonarqube-scan-action@v6`
+- **snyk.yml** — New workflow with 3 jobs: Snyk Code (SAST), Snyk Open Source (dependencies), Snyk Container (Docker image)
+- **sonar-project.properties** — Created with project key `Erreur32_MynetworK`
+
 ---
 
 ## [0.7.58] - 2026-04-09
+
+### Technical
+
+#### Backend
+
+- **rateLimiter.ts** — Custom `keyGenerator` using `CF-Connecting-IP` → `X-Real-IP` → `req.ip` for correct client IP behind Cloudflare/nginx. API limit raised from 100 → 300 req/min
 
 ---
 
 ## [0.7.57] - 2026-04-09
 
+### Technical
+
+#### Backend
+
+- **server/index.ts** — Changed `trust proxy: true` → `trust proxy: 1` to fix `ERR_ERL_PERMISSIVE_TRUST_PROXY` causing 429 errors
+- **Helmet CSP** — Added `https://way.myoueb.fr` to `scriptSrc` + `connectSrc` for Rybbit, `https://static.cloudflareinsights.com` to `scriptSrc` for Cloudflare beacon
+
 ---
 
 ## [0.7.56] - 2026-04-09
+
+### For users
+
+- **Analytics fixed** — Rybbit analytics now works reliably with self-hosted server
+
+---
+
+### Technical
+
+#### Frontend
+
+- **App.tsx** — Replaced `@rybbit/js` SDK with script tag injection (`/api/script.js`). SDK v0.6.2 was incompatible with self-hosted Rybbit (wrong API paths, CORS errors)
 
 ---
 
 ## [0.7.55] - 2026-04-09
 
+### Technical
+
+#### Backend
+
+- **system.ts** — Fixed header showing `v0.1.0` instead of actual version — replaced broken `path.join(__dirname)` with `import pkg from '../../package.json'`
+
+#### CI
+
+- **docker-publish.yml** — Added `timeout-minutes: 45` to prevent hanging builds
+- **README.md** — Fixed broken Features anchor link
+
 ---
 
 ## [0.7.54] - 2026-04-09
 
+### Technical
+
+#### Documentation
+
+- **README.md** — Added analytics privacy section explaining Rybbit opt-in, data collected, and opt-out
+
+#### CI
+
+- **Dockerfile** — Isolated npm cache per architecture (`id=npm-${TARGETPLATFORM}`) to prevent `ETXTBSY` error on arm64 QEMU builds
+
 ---
 
 ## [0.7.53] - 2026-04-09
+
+### For users
+
+- **Usage analytics** — Optional anonymous analytics via Rybbit (self-hosted). Only active when `VITE_ANALYTICS_HOST` and `VITE_ANALYTICS_SITE_ID` are set
+
+---
+
+### Technical
+
+#### Security
+
+- **OpenSSF Scorecard** — Improved score: added SAST workflow, pinned dependencies to SHA, added SECURITY.md
+- **scorecard.yml** — Added `workflow_dispatch` trigger, removed env vars blocked by OSSF verification
+
+#### Frontend
+
+- **App.tsx** — Rybbit analytics integration via `@rybbit/js` SDK (later replaced in v0.7.56)
+- **Dockerfile** — Analytics config moved to build ARGs
 
 ---
 
