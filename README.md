@@ -35,7 +35,7 @@
 
 **A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
-[Installation](#installation) | [Features](features) | [Configuration](#configuration) |  [Home Assistant](#home-assistant)
+[Installation](#installation) | [Features](#features) | [Configuration](#configuration) | [Analytics](#analytics-privacy) | [Home Assistant](#home-assistant)
 
 </div>
 
