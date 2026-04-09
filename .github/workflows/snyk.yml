@@ -34,7 +34,7 @@ jobs:
 
       - name: Upload Snyk Code results to GitHub
         uses: github/codeql-action/upload-sarif@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
-        if: always()
+        if: always() && hashFiles('snyk-code.sarif') != ''
         with:
           sarif_file: snyk-code.sarif
 
@@ -58,7 +58,7 @@ jobs:
 
       - name: Upload Snyk dependency results to GitHub
         uses: github/codeql-action/upload-sarif@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
-        if: always()
+        if: always() && hashFiles('snyk-deps.sarif') != ''
         with:
           sarif_file: snyk-deps.sarif
 
@@ -86,6 +86,6 @@ jobs:
 
       - name: Upload Snyk Docker results to GitHub
         uses: github/codeql-action/upload-sarif@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
-        if: always()
+        if: always() && hashFiles('snyk-docker.sarif') != ''
         with:
           sarif_file: snyk-docker.sarif
