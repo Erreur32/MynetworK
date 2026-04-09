@@ -604,13 +604,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Poll scan progress during auto scans
     useEffect(() => {
         const isAutoScanRunning = autoStatus && (
-            autoStatus.fullScan.scheduler.running || 
+            autoStatus.fullScan.scheduler.running ||
             autoStatus.refresh.scheduler.running
         );
 
         if (!isAutoScanRunning) {
             // Clear progress when auto scan stops
-            if (scanProgress && !isScanning && !isRefreshing) {
+            if (!isScanning && !isRefreshing) {
                 setScanProgress(null);
             }
             return;
@@ -634,7 +634,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return () => {
             clearInterval(progressInterval);
         };
-    }, [autoStatus, scanProgress, isScanning, isRefreshing]);
+    }, [autoStatus, isScanning, isRefreshing]);
 
     // Poll stats every 30 seconds if active
     // Optimized: Only fetch essential data, stagger requests to avoid blocking

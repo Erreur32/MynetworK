@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.66] - 2026-04-09
+
+### For users
+
+- **Network scan stability** — Fixed a polling loop that spammed the server with progress requests, causing 429 rate limit errors and blank pages
+
+---
+
+### Technical
+
+#### Frontend
+
+- **NetworkScanPage.tsx** — Removed `scanProgress` from useEffect dependencies to prevent infinite interval recreation loop (was spamming `/api/network-scan/progress` every render cycle instead of every 2s)
+- **update-version.sh** — Commit messages and changelog labels switched from French to English
+
+---
+
 ## [0.7.65] - 2026-04-09
 
 ### Technical
