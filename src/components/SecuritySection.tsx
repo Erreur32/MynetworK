@@ -15,10 +15,18 @@ import { useUserAuthStore } from '../stores/userAuthStore';
 
 type SecInnerTab = 'auth' | 'network' | 'logs';
 
-export const SecuritySection: React.FC = () => {
+export const SecuritySection: React.FC<{
+  activeSubTab?: string;
+  onSubTabChange?: (sub: string) => void;
+}> = ({ activeSubTab, onSubTabChange }) => {
     const { t } = useTranslation();
     const { user } = useUserAuthStore();
-    const [secTab, setSecTab] = useState<SecInnerTab>('auth');
+    const VALID_SEC_TABS: SecInnerTab[] = ['auth', 'network', 'logs'];
+    const secTab: SecInnerTab = (VALID_SEC_TABS as string[]).includes(activeSubTab || '')
+      ? activeSubTab as SecInnerTab : 'auth';
+    const setSecTab = (tab: SecInnerTab) => {
+      if (onSubTabChange) onSubTabChange(tab);
+    };
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     

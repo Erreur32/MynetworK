@@ -196,10 +196,18 @@ interface DbHealthReport {
 }
 
 // Database Management Section Component
-const DatabaseManagementSection: React.FC = () => {
+const DatabaseManagementSection: React.FC<{
+  activeSubTab?: string;
+  onSubTabChange?: (sub: string) => void;
+}> = ({ activeSubTab, onSubTabChange }) => {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
-  const [dbInnerTab, setDbInnerTab] = useState<DbInnerTab>('health');
+  const VALID_DB_TABS: DbInnerTab[] = ['health', 'data', 'performance', 'vendors'];
+  const dbInnerTab: DbInnerTab = (VALID_DB_TABS as string[]).includes(activeSubTab || '')
+    ? activeSubTab as DbInnerTab : 'health';
+  const setDbInnerTab = (tab: DbInnerTab) => {
+    if (onSubTabChange) onSubTabChange(tab);
+  };
   const [retentionConfig, setRetentionConfig] = useState({
     historyRetentionDays: 30,
     scanRetentionDays: 90,
@@ -2166,12 +2174,20 @@ const UpdateCheckSection: React.FC = () => {
 // Backup Section Component (for Administration > Backup tab)
 type BackupInnerTab = 'freebox' | 'unifi';
 
-const BackupSection: React.FC = () => {
+const BackupSection: React.FC<{
+  activeSubTab?: string;
+  onSubTabChange?: (sub: string) => void;
+}> = ({ activeSubTab, onSubTabChange }) => {
   const { t } = useTranslation();
   const { freeboxUrl, isRegistered: isFreeboxRegistered } = useAuthStore();
   const { plugins } = usePluginStore();
   const [hideBackupImportantBanner, setHideBackupImportantBanner] = useState(false);
-  const [backupTab, setBackupTab] = useState<BackupInnerTab>('freebox');
+  const VALID_BACKUP_TABS: BackupInnerTab[] = ['freebox', 'unifi'];
+  const backupTab: BackupInnerTab = (VALID_BACKUP_TABS as string[]).includes(activeSubTab || '')
+    ? activeSubTab as BackupInnerTab : 'freebox';
+  const setBackupTab = (tab: BackupInnerTab) => {
+    if (onSubTabChange) onSubTabChange(tab);
+  };
 
   // Get UniFi plugin configuration
   const unifiPlugin = plugins.find(p => p.id === 'unifi');
@@ -3414,6 +3430,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   // Derive active tab from URL: /settings/wifi → 'wifi'
   const urlTab = location.pathname.split('/')[2] || '';
+  const urlSubTab = location.pathname.split('/')[3] || '';
   const activeTab: SettingsTab = (VALID_SETTINGS_TABS as readonly string[]).includes(urlTab)
     ? urlTab as SettingsTab : 'network';
   const setActiveTab = useCallback((tab: SettingsTab) => {
@@ -3433,6 +3450,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     ? urlTab as AdminTab : adminDefault;
   const setActiveAdminTab = useCallback((tab: AdminTab) => {
     navigateTo(`/settings/${tab}`);
+  }, [navigateTo]);
+
+  const setSubTab = useCallback((parentTab: string, subTab: string) => {
+    navigateTo(`/settings/${parentTab}/${subTab}`);
   }, [navigateTo]);
 
   // Handle sessionStorage cleanup and legacy hash on mount
@@ -5193,7 +5214,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             )}
 
             {activeAdminTab === 'security' && (
-              <SecuritySection />
+              <SecuritySection
+                activeSubTab={urlSubTab}
+                onSubTabChange={(sub) => setSubTab('security', sub)}
+              />
             )}
 
             {activeAdminTab === 'exporter' && (
@@ -5201,13 +5225,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             )}
 
             {activeAdminTab === 'database' && (
-              <DatabaseManagementSection />
+              <DatabaseManagementSection
+                activeSubTab={urlSubTab}
+                onSubTabChange={(sub) => setSubTab('database', sub)}
+              />
             )}
 
             {activeAdminTab === 'backup' && (
               <div className="space-y-6">
                 <ConfigExportImportSection />
-                <BackupSection />
+                <BackupSection
+                  activeSubTab={urlSubTab}
+                  onSubTabChange={(sub) => setSubTab('backup', sub)}
+                />
               </div>
             )}
 
