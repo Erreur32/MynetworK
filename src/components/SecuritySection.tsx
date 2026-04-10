@@ -58,6 +58,11 @@ export const SecuritySection: React.FC<{
     const [newMethod, setNewMethod] = useState('');
     const [newHeader, setNewHeader] = useState('');
 
+    // Iframe origins configuration state
+    const [iframeOrigins, setIframeOrigins] = useState<string[]>([]);
+    const [newIframeOrigin, setNewIframeOrigin] = useState('');
+    const [initialIframeOrigins, setInitialIframeOrigins] = useState<string[]>([]);
+
     // Track initial values to detect unsaved changes
     const [initialSecuritySettings, setInitialSecuritySettings] = useState<{
         maxLoginAttempts: number;
@@ -87,7 +92,9 @@ export const SecuritySection: React.FC<{
         JSON.stringify(corsConfig.allowedHeaders?.sort()) !== JSON.stringify(initialCorsConfig.allowedHeaders?.sort())
     );
 
-    const hasUnsavedChanges = hasUnsavedSecurityChanges || hasUnsavedCorsChanges;
+    const hasUnsavedIframeChanges = JSON.stringify([...iframeOrigins].sort()) !== JSON.stringify([...initialIframeOrigins].sort());
+
+    const hasUnsavedChanges = hasUnsavedSecurityChanges || hasUnsavedCorsChanges || hasUnsavedIframeChanges;
 
     useEffect(() => {
         checkSecuritySettings();
@@ -235,12 +242,14 @@ export const SecuritySection: React.FC<{
                 allowCredentials?: boolean;
                 allowedMethods?: string[];
                 allowedHeaders?: string[];
-            } }>('/api/system/general');
+            }; iframeOrigins?: string[] }>('/api/system/general');
             if (response.success && response.result) {
                 const config = response.result.corsConfig || null;
                 setCorsConfig(config);
-                // Store initial values (deep copy)
                 setInitialCorsConfig(config ? JSON.parse(JSON.stringify(config)) : null);
+                const origins = response.result.iframeOrigins || [];
+                setIframeOrigins(origins);
+                setInitialIframeOrigins([...origins]);
             }
         } catch (error) {
             console.error('Failed to load CORS config:', error);
@@ -275,6 +284,44 @@ export const SecuritySection: React.FC<{
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSaveIframeConfig = async () => {
+        setIsLoading(true);
+        setMessage(null);
+
+        try {
+            const response = await api.put('/api/system/general', {
+                iframeOrigins
+            });
+
+            if (response.success) {
+                setMessage({ type: 'success', text: t('admin.security.iframeSaveSuccess') });
+                setTimeout(() => setMessage(null), 5000);
+                await loadCorsConfig();
+            } else {
+                const error = response.error as { message?: string } | undefined;
+                setMessage({ type: 'error', text: error?.message || t('admin.security.saveError') });
+            }
+        } catch (error) {
+            setMessage({ type: 'error', text: error instanceof Error ? error.message : t('admin.security.saveError') });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const addIframeOrigin = () => {
+        if (newIframeOrigin.trim()) {
+            const trimmed = newIframeOrigin.trim();
+            if (!iframeOrigins.includes(trimmed)) {
+                setIframeOrigins([...iframeOrigins, trimmed]);
+                setNewIframeOrigin('');
+            }
+        }
+    };
+
+    const removeIframeOrigin = (origin: string) => {
+        setIframeOrigins(iframeOrigins.filter(o => o !== origin));
     };
 
     const addOrigin = () => {
@@ -682,6 +729,54 @@ export const SecuritySection: React.FC<{
                                             className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm rounded-lg disabled:opacity-50">
                                             {isLoading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                                             {t('admin.security.saveCors')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </Section>
+
+                            {/* Iframe / Embed */}
+                            <Section title={t('admin.security.iframeTitle')} icon={Globe} iconColor="purple">
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-purple-900/10 border border-purple-700/30 rounded-lg flex items-start gap-2">
+                                        <Info size={15} className="text-purple-400 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-purple-300 font-semibold mb-0.5">{t('admin.security.iframeIntroTitle')}</p>
+                                            <p className="text-xs text-gray-400">{t('admin.security.iframeIntroDesc')}</p>
+                                        </div>
+                                    </div>
+
+                                    <SettingRow label={t('admin.security.iframeOrigins')} description={t('admin.security.iframeOriginsDesc')}>
+                                        <div className="w-full space-y-2">
+                                            <div className="flex gap-2 items-center flex-wrap">
+                                                <input type="text" value={newIframeOrigin}
+                                                    onChange={(e) => setNewIframeOrigin(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && addIframeOrigin()}
+                                                    placeholder={t('admin.security.iframeOriginPlaceholder')}
+                                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                                                <button onClick={addIframeOrigin}
+                                                    className="shrink-0 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg flex items-center gap-1.5">
+                                                    <Plus size={13} /> {t('admin.security.add')}
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                                                {iframeOrigins.length > 0
+                                                    ? iframeOrigins.map(origin => (
+                                                        <div key={origin} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
+                                                            <span className="text-sm text-white font-mono">{origin}</span>
+                                                            <button onClick={() => removeIframeOrigin(origin)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
+                                                        </div>
+                                                    ))
+                                                    : <p className="text-xs text-gray-500 self-center">{t('admin.security.noIframeOriginsConfigured')}</p>
+                                                }
+                                            </div>
+                                        </div>
+                                    </SettingRow>
+
+                                    <div className="flex justify-end pt-2 border-t border-gray-800">
+                                        <button onClick={handleSaveIframeConfig} disabled={isLoading}
+                                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg disabled:opacity-50">
+                                            {isLoading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                            {t('admin.security.saveIframe')}
                                         </button>
                                     </div>
                                 </div>
