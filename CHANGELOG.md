@@ -2,10 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.77] - 2026-04-10
+## [0.7.78] - 2026-04-10
 
 ### Technical
 
+- **fix(duplication): ThemeSection.tsx** — Extracted `ColorInput` component for 5 repeated color picker + text input pairs (-43 lines)
 - **fix(code-quality): ~30 code smells resolved** — `CorsListEditor` extracted as standalone component, `looksLikeMac()` helper, `getColorHex()` helper, `VALID_*_TABS` arrays replaced with `Set` + `.has()` across 5 pages, `node:crypto` imports, `replaceAll()` over `replace(/g)`, `for-of` loops, regex simplifications
 - **fix(security): Sonar exclusions expanded** — S1313 (IPs), S5332 (HTTP/ip-api.com), S4721 (validated exec) exclusions, `sonar.cpd.exclusions` for version-managed files
 - **fix(regex): Bounded remaining DoS patterns** — freeboxFirmwareCheckService, wiresharkVendorService, speedtest, UniFiApiService, ClientsTab

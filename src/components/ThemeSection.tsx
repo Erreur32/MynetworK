@@ -768,6 +768,18 @@ export const ThemeSection: React.FC = () => {
     const getColorHex = (key: keyof ThemeColors, fallback: string): string =>
         getColorValue(key).replace(/rgba?\([^)]{0,50}\)/, fallback);
 
+    // Reusable color picker + text input pair
+    const ColorInput: React.FC<{ colorKey: keyof ThemeColors; fallback: string }> = ({ colorKey, fallback }) => (
+        <>
+            <input type="color" value={getColorHex(colorKey, fallback)}
+                onChange={(e) => handleColorChange(colorKey, e.target.value)}
+                className="w-7 h-7 rounded border border-theme cursor-pointer" />
+            <input type="text" value={getColorValue(colorKey)}
+                onChange={(e) => handleColorChange(colorKey, e.target.value)}
+                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50" />
+        </>
+    );
+
     return (
         <Section title={t('theme.interfaceTheme')} icon={Lightbulb} iconColor="yellow">
             <div className="space-y-6">
@@ -1559,18 +1571,7 @@ export const ThemeSection: React.FC = () => {
                                             Arrière-plan principal
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorHex('bgPrimary', '#0f0f0f')}
-                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('bgPrimary')}
-                                                onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
+                                            <ColorInput colorKey="bgPrimary" fallback="#0f0f0f" />
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{ backgroundColor: getColorValue('bgPrimary') }}
@@ -1658,18 +1659,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorHex('borderColor', '#333333')}
-                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('borderColor')}
-                                                onChange={(e) => handleColorChange('borderColor', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
+                                            <ColorInput colorKey="borderColor" fallback="#333333" />
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{
@@ -1684,18 +1674,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure (light)
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorHex('borderColorLight', '#444444')}
-                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('borderColorLight')}
-                                                onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
+                                            <ColorInput colorKey="borderColorLight" fallback="#444444" />
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{
@@ -1720,18 +1699,7 @@ export const ThemeSection: React.FC = () => {
                                             Fond du bouton
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorHex('buttonBg', '#1a1a1a')}
-                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonBg')}
-                                                onChange={(e) => handleColorChange('buttonBg', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
+                                            <ColorInput colorKey="buttonBg" fallback="#1a1a1a" />
                                             <button
                                                 className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
                                                 style={{
@@ -1832,18 +1800,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure du bouton
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <input
-                                                type="color"
-                                                value={getColorHex('buttonBorder', '#333333')}
-                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
-                                                className="w-7 h-7 rounded border border-theme cursor-pointer"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={getColorValue('buttonBorder')}
-                                                onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
-                                                className="w-20 px-1.5 py-0.5 bg-theme-primary border border-theme rounded text-theme-primary text-[10px] font-mono focus:outline-none focus:border-yellow-500/50"
-                                            />
+                                            <ColorInput colorKey="buttonBorder" fallback="#333333" />
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{
