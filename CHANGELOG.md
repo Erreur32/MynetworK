@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.69] - 2026-04-10
+
+---
+
 ## [0.7.68] - 2026-04-10
 
 ### For users
@@ -15,7 +19,7 @@ All notable changes to this project will be documented in this file.
 
 #### Backend
 
-- **server/index.ts** — CSP `frame-ancestors` directive is now dynamically read from database config (`iframe_origins`) instead of being hardcoded to `'self'`
+- **server/index.ts** — CSP `frame-ancestors` directive is now dynamically read from database config (`iframe_origins`) on each request instead of once at startup. Disabled `X-Frame-Options` header (`frameguard: false`) so CSP `frame-ancestors` takes full control
 - **server/routes/system.ts** — Added `iframe_origins` field to `GET/PUT /api/system/general` endpoint for reading/writing allowed iframe origins
 
 #### Frontend
