@@ -31,7 +31,7 @@ interface UniFiPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
-const VALID_UNIFI_TABS: TabType[] = ['overview', 'nat', 'analyse', 'clients', 'traffic', 'threats', 'debug', 'switches'];
+const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'nat', 'analyse', 'clients', 'traffic', 'threats', 'debug', 'switches']);
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
@@ -41,7 +41,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
 
     // Derive active tab from URL path: /unifi/traffic → 'traffic'
     const urlTab = location.pathname.split('/')[2] as TabType | undefined;
-    const activeTab: TabType = urlTab && VALID_UNIFI_TABS.includes(urlTab) ? urlTab : 'overview';
+    const activeTab: TabType = urlTab && VALID_UNIFI_TABS.has(urlTab) ? urlTab : 'overview';
     const setActiveTab = useCallback((tab: TabType) => {
         navigate(`/unifi/${tab}`);
     }, [navigate]);

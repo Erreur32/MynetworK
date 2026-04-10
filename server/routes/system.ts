@@ -401,7 +401,7 @@ router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: Authe
         throw createError('Each iframe origin must be a non-empty string', 400, 'INVALID_IFRAME_CONFIG');
       }
       // Allow wildcard subdomains (https://*.example.com) or exact origins (https://example.com)
-      if (origin !== '*' && !origin.match(/^https?:\/\/(\*\.)?[\w][\w.-]{0,253}[\w](:\d{1,5})?$/)) {
+      if (origin !== '*' && !/^https?:\/\/(\*\.)?\w[\w.-]{0,253}\w(:\d{1,5})?$/.test(origin)) {
         throw createError(`Invalid iframe origin format: ${origin}. Use https://domain.com or https://*.domain.com`, 400, 'INVALID_IFRAME_CONFIG');
       }
     }

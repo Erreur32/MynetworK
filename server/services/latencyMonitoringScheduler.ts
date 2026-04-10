@@ -5,7 +5,7 @@
  * Pings monitored IPs every 15 seconds
  */
 
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import cron from 'node-cron';
 import { latencyMonitoringService } from './latencyMonitoringService.js';
 import { logger } from '../utils/logger.js';

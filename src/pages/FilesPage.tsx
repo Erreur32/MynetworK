@@ -491,7 +491,7 @@ interface FilesPageProps {
 }
 
 type FilesTab = 'files' | 'downloads' | 'shares';
-const VALID_FILES_TABS: FilesTab[] = ['files', 'downloads', 'shares'];
+const VALID_FILES_TABS = new Set<FilesTab>(['files', 'downloads', 'shares']);
 
 export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initialDownloadId }) => {
   const { t } = useTranslation();
@@ -546,7 +546,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
 
   // Derive active tab from URL: /files/downloads → 'downloads'
   const urlTab = location.pathname.split('/')[2] as FilesTab | undefined;
-  const activeTab: FilesTab = urlTab && VALID_FILES_TABS.includes(urlTab) ? urlTab : (initialTab || 'files');
+  const activeTab: FilesTab = urlTab && VALID_FILES_TABS.has(urlTab) ? urlTab : (initialTab || 'files');
   const setActiveTab = useCallback((tab: FilesTab) => {
     navigate(`/files/${tab}`);
   }, [navigate]);

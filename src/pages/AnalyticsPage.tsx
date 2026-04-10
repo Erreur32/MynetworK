@@ -63,7 +63,7 @@ interface AnalyticsPageProps {
 }
 
 type AnalyticsTab = 'bandwidth' | 'temperature' | 'wifi' | 'system';
-const VALID_ANALYTICS_TABS: AnalyticsTab[] = ['bandwidth', 'temperature', 'wifi', 'system'];
+const VALID_ANALYTICS_TABS = new Set<AnalyticsTab>(['bandwidth', 'temperature', 'wifi', 'system']);
 
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
   const { t } = useTranslation();
@@ -226,7 +226,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
 
   // Derive active tab from URL: /analytics/wifi → 'wifi'
   const urlTab = location.pathname.split('/')[2] as AnalyticsTab | undefined;
-  const activeTab: AnalyticsTab = urlTab && VALID_ANALYTICS_TABS.includes(urlTab) ? urlTab : 'bandwidth';
+  const activeTab: AnalyticsTab = urlTab && VALID_ANALYTICS_TABS.has(urlTab) ? urlTab : 'bandwidth';
   const setActiveTab = useCallback((tab: AnalyticsTab) => {
     navigate(`/analytics/${tab}`);
   }, [navigate]);

@@ -730,7 +730,7 @@ export class FreeboxApiService {
     async addDownloadFromFile(fileBuffer: Buffer, filename: string, downloadDir?: string): Promise<FreeboxApiResponse> {
         // The Freebox API requires multipart/form-data for file uploads
         // We'll build the multipart body manually since form-data + fetch has issues
-        const boundary = '----FreeboxFormBoundary' + crypto.randomUUID().replace(/-/g, '');
+        const boundary = '----FreeboxFormBoundary' + crypto.randomUUID().replaceAll('-', '');
 
         let body = '';
 

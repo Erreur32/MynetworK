@@ -113,8 +113,7 @@ class FreeboxFirmwareCheckService {
     let inTag = false;
     let tagName = '';
     let skipContent = false; // true inside <script> or <style>
-    for (let i = 0; i < html.length; i++) {
-      const ch = html[i];
+    for (const ch of html) {
       if (ch === '<') {
         inTag = true;
         tagName = '';
@@ -134,7 +133,7 @@ class FreeboxFirmwareCheckService {
     for (const [entity, replacement] of Object.entries(htmlEntities)) {
       text = text.split(entity).join(replacement);
     }
-    text = text.replace(/\s+/g, ' ');
+    text = text.replaceAll(/\s+/g, ' ');
 
     // Split by post separators (--- or Tweet or hr)
     const blocks = text.split(/\s{0,20}---\s{0,20}|\s{0,20}<hr\s{0,5}\/?>\s{0,20}|Tweet\s{0,10}/i);

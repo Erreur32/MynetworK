@@ -405,7 +405,7 @@ interface PhonePageProps {
 }
 
 type PhoneTab = 'calls' | 'contacts';
-const VALID_PHONE_TABS: PhoneTab[] = ['calls', 'contacts'];
+const VALID_PHONE_TABS = new Set<PhoneTab>(['calls', 'contacts']);
 
 export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
   const { t } = useTranslation();
@@ -433,7 +433,7 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
 
   // Derive active tab from URL: /phone/contacts → 'contacts'
   const urlTab = location.pathname.split('/')[2] as PhoneTab | undefined;
-  const activeTab: PhoneTab = urlTab && VALID_PHONE_TABS.includes(urlTab) ? urlTab : 'calls';
+  const activeTab: PhoneTab = urlTab && VALID_PHONE_TABS.has(urlTab) ? urlTab : 'calls';
   const setActiveTab = useCallback((tab: PhoneTab) => {
     navigate(`/phone/${tab}`);
   }, [navigate]);

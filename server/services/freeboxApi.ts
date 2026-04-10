@@ -209,7 +209,7 @@ class FreeboxApiService {
         // Parse the trusted base URL and rebuild with the API path
         const base = new URL(this.baseUrl);
         // Sanitize endpoint: strip path traversal, ensure it starts with /
-        const safeEndpoint = endpoint.replace(/\.\./g, '').replace(/^\/+/, '/');
+        const safeEndpoint = endpoint.replaceAll('..', '').replace(/^\/+/, '/');
         // Reconstruct URL from trusted origin components only (not from user input)
         return `${base.protocol}//${base.host}/api/${apiVersion}${safeEndpoint}`;
     }
@@ -989,7 +989,7 @@ class FreeboxApiService {
     async addDownloadFromFile(fileBuffer: Buffer, filename: string, downloadDir?: string): Promise<FreeboxApiResponse> {
         // The Freebox API requires multipart/form-data for file uploads
         // We'll build the multipart body manually since form-data + fetch has issues
-        const boundary = '----FreeboxFormBoundary' + crypto.randomUUID().replace(/-/g, '');
+        const boundary = '----FreeboxFormBoundary' + crypto.randomUUID().replaceAll('-', '');
 
         let body = '';
 

@@ -2,13 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.76] - 2026-04-10
+## [0.7.77] - 2026-04-10
 
 ### Technical
 
-- **fix(security): Sonar exclusions expanded** — S1313 (IPs) now covers all files, added S5332 (HTTP/ip-api.com) and S4721 (validated exec) exclusions to eliminate false positive hotspots
-- **fix(regex): Bounded remaining DoS patterns** — freeboxFirmwareCheckService (split, Server/Player match), wiresharkVendorService (hex/base16 parsing), speedtest (loss/average), UniFiApiService (duplicate cleanup), ClientsTab
-- **fix(duplication): ThemeSection.tsx** — Extracted `getColorHex()` helper for 5 repeated rgba-to-hex color picker conversions
+- **fix(code-quality): ~30 code smells resolved** — `CorsListEditor` extracted as standalone component, `looksLikeMac()` helper, `getColorHex()` helper, `VALID_*_TABS` arrays replaced with `Set` + `.has()` across 5 pages, `node:crypto` imports, `replaceAll()` over `replace(/g)`, `for-of` loops, regex simplifications
+- **fix(security): Sonar exclusions expanded** — S1313 (IPs), S5332 (HTTP/ip-api.com), S4721 (validated exec) exclusions, `sonar.cpd.exclusions` for version-managed files
+- **fix(regex): Bounded remaining DoS patterns** — freeboxFirmwareCheckService, wiresharkVendorService, speedtest, UniFiApiService, ClientsTab
 
 ---
 

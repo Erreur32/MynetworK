@@ -11,6 +11,9 @@ import { freeboxFirmwareCheckService } from '../../services/freeboxFirmwareCheck
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 import { logger } from '../../utils/logger.js';
 
+// Check if a string looks like a MAC address (12 hex digits with optional : or - separators)
+const looksLikeMac = (s: string): boolean => /^[0-9a-fA-F]{2}(?:[:-]?[0-9a-fA-F]{2}){5}$/.test(s);
+
 export class FreeboxPlugin extends BasePlugin {
     // Use the singleton instance from freeboxApi service to share the same session
     // This ensures the plugin uses the same session as the routes (/api/auth/*)
@@ -23,7 +26,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.76');
+        super('freebox', 'Freebox', '0.7.77');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -485,10 +488,8 @@ export class FreeboxPlugin extends BasePlugin {
                     // Priority 4: ID field (but skip if it looks like a MAC address)
                     else if (bss.id) {
                         const idStr = String(bss.id).trim();
-                        // MAC addresses are typically 12 hex digits (with or without separators)
-                        // Skip if it looks like a MAC (contains only hex chars and separators)
-                        const macPattern = /^[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}$/;
-                        if (!macPattern.test(idStr) && idStr.length > 0) {
+                        // Skip if it looks like a MAC address (12 hex digits with optional separators)
+                        if (!looksLikeMac(idStr) && idStr.length > 0) {
                             ssid = idStr;
                         } else {
                             logger.debug('FreeboxPlugin', 'Skipping BSS ID that looks like MAC:', idStr);
@@ -497,9 +498,7 @@ export class FreeboxPlugin extends BasePlugin {
                     // Priority 5: Try other possible fields
                     else if (bss.bssid && typeof bss.bssid === 'string' && bss.bssid.trim() !== '') {
                         const bssidStr = bss.bssid.trim();
-                        // Only use if it doesn't look like a MAC address
-                        const macPattern = /^[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}$/;
-                        if (!macPattern.test(bssidStr)) {
+                        if (!looksLikeMac(bssidStr)) {
                             ssid = bssidStr;
                         }
                     }

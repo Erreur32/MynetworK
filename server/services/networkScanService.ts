@@ -4,7 +4,7 @@
  * Handles network scanning operations: ping scanning, MAC detection, hostname resolution
  */
 
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';

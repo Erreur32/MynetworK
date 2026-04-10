@@ -1377,7 +1377,7 @@ const RecordingFormModal: React.FC<{
 };
 
 type TvTab = 'guide' | 'recordings' | 'programmed';
-const VALID_TV_TABS: TvTab[] = ['guide', 'recordings', 'programmed'];
+const VALID_TV_TABS = new Set<TvTab>(['guide', 'recordings', 'programmed']);
 
 export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
     const { t } = useTranslation();
@@ -1414,7 +1414,7 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
 
     // Derive active tab from URL: /tv/guide → 'guide'
     const urlTab = location.pathname.split('/')[2] as TvTab | undefined;
-    const activeTab: TvTab = urlTab && VALID_TV_TABS.includes(urlTab) ? urlTab : 'recordings';
+    const activeTab: TvTab = urlTab && VALID_TV_TABS.has(urlTab) ? urlTab : 'recordings';
     const setActiveTab = useCallback((tab: TvTab) => {
         navigate(`/tv/${tab}`);
     }, [navigate]);
