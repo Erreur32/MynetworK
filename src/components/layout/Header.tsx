@@ -367,7 +367,7 @@ export const Header: React.FC<HeaderProps> = ({
   const parseSpeed = (speed: string): [string, string] => {
     if (speed === '--') return ['0', 'kb/s'];
     // Format: "17Mb/s" or "289kb/s" - extract number and unit
-    const match = speed.match(/^(\d+\.?\d*)([a-zA-Z]+)\/s$/);
+    const match = speed.match(/^(\d+(?:\.\d+)?)([a-zA-Z]+)\/s$/);
     if (match) {
       return [match[1], `${match[2]}/s`];
     }

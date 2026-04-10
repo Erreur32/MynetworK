@@ -910,7 +910,7 @@ const GEO_CACHE_TTL = 30 * 60 * 1000; // 30 min
  */
 router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.ip;
-    if (!ip || !/^[\d.]+$/.test(ip)) {
+    if (!ip || !/^[\d.]{7,15}$/.test(ip)) {
         return res.json({ success: true, result: { ok: false, error: 'Invalid IP' } });
     }
 
@@ -951,7 +951,7 @@ router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: Authe
  * Batch-resolve multiple IPs at once (max 15 per request to respect ip-api rate limits).
  */
 router.post('/unifi/threats/geo/batch', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ips: string[] = (req.body?.ips || []).filter((ip: string) => /^[\d.]+$/.test(ip)).slice(0, 15);
+    const ips: string[] = (req.body?.ips || []).filter((ip: string) => /^[\d.]{7,15}$/.test(ip)).slice(0, 15);
     const results: Record<string, any> = {};
 
     // Return cached first

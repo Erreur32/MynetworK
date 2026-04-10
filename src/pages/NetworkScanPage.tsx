@@ -818,7 +818,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
 
         // Validate IP format
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         if (!ipRegex.test(manualIp.trim())) {
             alert(t('networkScan.errors.invalidIpFormat'));
             return;

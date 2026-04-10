@@ -1557,7 +1557,7 @@ export const ThemeSection: React.FC = () => {
                                         <div className="flex items-center gap-1.5">
                                             <input
                                                 type="color"
-                                                value={getColorValue('bgPrimary').replace(/rgba?\([^)]+\)/, '#0f0f0f')}
+                                                value={getColorValue('bgPrimary').replace(/rgba?\([^)]{0,50}\)/, '#0f0f0f')}
                                                 onChange={(e) => handleColorChange('bgPrimary', e.target.value)}
                                                 className="w-7 h-7 rounded border border-theme cursor-pointer"
                                             />
@@ -1656,7 +1656,7 @@ export const ThemeSection: React.FC = () => {
                                         <div className="flex items-center gap-1.5">
                                             <input
                                                 type="color"
-                                                value={getColorValue('borderColor').replace(/rgba?\([^)]+\)/, '#333333')}
+                                                value={getColorValue('borderColor').replace(/rgba?\([^)]{0,50}\)/, '#333333')}
                                                 onChange={(e) => handleColorChange('borderColor', e.target.value)}
                                                 className="w-7 h-7 rounded border border-theme cursor-pointer"
                                             />
@@ -1682,7 +1682,7 @@ export const ThemeSection: React.FC = () => {
                                         <div className="flex items-center gap-1.5">
                                             <input
                                                 type="color"
-                                                value={getColorValue('borderColorLight').replace(/rgba?\([^)]+\)/, '#444444')}
+                                                value={getColorValue('borderColorLight').replace(/rgba?\([^)]{0,50}\)/, '#444444')}
                                                 onChange={(e) => handleColorChange('borderColorLight', e.target.value)}
                                                 className="w-7 h-7 rounded border border-theme cursor-pointer"
                                             />
@@ -1718,7 +1718,7 @@ export const ThemeSection: React.FC = () => {
                                         <div className="flex items-center gap-1.5">
                                             <input
                                                 type="color"
-                                                value={getColorValue('buttonBg').replace(/rgba?\([^)]+\)/, '#1a1a1a')}
+                                                value={getColorValue('buttonBg').replace(/rgba?\([^)]{0,50}\)/, '#1a1a1a')}
                                                 onChange={(e) => handleColorChange('buttonBg', e.target.value)}
                                                 className="w-7 h-7 rounded border border-theme cursor-pointer"
                                             />
@@ -1830,7 +1830,7 @@ export const ThemeSection: React.FC = () => {
                                         <div className="flex items-center gap-1.5">
                                             <input
                                                 type="color"
-                                                value={getColorValue('buttonBorder').replace(/rgba?\([^)]+\)/, '#333333')}
+                                                value={getColorValue('buttonBorder').replace(/rgba?\([^)]{0,50}\)/, '#333333')}
                                                 onChange={(e) => handleColorChange('buttonBorder', e.target.value)}
                                                 className="w-7 h-7 rounded border border-theme cursor-pointer"
                                             />

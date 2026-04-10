@@ -5,6 +5,7 @@
  * Pings monitored IPs every 15 seconds
  */
 
+import crypto from 'crypto';
 import cron from 'node-cron';
 import { latencyMonitoringService } from './latencyMonitoringService.js';
 import { logger } from '../utils/logger.js';
@@ -78,7 +79,7 @@ class LatencyMonitoringSchedulerService {
             await Promise.all(pingPromises);
 
             // Log occasionally (every ~100 cycles, approximately every 25 minutes)
-            if (Math.random() < 0.01) {
+            if (crypto.randomInt(100) === 0) {
                 logger.debug('LatencyMonitoringScheduler', `Monitoring cycle completed for ${enabledIps.length} IP(s)`);
             }
         } catch (error: any) {

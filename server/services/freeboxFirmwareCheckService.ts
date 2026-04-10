@@ -109,8 +109,8 @@ class FreeboxFirmwareCheckService {
 
     // Strip HTML tags and decode entities for simpler regex matching
     const text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]{0,10000}?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]{0,10000}?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .replace(/&nbsp;/g, ' ')
@@ -133,10 +133,10 @@ class FreeboxFirmwareCheckService {
         const dateStr = dateMatch ? `${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]}` : '';
 
         const changelogParts: string[] = [];
-        const ajouts = blockTrimmed.match(/(?:###\s*)?Ajouts\s*([\s\S]*?)(?=###|Corrections|Modifications|Nouveautés|$)/i);
-        const corrections = blockTrimmed.match(/(?:###\s*)?Corrections?\s*([\s\S]*?)(?=###|Ajouts|Modifications|Nouveautés|$)/i);
-        const modifs = blockTrimmed.match(/(?:###\s*)?Modifications?\s*([\s\S]*?)(?=###|Ajouts|Corrections|$)/i);
-        const nouveautes = blockTrimmed.match(/(?:###\s*)?Nouveaut[eé]s\s*([\s\S]*?)(?=###|Ajouts|Corrections|$)/i);
+        const ajouts = blockTrimmed.match(/(?:###\s{0,10})?Ajouts\s{0,10}([\s\S]{0,5000}?)(?=###|Corrections|Modifications|Nouveautés|$)/i);
+        const corrections = blockTrimmed.match(/(?:###\s{0,10})?Corrections?\s{0,10}([\s\S]{0,5000}?)(?=###|Ajouts|Modifications|Nouveautés|$)/i);
+        const modifs = blockTrimmed.match(/(?:###\s{0,10})?Modifications?\s{0,10}([\s\S]{0,5000}?)(?=###|Ajouts|Corrections|$)/i);
+        const nouveautes = blockTrimmed.match(/(?:###\s{0,10})?Nouveaut[eé]s\s{0,10}([\s\S]{0,5000}?)(?=###|Ajouts|Corrections|$)/i);
         if (ajouts?.[1]) changelogParts.push('Ajouts: ' + decodeHtmlEntities(ajouts[1].trim().slice(0, 500)));
         if (nouveautes?.[1]) changelogParts.push('Nouveautés: ' + decodeHtmlEntities(nouveautes[1].trim().slice(0, 500)));
         if (corrections?.[1]) changelogParts.push('Corrections: ' + decodeHtmlEntities(corrections[1].trim().slice(0, 500)));
@@ -164,8 +164,8 @@ class FreeboxFirmwareCheckService {
         const dateStr = dateMatch ? `${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]}` : '';
 
         const changelogParts: string[] = [];
-        const ajouts = blockTrimmed.match(/(?:###\s*)?Ajouts\s*([\s\S]*?)(?=###|Corrections|Modifications|Nouveautés|$)/i);
-        const corrections = blockTrimmed.match(/(?:###\s*)?Corrections?\s*([\s\S]*?)(?=###|Ajouts|Modifications|Nouveautés|$)/i);
+        const ajouts = blockTrimmed.match(/(?:###\s{0,10})?Ajouts\s{0,10}([\s\S]{0,5000}?)(?=###|Corrections|Modifications|Nouveautés|$)/i);
+        const corrections = blockTrimmed.match(/(?:###\s{0,10})?Corrections?\s{0,10}([\s\S]{0,5000}?)(?=###|Ajouts|Modifications|Nouveautés|$)/i);
         if (ajouts?.[1]) changelogParts.push(decodeHtmlEntities(ajouts[1].trim().slice(0, 500)));
         if (corrections?.[1]) changelogParts.push(decodeHtmlEntities(corrections[1].trim().slice(0, 500)));
         const changelog = changelogParts.length > 0 ? changelogParts.join('\n') : 'Voir le blog pour les détails.';

@@ -3010,7 +3010,7 @@ function parseChangelogVersions(content: string): Array<{ version: string; date:
     const idx = block.indexOf('\n');
     const firstLine = idx >= 0 ? block.slice(0, idx) : block;
     const body = (idx >= 0 ? block.slice(idx) : '').replace(/^\s*\n+/, '').trim();
-    const m = firstLine.match(/^(.+?)\]\s*-\s*(.*)$/);
+    const m = firstLine.match(/^(.{1,200}?)\]\s{0,10}-\s{0,10}(.{0,500})$/);
     const version = m ? m[1].trim() : firstLine.replace(/\]\s*$/, '').trim();
     const date = m ? m[2].trim() : '';
     return { version, date, body };
@@ -5813,7 +5813,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                           if (e.key === 'Enter') {
                             const input = e.currentTarget;
                             const mac = input.value.trim();
-                            if (mac && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(mac)) {
+                            if (mac && /^[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}$/.test(mac)) {
                               const currentMacs = wifiMacFilter?.macs || [];
                               if (!currentMacs.includes(mac.toUpperCase())) {
                                 setWifiMacFilter({ ...wifiMacFilter, macs: [...currentMacs, mac.toUpperCase()] });
@@ -5828,7 +5828,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                         onClick={(e) => {
                           const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                           const mac = input.value.trim();
-                          if (mac && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(mac)) {
+                          if (mac && /^[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}$/.test(mac)) {
                             const currentMacs = wifiMacFilter?.macs || [];
                             if (!currentMacs.includes(mac.toUpperCase())) {
                               setWifiMacFilter({ ...wifiMacFilter, macs: [...currentMacs, mac.toUpperCase()] });

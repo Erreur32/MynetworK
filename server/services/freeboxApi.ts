@@ -217,14 +217,10 @@ class FreeboxApiService {
             body: body ? JSON.stringify(body) : undefined
         };
 
-        const requestStartTime = Date.now();
         // Check if model is Revolution - if so, use longer timeout (ONLY for Revolution)
         const isRevolution = this.isRevolutionModel();
         const timeoutValue = this.getTimeoutForEndpoint(endpoint, isRevolution);
         try {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:186',message:'Request start',data:{method,url,timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), timeoutValue);
 
@@ -240,11 +236,6 @@ class FreeboxApiService {
             }
             const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
-            const requestDuration = Date.now() - requestStartTime;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:192',message:'Request success',data:{method,url,duration:requestDuration,status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
-
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
@@ -260,11 +251,7 @@ class FreeboxApiService {
             const data = await response.json() as FreeboxApiResponse<T>;
             return data;
         } catch (error) {
-            const requestDuration = Date.now() - requestStartTime;
             const isAbortError = error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'));
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'freeboxApi.ts:207',message:'Request failed',data:{method,url,duration:requestDuration,isAbortError,errorName:error instanceof Error ? error.name : 'unknown',errorMsg:error instanceof Error ? error.message : String(error),timeout:timeoutValue,isRevolution,defaultTimeout:config.freebox.requestTimeout},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             logger.error('FreeboxAPI', `Request failed: ${method} ${url}`, error);
             // Return error response instead of throwing
             return {
@@ -983,7 +970,7 @@ class FreeboxApiService {
     async addDownloadFromFile(fileBuffer: Buffer, filename: string, downloadDir?: string): Promise<FreeboxApiResponse> {
         // The Freebox API requires multipart/form-data for file uploads
         // We'll build the multipart body manually since form-data + fetch has issues
-        const boundary = '----FreeboxFormBoundary' + Math.random().toString(36).substring(2);
+        const boundary = '----FreeboxFormBoundary' + crypto.randomUUID().replace(/-/g, '');
 
         let body = '';
 

@@ -4,6 +4,7 @@
  * Handles network scanning operations: ping scanning, MAC detection, hostname resolution
  */
 
+import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
@@ -1502,7 +1503,7 @@ export class NetworkScanService {
             // IMPORTANT: latency can be 0 (for very fast responses <1ms), which is still a successful ping
             if (latency !== null && latency >= 0) {
                 // Log first few successful pings for debugging
-                if (Math.random() < 0.05) { // Log ~5% of successful pings
+                if (crypto.randomInt(20) === 0) { // Log ~5% of successful pings
                     logger.debug('NetworkScanService', `[${ip}] Ping successful, latency: ${latency}ms`);
                 }
             return {
@@ -1571,8 +1572,7 @@ export class NetworkScanService {
                 }
                 
                 // If we got output but no latency and it's not a timeout, log for debugging (first 5 only)
-                const logCount = Math.floor(Math.random() * 100);
-                if (logCount < 5) {
+                if (crypto.randomInt(20) === 0) {
                     logger.debug('NetworkScanService', `[${ip}] Ping output without latency (may be parsing issue). Command: ${command}`);
                     logger.debug('NetworkScanService', `[${ip}] Output: ${stdout.substring(0, 300)}`);
                 }
@@ -2977,7 +2977,7 @@ export class NetworkScanService {
      * Validate if an IP address is valid IPv4
      */
     private isValidIp(ip: string): boolean {
-        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         if (!ipv4Regex.test(ip)) return false;
         
         const parts = ip.split('.').map(Number);

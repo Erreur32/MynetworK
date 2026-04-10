@@ -95,7 +95,7 @@ export const ExporterSection: React.FC = () => {
         
         // No public URL configured: use HTTP + IP + port
         const hostname = window.location.hostname;
-        const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/.test(hostname);
+        const isIpAddress = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || /^[0-9a-fA-F:]{2,39}$/.test(hostname);
         
         if (isIpAddress) {
             // Use IP address with configured port

@@ -41,7 +41,7 @@ router.post('/enable/:ip', (req, res) => {
     try {
         const ip = req.params.ip;
         
-        if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        if (!ip || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
             return res.status(400).json({
                 success: false,
                 error: {
@@ -79,7 +79,7 @@ router.post('/disable/:ip', (req, res) => {
     try {
         const ip = req.params.ip;
         
-        if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        if (!ip || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
             return res.status(400).json({
                 success: false,
                 error: {
@@ -119,7 +119,7 @@ router.get('/measurements/:ip', (req, res) => {
         const ip = req.params.ip;
         const days = parseInt(req.query.days as string) || 30;
         
-        if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        if (!ip || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
             return res.status(400).json({
                 success: false,
                 error: {
@@ -166,7 +166,7 @@ router.get('/stats/:ip', (req, res) => {
     try {
         const ip = req.params.ip;
         
-        if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+        if (!ip || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
             return res.status(400).json({
                 success: false,
                 error: {
@@ -219,7 +219,7 @@ router.post('/stats/batch', (req, res) => {
         }
 
         // Validate IPs
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         const invalidIps = ips.filter((ip: string) => !ip || !ipRegex.test(ip));
         if (invalidIps.length > 0) {
             return res.status(400).json({
@@ -267,7 +267,7 @@ router.post('/status/batch', (req, res) => {
         }
 
         // Validate IPs
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         const invalidIps = ips.filter((ip: string) => !ip || !ipRegex.test(ip));
         if (invalidIps.length > 0) {
             return res.status(400).json({

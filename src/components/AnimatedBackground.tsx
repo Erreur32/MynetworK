@@ -939,7 +939,7 @@ const PlaystationCanvas: React.FC<{
     // Parser la couleur RGB ou hex
     const parseColor = (colorStr: string): { r: number; g: number; b: number } => {
       // Format RGB
-      const rgbMatch = colorStr.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      const rgbMatch = colorStr.match(/rgb\((\d+),\s{0,5}(\d+),\s{0,5}(\d+)\)/);
       if (rgbMatch) {
         return {
           r: parseInt(rgbMatch[1], 10),

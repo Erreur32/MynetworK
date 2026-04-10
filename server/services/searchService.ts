@@ -34,7 +34,7 @@ function parseQuery(query: string): ParsedQuery {
     }
 
     // IP exact: 192.168.32.1
-    const ipExactRe = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipExactRe = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (ipExactRe.test(trimmed)) {
         const parts = trimmed.split('.').map(Number);
         if (parts.length === 4 && parts.every(p => p >= 0 && p <= 255)) {
@@ -43,7 +43,7 @@ function parseQuery(query: string): ParsedQuery {
     }
 
     // IP wildcard: 192.168.32.* or 192.168.32.1* (partial last octet)
-    if (trimmed.endsWith('*') && /^[\d.]+\*$/.test(trimmed)) {
+    if (trimmed.endsWith('*') && /^[\d.]{1,16}\*$/.test(trimmed)) {
         const prefix = trimmed.slice(0, -1); // part before *
         if (prefix.endsWith('.')) {
             const parts = prefix.slice(0, -1).split('.').map(Number);
@@ -86,7 +86,7 @@ function parseQuery(query: string): ParsedQuery {
     }
 
     // MAC exact: AA:BB:CC:DD:EE:FF or AA-BB-CC-DD-EE-FF
-    const macExactRe = /^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/;
+    const macExactRe = /^[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}$/;
     if (macExactRe.test(trimmed)) {
         const macNorm = trimmed.replace(/-/g, ':');
         return { mode: 'ip-mac', macLike: macNorm };

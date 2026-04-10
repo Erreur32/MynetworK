@@ -404,7 +404,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
     const isLocalIPv4 = (ip?: string): boolean => {
         if (!ip) return false;
         // IPv4 regex
-        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         if (!ipv4Regex.test(ip)) return false;
         
         // Check if it's a private/local IP range
@@ -426,7 +426,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
 
     // Check if query is an exact IP address
     const isExactIp = (query: string): boolean => {
-        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         if (!ipv4Regex.test(query.trim())) return false;
         const parts = query.trim().split('.').map(Number);
         return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
@@ -440,7 +440,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             const [network, cidrStr] = trimmed.split('/');
             const cidr = parseInt(cidrStr, 10);
             if (isNaN(cidr) || cidr < 0 || cidr > 32) return false;
-            const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
             if (!ipv4Regex.test(network)) return false;
             const parts = network.split('.').map(Number);
             return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
@@ -451,7 +451,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             if (parts.length === 2) {
                 const start = parts[0].trim();
                 const end = parts[1].trim();
-                const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
                 // Check if start is a valid IP
                 if (!ipv4Regex.test(start)) return false;
                 const startParts = start.split('.').map(Number);
@@ -475,7 +475,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
         if (!target) return false;
         
         // Check if it's an IPv4 address
-        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
         if (ipv4Regex.test(target)) {
             const parts = target.split('.').map(Number);
             return parts.length === 4 && parts.every(p => p >= 0 && p <= 255);
@@ -668,7 +668,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             if (parts.length === 2) {
                 const start = parts[0].trim();
                 const end = parts[1].trim();
-                const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
                 
                 if (ipv4Regex.test(start)) {
                     const startParts = start.split('.').map(Number);

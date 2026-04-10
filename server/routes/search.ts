@@ -103,7 +103,7 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
     const { ip } = req.params;
 
     // Validate IP format (basic IPv4 validation)
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (!ipRegex.test(ip)) {
         return res.status(400).json({
             success: false,

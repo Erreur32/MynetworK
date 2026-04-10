@@ -63,7 +63,9 @@ WORKDIR /app
 #       If arp-scan is needed, it must be compiled in the build stage.
 # nmap: for port scanning (option "Scan ports after each full scan").
 # arping: for direct ARP-based MAC address resolution (reliable in native and host network mode).
-RUN apk add --no-cache su-exec iputils-ping iproute2 samba-common curl nmap arping
+# Upgrade base packages first to fix known CVEs (e.g. zlib CVE-2026-27171)
+RUN apk upgrade --no-cache && \
+    apk add --no-cache su-exec iputils-ping iproute2 samba-common curl nmap arping
 
 # Create data directory with correct permissions
 RUN mkdir -p /app/data && chown -R node:node /app

@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.70] - 2026-04-10
+
+### For users
+
+- **SonarCloud quality gate fixes** — Resolved all 3 failing conditions: reliability bugs, code duplication, and security hotspot reduction
+- **Dockerfile security** — Fixed zlib CVE-2026-27171 vulnerability (Snyk)
+- **Configurable network defaults** — Ping target (`DEFAULT_PING_TARGET`) and scan range (`DEFAULT_SCAN_RANGE`) are now configurable via environment variables
+
+---
+
+### Technical
+
+#### Backend
+
+- **Removed debug instrumentation** — Cleaned up 6 leftover debug `fetch()` calls to `127.0.0.1:7243` in freeboxApi.ts, modelDetection.ts, and FreeboxPlugin.ts
+- **Crypto-safe random** — Replaced `Math.random()` with `crypto.randomUUID()` / `crypto.randomInt()` in server code (boundary generation, log sampling)
+- **Hardened regex patterns** — Fixed 27 regex patterns vulnerable to ReDoS (S5852): bounded quantifiers, non-capturing groups, removed nested backtracking across 16 files
+- **Configurable defaults** — `8.8.8.8` and `192.168.1.0/24` moved from hardcoded values to `config.defaultPingTarget` / `config.defaultScanRange` with env var support
+
+#### Frontend
+
+- **SecuritySection.tsx** — Fixed 2 reliability bugs (unused `XCircle` import, unused `user` variable), refactored 7 duplicate `setCorsConfig()` calls into single `updateCorsConfig()` helper, fixed `.sort()` mutating React state, replaced deprecated `onKeyPress` with `onKeyDown`
+- **Regex hardening** — IPv4 validation, MAC address, color parsing, and domain validation patterns hardened across ThemeSection, SettingsPage, SearchPage, ExporterSection, and others
+
+#### CI/Quality
+
+- **sonar-project.properties** — Added `sonar.issue.ignore.multicriteria` exclusions for false positive S2245 (Math.random in visual animations) and S1313 (hardcoded IPs expected in network monitoring tool)
+- **Dockerfile** — Added `apk upgrade --no-cache` to fix zlib CVE-2026-27171
+
+---
+
 ## [0.7.69] - 2026-04-10
 
 ---

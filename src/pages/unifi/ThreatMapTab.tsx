@@ -196,7 +196,7 @@ export const ThreatMapTab: React.FC<ThreatMapTabProps> = ({ threatData }) => {
         const ipFlows = new Map<string, any[]>();
         for (const f of threatData.recentFlows) {
             const ip = f.srcIp;
-            if (!ip || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(ip)) continue;
+            if (!ip || /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|127\.)/.test(ip)) continue;
             if (!ipFlows.has(ip)) ipFlows.set(ip, []);
             ipFlows.get(ip)!.push(f);
         }

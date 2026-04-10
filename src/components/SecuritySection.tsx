@@ -7,11 +7,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Shield, Lock, AlertTriangle, Save, Loader2, CheckCircle, XCircle, Info, Trash2, RefreshCw, Plus, Globe } from 'lucide-react';
+import { Shield, Lock, AlertTriangle, Save, Loader2, CheckCircle, Info, Trash2, RefreshCw, Plus, Globe } from 'lucide-react';
 import { Section, SettingRow } from '../pages/SettingsPage';
 import { LogsManagementSection } from './LogsManagementSection';
 import { api } from '../api/client';
-import { useUserAuthStore } from '../stores/userAuthStore';
 
 type SecInnerTab = 'auth' | 'network' | 'logs';
 
@@ -20,7 +19,6 @@ export const SecuritySection: React.FC<{
   onSubTabChange?: (sub: string) => void;
 }> = ({ activeSubTab, onSubTabChange }) => {
     const { t } = useTranslation();
-    const { user } = useUserAuthStore();
     const VALID_SEC_TABS: SecInnerTab[] = ['auth', 'network', 'logs'];
     const secTab: SecInnerTab = (VALID_SEC_TABS as string[]).includes(activeSubTab || '')
       ? activeSubTab as SecInnerTab : 'auth';
@@ -86,10 +84,10 @@ export const SecuritySection: React.FC<{
     );
 
     const hasUnsavedCorsChanges = initialCorsConfig && corsConfig && (
-        JSON.stringify(corsConfig.allowedOrigins?.sort()) !== JSON.stringify(initialCorsConfig.allowedOrigins?.sort()) ||
+        JSON.stringify([...(corsConfig.allowedOrigins || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedOrigins || [])].sort()) ||
         corsConfig.allowCredentials !== initialCorsConfig.allowCredentials ||
-        JSON.stringify(corsConfig.allowedMethods?.sort()) !== JSON.stringify(initialCorsConfig.allowedMethods?.sort()) ||
-        JSON.stringify(corsConfig.allowedHeaders?.sort()) !== JSON.stringify(initialCorsConfig.allowedHeaders?.sort())
+        JSON.stringify([...(corsConfig.allowedMethods || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedMethods || [])].sort()) ||
+        JSON.stringify([...(corsConfig.allowedHeaders || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedHeaders || [])].sort())
     );
 
     const hasUnsavedIframeChanges = JSON.stringify([...iframeOrigins].sort()) !== JSON.stringify([...initialIframeOrigins].sort());
@@ -324,85 +322,57 @@ export const SecuritySection: React.FC<{
         setIframeOrigins(iframeOrigins.filter(o => o !== origin));
     };
 
+    // Helper to update CORS config while preserving defaults for unset fields
+    const updateCorsConfig = (updates: Partial<NonNullable<typeof corsConfig>>) => {
+        setCorsConfig({
+            allowedOrigins: corsConfig?.allowedOrigins || [],
+            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
+            allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+            allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With'],
+            ...updates
+        });
+    };
+
     const addOrigin = () => {
         if (newOrigin.trim()) {
             const origins = corsConfig?.allowedOrigins || [];
             if (!origins.includes(newOrigin.trim())) {
-                setCorsConfig({
-                    ...corsConfig,
-                    allowedOrigins: [...origins, newOrigin.trim()],
-                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
-                });
+                updateCorsConfig({ allowedOrigins: [...origins, newOrigin.trim()] });
                 setNewOrigin('');
             }
         }
     };
 
     const removeOrigin = (origin: string) => {
-        const origins = corsConfig?.allowedOrigins || [];
-        setCorsConfig({
-            ...corsConfig,
-            allowedOrigins: origins.filter(o => o !== origin),
-            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-            allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-            allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
-        });
+        updateCorsConfig({ allowedOrigins: (corsConfig?.allowedOrigins || []).filter(o => o !== origin) });
     };
 
     const addMethod = () => {
         if (newMethod.trim()) {
             const methods = corsConfig?.allowedMethods || [];
             if (!methods.includes(newMethod.trim().toUpperCase())) {
-                setCorsConfig({
-                    ...corsConfig,
-                    allowedMethods: [...methods, newMethod.trim().toUpperCase()],
-                    allowedOrigins: corsConfig?.allowedOrigins || [],
-                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-                    allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
-                });
+                updateCorsConfig({ allowedMethods: [...methods, newMethod.trim().toUpperCase()] });
                 setNewMethod('');
             }
         }
     };
 
     const removeMethod = (method: string) => {
-        const methods = corsConfig?.allowedMethods || [];
-        setCorsConfig({
-            ...corsConfig,
-            allowedMethods: methods.filter(m => m !== method),
-            allowedOrigins: corsConfig?.allowedOrigins || [],
-            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-            allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
-        });
+        updateCorsConfig({ allowedMethods: (corsConfig?.allowedMethods || []).filter(m => m !== method) });
     };
 
     const addHeader = () => {
         if (newHeader.trim()) {
             const headers = corsConfig?.allowedHeaders || [];
             if (!headers.includes(newHeader.trim())) {
-                setCorsConfig({
-                    ...corsConfig,
-                    allowedHeaders: [...headers, newHeader.trim()],
-                    allowedOrigins: corsConfig?.allowedOrigins || [],
-                    allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-                    allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
-                });
+                updateCorsConfig({ allowedHeaders: [...headers, newHeader.trim()] });
                 setNewHeader('');
             }
         }
     };
 
     const removeHeader = (header: string) => {
-        const headers = corsConfig?.allowedHeaders || [];
-        setCorsConfig({
-            ...corsConfig,
-            allowedHeaders: headers.filter(h => h !== header),
-            allowedOrigins: corsConfig?.allowedOrigins || [],
-            allowCredentials: corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-            allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH']
-        });
+        updateCorsConfig({ allowedHeaders: (corsConfig?.allowedHeaders || []).filter(h => h !== header) });
     };
 
     const secTabs: { id: SecInnerTab; label: string; icon: React.ElementType }[] = [
@@ -644,7 +614,7 @@ export const SecuritySection: React.FC<{
                                             <div className="flex gap-2 items-center flex-wrap">
                                                 <input type="text" value={newOrigin}
                                                     onChange={(e) => setNewOrigin(e.target.value)}
-                                                    onKeyPress={(e) => e.key === 'Enter' && addOrigin()}
+                                                    onKeyDown={(e) => e.key === 'Enter' && addOrigin()}
                                                     placeholder={t('admin.security.originPlaceholder')}
                                                     className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
                                                 <button onClick={addOrigin}
@@ -670,7 +640,7 @@ export const SecuritySection: React.FC<{
                                         <div className="flex items-center gap-2">
                                             <input type="checkbox"
                                                 checked={corsConfig?.allowCredentials !== undefined ? corsConfig.allowCredentials : true}
-                                                onChange={(e) => setCorsConfig({ ...corsConfig, allowCredentials: e.target.checked, allowedOrigins: corsConfig?.allowedOrigins || [], allowedMethods: corsConfig?.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'], allowedHeaders: corsConfig?.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With'] })}
+                                                onChange={(e) => updateCorsConfig({ allowCredentials: e.target.checked })}
                                                 className="w-4 h-4 text-blue-600 bg-[#1a1a1a] border-gray-700 rounded focus:ring-blue-500" />
                                             <span className="text-sm text-gray-400">
                                                 {(corsConfig?.allowCredentials ?? true) ? t('admin.security.enabled') : t('admin.security.disabled')}
@@ -683,7 +653,7 @@ export const SecuritySection: React.FC<{
                                             <div className="flex gap-2 items-center">
                                                 <input type="text" value={newMethod}
                                                     onChange={(e) => setNewMethod(e.target.value)}
-                                                    onKeyPress={(e) => e.key === 'Enter' && addMethod()}
+                                                    onKeyDown={(e) => e.key === 'Enter' && addMethod()}
                                                     placeholder={t('admin.security.methodsPlaceholder')}
                                                     className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
                                                 <button onClick={addMethod} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
@@ -706,7 +676,7 @@ export const SecuritySection: React.FC<{
                                             <div className="flex gap-2 items-center">
                                                 <input type="text" value={newHeader}
                                                     onChange={(e) => setNewHeader(e.target.value)}
-                                                    onKeyPress={(e) => e.key === 'Enter' && addHeader()}
+                                                    onKeyDown={(e) => e.key === 'Enter' && addHeader()}
                                                     placeholder={t('admin.security.headersPlaceholder')}
                                                     className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
                                                 <button onClick={addHeader} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">

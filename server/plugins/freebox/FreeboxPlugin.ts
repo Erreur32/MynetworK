@@ -23,7 +23,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.7.69');
+        super('freebox', 'Freebox', '0.7.70');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -244,15 +244,10 @@ export class FreeboxPlugin extends BasePlugin {
 
         try {
             // Fetch data from Freebox API in groups to avoid overloading Revolution
+            // Fetch data from Freebox API in groups to avoid overloading Revolution
             // Group 1: Fast endpoints (system info, connection status)
             // Group 2: DHCP endpoints (can be slow on Revolution)
             // Group 3: Network endpoints (port forwarding, WiFi, LAN browser - can be slow)
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:226',message:'Starting grouped API calls',data:{endpointCount:8},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-            const parallelStartTime = Date.now();
-            
-            // Group 1: Fast endpoints (system info, connection status)
             const [
                 connectionResult,
                 systemResult
@@ -283,13 +278,6 @@ export class FreeboxPlugin extends BasePlugin {
                 this.apiService.getWifiBss()
             ]);
             
-            const parallelDuration = Date.now() - parallelStartTime;
-            // #region agent log
-            const results = [devicesResult,connectionResult,systemResult,dhcpConfigResult,dhcpLeasesResult,dhcpStaticLeasesResult,portForwardResult,wifiBssResult];
-            const endpoints = ['lan/browser/pub','connection','system','dhcp/config','dhcp/dynamic_lease','dhcp/static_lease','fw/redir','wifi/bss'];
-            fetch('http://127.0.0.1:7243/ingest/c70980b8-6d32-4e8c-a501-4c043570cc94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FreeboxPlugin.ts:236',message:'Parallel API calls completed',data:{totalDuration:parallelDuration,results:results.map((r,i)=>({endpoint:endpoints[i],status:r.status,success:r.status==='fulfilled'?r.value.success:false}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-
             // Verify we're still authenticated after API calls
             // If session expired during calls, clear sensitive data
             const stillLoggedIn = await this.apiService.checkSession();
@@ -307,7 +295,7 @@ export class FreeboxPlugin extends BasePlugin {
                         // l2ident.id contains the MAC if type is "mac_address"
                         if (device.l2ident.type === 'mac_address' || device.l2ident.type === 'mac') {
                             mac = device.l2ident.id;
-                        } else if (device.l2ident.id && /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(device.l2ident.id)) {
+                        } else if (device.l2ident.id && /^[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}$/.test(device.l2ident.id)) {
                             // If l2ident.id looks like a MAC address, use it
                             mac = device.l2ident.id;
                         }
@@ -478,11 +466,6 @@ export class FreeboxPlugin extends BasePlugin {
                 }
                 
                 for (const bss of bssList) {
-                    // Check if BSS is enabled - check multiple possible locations
-                    // Default to enabled if not explicitly disabled (more permissive)
-                    const enabled = bss.enabled !== undefined ? bss.enabled : (bss.config?.enabled !== undefined ? bss.config.enabled : true);
-                    const isEnabled = enabled !== false && enabled !== 0; // More permissive: only exclude if explicitly false/0
-                    
                     // Get SSID from multiple possible locations with improved detection
                     // Try multiple fields in order of priority
                     let ssid: string | null = null;
@@ -504,7 +487,7 @@ export class FreeboxPlugin extends BasePlugin {
                         const idStr = String(bss.id).trim();
                         // MAC addresses are typically 12 hex digits (with or without separators)
                         // Skip if it looks like a MAC (contains only hex chars and separators)
-                        const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
+                        const macPattern = /^[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}$/;
                         if (!macPattern.test(idStr) && idStr.length > 0) {
                             ssid = idStr;
                         } else {
@@ -515,7 +498,7 @@ export class FreeboxPlugin extends BasePlugin {
                     else if (bss.bssid && typeof bss.bssid === 'string' && bss.bssid.trim() !== '') {
                         const bssidStr = bss.bssid.trim();
                         // Only use if it doesn't look like a MAC address
-                        const macPattern = /^[0-9a-fA-F]{2}[:-]?([0-9a-fA-F]{2}[:-]?){4}[0-9a-fA-F]{2}$/;
+                        const macPattern = /^[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}[:-]?[0-9a-fA-F]{2}$/;
                         if (!macPattern.test(bssidStr)) {
                             ssid = bssidStr;
                         }

@@ -365,7 +365,7 @@ router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: Authe
             throw createError('Each origin must be a non-empty string', 400, 'INVALID_CORS_CONFIG');
           }
           // Allow wildcard or valid URL patterns
-          if (origin !== '*' && !origin.match(/^https?:\/\//) && !origin.match(/^\/.*\/$/)) {
+          if (origin !== '*' && !origin.match(/^https?:\/\//) && !origin.match(/^\/[^\n]*\/$/)) {
             throw createError(`Invalid origin format: ${origin}. Must be a URL (http://... or https://...) or a regex pattern (/pattern/)`, 400, 'INVALID_CORS_CONFIG');
           }
         }
@@ -401,7 +401,7 @@ router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: Authe
         throw createError('Each iframe origin must be a non-empty string', 400, 'INVALID_IFRAME_CONFIG');
       }
       // Allow wildcard subdomains (https://*.example.com) or exact origins (https://example.com)
-      if (origin !== '*' && !origin.match(/^https?:\/\/(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.?[a-zA-Z]{2,}(:\d+)?$/)) {
+      if (origin !== '*' && !origin.match(/^https?:\/\/(\*\.)?[\w][\w.-]{0,253}[\w](:\d{1,5})?$/)) {
         throw createError(`Invalid iframe origin format: ${origin}. Use https://domain.com or https://*.domain.com`, 400, 'INVALID_IFRAME_CONFIG');
       }
     }

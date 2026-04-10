@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { logger } from '../utils/logger.js';
+import { config } from '../config.js';
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -14,7 +15,7 @@ const PING_FLAG = isWindows ? '-n' : '-c';
 // Strict validation: only allow IPs or safe hostnames (no shell metacharacters)
 function isValidPingTarget(target: string): boolean {
   // Allow IPv4 addresses
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(target)) {
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(target)) {
     return target.split('.').map(Number).every(p => p >= 0 && p <= 255);
   }
   // Allow safe hostnames (alphanumeric, dots, hyphens only)
@@ -113,7 +114,7 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
 
 // GET /api/speedtest/ping - Run ping test to measure latency and jitter
 router.get('/ping', asyncHandler(async (req, res) => {
-  const target = (req.query.target as string) || '8.8.8.8';
+  const target = (req.query.target as string) || config.defaultPingTarget;
   const count = Math.min(parseInt(req.query.count as string) || 10, 20);
 
   if (!isValidPingTarget(target)) {
@@ -230,7 +231,7 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
 
 // POST /api/speedtest/run - Run a full speedtest
 router.post('/run', asyncHandler(async (req, res) => {
-  const { pingTarget = '8.8.8.8', samples = 10 } = req.body;
+  const { pingTarget = config.defaultPingTarget, samples = 10 } = req.body;
 
   if (!isValidPingTarget(pingTarget)) {
     res.status(400).json({ success: false, error: { code: 'invalid_target', message: 'Invalid ping target' } });

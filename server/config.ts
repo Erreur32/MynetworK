@@ -84,6 +84,10 @@ export const config = {
   // Note: Use getPublicUrl() function to get the value (reads from DB if available)
   publicUrl: process.env.PUBLIC_URL || process.env.DASHBOARD_URL || null,
 
+  // Network defaults
+  defaultPingTarget: process.env.DEFAULT_PING_TARGET || '8.8.8.8',
+  defaultScanRange: process.env.DEFAULT_SCAN_RANGE || '192.168.1.0/24',
+
   // Freebox API
   freebox: {
     // Default URLs - can be overridden by env vars

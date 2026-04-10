@@ -12,7 +12,7 @@ const isLocalIpUrl = (url: string): boolean => {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname;
     // Check for common private IP patterns
-    return /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.)/.test(hostname);
+    return /^(?:192\.168\.|10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|localhost|127\.)/.test(hostname);
   } catch {
     return false;
   }

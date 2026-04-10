@@ -13,6 +13,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { config as appConfig } from '../config.js';
 import { networkScanScheduler, type UnifiedAutoScanConfig } from '../services/networkScanScheduler.js';
 import { 
     getRetentionConfig, 
@@ -778,7 +779,7 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
             return res.json({
                 success: true,
                 result: {
-                    defaultRange: '192.168.1.0/24',
+                    defaultRange: appConfig.defaultScanRange,
                     defaultAutoDetect: false
                     // defaultScanType retiré - scan complet toujours en mode 'full'
                 }
@@ -816,7 +817,7 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
  * }
  */
 router.post('/default-config', requireAuth, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { defaultRange = '192.168.1.0/24', defaultAutoDetect = false } = req.body;
+    const { defaultRange = appConfig.defaultScanRange, defaultAutoDetect = false } = req.body;
     // defaultScanType retiré - scan complet toujours en mode 'full'
 
     // Validate defaultRange format (basic validation)
@@ -1459,7 +1460,7 @@ router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), a
     const scanType = 'full'; // Ajout manuel toujours en mode 'full'
 
     // Validate IP format
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (!ipRegex.test(ip)) {
         return res.status(400).json({
             success: false,
@@ -1561,7 +1562,7 @@ router.post('/:id/rescan', requireAuth, autoLog('network-scan', 'rescan'), async
     const ip = req.params.id;
 
     // Validate IP format
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (!ipRegex.test(ip)) {
         return res.status(400).json({
             success: false,
@@ -1644,7 +1645,7 @@ router.post('/blacklist/add', requireAuth, autoLog('network-scan', 'blacklist-ad
     const { ip } = req.body;
 
     // Validate IP format
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (!ip || !ipRegex.test(ip)) {
         return res.status(400).json({
             success: false,
@@ -1692,7 +1693,7 @@ router.delete('/blacklist/:ip', requireAuth, autoLog('network-scan', 'blacklist-
     const ip = req.params.ip;
 
     // Validate IP format
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
     if (!ipRegex.test(ip)) {
         return res.status(400).json({
             success: false,
