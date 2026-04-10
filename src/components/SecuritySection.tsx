@@ -359,6 +359,38 @@ export const SecuritySection: React.FC<{
     const addHeader = () => addCorsItem('allowedHeaders', newHeader, undefined, () => setNewHeader(''));
     const removeHeader = (header: string) => removeCorsItem('allowedHeaders', header);
 
+    // Reusable list editor for CORS string arrays (Origins, Methods, Headers)
+    const CorsListEditor: React.FC<{
+        items: string[] | undefined;
+        value: string;
+        onChange: (v: string) => void;
+        onAdd: () => void;
+        onRemove: (item: string) => void;
+        placeholder: string;
+        maxWidth?: string;
+    }> = ({ items, value, onChange, onAdd, onRemove, placeholder, maxWidth = 'max-w-xs' }) => (
+        <div className="w-full space-y-2">
+            <div className="flex gap-2 items-center">
+                <input type="text" value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+                    placeholder={placeholder}
+                    className={`flex-1 min-w-0 ${maxWidth} px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500`} />
+                <button onClick={onAdd} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
+                    <Plus size={13} /> {t('admin.security.add')}
+                </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {items?.map(item => (
+                    <div key={item} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
+                        <span className="text-sm text-white font-mono">{item}</span>
+                        <button onClick={() => onRemove(item)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
     const secTabs: { id: SecInnerTab; label: string; icon: React.ElementType }[] = [
         { id: 'auth', label: t('admin.security.tabAuth'), icon: Shield },
         { id: 'network', label: t('admin.security.tabNetwork'), icon: Globe },
@@ -595,28 +627,11 @@ export const SecuritySection: React.FC<{
                                     <SettingRow label={t('admin.security.allowedOrigins')} description={t('admin.security.allowedOriginsDesc')}>
                                         <div className="w-full space-y-2">
                                             <p className="text-xs text-gray-500">{t('admin.security.allowedOriginsVsPublicUrl')}</p>
-                                            <div className="flex gap-2 items-center flex-wrap">
-                                                <input type="text" value={newOrigin}
-                                                    onChange={(e) => setNewOrigin(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && addOrigin()}
-                                                    placeholder={t('admin.security.originPlaceholder')}
-                                                    className="flex-1 min-w-0 max-w-sm px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
-                                                <button onClick={addOrigin}
-                                                    className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
-                                                    <Plus size={13} /> {t('admin.security.add')}
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2 min-h-[2rem]">
-                                                {corsConfig?.allowedOrigins && corsConfig.allowedOrigins.length > 0
-                                                    ? corsConfig.allowedOrigins.map(origin => (
-                                                        <div key={origin} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
-                                                            <span className="text-sm text-white font-mono">{origin}</span>
-                                                            <button onClick={() => removeOrigin(origin)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
-                                                        </div>
-                                                    ))
-                                                    : <p className="text-xs text-gray-500 self-center">{t('admin.security.noOriginsConfigured')}</p>
-                                                }
-                                            </div>
+                                            <CorsListEditor items={corsConfig?.allowedOrigins} value={newOrigin}
+                                                onChange={setNewOrigin} onAdd={addOrigin} onRemove={removeOrigin}
+                                                placeholder={t('admin.security.originPlaceholder')} maxWidth="max-w-sm" />
+                                            {(!corsConfig?.allowedOrigins || corsConfig.allowedOrigins.length === 0) &&
+                                                <p className="text-xs text-gray-500">{t('admin.security.noOriginsConfigured')}</p>}
                                         </div>
                                     </SettingRow>
 
@@ -633,49 +648,15 @@ export const SecuritySection: React.FC<{
                                     </SettingRow>
 
                                     <SettingRow label={t('admin.security.allowedMethods')} description={t('admin.security.allowedMethodsDesc')}>
-                                        <div className="w-full space-y-2">
-                                            <div className="flex gap-2 items-center">
-                                                <input type="text" value={newMethod}
-                                                    onChange={(e) => setNewMethod(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && addMethod()}
-                                                    placeholder={t('admin.security.methodsPlaceholder')}
-                                                    className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
-                                                <button onClick={addMethod} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
-                                                    <Plus size={13} /> {t('admin.security.add')}
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {corsConfig?.allowedMethods?.map(method => (
-                                                    <div key={method} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
-                                                        <span className="text-sm text-white font-mono">{method}</span>
-                                                        <button onClick={() => removeMethod(method)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                                        <CorsListEditor items={corsConfig?.allowedMethods} value={newMethod}
+                                            onChange={setNewMethod} onAdd={addMethod} onRemove={removeMethod}
+                                            placeholder={t('admin.security.methodsPlaceholder')} />
                                     </SettingRow>
 
                                     <SettingRow label={t('admin.security.allowedHeaders')} description={t('admin.security.allowedHeadersDesc')}>
-                                        <div className="w-full space-y-2">
-                                            <div className="flex gap-2 items-center">
-                                                <input type="text" value={newHeader}
-                                                    onChange={(e) => setNewHeader(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && addHeader()}
-                                                    placeholder={t('admin.security.headersPlaceholder')}
-                                                    className="flex-1 min-w-0 max-w-xs px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500" />
-                                                <button onClick={addHeader} className="shrink-0 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg flex items-center gap-1.5">
-                                                    <Plus size={13} /> {t('admin.security.add')}
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {corsConfig?.allowedHeaders?.map(header => (
-                                                    <div key={header} className="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg">
-                                                        <span className="text-sm text-white font-mono">{header}</span>
-                                                        <button onClick={() => removeHeader(header)} className="text-red-400 hover:text-red-300"><Trash2 size={13} /></button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
+                                        <CorsListEditor items={corsConfig?.allowedHeaders} value={newHeader}
+                                            onChange={setNewHeader} onAdd={addHeader} onRemove={removeHeader}
+                                            placeholder={t('admin.security.headersPlaceholder')} />
                                     </SettingRow>
 
                                     <div className="flex justify-end pt-2 border-t border-gray-800">

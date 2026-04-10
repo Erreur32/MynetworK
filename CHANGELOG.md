@@ -2,12 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.74] - 2026-04-10
+## [0.7.75] - 2026-04-10
 
 ### Technical
 
-- **fix(duplication): SecuritySection.tsx** — Replaced 3 duplicate add/remove function pairs with generic `addCorsItem()`/`removeCorsItem()` helpers (-20 lines)
-- **fix(duplication): latency-monitoring.ts** — Extracted repeated IPv4 validation into `isValidIpv4()` helper (6 occurrences → 1 definition)
+- **fix(duplication): SecuritySection.tsx** — Extracted `CorsListEditor` component to replace 3 duplicate input+button+list JSX blocks for Origins/Methods/Headers (-30 lines), plus `addCorsItem()`/`removeCorsItem()` generic helpers
+- **fix(duplication): latency-monitoring.ts** — Extracted `isValidIpv4()` helper (6 identical regex blocks → 1 definition)
+- **fix(ci): update-version.sh** — Now updates `sonar-project.properties` version (was stuck at 0.7.58)
 
 ---
 

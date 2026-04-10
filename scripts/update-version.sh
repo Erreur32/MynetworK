@@ -153,6 +153,12 @@ fi
 echo -e "${BLUE}  📝 Mise à jour de README.md...${NC}"
 sed -i -E "s/MynetworK-[0-9]+\.[0-9]+\.[0-9]+/MynetworK-$NEW_VERSION/g" README.md
 
+# 3b. sonar-project.properties (SonarCloud project version)
+if [ -f "sonar-project.properties" ]; then
+    echo -e "${BLUE}  📝 Mise à jour de sonar-project.properties...${NC}"
+    sed -i -E "s/sonar\.projectVersion=.*/sonar.projectVersion=$NEW_VERSION/" sonar-project.properties
+fi
+
 # 4. CHANGELOG.md (ajout de la nouvelle entrée en haut)
 echo -e "${BLUE}  📝 Mise à jour de CHANGELOG.md...${NC}"
 # Obtenir la date actuelle au format YYYY-MM-DD
@@ -273,6 +279,7 @@ echo -e "  ${BLUE}- server/plugins/freebox/FreeboxPlugin.ts${NC}"
 echo -e "  ${BLUE}- server/plugins/unifi/UniFiPlugin.ts${NC}"
 echo -e "  ${BLUE}- server/plugins/scan-reseau/ScanReseauPlugin.ts${NC}"
 echo -e "  ${BLUE}- README.md${NC}"
+echo -e "  ${BLUE}- sonar-project.properties${NC}"
 echo -e "  ${BLUE}- CHANGELOG.md${NC}"
 echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"
 echo ""
