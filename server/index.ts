@@ -189,7 +189,22 @@ function getCorsConfig() {
   };
 }
 
-// Security headers
+// Security headers — frameAncestors is built from DB config
+function getFrameAncestors(): string[] {
+  try {
+    const iframeOriginsJson = AppConfigRepository.get('iframe_origins');
+    if (iframeOriginsJson) {
+      const origins: string[] = JSON.parse(iframeOriginsJson);
+      if (origins.length > 0) {
+        return ["'self'", ...origins];
+      }
+    }
+  } catch {
+    // Fall back to self-only on parse error
+  }
+  return ["'self'"];
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -200,7 +215,7 @@ app.use(helmet({
       connectSrc: ["'self'", "ws:", "wss:", "https://way.myoueb.fr"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
-      frameAncestors: ["'self'"],
+      frameAncestors: getFrameAncestors(),
     }
   },
   crossOriginEmbedderPolicy: false, // Allow loading external images
