@@ -286,12 +286,17 @@ router.get('/general', requireAuth, requireAdmin, asyncHandler(async (_req, res)
   // Get CORS config from database
   const corsConfigJson = AppConfigRepository.get('cors_config');
   const corsConfig = corsConfigJson ? JSON.parse(corsConfigJson) : null;
-  
+
+  // Get iframe origins config from database
+  const iframeOriginsJson = AppConfigRepository.get('iframe_origins');
+  const iframeOrigins: string[] = iframeOriginsJson ? JSON.parse(iframeOriginsJson) : [];
+
   res.json({
     success: true,
     result: {
       publicUrl,
-      corsConfig
+      corsConfig,
+      iframeOrigins
     }
   });
 }));
@@ -385,18 +390,48 @@ router.put('/general', requireAuth, requireAdmin, asyncHandler(async (req: Authe
     }
   }
 
+  // Handle iframe origins configuration
+  if (req.body.iframeOrigins !== undefined) {
+    const { iframeOrigins } = req.body;
+    if (!Array.isArray(iframeOrigins)) {
+      throw createError('iframeOrigins must be an array', 400, 'INVALID_IFRAME_CONFIG');
+    }
+    for (const origin of iframeOrigins) {
+      if (typeof origin !== 'string' || origin.trim() === '') {
+        throw createError('Each iframe origin must be a non-empty string', 400, 'INVALID_IFRAME_CONFIG');
+      }
+      // Allow wildcard subdomains (https://*.example.com) or exact origins (https://example.com)
+      if (origin !== '*' && !origin.match(/^https?:\/\/(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.?[a-zA-Z]{2,}(:\d+)?$/)) {
+        throw createError(`Invalid iframe origin format: ${origin}. Use https://domain.com or https://*.domain.com`, 400, 'INVALID_IFRAME_CONFIG');
+      }
+    }
+    AppConfigRepository.set('iframe_origins', JSON.stringify(iframeOrigins));
+
+    if (req.user) {
+      await securityNotificationService.notifySecuritySettingsChanged(
+        req.user.userId,
+        req.user.username,
+        { iframeOrigins: 'Updated' }
+      );
+    }
+  }
+
   const currentPublicUrl = AppConfigRepository.get('public_url') || process.env.PUBLIC_URL || process.env.DASHBOARD_URL || '';
   
   // Get current CORS config
   const corsConfigJson = AppConfigRepository.get('cors_config');
   const currentCorsConfig = corsConfigJson ? JSON.parse(corsConfigJson) : null;
 
+  const iframeOriginsJson = AppConfigRepository.get('iframe_origins');
+  const currentIframeOrigins: string[] = iframeOriginsJson ? JSON.parse(iframeOriginsJson) : [];
+
   res.json({
     success: true,
     result: {
       publicUrl: currentPublicUrl,
       corsConfig: currentCorsConfig,
-      message: 'General settings updated. Note: CORS changes require a server restart to take full effect.'
+      iframeOrigins: currentIframeOrigins,
+      message: 'General settings updated. Note: CORS and iframe changes require a server restart to take full effect.'
     }
   });
 }));
