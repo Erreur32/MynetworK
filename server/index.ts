@@ -209,8 +209,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://way.myoueb.fr", "https://static.cloudflareinsights.com"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "https://way.myoueb.fr", "https://static.cloudflareinsights.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Required for Tailwind/inline styles in index.html
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'", "ws:", "wss:", "https://way.myoueb.fr"],
       fontSrc: ["'self'", "data:"],
@@ -219,7 +219,8 @@ app.use(helmet({
       frameAncestors: ["'self'"],
     }
   },
-  // Disable X-Frame-Options so CSP frame-ancestors takes full control
+  // frameguard disabled: CSP frame-ancestors provides the same protection with more flexibility
+  // (supports multiple origins, while X-Frame-Options only allows one)
   frameguard: false,
   crossOriginEmbedderPolicy: false, // Allow loading external images
 }));

@@ -107,10 +107,17 @@ class FreeboxFirmwareCheckService {
     let server: FirmwareEntry | null = null;
     let player: FirmwareEntry | null = null;
 
-    // Strip HTML tags and decode entities for simpler regex matching
-    const text = html
-      .replace(/<script[^>]*>[\s\S]{0,10000}?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]{0,10000}?<\/style>/gi, '')
+    // Strip HTML to plain text — iterative approach to handle nested/malformed tags
+    let stripped = html;
+    // Remove script/style blocks iteratively (handles nested cases like <scr<script>ipt>)
+    let prev = '';
+    while (prev !== stripped) {
+      prev = stripped;
+      stripped = stripped.replace(/<script\b[^>]*>([^<]|<(?!\/script>))*<\/script>/gi, '');
+      stripped = stripped.replace(/<style\b[^>]*>([^<]|<(?!\/style>))*<\/style>/gi, '');
+    }
+    // Remove all remaining HTML tags and normalize whitespace
+    const text = stripped
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .replace(/&nbsp;/g, ' ')

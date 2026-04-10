@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.71] - 2026-04-10
+
+### Technical
+
+- **fix(security): SSRF protection** — Added URL hostname validation in Freebox API client to prevent server-side request forgery (CodeQL #211)
+- **fix(security): HTML sanitization** — Replaced single-pass regex HTML stripping with iterative approach to handle nested/malformed tags (CodeQL #209, #210)
+- **fix(security): Helmet CSP** — Removed `'unsafe-inline'` from `scriptSrc` directive (not needed for Vite module builds) (CodeQL #207)
+
+---
+
 ## [0.7.70] - 2026-04-10
 
 ### For users

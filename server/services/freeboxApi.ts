@@ -188,11 +188,18 @@ class FreeboxApiService {
         logger.info('FreeboxAPI', 'Token reset - re-registration required');
     }
 
-    // Build full API URL
+    // Build full API URL — only allows requests to the configured Freebox host
     private buildUrl(endpoint: string, apiVersion = config.freebox.apiVersion): string {
-        // All endpoints use v15 now (the latest API version)
-        // WiFi was previously v2 but is now supported in v15
-        return `${this.baseUrl}/api/${apiVersion}${endpoint}`;
+        // Sanitize endpoint to prevent path traversal
+        const safeEndpoint = endpoint.replace(/\.\./g, '');
+        const url = `${this.baseUrl}/api/${apiVersion}${safeEndpoint}`;
+        // Validate the URL resolves to the expected Freebox host (SSRF protection)
+        const parsed = new URL(url);
+        const baseHost = new URL(this.baseUrl).hostname;
+        if (parsed.hostname !== baseHost) {
+            throw new Error(`SSRF blocked: ${parsed.hostname} does not match ${baseHost}`);
+        }
+        return url;
     }
 
     // Make HTTP request to Freebox
