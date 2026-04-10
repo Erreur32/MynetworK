@@ -83,14 +83,15 @@ export const SecuritySection: React.FC<{
         sessionTimeoutHours !== initialSecuritySettings.sessionTimeoutHours
     );
 
+    const sortStr = (a: string, b: string) => a.localeCompare(b);
     const hasUnsavedCorsChanges = initialCorsConfig && corsConfig && (
-        JSON.stringify([...(corsConfig.allowedOrigins || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedOrigins || [])].sort()) ||
+        JSON.stringify([...(corsConfig.allowedOrigins || [])].sort(sortStr)) !== JSON.stringify([...(initialCorsConfig.allowedOrigins || [])].sort(sortStr)) ||
         corsConfig.allowCredentials !== initialCorsConfig.allowCredentials ||
-        JSON.stringify([...(corsConfig.allowedMethods || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedMethods || [])].sort()) ||
-        JSON.stringify([...(corsConfig.allowedHeaders || [])].sort()) !== JSON.stringify([...(initialCorsConfig.allowedHeaders || [])].sort())
+        JSON.stringify([...(corsConfig.allowedMethods || [])].sort(sortStr)) !== JSON.stringify([...(initialCorsConfig.allowedMethods || [])].sort(sortStr)) ||
+        JSON.stringify([...(corsConfig.allowedHeaders || [])].sort(sortStr)) !== JSON.stringify([...(initialCorsConfig.allowedHeaders || [])].sort(sortStr))
     );
 
-    const hasUnsavedIframeChanges = JSON.stringify([...iframeOrigins].sort()) !== JSON.stringify([...initialIframeOrigins].sort());
+    const hasUnsavedIframeChanges = JSON.stringify([...iframeOrigins].sort(sortStr)) !== JSON.stringify([...initialIframeOrigins].sort(sortStr));
 
     const hasUnsavedChanges = hasUnsavedSecurityChanges || hasUnsavedCorsChanges || hasUnsavedIframeChanges;
 

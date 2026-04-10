@@ -107,23 +107,34 @@ class FreeboxFirmwareCheckService {
     let server: FirmwareEntry | null = null;
     let player: FirmwareEntry | null = null;
 
-    // Strip HTML to plain text — iterative approach to handle nested/malformed tags
-    let stripped = html;
-    // Remove script/style blocks iteratively (handles nested cases like <scr<script>ipt>)
-    let prev = '';
-    while (prev !== stripped) {
-      prev = stripped;
-      stripped = stripped.replace(/<script\b[^>]*>([^<]|<(?!\/script>))*<\/script>/gi, '');
-      stripped = stripped.replace(/<style\b[^>]*>([^<]|<(?!\/style>))*<\/style>/gi, '');
+    // Strip HTML to plain text using state-machine parser (no regex for tag removal)
+    const htmlEntities: Record<string, string> = { '&nbsp;': ' ', '&agrave;': 'à', '&eacute;': 'é', '&egrave;': 'è', '&amp;': '&', '&lt;': '<', '&gt;': '>' };
+    let text = '';
+    let inTag = false;
+    let tagName = '';
+    let skipContent = false; // true inside <script> or <style>
+    for (let i = 0; i < html.length; i++) {
+      const ch = html[i];
+      if (ch === '<') {
+        inTag = true;
+        tagName = '';
+      } else if (ch === '>' && inTag) {
+        inTag = false;
+        const lower = tagName.toLowerCase().replace(/\s.*/, ''); // get tag name only
+        if (lower === 'script' || lower === 'style') skipContent = true;
+        if (lower === '/script' || lower === '/style') skipContent = false;
+        text += ' ';
+      } else if (inTag) {
+        tagName += ch;
+      } else if (!skipContent) {
+        text += ch;
+      }
     }
-    // Remove all remaining HTML tags and normalize whitespace
-    const text = stripped
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&agrave;/g, 'à')
-      .replace(/&eacute;/g, 'é')
-      .replace(/&egrave;/g, 'è');
+    // Decode HTML entities and normalize whitespace
+    for (const [entity, replacement] of Object.entries(htmlEntities)) {
+      text = text.split(entity).join(replacement);
+    }
+    text = text.replace(/\s+/g, ' ');
 
     // Split by post separators (--- or Tweet or hr)
     const blocks = text.split(/\s*---\s*|\s*<hr\s*\/?>\s*|Tweet\s*/i);

@@ -219,19 +219,21 @@ app.use(helmet({
       frameAncestors: ["'self'"],
     }
   },
-  // frameguard disabled: CSP frame-ancestors provides the same protection with more flexibility
-  // (supports multiple origins, while X-Frame-Options only allows one)
-  frameguard: false,
   crossOriginEmbedderPolicy: false, // Allow loading external images
 }));
 
-// Dynamic frame-ancestors: re-read iframe_origins from DB on each request
-// so config changes via the UI take effect without server restart
+// Dynamic frame-ancestors and X-Frame-Options: re-read iframe_origins from DB
+// on each request so config changes via the UI take effect without server restart
 app.use((_req, res, next) => {
+  const ancestors = getFrameAncestors();
+  // Update CSP frame-ancestors
   const csp = res.getHeader('content-security-policy') as string | undefined;
   if (csp) {
-    const ancestors = getFrameAncestors().join(' ');
-    res.setHeader('content-security-policy', csp.replace(/frame-ancestors [^;]+/, `frame-ancestors ${ancestors}`));
+    res.setHeader('content-security-policy', csp.replace(/frame-ancestors [^;]+/, `frame-ancestors ${ancestors.join(' ')}`));
+  }
+  // Set X-Frame-Options based on allowed origins (SAMEORIGIN if only self, removed if external origins allowed)
+  if (ancestors.length > 1 || (ancestors.length === 1 && ancestors[0] !== "'self'")) {
+    res.removeHeader('x-frame-options'); // Multiple origins: rely on CSP frame-ancestors only
   }
   next();
 });

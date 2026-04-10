@@ -2,13 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.71] - 2026-04-10
+## [0.7.72] - 2026-04-10
 
 ### Technical
 
-- **fix(security): SSRF protection** — Added URL hostname validation in Freebox API client to prevent server-side request forgery (CodeQL #211)
-- **fix(security): HTML sanitization** — Replaced single-pass regex HTML stripping with iterative approach to handle nested/malformed tags (CodeQL #209, #210)
-- **fix(security): Helmet CSP** — Removed `'unsafe-inline'` from `scriptSrc` directive (not needed for Vite module builds) (CodeQL #207)
+- **fix(security): SSRF protection** — Rebuilt URL from trusted origin components in Freebox API client (CodeQL #211)
+- **fix(security): HTML sanitization** — Replaced regex HTML stripping with state-machine parser for safe tag removal (CodeQL #209, #210, #212-#214)
+- **fix(security): Helmet hardening** — Removed `'unsafe-inline'` from `scriptSrc`, re-enabled `frameguard` with dynamic X-Frame-Options (CodeQL #207, #215)
+- **fix(reliability): sort comparator** — Added explicit `localeCompare` comparator to all `.sort()` calls in SecuritySection.tsx (SonarCloud S2871, 8 bugs)
 
 ---
 

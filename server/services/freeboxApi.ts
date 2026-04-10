@@ -188,18 +188,14 @@ class FreeboxApiService {
         logger.info('FreeboxAPI', 'Token reset - re-registration required');
     }
 
-    // Build full API URL — only allows requests to the configured Freebox host
+    // Build full API URL — reconstructs URL from trusted base to prevent SSRF
     private buildUrl(endpoint: string, apiVersion = config.freebox.apiVersion): string {
-        // Sanitize endpoint to prevent path traversal
-        const safeEndpoint = endpoint.replace(/\.\./g, '');
-        const url = `${this.baseUrl}/api/${apiVersion}${safeEndpoint}`;
-        // Validate the URL resolves to the expected Freebox host (SSRF protection)
-        const parsed = new URL(url);
-        const baseHost = new URL(this.baseUrl).hostname;
-        if (parsed.hostname !== baseHost) {
-            throw new Error(`SSRF blocked: ${parsed.hostname} does not match ${baseHost}`);
-        }
-        return url;
+        // Parse the trusted base URL and rebuild with the API path
+        const base = new URL(this.baseUrl);
+        // Sanitize endpoint: strip path traversal, ensure it starts with /
+        const safeEndpoint = endpoint.replace(/\.\./g, '').replace(/^\/+/, '/');
+        // Reconstruct URL from trusted origin components only (not from user input)
+        return `${base.protocol}//${base.host}/api/${apiVersion}${safeEndpoint}`;
     }
 
     // Make HTTP request to Freebox
