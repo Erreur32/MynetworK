@@ -215,11 +215,25 @@ app.use(helmet({
       connectSrc: ["'self'", "ws:", "wss:", "https://way.myoueb.fr"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
-      frameAncestors: getFrameAncestors(),
+      // frame-ancestors is set dynamically per-request below
+      frameAncestors: ["'self'"],
     }
   },
+  // Disable X-Frame-Options so CSP frame-ancestors takes full control
+  frameguard: false,
   crossOriginEmbedderPolicy: false, // Allow loading external images
 }));
+
+// Dynamic frame-ancestors: re-read iframe_origins from DB on each request
+// so config changes via the UI take effect without server restart
+app.use((_req, res, next) => {
+  const csp = res.getHeader('content-security-policy') as string | undefined;
+  if (csp) {
+    const ancestors = getFrameAncestors().join(' ');
+    res.setHeader('content-security-policy', csp.replace(/frame-ancestors [^;]+/, `frame-ancestors ${ancestors}`));
+  }
+  next();
+});
 
 // Gzip/deflate compression for API responses and static assets
 app.use(compression());
