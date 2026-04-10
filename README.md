@@ -13,6 +13,10 @@
 [![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
 [![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
 [![SonarCloud](https://img.shields.io/sonar/quality_gate/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Sonar)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Reliability](https://img.shields.io/sonar/reliability_rating/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Reliability)](https://sonarcloud.io/component_measures?id=Erreur32_MynetworK&metric=reliability_rating)
+[![Security](https://img.shields.io/sonar/security_rating/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Security)](https://sonarcloud.io/component_measures?id=Erreur32_MynetworK&metric=security_rating)
+[![Maintainability](https://img.shields.io/sonar/tech_debt/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Tech%20Debt)](https://sonarcloud.io/component_measures?id=Erreur32_MynetworK&metric=sqale_index)
+[![Lines of Code](https://img.shields.io/sonar/ncloc/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Lines)](https://sonarcloud.io/component_measures?id=Erreur32_MynetworK&metric=ncloc)
 [![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
 [![Snyk](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/snyk.yml?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/snyk.yml)
 
