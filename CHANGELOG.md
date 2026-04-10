@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.68] - 2026-04-10
+
+### For users
+
+- **Iframe embed configuration** — New UI in Settings > Security > Network to manage allowed iframe origins. MyNetwork can now be embedded in iframes from authorized domains via `Content-Security-Policy: frame-ancestors`
+- **URL-driven Settings sub-tabs** — Security, Database, and Backup sections now use URL-based sub-tabs (e.g. `/settings/security/network`), so refreshing or sharing a link keeps the active sub-tab
+
+---
+
+### Technical
+
+#### Backend
+
+- **server/index.ts** — CSP `frame-ancestors` directive is now dynamically read from database config (`iframe_origins`) instead of being hardcoded to `'self'`
+- **server/routes/system.ts** — Added `iframe_origins` field to `GET/PUT /api/system/general` endpoint for reading/writing allowed iframe origins
+
+#### Frontend
+
+- **SecuritySection.tsx** — Added iframe embed configuration UI (origin list management with add/remove, test button, and snippet display)
+- **SettingsPage.tsx** — Security, Database, and Backup sections now derive active sub-tab from 3rd URL path segment via `useNavigate`
+
+#### i18n
+
+- **en/admin.json + fr/admin.json** — Added 9 translation keys for iframe embed configuration
+
+---
+
 ## [0.7.67] - 2026-04-09
 
 ### For users
