@@ -1406,9 +1406,9 @@ export class UniFiApiService {
                         // Clean up any "[object Object]" strings in the error message
                         let cleanMessage = loginError.message.replace(/\[object Object\]/g, '').trim();
                         // Remove duplicate deployment hints
-                        cleanMessage = cleanMessage.replace(/Verify URL, username, and password are correct\.\s*Verify URL, username, and password are correct\./g, 'Verify URL, username, and password are correct.');
+                        cleanMessage = cleanMessage.replace(/Verify URL, username, and password are correct\.\s{0,10}Verify URL, username, and password are correct\./g, 'Verify URL, username, and password are correct.');
                         // Remove duplicate "Verify URL, username, and password" at the end
-                        cleanMessage = cleanMessage.replace(/\s*Verify URL, username, and password\.?\s*$/g, '');
+                        cleanMessage = cleanMessage.replace(/\s{0,10}Verify URL, username, and password\.?\s{0,10}$/g, '');
                         
                         // If it's a rate limit error, preserve the full message with retry info
                         if (cleanMessage.includes('429') || cleanMessage.includes('Too Many Requests')) {

@@ -708,7 +708,7 @@ export class WiresharkVendorService {
                 // Format 3: 			Address lines (skip)
                 
                 // Match hex format line: XX-XX-XX   (hex)		Organization Name
-                const hexMatch = trimmed.match(/^([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})\s+\(hex\)\s+(.+)$/);
+                const hexMatch = trimmed.match(/^([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})\s{1,20}\(hex\)\s{1,20}(.{1,200})$/);
                 if (hexMatch) {
                     // Convert XX-XX-XX to aa:bb:cc format
                     const oui = `${hexMatch[1].toLowerCase()}:${hexMatch[2].toLowerCase()}:${hexMatch[3].toLowerCase()}`;
@@ -737,7 +737,7 @@ export class WiresharkVendorService {
                 }
                 
                 // Match base16 format line: XXXXXX     (base 16)		Organization Name (duplicate, skip)
-                const base16Match = trimmed.match(/^[0-9A-Fa-f]{6}\s+\(base 16\)\s+(.+)$/);
+                const base16Match = trimmed.match(/^[0-9A-Fa-f]{6}\s{1,20}\(base 16\)\s{1,20}(.{1,200})$/);
                 if (base16Match) {
                     // This is a duplicate entry, skip it (we already have it from hex format)
                     continue;

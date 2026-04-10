@@ -406,7 +406,7 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                 {renderSortHeader(t('unifi.ssidPorts'), 'ssid', 'left')}
                                             </th>
                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
-                                                {renderSortHeader(t('unifi.typeLabel').replace(/\s*:\s*$/, ''), 'type', 'left')}
+                                                {renderSortHeader(t('unifi.typeLabel').replace(/\s{0,10}:\s{0,10}$/, ''), 'type', 'left')}
                                             </th>
                                             <th className="px-3 py-2 text-left sticky top-0 bg-theme-card">
                                                 <span className="flex items-center gap-1">

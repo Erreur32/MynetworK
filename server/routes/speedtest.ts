@@ -67,11 +67,11 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
 
     // --- WINDOWS CASE ---
     else {
-      const lossMatchWin = output.match(/\((\d+)%\s*(?:perte|loss)\)/i);
+      const lossMatchWin = output.match(/\((\d+)%\s{0,5}(?:perte|loss)\)/i);
       loss = lossMatchWin ? parseFloat(lossMatchWin[1]) : 0;
 
       // Match average from Windows ping (French: "Moyenne", English: "Average")
-      const avgMatch = output.match(/(?:Moyenne|Average)\s*=\s*(\d+)ms/i);
+      const avgMatch = output.match(/(?:Moyenne|Average)\s{0,5}=\s{0,5}(\d+)ms/i);
 
       if (avgMatch) {
         avg = parseFloat(avgMatch[1]);
