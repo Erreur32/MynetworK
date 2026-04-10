@@ -12,6 +12,20 @@ const router = Router();
 const isValidIpv4 = (ip: string | undefined): ip is string =>
     !!ip && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip);
 
+// Validate batch IP array, returns error response or null if valid
+const validateIpBatch = (ips: unknown, res: any): boolean => {
+    if (!Array.isArray(ips) || ips.length === 0) {
+        res.status(400).json({ success: false, error: { message: 'Invalid request body. Expected { ips: string[] }' } });
+        return false;
+    }
+    const invalid = ips.filter((ip: string) => !isValidIpv4(ip));
+    if (invalid.length > 0) {
+        res.status(400).json({ success: false, error: { message: `Invalid IP addresses: ${invalid.join(', ')}` } });
+        return false;
+    }
+    return true;
+};
+
 /**
  * GET /api/latency-monitoring/status
  * Get list of all IPs with monitoring enabled
@@ -210,26 +224,7 @@ router.get('/stats/:ip', (req, res) => {
 router.post('/stats/batch', (req, res) => {
     try {
         const { ips } = req.body;
-        
-        if (!Array.isArray(ips) || ips.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'Invalid request body. Expected { ips: string[] }'
-                }
-            });
-        }
-
-        // Validate IPs
-        const invalidIps = ips.filter((ip: string) => !isValidIpv4(ip));
-        if (invalidIps.length > 0) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: `Invalid IP addresses: ${invalidIps.join(', ')}`
-                }
-            });
-        }
+        if (!validateIpBatch(ips, res)) return;
 
         const stats = latencyMonitoringService.getStatisticsBatch(ips);
         
@@ -257,26 +252,7 @@ router.post('/stats/batch', (req, res) => {
 router.post('/status/batch', (req, res) => {
     try {
         const { ips } = req.body;
-        
-        if (!Array.isArray(ips) || ips.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: 'Invalid request body. Expected { ips: string[] }'
-                }
-            });
-        }
-
-        // Validate IPs
-        const invalidIps = ips.filter((ip: string) => !isValidIpv4(ip));
-        if (invalidIps.length > 0) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    message: `Invalid IP addresses: ${invalidIps.join(', ')}`
-                }
-            });
-        }
+        if (!validateIpBatch(ips, res)) return;
 
         const status = latencyMonitoringService.getMonitoringStatusBatch(ips);
         
