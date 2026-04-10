@@ -294,12 +294,9 @@ export class FreeboxPlugin extends BasePlugin {
                 devices.push(...devicesResult.value.result.map((device: any) => {
                     // Extract MAC address from l2ident if available, otherwise use device.mac
                     let mac = device.mac;
-                    if (!mac && device.l2ident) {
-                        // l2ident.id contains the MAC if type is "mac_address"
-                        if (device.l2ident.type === 'mac_address' || device.l2ident.type === 'mac') {
-                            mac = device.l2ident.id;
-                        } else if (device.l2ident.id && /^[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}$/.test(device.l2ident.id)) {
-                            // If l2ident.id looks like a MAC address, use it
+                    if (!mac && device.l2ident?.id) {
+                        // Use l2ident.id if type indicates MAC or if it looks like a MAC address
+                        if (device.l2ident.type === 'mac_address' || device.l2ident.type === 'mac' || looksLikeMac(device.l2ident.id)) {
                             mac = device.l2ident.id;
                         }
                     }

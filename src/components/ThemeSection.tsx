@@ -768,8 +768,7 @@ export const ThemeSection: React.FC = () => {
     const getColorHex = (key: keyof ThemeColors, fallback: string): string =>
         getColorValue(key).replace(/rgba?\([^)]{0,50}\)/, fallback);
 
-    // Reusable color picker + text input pair
-    const ColorInput: React.FC<{ colorKey: keyof ThemeColors; fallback: string }> = ({ colorKey, fallback }) => (
+    const colorInput = (colorKey: keyof ThemeColors, fallback: string) => (
         <>
             <input type="color" value={getColorHex(colorKey, fallback)}
                 onChange={(e) => handleColorChange(colorKey, e.target.value)}
@@ -1571,7 +1570,7 @@ export const ThemeSection: React.FC = () => {
                                             Arrière-plan principal
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <ColorInput colorKey="bgPrimary" fallback="#0f0f0f" />
+                                            {colorInput('bgPrimary', '#0f0f0f')}
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{ backgroundColor: getColorValue('bgPrimary') }}
@@ -1659,7 +1658,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <ColorInput colorKey="borderColor" fallback="#333333" />
+                                            {colorInput('borderColor', '#333333')}
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{
@@ -1674,7 +1673,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure (light)
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <ColorInput colorKey="borderColorLight" fallback="#444444" />
+                                            {colorInput('borderColorLight', '#444444')}
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{
@@ -1699,7 +1698,7 @@ export const ThemeSection: React.FC = () => {
                                             Fond du bouton
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <ColorInput colorKey="buttonBg" fallback="#1a1a1a" />
+                                            {colorInput('buttonBg', '#1a1a1a')}
                                             <button
                                                 className="w-8 h-8 rounded border border-theme/30 flex items-center justify-center text-[10px] font-medium transition-all"
                                                 style={{
@@ -1800,7 +1799,7 @@ export const ThemeSection: React.FC = () => {
                                             Bordure du bouton
                                         </label>
                                         <div className="flex items-center gap-1.5">
-                                            <ColorInput colorKey="buttonBorder" fallback="#333333" />
+                                            {colorInput('buttonBorder', '#333333')}
                                             <div
                                                 className="w-8 h-8 rounded border border-theme/30 transition-all"
                                                 style={{

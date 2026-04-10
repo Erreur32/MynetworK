@@ -3437,14 +3437,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     navigateTo(`/settings/${tab}`);
   }, [navigateTo]);
 
+  // Remap legacy tab names to current ones
+  const resolveAdminTab = (tab: string | null | undefined): string | null | undefined => {
+    if (tab === 'logs') return 'security';
+    if (tab === 'users') return 'general';
+    return tab;
+  };
+
   // Admin tab: derive from URL, with sessionStorage + initialAdminTab fallback
   const storedAdminTabRaw = sessionStorage.getItem('adminTab') as string | null;
-  const storedAdminTab = (
-    storedAdminTabRaw === 'logs' ? 'security' : storedAdminTabRaw === 'users' ? 'general' : storedAdminTabRaw
-  ) as AdminTab | null;
-  const initialTab = (
-    initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab
-  ) as AdminTab;
+  const storedAdminTab = resolveAdminTab(storedAdminTabRaw) as AdminTab | null;
+  const initialTab = resolveAdminTab(initialAdminTab) as AdminTab;
   const adminDefault = storedAdminTab || initialTab;
   const activeAdminTab: AdminTab = (VALID_ADMIN_TABS as readonly string[]).includes(urlTab)
     ? urlTab as AdminTab : adminDefault;
@@ -3460,13 +3463,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   useEffect(() => {
     const tabFromStorageRaw = sessionStorage.getItem('adminTab') as string | null;
     if (tabFromStorageRaw) {
-      const tabFromStorage = (
-        tabFromStorageRaw === 'logs' ? 'security' : tabFromStorageRaw === 'users' ? 'general' : tabFromStorageRaw
-      ) as AdminTab;
+      const tabFromStorage = resolveAdminTab(tabFromStorageRaw) as AdminTab;
       sessionStorage.removeItem('adminTab');
       navigateTo(`/settings/${tabFromStorage}`, { replace: true });
     } else if (initialAdminTab && initialAdminTab !== 'general' && !urlTab) {
-      const resolved = initialAdminTab === 'logs' ? 'security' : initialAdminTab === 'users' ? 'general' : initialAdminTab;
+      const resolved = resolveAdminTab(initialAdminTab);
       navigateTo(`/settings/${resolved}`, { replace: true });
     }
     if (window.location.hash === '#admin') {
