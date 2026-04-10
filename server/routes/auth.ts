@@ -117,8 +117,18 @@ router.get('/check', asyncHandler(async (_req, res) => {
 // POST /api/auth/set-url - Set Freebox base URL
 router.post('/set-url', asyncHandler(async (req, res) => {
   const { url } = req.body;
-  if (!url) {
+  if (!url || typeof url !== 'string') {
     throw createError('URL is required', 400, 'MISSING_URL');
+  }
+  // Validate URL format before passing to API client
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw createError('Only HTTP(S) URLs are allowed', 400, 'INVALID_URL');
+    }
+  } catch (e) {
+    if (e instanceof TypeError) throw createError('Invalid URL format', 400, 'INVALID_URL');
+    throw e;
   }
 
   freeboxApi.setBaseUrl(url);

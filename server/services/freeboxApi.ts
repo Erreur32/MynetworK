@@ -76,9 +76,25 @@ class FreeboxApiService {
         this.loadToken();
     }
 
+    // Allowed hostnames for Freebox API (prevents SSRF via setBaseUrl)
+    private static readonly ALLOWED_HOSTS = [
+        'mafreebox.freebox.fr',
+        /^192\.168\.\d{1,3}\.\d{1,3}$/,  // Local network
+        /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/,
+        /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/,
+    ];
+
     // Set the base URL (for switching between mafreebox.freebox.fr and local IP)
     setBaseUrl(url: string) {
-        this.baseUrl = url;
+        // Validate URL to prevent SSRF: only allow Freebox-related hosts
+        const parsed = new URL(url);
+        const isAllowed = FreeboxApiService.ALLOWED_HOSTS.some(h =>
+            typeof h === 'string' ? parsed.hostname === h : h.test(parsed.hostname)
+        );
+        if (!isAllowed) {
+            throw new Error(`Blocked: ${parsed.hostname} is not an allowed Freebox host`);
+        }
+        this.baseUrl = `${parsed.protocol}//${parsed.host}`;
     }
 
     // Get current base URL

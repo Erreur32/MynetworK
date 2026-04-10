@@ -2,14 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.7.72] - 2026-04-10
+## [0.7.73] - 2026-04-10
 
 ### Technical
 
-- **fix(security): SSRF protection** — Rebuilt URL from trusted origin components in Freebox API client (CodeQL #211)
-- **fix(security): HTML sanitization** — Replaced regex HTML stripping with state-machine parser for safe tag removal (CodeQL #209, #210, #212-#214)
+- **fix(security): SSRF prevention** — Added hostname allowlist validation in `setBaseUrl()` (only Freebox hosts and private IPs allowed) + URL format validation in auth route (CodeQL #211)
+- **fix(security): HTML sanitization** — Replaced regex HTML stripping with state-machine parser for safe tag removal (CodeQL #209-#214)
 - **fix(security): Helmet hardening** — Removed `'unsafe-inline'` from `scriptSrc`, re-enabled `frameguard` with dynamic X-Frame-Options (CodeQL #207, #215)
-- **fix(reliability): sort comparator** — Added explicit `localeCompare` comparator to all `.sort()` calls in SecuritySection.tsx (SonarCloud S2871, 8 bugs)
+- **fix(reliability): sort comparator** — Refactored `.sort()` calls into `arraysEqual()` helper with explicit `localeCompare` (SonarCloud S2871)
+- **fix(duplication): SecuritySection.tsx** — Extracted repeated sorted-array comparison into `arraysEqual()` helper to reduce code duplication
 
 ---
 
