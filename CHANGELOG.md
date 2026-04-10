@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.74] - 2026-04-10
+
+### Technical
+
+- **fix(duplication): SecuritySection.tsx** — Replaced 3 duplicate add/remove function pairs with generic `addCorsItem()`/`removeCorsItem()` helpers (-20 lines)
+- **fix(duplication): latency-monitoring.ts** — Extracted repeated IPv4 validation into `isValidIpv4()` helper (6 occurrences → 1 definition)
+
+---
+
 ## [0.7.73] - 2026-04-10
 
 ### Technical

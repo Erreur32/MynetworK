@@ -337,47 +337,27 @@ export const SecuritySection: React.FC<{
         });
     };
 
-    const addOrigin = () => {
-        if (newOrigin.trim()) {
-            const origins = corsConfig?.allowedOrigins || [];
-            if (!origins.includes(newOrigin.trim())) {
-                updateCorsConfig({ allowedOrigins: [...origins, newOrigin.trim()] });
-                setNewOrigin('');
-            }
+    // Generic add/remove helpers for CORS list fields to avoid duplication
+    type CorsListKey = 'allowedOrigins' | 'allowedMethods' | 'allowedHeaders';
+    const addCorsItem = (key: CorsListKey, value: string, transform?: (v: string) => string, resetFn?: () => void) => {
+        const trimmed = transform ? transform(value.trim()) : value.trim();
+        if (!trimmed) return;
+        const current = corsConfig?.[key] || [];
+        if (!current.includes(trimmed)) {
+            updateCorsConfig({ [key]: [...current, trimmed] });
+            resetFn?.();
         }
     };
-
-    const removeOrigin = (origin: string) => {
-        updateCorsConfig({ allowedOrigins: (corsConfig?.allowedOrigins || []).filter(o => o !== origin) });
+    const removeCorsItem = (key: CorsListKey, value: string) => {
+        updateCorsConfig({ [key]: (corsConfig?.[key] || []).filter((v: string) => v !== value) });
     };
 
-    const addMethod = () => {
-        if (newMethod.trim()) {
-            const methods = corsConfig?.allowedMethods || [];
-            if (!methods.includes(newMethod.trim().toUpperCase())) {
-                updateCorsConfig({ allowedMethods: [...methods, newMethod.trim().toUpperCase()] });
-                setNewMethod('');
-            }
-        }
-    };
-
-    const removeMethod = (method: string) => {
-        updateCorsConfig({ allowedMethods: (corsConfig?.allowedMethods || []).filter(m => m !== method) });
-    };
-
-    const addHeader = () => {
-        if (newHeader.trim()) {
-            const headers = corsConfig?.allowedHeaders || [];
-            if (!headers.includes(newHeader.trim())) {
-                updateCorsConfig({ allowedHeaders: [...headers, newHeader.trim()] });
-                setNewHeader('');
-            }
-        }
-    };
-
-    const removeHeader = (header: string) => {
-        updateCorsConfig({ allowedHeaders: (corsConfig?.allowedHeaders || []).filter(h => h !== header) });
-    };
+    const addOrigin = () => addCorsItem('allowedOrigins', newOrigin, undefined, () => setNewOrigin(''));
+    const removeOrigin = (origin: string) => removeCorsItem('allowedOrigins', origin);
+    const addMethod = () => addCorsItem('allowedMethods', newMethod, (v) => v.toUpperCase(), () => setNewMethod(''));
+    const removeMethod = (method: string) => removeCorsItem('allowedMethods', method);
+    const addHeader = () => addCorsItem('allowedHeaders', newHeader, undefined, () => setNewHeader(''));
+    const removeHeader = (header: string) => removeCorsItem('allowedHeaders', header);
 
     const secTabs: { id: SecInnerTab; label: string; icon: React.ElementType }[] = [
         { id: 'auth', label: t('admin.security.tabAuth'), icon: Shield },
