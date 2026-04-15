@@ -101,11 +101,10 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
-    # Drop all other capabilities and prevent privilege escalation
+      - SETUID
+      - SETGID
     cap_drop:
       - ALL
-    security_opt:
-      - no-new-privileges:true
 
     # OPTIONAL: Use host network mode for better MAC/vendor detection
     # In bridge mode (default), the container reads the host's ARP table via /host/proc/net/arp.

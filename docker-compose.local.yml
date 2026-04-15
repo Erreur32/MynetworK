@@ -92,10 +92,10 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
+      - SETUID
+      - SETGID
     cap_drop:
       - ALL
-    security_opt:
-      - no-new-privileges:true
 
     restart: unless-stopped
     # Health check (use 127.0.0.1 instead of localhost to avoid IPv6 issues)
