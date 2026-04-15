@@ -19,7 +19,7 @@ import { pluginManager } from './pluginManager.js';
 import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { ipBlacklistService } from './ipBlacklistService.js';
-import { extractMac, escapeRegex } from '../utils/networkValidation.js';
+import { extractMac, escapeRegex, normalizeMac } from '../utils/networkValidation.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -2100,8 +2100,8 @@ export class NetworkScanService {
             const existingScan = NetworkScanRepository.findByIp(ip);
             if (existingScan?.mac) {
                 const deviceByMac = stats.devices.find((d: any) => {
-                    const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
-                    const scanMac = existingScan.mac.toLowerCase().replace(/[:-]/g, '');
+                    const deviceMac = normalizeMac(d.mac || '');
+                    const scanMac = normalizeMac(existingScan.mac);
                     return deviceMac === scanMac;
                 });
                 if (deviceByMac) {
@@ -2141,8 +2141,8 @@ export class NetworkScanService {
             const existingScan = NetworkScanRepository.findByIp(ip);
             if (existingScan?.mac) {
                 const deviceByMac = stats.devices.find((d: any) => {
-                    const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
-                    const scanMac = existingScan.mac.toLowerCase().replace(/[:-]/g, '');
+                    const deviceMac = normalizeMac(d.mac || '');
+                    const scanMac = normalizeMac(existingScan.mac);
                     return deviceMac === scanMac;
                 });
                 if (deviceByMac) {
@@ -2327,9 +2327,9 @@ export class NetworkScanService {
             logger.debug('NetworkScanService', `[VENDOR] Freebox: Checking ${stats.devices.length} devices`);
             
             // Try by MAC first (more reliable)
-            const normalizedMac = mac.toLowerCase().replace(/[:-]/g, '');
+            const normalizedMac = normalizeMac(mac);
             const device = stats.devices.find((d: any) => {
-                const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                const deviceMac = normalizeMac(d.mac || '');
                 return deviceMac === normalizedMac;
             });
             
@@ -2387,9 +2387,9 @@ export class NetworkScanService {
             logger.debug('NetworkScanService', `[VENDOR] UniFi: Checking ${stats.devices.length} devices`);
             
             // Try by MAC first (more reliable)
-            const normalizedMac = mac.toLowerCase().replace(/[:-]/g, '');
+            const normalizedMac = normalizeMac(mac);
             const device = stats.devices.find((d: any) => {
-                const deviceMac = (d.mac || '').toLowerCase().replace(/[:-]/g, '');
+                const deviceMac = normalizeMac(d.mac || '');
                 return deviceMac === normalizedMac;
             });
             
