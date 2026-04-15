@@ -153,6 +153,9 @@ services:
 
 ```
 
+> [!IMPORTANT]
+> **v0.7.80 Breaking Change:** Docker volumes have changed. `/:/host:ro` and `docker.sock` mounts removed for security. See [CHANGELOG](CHANGELOG.md#0780---2026-04-15) for migration instructions.
+
 **Launch:**
 
 ```bash

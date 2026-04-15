@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.80] - 2026-04-15
 
+### BREAKING CHANGES (Docker)
+
+- **Docker volumes changed** — `/:/host:ro` and `/var/run/docker.sock` mounts removed. Replace with targeted mounts. See updated docker-compose.yml example below.
+- **Capabilities changed** — Added `cap_drop: ALL` + `SETUID`/`SETGID`. Remove `no-new-privileges` if present (incompatible with su-exec).
+- **Disk usage and Docker version removed** — These features required unsafe mounts and have been permanently removed from the dashboard.
+
+**Migration:** Update your docker-compose volumes section:
+```yaml
+volumes:
+  - ./data:/app/data
+  - /proc:/host/proc:ro
+  - /sys:/host/sys:ro
+  - /etc/hostname:/host/etc/hostname:ro
+  - /etc/hosts:/host/etc/hosts:ro
+cap_add:
+  - NET_RAW
+  - NET_ADMIN
+  - SETUID
+  - SETGID
+cap_drop:
+  - ALL
+```
+
+### Security
+
+- **fix(critical): Command injection prevention** — All `exec()` calls replaced with `execFile()` (array arguments, no shell) across networkScanService, portScanService, speedtest, wiresharkVendorService
+- **feat: JWT blacklist persistence** — Revoked tokens stored in SQLite, survive container restarts. New `POST /api/users/logout` route
+- **feat: WebSocket rate limiting** — 50 msg/10s per connection on all 3 WS services
+- **feat: RBAC on network scan** — 15 scan routes restricted to admin role
+- **fix: Helmet HSTS/upgrade-insecure-requests disabled** — App runs behind reverse proxy (NPM), these headers caused ERR_SSL_PROTOCOL_ERROR on LAN HTTP access
+- **fix: CodeQL incomplete string escaping** — `escapeRegex()` utility replaces partial dot-only escaping
+
+### Code Quality
+
+- **refactor: Shared validation utilities** — `server/utils/networkValidation.ts` with `isValidIp`, `isValidPingTarget`, `isValidPortRange`, `extractMac`, `normalizeMac`, `escapeRegex`
+- **refactor: Reduced duplication** — MAC extraction (5x), MAC normalization (10x), hostname validation (6x) deduplicated via shared helpers
+- **refactor: NumericInput component** — Extracted from SecuritySection.tsx to reduce UI duplication
+
+### Cleanup
+
+- **Removed** `docker-compose.dev.yml`, `Dockerfile.dev` — simplified to 2 compose files
+- **Removed** 7 obsolete Doc_Dev files
+- **Updated** README.md, README.fr.md, SECURITY.md, CLAUDE.md, all documentation
+
 ---
 
 ## [0.7.79] - 2026-04-10
