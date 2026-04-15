@@ -19,7 +19,7 @@ import { pluginManager } from './pluginManager.js';
 import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { ipBlacklistService } from './ipBlacklistService.js';
-import { extractMac } from '../utils/networkValidation.js';
+import { extractMac, escapeRegex } from '../utils/networkValidation.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -1726,7 +1726,7 @@ export class NetworkScanService {
                 for (const arpPath of arpPaths) {
                     try {
                         logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip}...`);
-                        const escapedIp = ip.replace(/\./g, '\\.');
+                        const escapedIp = escapeRegex(ip);
                         const lines = grepFile(arpPath, new RegExp(`^${escapedIp} `));
                         const stdout = lines.join('\n');
                         logger.debug('NetworkScanService', `[MAC] ${arpPath} output for ${ip}: ${stdout.substring(0, 100)}`);
@@ -2721,7 +2721,7 @@ export class NetworkScanService {
             for (const hostsPath of hostsPaths) {
                 try {
                     logger.info('NetworkScanService', `[HOSTNAME] Trying ${hostsPath} for ${ip}...`);
-                    const escapedIp = ip.replace(/\./g, '\\.');
+                    const escapedIp = escapeRegex(ip);
                     const matchedLines = grepFile(hostsPath, new RegExp(`^${escapedIp}\\s`));
                     const stdout = matchedLines.length > 0 ? matchedLines[0] : '';
                     logger.info('NetworkScanService', `[HOSTNAME] ${hostsPath} output for ${ip}: ${stdout.substring(0, 100)}`);
@@ -2810,7 +2810,7 @@ export class NetworkScanService {
                 for (const arpPath of arpPaths) {
                     try {
                         // Read ARP table and look for hostname in comments or additional fields
-                        const escapedIp = ip.replace(/\./g, '\\.');
+                        const escapedIp = escapeRegex(ip);
                         const arpLines = grepFile(arpPath, new RegExp(`^${escapedIp} `));
                         const stdout = arpLines.join('\n');
                         const parts = stdout.trim().split(/\s+/);
@@ -2867,7 +2867,7 @@ export class NetworkScanService {
                     if (stdout.trim()) {
                         // Format: hostname [IP] port ...
                         // Escape all regex special characters in IP, not just dots
-                        const escapedIp = ip.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const escapedIp = escapeRegex(ip);
                         const match = stdout.match(new RegExp(`([a-zA-Z0-9.-]+)\\s+\\[${escapedIp}\\]`));
                         if (match && match[1]) {
                             const hostname = match[1].trim();

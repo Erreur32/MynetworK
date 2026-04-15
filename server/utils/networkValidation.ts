@@ -72,3 +72,11 @@ export function isValidPortRange(range: string): boolean {
     const ports = range.replace(/-/g, ',').split(',').map(Number);
     return ports.every(p => p >= 1 && p <= 65535);
 }
+
+/**
+ * Escape a string for safe use in a RegExp constructor.
+ * Escapes all regex special characters, not just dots.
+ */
+export function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
