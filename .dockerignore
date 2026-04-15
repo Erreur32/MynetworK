@@ -86,6 +86,9 @@ logs
 # Secrets and sensitive files (additional patterns)
 *secret*
 *token*
+# Re-include server token-related source files (excluded by *token* above)
+!server/services/tokenBlacklistService.ts
+!server/database/models/TokenBlacklist.ts
 *.key
 *.pem
 *.p12
