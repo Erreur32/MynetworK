@@ -85,10 +85,14 @@ logs
 
 # Secrets and sensitive files (additional patterns)
 *secret*
-*token*
-# Re-include server token-related source files (excluded by *token* above)
-!server/services/tokenBlacklistService.ts
-!server/database/models/TokenBlacklist.ts
+# Token files (credentials) — use specific patterns to avoid excluding source code
+*.token
+*.token.*
+*_token
+*_token.*
+.freebox_token*
+**/token.json
+**/token.txt
 *.key
 *.pem
 *.p12

@@ -47,6 +47,23 @@ const CorsListEditor: React.FC<{
     </div>
 );
 
+// Reusable numeric input with unit label (avoids duplicated input+span blocks)
+const NumericInput: React.FC<{
+    value: number;
+    onChange: (v: number) => void;
+    min: number;
+    max: number;
+    fallback: number;
+    unit: string;
+}> = ({ value, onChange, min, max, fallback, unit }) => (
+    <div className="flex items-center gap-2">
+        <input type="number" min={min} max={max} value={value}
+            onChange={(e) => onChange(parseInt(e.target.value) || fallback)}
+            className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
+        <span className="text-sm text-gray-400">{unit}</span>
+    </div>
+);
+
 export const SecuritySection: React.FC<{
   activeSubTab?: string;
   onSubTabChange?: (sub: string) => void;
@@ -473,28 +490,13 @@ export const SecuritySection: React.FC<{
                                 <Section title={t('admin.security.attackProtectionTitle')} icon={Shield} iconColor="red">
                                     <div className="space-y-4">
                                         <SettingRow label={t('admin.security.maxLoginAttempts')} description={t('admin.security.maxLoginAttemptsDesc')}>
-                                            <div className="flex items-center gap-2">
-                                                <input type="number" min="3" max="10" value={maxLoginAttempts}
-                                                    onChange={(e) => setMaxLoginAttempts(parseInt(e.target.value) || 5)}
-                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
-                                                <span className="text-sm text-gray-400">{t('admin.security.attemptsUnit')}</span>
-                                            </div>
+                                            <NumericInput value={maxLoginAttempts} onChange={setMaxLoginAttempts} min={3} max={10} fallback={5} unit={t('admin.security.attemptsUnit')} />
                                         </SettingRow>
                                         <SettingRow label={t('admin.security.lockoutDuration')} description={t('admin.security.lockoutDurationDesc')}>
-                                            <div className="flex items-center gap-2">
-                                                <input type="number" min="5" max="60" value={lockoutDuration}
-                                                    onChange={(e) => setLockoutDuration(parseInt(e.target.value) || 15)}
-                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none" />
-                                                <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
-                                            </div>
+                                            <NumericInput value={lockoutDuration} onChange={setLockoutDuration} min={5} max={60} fallback={15} unit={t('admin.security.minutes')} />
                                         </SettingRow>
                                         <SettingRow label={t('admin.security.trackingWindow')} description={t('admin.security.trackingWindowDesc')}>
-                                            <div className="flex items-center gap-2">
-                                                <input type="number" min="15" max="120" value={trackingWindow}
-                                                    onChange={(e) => setTrackingWindow(parseInt(e.target.value) || 30)}
-                                                    className="w-20 px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500" />
-                                                <span className="text-sm text-gray-400">{t('admin.security.minutes')}</span>
-                                            </div>
+                                            <NumericInput value={trackingWindow} onChange={setTrackingWindow} min={15} max={120} fallback={30} unit={t('admin.security.minutes')} />
                                         </SettingRow>
                                         <div className="p-3 bg-green-900/10 border border-green-700/30 rounded-lg flex items-start gap-2">
                                             <CheckCircle size={15} className="text-green-400 mt-0.5 flex-shrink-0" />
