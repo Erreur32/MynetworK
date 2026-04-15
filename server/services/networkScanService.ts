@@ -19,6 +19,7 @@ import { pluginManager } from './pluginManager.js';
 import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { ipBlacklistService } from './ipBlacklistService.js';
+import { extractMac } from '../utils/networkValidation.js';
 
 // Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
 // ping returns non-zero exit code on packet loss, which is normal for offline hosts
@@ -1703,9 +1704,8 @@ export class NetworkScanService {
                 logger.debug('NetworkScanService', `[MAC] Trying Windows arp -a for ${ip}...`);
                 try {
                 const { stdout } = await safeExecFile('arp', ['-a', ip]);
-                const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                if (match) {
-                        const mac = match[0].toLowerCase().replace(/-/g, ':');
+                const mac = extractMac(stdout);
+                if (mac) {
                         logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} using Windows arp`);
                         return mac;
                     }
@@ -1756,13 +1756,10 @@ export class NetworkScanService {
                         ? ['-c', '1', '-w', '1', '-I', networkInterface, ip]
                         : ['-c', '1', '-w', '1', ip];
                     const { stdout } = await safeExecFile('arping', arpingArgs, { timeout: 2000 });
-                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                    if (match) {
-                        const mac = match[0].toLowerCase().replace(/-/g, ':');
-                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
-                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using arping`);
-                            return mac;
-                        }
+                    const mac = extractMac(stdout);
+                    if (mac) {
+                        logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using arping`);
+                        return mac;
                     }
                 } catch (error: any) {
                     logger.debug('NetworkScanService', `[MAC] arping not available or failed for ${ip}: ${error.message || error}`);
@@ -1780,13 +1777,10 @@ export class NetworkScanService {
                         ipNeighStdout = result.stdout;
                     }
                     logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${ipNeighStdout.substring(0, 100)}`);
-                    const match = ipNeighStdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                    if (match) {
-                        const mac = match[0].toLowerCase().replace(/-/g, ':');
-                        if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
-                            logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
-                            return mac;
-                        }
+                    const mac = extractMac(ipNeighStdout);
+                    if (mac) {
+                        logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
+                        return mac;
                     }
                 } catch (error: any) {
                     logger.debug('NetworkScanService', `[MAC] ip neigh failed for ${ip}: ${error.message || error}`);
@@ -1800,13 +1794,10 @@ export class NetworkScanService {
                         // Filter output for the target IP in JS instead of piping to grep
                         const matchLine = stdout.split('\n').find(line => line.includes(ip));
                         if (matchLine) {
-                            const match = matchLine.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                            if (match) {
-                                const mac = match[0].toLowerCase().replace(/-/g, ':');
-                                if (mac !== '00:00:00:00:00:00') {
-                                    logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
-                                    return mac;
-                                }
+                            const mac = extractMac(matchLine);
+                            if (mac) {
+                                logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
+                                return mac;
                             }
                         }
                     }
@@ -1817,13 +1808,10 @@ export class NetworkScanService {
                 // Method 5: Traditional arp command (last resort)
                 try {
                     const { stdout } = await safeExecFile('arp', ['-n', ip], { timeout: 2000 });
-                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                    if (match) {
-                        const mac = match[0].toLowerCase().replace(/-/g, ':');
-                        if (mac !== '00:00:00:00:00:00') {
-                            logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
-                            return mac;
-                        }
+                    const mac = extractMac(stdout);
+                    if (mac) {
+                        logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
+                        return mac;
                     }
                 } catch (error: any) {
                     logger.debug('NetworkScanService', `[MAC] Traditional arp command failed for ${ip}: ${error.message || error}`);
@@ -2607,6 +2595,21 @@ export class NetworkScanService {
             hostname.length < 64
         );
     }
+
+    /**
+     * Validate and extract short hostname from a raw hostname string.
+     * Applies strict filtering (no IPs, no arpa, valid chars, length) and returns
+     * the first label (before the first dot), or null if invalid.
+     */
+    private extractShortHostname(hostname: string | undefined, ip: string): string | null {
+        if (!hostname || !this.isValidHostname(hostname, ip)) return null;
+        if (hostname.includes('in-addr.arpa')) return null;
+        if (hostname.toLowerCase().includes(ip.replace(/\./g, '-'))) return null;
+        if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) return null;
+        const short = hostname.split('.')[0];
+        if (!short || short.length === 0 || short.length >= 64) return null;
+        return short;
+    }
     
     /**
      * Get hostname for an IP using multiple methods (system only, no plugins)
@@ -2628,20 +2631,10 @@ export class NetworkScanService {
                 logger.info('NetworkScanService', `[HOSTNAME] Reverse DNS returned: ${hostname}`);
                 // Filter out generic reverse DNS entries and IP addresses
                 // Also filter out hostnames that are just IPs or invalid
-                if (hostname && 
-                    !hostname.includes('in-addr.arpa') && 
-                    hostname.length > 0 &&
-                    hostname.length < 64 && // Max hostname length
-                    hostname !== ip && // Don't return IP as hostname
-                    !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
-                    !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
-                    /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
-                    // Extract first part before dot (hostname, not FQDN)
-                    const shortHostname = hostname.split('.')[0];
-                    if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
-                        logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using reverse DNS`);
-                        return shortHostname;
-                    }
+                const shortHostname = this.extractShortHostname(hostname, ip);
+                if (shortHostname) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using reverse DNS`);
+                    return shortHostname;
                 } else {
                     logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS returned invalid hostname: ${hostname}`);
                 }
@@ -2702,20 +2695,10 @@ export class NetworkScanService {
                     const hostname = parts[1].trim();
                     logger.info('NetworkScanService', `[HOSTNAME] getent hosts parsed hostname: ${hostname}`);
                     // Filter out IP addresses and generic entries
-                    if (hostname && 
-                        hostname.length > 0 &&
-                        hostname.length < 64 && // Max hostname length
-                        !hostname.includes('in-addr.arpa') &&
-                        hostname !== ip && // Don't return IP as hostname
-                        !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
-                        !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
-                        /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
-                        // Extract first part before dot (hostname, not FQDN)
-                        const shortHostname = hostname.split('.')[0];
-                        if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
-                            logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using getent hosts`);
-                            return shortHostname;
-                        }
+                    const shortHostname = this.extractShortHostname(hostname, ip);
+                    if (shortHostname) {
+                        logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using getent hosts`);
+                        return shortHostname;
                     } else {
                         logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts returned invalid hostname for ${ip}: ${hostname}`);
                     }
@@ -2745,21 +2728,10 @@ export class NetworkScanService {
                     const parts = stdout.trim().split(/\s+/);
                     if (parts.length >= 2) {
                         const hostname = parts[1].trim();
-                        // Filter out comments, IP addresses, and ensure it's a valid hostname
-                        if (hostname && 
-                            hostname.length > 0 &&
-                            hostname.length < 64 && // Max hostname length
-                            !hostname.startsWith('#') &&
-                            hostname !== ip && // Don't return IP as hostname
-                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) && // Don't return IP-like strings
-                            !hostname.toLowerCase().includes(ip.replace(/\./g, '-')) && // Don't return IP with dashes
-                            /^[a-zA-Z0-9.-]+$/.test(hostname)) { // Only valid hostname characters
-                            // Extract first part before dot (hostname, not FQDN)
-                            const shortHostname = hostname.split('.')[0];
-                            if (shortHostname && shortHostname.length > 0 && shortHostname.length < 64) {
-                                logger.info('NetworkScanService', `[HOSTNAME] Found hostname ${shortHostname} for ${ip} using ${hostsPath}`);
-                                return shortHostname;
-                            }
+                        const shortHostname = (!hostname.startsWith('#')) ? this.extractShortHostname(hostname, ip) : null;
+                        if (shortHostname) {
+                            logger.info('NetworkScanService', `[HOSTNAME] Found hostname ${shortHostname} for ${ip} using ${hostsPath}`);
+                            return shortHostname;
                         } else {
                             logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} returned invalid hostname for ${ip}: ${hostname}`);
                         }
@@ -2876,13 +2848,8 @@ export class NetworkScanService {
                     const parts = stdout.trim().split(/\s+/);
                     if (parts.length >= 2) {
                         const hostname = parts[1].trim();
-                        if (hostname && 
-                            hostname !== ip &&
-                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
-                            /^[a-zA-Z0-9.-]+$/.test(hostname) &&
-                            hostname.length > 0 &&
-                            hostname.length < 64) {
-                            const shortHostname = hostname.split('.')[0];
+                        const shortHostname = this.extractShortHostname(hostname, ip);
+                        if (shortHostname) {
                             logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using avahi-resolve`);
                             return shortHostname;
                         }
@@ -2904,13 +2871,8 @@ export class NetworkScanService {
                         const match = stdout.match(new RegExp(`([a-zA-Z0-9.-]+)\\s+\\[${escapedIp}\\]`));
                         if (match && match[1]) {
                             const hostname = match[1].trim();
-                            if (hostname && 
-                                hostname !== ip &&
-                                !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
-                                /^[a-zA-Z0-9.-]+$/.test(hostname) &&
-                                hostname.length > 0 &&
-                                hostname.length < 64) {
-                                const shortHostname = hostname.split('.')[0];
+                            const shortHostname = this.extractShortHostname(hostname, ip);
+                            if (shortHostname) {
                                 logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using avahi-browse`);
                                 return shortHostname;
                             }
@@ -2933,13 +2895,8 @@ export class NetworkScanService {
                     const match = nameLine.match(/name:\s+([a-zA-Z0-9.-]+)/i);
                     if (match && match[1]) {
                         const hostname = match[1].trim();
-                        if (hostname && 
-                            hostname !== ip &&
-                            !/^\d+\.\d+\.\d+\.\d+$/.test(hostname) &&
-                            /^[a-zA-Z0-9.-]+$/.test(hostname) &&
-                            hostname.length > 0 &&
-                            hostname.length < 64) {
-                            const shortHostname = hostname.split('.')[0];
+                        const shortHostname = this.extractShortHostname(hostname, ip);
+                        if (shortHostname) {
                             logger.info('NetworkScanService', `[HOSTNAME] ✓ Found hostname ${shortHostname} for ${ip} using LLMNR`);
                             return shortHostname;
                         }
