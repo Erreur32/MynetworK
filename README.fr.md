@@ -118,10 +118,10 @@ services:
     cap_add:
       - NET_RAW
       - NET_ADMIN
+      - SETUID
+      - SETGID
     cap_drop:
       - ALL
-    security_opt:
-      - no-new-privileges:true
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
