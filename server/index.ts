@@ -225,9 +225,15 @@ app.use(helmet({
       objectSrc: ["'none'"],
       // frame-ancestors is set dynamically per-request below
       frameAncestors: ["'self'"],
+      // Disable upgrade-insecure-requests — the app may be accessed via HTTP
+      // directly (dev, LAN). HTTPS is handled by the reverse proxy (NPM).
+      upgradeInsecureRequests: null,
     }
   },
   crossOriginEmbedderPolicy: false, // Allow loading external images
+  // Disable HSTS — the app runs behind NPM which handles HTTPS.
+  // HSTS on the backend causes ERR_SSL_PROTOCOL_ERROR when accessing via HTTP directly.
+  hsts: false,
 }));
 
 // Dynamic frame-ancestors and X-Frame-Options: re-read iframe_origins from DB
