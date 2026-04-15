@@ -79,7 +79,14 @@ unitfi_test.sh
 
 # Secrets and sensitive files
 *secret*
-*token*
+# Token credential files (specific patterns to avoid excluding source code)
+*.token
+*.token.*
+*_token
+*_token.*
+.freebox_token*
+**/token.json
+**/token.txt
 *.key
 *.pem
 *.p12
