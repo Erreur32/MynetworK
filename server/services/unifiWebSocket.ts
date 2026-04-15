@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { WebSocket as WsType } from 'ws';
 import { pluginManager } from './pluginManager.js';
 import { logger } from '../utils/logger.js';
+import { applyWsRateLimit } from './wsRateLimiter.js';
 
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
@@ -38,6 +39,7 @@ class UnifiWebSocketService {
       logger.debug('WS-UniFi', `Client connected from ${clientAddress} (total: ${this.wss?.clients.size || 0})`);
 
       ws.isAlive = true;
+      applyWsRateLimit(ws, 'WS-UniFi');
 
       ws.on('pong', () => { ws.isAlive = true; });
 

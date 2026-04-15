@@ -73,22 +73,29 @@ services:
     volumes:
       # Persistent storage for Freebox authentication token and database
       - mynetwork_data_local:/app/data
-      # Mount host filesystem (read-only) to access real host metrics
-      - /:/host:ro
+      # Mount host /proc and /sys (read-only) for CPU, memory, network stats, ARP table, hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      # Mount Docker socket to enable Docker version detection
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount specific host files needed for hostname resolution and system info
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/hosts:/host/etc/hosts:ro
+      # ⚠️  SECURITY: Docker socket (optional, disabled by default — see docker-compose.yml for details)
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+      # ⚠️  SECURITY: Full host root mount (optional — only needed for host disk usage)
+      # - /:/host:ro
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
       # - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
 
     # Network capabilities required for network scanning (ping, arp)
-    # NET_RAW: Required to send ICMP packets (ping) - allows non-root user to use ping
-    # NET_ADMIN: Required for some network operations and ARP table access
+    # ⚠️  SECURITY: See docker-compose.yml for details on these capabilities
     cap_add:
       - NET_RAW
       - NET_ADMIN
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     restart: unless-stopped
     # Health check (use 127.0.0.1 instead of localhost to avoid IPv6 issues)

@@ -15,7 +15,7 @@ Docker Compose reads environment variables in this order (highest to lowest prio
 1. **Shell environment variables** (exported before the command)
    ```bash
    export DASHBOARD_PORT=4000
-   docker-compose -f docker-compose.dev.yml up
+   docker-compose -f docker-compose.local.yml up
    ```
 
 2. **`.env` file** (at project root, next to `docker-compose.yml`)
@@ -28,7 +28,7 @@ Docker Compose reads environment variables in this order (highest to lowest prio
 
 3. **`--env-file` flag** (custom file)
    ```bash
-   docker-compose -f docker-compose.dev.yml --env-file .env.local up
+   docker-compose -f docker-compose.local.yml --env-file .env.local up
    ```
 
 4. **Default values** in `docker-compose.yml` (syntax `${VAR:-default}`)
@@ -60,7 +60,7 @@ npm run dev
 - ✅ Defaults in code
 
 **Configuration used**:
-- ❌ Does **not** use `docker-compose.dev.yml`
+- ❌ Does **not** use `docker-compose.local.yml`
 - ✅ Uses config files directly:
   - `vite.config.ts` for the frontend
   - `server/config.ts` for the backend
@@ -81,11 +81,11 @@ JWT_SECRET=dev_secret
 
 ---
 
-### Mode 2: `docker-compose -f docker-compose.dev.yml` (development with Docker)
+### Mode 2: `docker-compose -f docker-compose.local.yml` (development with Docker)
 
 **Command**:
 ```bash
-docker-compose -f docker-compose.dev.yml up --build
+docker-compose -f docker-compose.local.yml up --build
 ```
 
 **What happens**:
@@ -94,13 +94,13 @@ docker-compose -f docker-compose.dev.yml up --build
 - Runs `npm run dev` **inside the container**
 
 **Environment variables**:
-- ✅ Variables defined in `docker-compose.dev.yml` (`environment:` section)
+- ✅ Variables defined in `docker-compose.local.yml` (`environment:` section)
 - ✅ Shell variables (exported before the command)
 - ✅ `.env` file (if present at root)
 - ✅ `--env-file` (if used)
 
 **Configuration used**:
-- ✅ Uses `docker-compose.dev.yml`
+- ✅ Uses `docker-compose.local.yml`
 - ✅ Variables are passed to the container via `environment:`
 - ✅ Code in the container can also read `.env` if it is mounted
 
@@ -120,11 +120,11 @@ JWT_SECRET=dev_secret
 
 ## 🔄 Mode comparison
 
-| Aspect | `npm run dev` | `docker-compose -f docker-compose.dev.yml` |
+| Aspect | `npm run dev` | `docker-compose -f docker-compose.local.yml` |
 |--------|---------------|--------------------------------------------|
 | **Environment** | Host (Node.js directly) | Docker container |
-| **Configuration** | `vite.config.ts` + `server/config.ts` | `docker-compose.dev.yml` + configs |
-| **Variables** | `.env` + shell + defaults | `.env` + shell + `docker-compose.dev.yml` |
+| **Configuration** | `vite.config.ts` + `server/config.ts` | `docker-compose.local.yml` + configs |
+| **Variables** | `.env` + shell + defaults | `.env` + shell + `docker-compose.local.yml` |
 | **Frontend port** | `5173` (Vite default) | `3000` (in docker-compose) |
 | **Backend port** | `3003` (config.ts default) | `3003` (in docker-compose) |
 | **Hot reload** | ✅ Yes | ✅ Yes (via volume mount) |
@@ -152,7 +152,7 @@ JWT_SECRET=dev_secret_change_me
 FREEBOX_HOST=mafreebox.freebox.fr
 ```
 
-### 2. `docker-compose.dev.yml`
+### 2. `docker-compose.local.yml`
 
 Defines variables for the Docker container:
 ```yaml
@@ -200,16 +200,16 @@ port: parseInt(
 
 The `.env` file is **optional**; if it exists, Docker Compose reads it automatically.
 
-### Q2: Does `npm run dev` use `docker-compose.dev.yml`?
+### Q2: Does `npm run dev` use `docker-compose.local.yml`?
 
 **Answer**: **No** ❌
 
 - `npm run dev`: Runs Node.js/Vite on the host **without Docker**
-- `docker-compose -f docker-compose.dev.yml`: Runs inside a Docker container
+- `docker-compose -f docker-compose.local.yml`: Runs inside a Docker container
 
 These are two different modes:
 - **Local** (`npm run dev`): Faster, uses local node_modules
-- **Docker** (`docker-compose.dev.yml`): Isolated, mirrors production
+- **Docker** (`docker-compose.local.yml`): Isolated, mirrors production
 
 ---
 
@@ -233,7 +233,7 @@ npm run dev
 # Backend: http://localhost:3003
 ```
 
-### Example 2: Docker development (`docker-compose.dev.yml`)
+### Example 2: Docker development (`docker-compose.local.yml`)
 
 ```bash
 # 1. Create .env (optional)
@@ -244,7 +244,7 @@ JWT_SECRET=dev_secret
 EOF
 
 # 2. Run with Docker
-docker-compose -f docker-compose.dev.yml up --build
+docker-compose -f docker-compose.local.yml up --build
 
 # Frontend: http://localhost:3000
 # Backend: http://localhost:3003
@@ -254,7 +254,7 @@ docker-compose -f docker-compose.dev.yml up --build
 
 ```bash
 # Override ports via shell
-DASHBOARD_PORT=4000 SERVER_PORT=3004 docker-compose -f docker-compose.dev.yml up
+DASHBOARD_PORT=4000 SERVER_PORT=3004 docker-compose -f docker-compose.local.yml up
 
 # Frontend: http://localhost:4000
 # Backend: http://localhost:3004
@@ -269,7 +269,7 @@ DASHBOARD_PORT=4000 SERVER_PORT=3004 docker-compose -f docker-compose.dev.yml up
    - ✅ Read automatically by `npm run dev` (via dotenv)
    - ⚠️ Must **never** be committed to Git (add to `.gitignore`)
 
-2. **Variables in `docker-compose.dev.yml`**:
+2. **Variables in `docker-compose.local.yml`**:
    - Variables in the `environment:` section are passed **into the container**
    - The container can also read a mounted `.env`
 

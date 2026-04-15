@@ -65,6 +65,14 @@ initializeDatabase();
 import { initializeDatabaseConfig } from './database/dbConfig.js';
 initializeDatabaseConfig();
 
+// Initialize token blacklist service (load persisted revoked tokens into memory)
+import { tokenBlacklistService } from './services/tokenBlacklistService.js';
+try {
+    tokenBlacklistService.init();
+} catch (error) {
+    logger.error('Server', 'Failed to initialize token blacklist service:', error);
+}
+
 // Initialize Wireshark vendor database (async, don't block startup)
 import { WiresharkVendorService } from './services/wiresharkVendorService.js';
 WiresharkVendorService.initialize().catch((error) => {
@@ -760,7 +768,7 @@ server.listen(port, host, () => {
       wsUrl = `ws://${fallbackIP}:${dashboardPort}/ws/connection`;
     }
   } else if (isDockerDev) {
-    // Docker dev mode: use host ports from docker-compose.dev.yml (DASHBOARD_PORT and SERVER_PORT)
+    // Docker dev mode: use host ports from compose (DASHBOARD_PORT and SERVER_PORT)
     // These are the ports exposed on the host machine, not the container ports
     const dashboardPort = process.env.DASHBOARD_PORT || '3666'; // Host port for frontend
     const serverPort = process.env.SERVER_PORT || '3668'; // Host port for backend

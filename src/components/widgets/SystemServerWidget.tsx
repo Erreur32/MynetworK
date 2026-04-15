@@ -1,7 +1,7 @@
 /**
  * System Server Widget
  * 
- * Displays server system information (CPU, RAM, Disk, Docker)
+ * Displays server system information (CPU, RAM, Network)
  * Compatible with Docker containers
  */
 
@@ -15,14 +15,6 @@ import { api } from '../../api/client';
 import { usePolling } from '../../hooks/usePolling';
 import { POLLING_INTERVALS, formatSpeed } from '../../utils/constants';
 import type { NetworkStat as ChartNetworkStat } from '../../types';
-
-interface DiskInfo {
-    mount: string;
-    total: number;
-    free: number;
-    used: number;
-    percentage: number;
-}
 
 interface NetworkStat {
     timestamp: number;
@@ -46,26 +38,6 @@ interface SystemNetworkData {
     history: NetworkStat[];
 }
 
-interface DockerStats {
-    version: string | null;
-    containers: {
-        total: number;
-        running: number;
-        stopped: number;
-        paused: number;
-    };
-    images: number;
-    volumes: number;
-    networks: number;
-    diskUsage: {
-        images: number;
-        containers: number;
-        volumes: number;
-        buildCache: number;
-        total: number;
-    } | null;
-}
-
 interface DatabaseStats {
     pageSize: number;
     pageCount: number;
@@ -83,8 +55,6 @@ interface SystemInfo {
     uptime: number;
     nodeVersion: string;
     docker: boolean;
-    dockerVersion?: string | null;
-    dockerStats?: DockerStats | null;
     cpu: {
         cores: number;
         model: string;
@@ -96,13 +66,6 @@ interface SystemInfo {
         used: number;
         percentage: number;
     };
-    disk: {
-        total: number;
-        free: number;
-        used: number;
-        percentage: number;
-    };
-    disks?: DiskInfo[];
 }
 
 export const SystemServerWidget: React.FC = () => {

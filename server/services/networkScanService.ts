@@ -5,9 +5,10 @@
  */
 
 import crypto from 'node:crypto';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
+import * as fs from 'fs';
 import * as dns from 'dns';
 import { NetworkScanRepository, type NetworkScan, type CreateNetworkScanInput } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
@@ -50,6 +51,42 @@ const execAsync = (command: string, options?: { timeout?: number }): Promise<{ s
 };
 
 const dnsReverseAsync = promisify(dns.reverse);
+
+// Safe execFile wrapper — no shell, arguments passed as array (prevents command injection)
+// Does not reject on non-zero exit codes (needed for ping, arp, ip neigh, etc.)
+const safeExecFile = (cmd: string, args: string[], options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }> => {
+    return new Promise((resolve, reject) => {
+        const childProcess = execFile(cmd, args, {
+            timeout: options?.timeout,
+            killSignal: 'SIGTERM',
+            maxBuffer: 2 * 1024 * 1024
+        }, (error, stdout, stderr) => {
+            if (error) {
+                const errorCode = error.code;
+                if (error.signal === 'SIGTERM' ||
+                    error.message?.includes('timeout') ||
+                    (typeof errorCode === 'string' && errorCode === 'ENOENT') ||
+                    error.message?.includes('spawn')) {
+                    reject(error);
+                } else {
+                    resolve({ stdout: stdout || '', stderr: stderr || '' });
+                }
+            } else {
+                resolve({ stdout: stdout || '', stderr: stderr || '' });
+            }
+        });
+    });
+};
+
+// Helper: read a file and grep for lines matching a pattern (replaces shell `cat file | grep pattern`)
+function grepFile(filePath: string, pattern: RegExp): string[] {
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        return content.split('\n').filter(line => pattern.test(line));
+    } catch {
+        return [];
+    }
+}
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
@@ -1458,25 +1495,23 @@ export class NetworkScanService {
             // On Linux (Docker or npm), try to find ping command dynamically
             // This works for both Docker and npm dev mode
             try {
-                const { stdout: whichOutput } = await execAsync('which ping', { timeout: 1000 });
+                const { stdout: whichOutput } = await safeExecFile('which', ['ping'], { timeout: 1000 });
                 const foundPath = whichOutput.trim();
                 if (foundPath) {
                     pingCommand = foundPath;
                 } else {
-                    // If 'which' doesn't return a path, try common paths
                     throw new Error('which ping returned empty');
                 }
             } catch {
                 // If 'which' fails, try common paths
                 try {
-                    await execAsync('test -x /bin/ping', { timeout: 100 });
+                    await safeExecFile('test', ['-x', '/bin/ping'], { timeout: 100 });
                     pingCommand = '/bin/ping';
                 } catch {
                     try {
-                        await execAsync('test -x /usr/bin/ping', { timeout: 100 });
+                        await safeExecFile('test', ['-x', '/usr/bin/ping'], { timeout: 100 });
                         pingCommand = '/usr/bin/ping';
                     } catch {
-                        // Fallback to 'ping' and let the system PATH find it
                         pingCommand = 'ping';
                     }
                 }
@@ -1486,13 +1521,12 @@ export class NetworkScanService {
         try {
             // Use single ping with timeout
             // Note: On some systems, ping requires NET_RAW capability or root permissions
-            const command = isWindows
-                ? `ping ${PING_FLAG} 1 -w ${PING_TIMEOUT} ${ip}`
-                : `${pingCommand} ${PING_FLAG} 1 -W ${Math.floor(PING_TIMEOUT / 1000)} ${ip}`;
-            
-            // Execute ping command - our custom execAsync doesn't reject on non-zero exit codes
-            // Increase timeout buffer for Docker environments
-            const { stdout, stderr } = await execAsync(command, {
+            const pingArgs = isWindows
+                ? [PING_FLAG, '1', '-w', String(PING_TIMEOUT), ip]
+                : [PING_FLAG, '1', '-W', String(Math.floor(PING_TIMEOUT / 1000)), ip];
+
+            // Execute ping command using execFile (no shell — prevents command injection)
+            const { stdout, stderr } = await safeExecFile(pingCommand, pingArgs, {
                 timeout: PING_TIMEOUT + 1000 // Add 1 second buffer for Docker
             });
             
@@ -1573,7 +1607,7 @@ export class NetworkScanService {
                 
                 // If we got output but no latency and it's not a timeout, log for debugging (first 5 only)
                 if (crypto.randomInt(20) === 0) {
-                    logger.debug('NetworkScanService', `[${ip}] Ping output without latency (may be parsing issue). Command: ${command}`);
+                    logger.debug('NetworkScanService', `[${ip}] Ping output without latency (may be parsing issue). Command: ${pingCommand} ${pingArgs.join(' ')}`);
                     logger.debug('NetworkScanService', `[${ip}] Output: ${stdout.substring(0, 300)}`);
                 }
             }
@@ -1668,7 +1702,7 @@ export class NetworkScanService {
                 // Windows: arp -a
                 logger.debug('NetworkScanService', `[MAC] Trying Windows arp -a for ${ip}...`);
                 try {
-                const { stdout } = await execAsync(`arp -a ${ip}`);
+                const { stdout } = await safeExecFile('arp', ['-a', ip]);
                 const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                 if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
@@ -1692,7 +1726,9 @@ export class NetworkScanService {
                 for (const arpPath of arpPaths) {
                     try {
                         logger.debug('NetworkScanService', `[MAC] Trying ${arpPath} for ${ip}...`);
-                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
+                        const escapedIp = ip.replace(/\./g, '\\.');
+                        const lines = grepFile(arpPath, new RegExp(`^${escapedIp} `));
+                        const stdout = lines.join('\n');
                         logger.debug('NetworkScanService', `[MAC] ${arpPath} output for ${ip}: ${stdout.substring(0, 100)}`);
                         const parts = stdout.trim().split(/\s+/);
                         if (parts.length >= 4 && parts[3] !== '00:00:00:00:00:00') {
@@ -1716,10 +1752,10 @@ export class NetworkScanService {
                 // Silently fails in Docker bridge mode (different L2 subnet) - expected behavior
                 try {
                     const networkInterface = this.getNetworkInterface();
-                    const arpingCmd = networkInterface
-                        ? `arping -c 1 -w 1 -I ${networkInterface} ${ip} 2>/dev/null`
-                        : `arping -c 1 -w 1 ${ip} 2>/dev/null`;
-                    const { stdout } = await execAsync(arpingCmd, { timeout: 2000 });
+                    const arpingArgs = networkInterface
+                        ? ['-c', '1', '-w', '1', '-I', networkInterface, ip]
+                        : ['-c', '1', '-w', '1', ip];
+                    const { stdout } = await safeExecFile('arping', arpingArgs, { timeout: 2000 });
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
@@ -1735,9 +1771,16 @@ export class NetworkScanService {
                 // Method 3: ip neigh (forces ARP resolution for stale/missing entries in native mode)
                 try {
                     logger.debug('NetworkScanService', `[MAC] Trying ip neigh get/show for ${ip}...`);
-                    const { stdout } = await execAsync(`ip neigh get ${ip} 2>/dev/null || ip neigh show ${ip}`, { timeout: 2000 });
-                    logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${stdout.substring(0, 100)}`);
-                    const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                    let ipNeighStdout = '';
+                    try {
+                        const result = await safeExecFile('ip', ['neigh', 'get', ip], { timeout: 2000 });
+                        ipNeighStdout = result.stdout;
+                    } catch {
+                        const result = await safeExecFile('ip', ['neigh', 'show', ip], { timeout: 2000 });
+                        ipNeighStdout = result.stdout;
+                    }
+                    logger.debug('NetworkScanService', `[MAC] ip neigh output for ${ip}: ${ipNeighStdout.substring(0, 100)}`);
+                    const match = ipNeighStdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
                         if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
@@ -1747,35 +1790,23 @@ export class NetworkScanService {
                     }
                 } catch (error: any) {
                     logger.debug('NetworkScanService', `[MAC] ip neigh failed for ${ip}: ${error.message || error}`);
-                    try {
-                        const { stdout } = await execAsync(`ip neigh show ${ip} 2>/dev/null`, { timeout: 1000 });
-                        const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                        if (match) {
-                            const mac = match[0].toLowerCase().replace(/-/g, ':');
-                            if (mac !== '00:00:00:00:00:00' && mac.length === 17) {
-                                logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh show`);
-                                return mac;
-                            }
-                        }
-                    } catch (error2: any) {
-                        logger.debug('NetworkScanService', `[MAC] ip neigh show also failed for ${ip}: ${error2.message || error2}`);
-                    }
                 }
 
                 // Method 4: arp-scan (if installed)
                 try {
                     const networkInterface = this.getNetworkInterface();
                     if (networkInterface) {
-                        const { stdout } = await execAsync(
-                            `arp-scan -l -q -x -I ${networkInterface} 2>/dev/null | grep ${ip}`,
-                            { timeout: 5000 }
-                        );
-                        const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
-                        if (match) {
-                            const mac = match[0].toLowerCase().replace(/-/g, ':');
-                            if (mac !== '00:00:00:00:00:00') {
-                                logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
-                                return mac;
+                        const { stdout } = await safeExecFile('arp-scan', ['-l', '-q', '-x', '-I', networkInterface], { timeout: 5000 });
+                        // Filter output for the target IP in JS instead of piping to grep
+                        const matchLine = stdout.split('\n').find(line => line.includes(ip));
+                        if (matchLine) {
+                            const match = matchLine.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
+                            if (match) {
+                                const mac = match[0].toLowerCase().replace(/-/g, ':');
+                                if (mac !== '00:00:00:00:00:00') {
+                                    logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp-scan`);
+                                    return mac;
+                                }
                             }
                         }
                     }
@@ -1785,7 +1816,7 @@ export class NetworkScanService {
 
                 // Method 5: Traditional arp command (last resort)
                 try {
-                    const { stdout } = await execAsync(`arp -n ${ip}`, { timeout: 2000 });
+                    const { stdout } = await safeExecFile('arp', ['-n', ip], { timeout: 2000 });
                     const match = stdout.match(/([0-9a-f]{2}[:-]){5}([0-9a-f]{2})/i);
                     if (match) {
                         const mac = match[0].toLowerCase().replace(/-/g, ':');
@@ -2624,7 +2655,7 @@ export class NetworkScanService {
         if (isWindows) {
             // Windows: Try NetBIOS name resolution
             try {
-                const { stdout } = await execAsync(`nbtstat -A ${ip}`, { timeout: 3000 });
+                const { stdout } = await safeExecFile('nbtstat', ['-A', ip], { timeout: 3000 });
                 // Parse NetBIOS output for computer name
                 const nameMatch = stdout.match(/<00>\s+UNIQUE\s+([A-Z0-9-]+)/i);
                 if (nameMatch && nameMatch[1]) {
@@ -2652,22 +2683,18 @@ export class NetworkScanService {
                 // Try to find getent command (may be in /usr/glibc-compat/bin/getent if glibc is installed)
                 let getentCommand = 'getent';
                 try {
-                    // Check if getent exists in standard locations
-                    await execAsync('which getent 2>/dev/null || test -x /usr/glibc-compat/bin/getent', { timeout: 500 });
-                    // If glibc-compat is installed, getent might be there
+                    await safeExecFile('which', ['getent'], { timeout: 500 });
+                } catch {
                     try {
-                        await execAsync('test -x /usr/glibc-compat/bin/getent', { timeout: 100 });
+                        await safeExecFile('test', ['-x', '/usr/glibc-compat/bin/getent'], { timeout: 100 });
                         getentCommand = '/usr/glibc-compat/bin/getent';
                     } catch {
-                        // Use default getent
+                        logger.debug('NetworkScanService', `[HOSTNAME] ✗ getent command not found, skipping Method 2`);
+                        throw new Error('getent not available');
                     }
-                } catch {
-                    // getent not found, skip this method
-                    logger.debug('NetworkScanService', `[HOSTNAME] ✗ getent command not found, skipping Method 2`);
-                    throw new Error('getent not available');
                 }
-                
-                const { stdout } = await execAsync(`${getentCommand} hosts ${ip} 2>/dev/null`, { timeout: 2000 });
+
+                const { stdout } = await safeExecFile(getentCommand, ['hosts', ip], { timeout: 2000 });
                 logger.info('NetworkScanService', `[HOSTNAME] getent hosts output for ${ip}: ${stdout.substring(0, 200)}`);
                 const parts = stdout.trim().split(/\s+/);
                 if (parts.length >= 2) {
@@ -2711,7 +2738,9 @@ export class NetworkScanService {
             for (const hostsPath of hostsPaths) {
                 try {
                     logger.info('NetworkScanService', `[HOSTNAME] Trying ${hostsPath} for ${ip}...`);
-                    const { stdout } = await execAsync(`grep "^${ip.replace(/\./g, '\\.')}\\s" ${hostsPath} 2>/dev/null | head -1`, { timeout: 1000 });
+                    const escapedIp = ip.replace(/\./g, '\\.');
+                    const matchedLines = grepFile(hostsPath, new RegExp(`^${escapedIp}\\s`));
+                    const stdout = matchedLines.length > 0 ? matchedLines[0] : '';
                     logger.info('NetworkScanService', `[HOSTNAME] ${hostsPath} output for ${ip}: ${stdout.substring(0, 100)}`);
                     const parts = stdout.trim().split(/\s+/);
                     if (parts.length >= 2) {
@@ -2749,7 +2778,7 @@ export class NetworkScanService {
                 logger.info('NetworkScanService', `[HOSTNAME] Method 4: Trying nmblookup (NetBIOS) for ${ip}...`);
                 // Try nmblookup first (faster, no authentication needed)
                 // Use -A for node status query (more reliable)
-                const { stdout, stderr } = await execAsync(`nmblookup -A ${ip} 2>&1`, { timeout: 5000 });
+                const { stdout, stderr } = await safeExecFile('nmblookup', ['-A', ip], { timeout: 5000 });
                 logger.info('NetworkScanService', `[HOSTNAME] nmblookup output for ${ip}: ${stdout.substring(0, 300)}`);
                 if (stderr && !stderr.includes('name_query')) {
                     logger.info('NetworkScanService', `[HOSTNAME] nmblookup stderr for ${ip}: ${stderr.substring(0, 200)}`);
@@ -2809,7 +2838,9 @@ export class NetworkScanService {
                 for (const arpPath of arpPaths) {
                     try {
                         // Read ARP table and look for hostname in comments or additional fields
-                        const { stdout } = await execAsync(`cat ${arpPath} 2>/dev/null | grep "^${ip.replace(/\./g, '\\.')} "`, { timeout: 1000 });
+                        const escapedIp = ip.replace(/\./g, '\\.');
+                        const arpLines = grepFile(arpPath, new RegExp(`^${escapedIp} `));
+                        const stdout = arpLines.join('\n');
                         const parts = stdout.trim().split(/\s+/);
                         // ARP table format: IP HWtype HWaddress Flags Mask IFace [hostname]
                         // Some systems add hostname as last field
@@ -2841,7 +2872,7 @@ export class NetworkScanService {
                 
                 // Method 6a: Try avahi-resolve (reverse lookup)
                 try {
-                    const { stdout } = await execAsync(`avahi-resolve -a ${ip} 2>/dev/null`, { timeout: 3000 });
+                    const { stdout } = await safeExecFile('avahi-resolve', ['-a', ip], { timeout: 3000 });
                     const parts = stdout.trim().split(/\s+/);
                     if (parts.length >= 2) {
                         const hostname = parts[1].trim();
@@ -2864,7 +2895,8 @@ export class NetworkScanService {
                 // This is slower but more comprehensive
                 try {
                     // Browse all services and grep for our IP
-                    const { stdout } = await execAsync(`timeout 2 avahi-browse -atr 2>/dev/null | grep "${ip}" | head -1`, { timeout: 3000 });
+                    const { stdout: browseOut } = await safeExecFile('avahi-browse', ['-atr'], { timeout: 3000 });
+                    const stdout = browseOut.split('\n').find(line => line.includes(ip)) || '';
                     if (stdout.trim()) {
                         // Format: hostname [IP] port ...
                         // Escape all regex special characters in IP, not just dots
@@ -2896,8 +2928,9 @@ export class NetworkScanService {
                 logger.info('NetworkScanService', `[HOSTNAME] Method 7: Trying LLMNR for ${ip}...`);
                 // Use systemd-resolve or resolvectl if available (systemd systems)
                 try {
-                    const { stdout } = await execAsync(`resolvectl query ${ip} 2>/dev/null | grep -i "name:" | head -1`, { timeout: 2000 });
-                    const match = stdout.match(/name:\s+([a-zA-Z0-9.-]+)/i);
+                    const { stdout: resolveOut } = await safeExecFile('resolvectl', ['query', ip], { timeout: 2000 });
+                    const nameLine = resolveOut.split('\n').find(line => /name:/i.test(line)) || '';
+                    const match = nameLine.match(/name:\s+([a-zA-Z0-9.-]+)/i);
                     if (match && match[1]) {
                         const hostname = match[1].trim();
                         if (hostname && 

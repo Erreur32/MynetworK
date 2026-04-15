@@ -20,9 +20,10 @@ import { AppConfigRepository } from '../database/models/AppConfig.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // IEEE OUI Official Database (primary source)
 const IEEE_OUI_URL = 'https://standards-oui.ieee.org/oui/oui.txt';
@@ -499,7 +500,7 @@ export class WiresharkVendorService {
                     // Try curl first (more reliable in Docker)
                     try {
                         // Use curl with proper flags: -L (follow redirects), -f (fail on HTTP errors), -s (silent), --max-time (timeout)
-                        await execAsync(`curl -f -L -s --max-time 60 -o "${MANUF_FILE_PATH}" "${url}"`, { timeout: 70000 });
+                        await execFileAsync('curl', ['-f', '-L', '-s', '--max-time', '60', '-o', MANUF_FILE_PATH, url], { timeout: 70000 });
                         
                         // Verify file was downloaded
                         if (!fs.existsSync(MANUF_FILE_PATH)) {

@@ -8,6 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { WebSocket as WsType } from 'ws';
 import { logger } from '../utils/logger.js';
 import { logBuffer } from '../utils/logBuffer.js';
+import { applyWsRateLimit } from './wsRateLimiter.js';
 
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
@@ -36,6 +37,7 @@ class LogsWebSocketService {
     this.wss.on('connection', (ws: ClientWebSocket, req) => {
       logger.debug('LogsWS', `Client connected from ${req.socket.remoteAddress}`);
       ws.isAlive = true;
+      applyWsRateLimit(ws, 'LogsWS');
 
       // Send recent logs immediately (limited to 50 to prevent memory issues)
       const recentLogs = logBuffer.getRecent(50);

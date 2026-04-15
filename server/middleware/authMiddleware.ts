@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService.js';
 import { UserRepository } from '../database/models/User.js';
+import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
 
 export interface AuthenticatedRequest extends Request {
     user?: {
@@ -40,6 +41,18 @@ export const requireAuth = async (
         }
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+        // Check if token has been revoked (logout/ban)
+        if (tokenBlacklistService.isRevoked(token)) {
+            res.status(401).json({
+                success: false,
+                error: {
+                    code: 'TOKEN_REVOKED',
+                    message: 'Token has been revoked'
+                }
+            });
+            return;
+        }
 
         // Verify token
         const payload = await authService.verifyToken(token);
@@ -124,6 +137,10 @@ export const optionalAuth = async (
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
+            if (tokenBlacklistService.isRevoked(token)) {
+                next();
+                return;
+            }
             const payload = await authService.verifyToken(token);
             const user = UserRepository.findById(payload.userId);
             

@@ -15,6 +15,8 @@ import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
 import { getClientIp } from '../utils/getClientIp.js';
 import { metricsCollector } from '../services/metricsCollector.js';
+import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -177,6 +179,33 @@ router.post('/login', asyncHandler(async (req, res) => {
         // Re-throw the original error
         throw error;
     }
+}));
+
+// POST /api/users/logout - Logout (revoke current token)
+router.post('/logout', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const revoked = tokenBlacklistService.revoke(token, req.user!.userId, 'logout');
+        if (!revoked) {
+            logger.warn('Auth', `Failed to persist token revocation for user ${req.user!.username}`);
+        }
+
+        await loggingService.log({
+            action: 'user.logout',
+            resource: 'user',
+            resourceId: req.user!.userId.toString(),
+            username: req.user!.username,
+            ipAddress: getClientIp(req),
+            userAgent: req.get('user-agent') || undefined,
+            level: 'info'
+        });
+    }
+
+    res.json({
+        success: true,
+        result: { message: 'Logged out successfully' }
+    });
 }));
 
 // GET /api/users/me - Get current user info

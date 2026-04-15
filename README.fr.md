@@ -108,18 +108,20 @@ services:
       # Données persistantes (token Freebox, base locale, etc.)
       - ./data:/app/data
 
-      # Accès métriques système (lecture seule)
-      - /:/host:ro
+      # Métriques hôte (lecture seule) — CPU, RAM, réseau, table ARP, hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/hosts:/host/etc/hosts:ro
 
-      # Accès Docker (lecture seule)
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
-    # Capacités réseau nécessaires au scan (ping / ARP)
+    # Capacités réseau pour le scan (ping / ARP)
     cap_add:
       - NET_RAW
       - NET_ADMIN
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]

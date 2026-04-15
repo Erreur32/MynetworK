@@ -3,6 +3,7 @@ import type { WebSocket as WsType } from 'ws';
 import { freeboxApi } from './freeboxApi.js';
 import { normalizeSystemInfo } from './apiNormalizer.js';
 import { logger } from '../utils/logger.js';
+import { applyWsRateLimit } from './wsRateLimiter.js';
 
 interface ConnectionStatus {
   type: string;
@@ -73,7 +74,8 @@ class ConnectionWebSocketService {
       logger.debug('WS', `Client connected from ${clientAddress} (total: ${this.wss?.clients.size || 0})`);
       
       ws.isAlive = true;
-      
+      applyWsRateLimit(ws, 'WS');
+
       // Verify connection is still open after handshake
       setTimeout(() => {
         if (ws.readyState !== WebSocket.OPEN) {

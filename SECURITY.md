@@ -30,3 +30,16 @@ This project uses:
 - **Dependabot** for automated dependency updates
 - **OpenSSF Scorecard** for supply chain security monitoring
 - **Secret scanning** and `.gitignore` rules to prevent credential leaks
+
+### Container Hardening
+- `cap_drop: ALL` + targeted `NET_RAW`/`NET_ADMIN` for network scanning only
+- `security_opt: no-new-privileges:true` to prevent privilege escalation
+- No Docker socket mount (removed — prevents container escape)
+- No full host filesystem mount (removed — only `/proc`, `/sys`, `/etc/hostname`, `/etc/hosts` mounted read-only)
+
+### Application Security
+- **Command injection prevention**: all shell commands use `execFile()` (array arguments, no shell) instead of `exec()` (string interpolation)
+- **JWT blacklist persistence**: revoked tokens survive container restarts (SQLite-backed)
+- **WebSocket rate limiting**: per-connection sliding window (50 msg/10s)
+- **RBAC**: network scan operations restricted to admin role
+- **Brute force protection**: login attempts rate-limited per username and IP

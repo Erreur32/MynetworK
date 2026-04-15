@@ -259,6 +259,19 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Token blacklist table (persists revoked JWT tokens across restarts)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS token_blacklist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            user_id INTEGER,
+            reason TEXT NOT NULL DEFAULT 'logout',
+            blacklisted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    `);
+
     // Create indexes for better performance
     database.exec(`
         CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
@@ -279,6 +292,8 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_latency_measurements_ip ON latency_measurements(ip);
         CREATE INDEX IF NOT EXISTS idx_latency_measurements_measured_at ON latency_measurements(measured_at);
         CREATE INDEX IF NOT EXISTS idx_latency_measurements_ip_measured_at ON latency_measurements(ip, measured_at);
+        CREATE INDEX IF NOT EXISTS idx_token_blacklist_token_hash ON token_blacklist(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires_at ON token_blacklist(expires_at);
     `);
 
     logger.success('Database', 'Schema initialized');

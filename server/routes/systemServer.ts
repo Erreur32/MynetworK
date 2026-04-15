@@ -1,8 +1,9 @@
 /**
  * System Server Routes
  * 
- * Provides system information about the server (CPU, RAM, Disk, Docker)
+ * Provides system information about the server (CPU, RAM, Network)
  * Compatible with Docker containers
+ * Note: Disk usage and Docker version features removed for security (required unsafe mounts)
  */
 
 import express from 'express';
@@ -113,18 +114,14 @@ const getCpuUsage = async (): Promise<number> => {
 };
 
 /**
- * Get all disk usage
- * Returns disk usage for mounted filesystems.
- *
- * Implementation notes:
- * - When running in Docker with the host root mounted at HOST_ROOT_PATH,
- *   we use a very simple and robust approach: run `df` against the mounted
- *   host root directory (e.g. /host). This typically returns the main host
- *   filesystem (/, often sufficient for a dashboard).
- * - On non-Docker or unsupported environments, we fall back to a standard
- *   `df` call on local devices.
+ * Get all disk usage — REMOVED for security
+ * Required mounting the entire host filesystem (/:ro) which is a significant security risk.
+ * Returns empty array.
  */
 const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; free: number; used: number; percentage: number }>> => {
+  return [];
+  // --- REMOVED: disk usage detection (required /:/host:ro mount) ---
+  // Original code kept below for reference but unreachable.
   try {
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
@@ -362,10 +359,13 @@ const getAllDiskUsage = async (): Promise<Array<{ mount: string; total: number; 
 };
 
 /**
- * Get Docker version from host system
- * Returns Docker version string or null if not available
+ * Get Docker version — REMOVED for security
+ * Required Docker socket mount which allows full container escape.
+ * Returns null.
  */
 const getDockerVersion = async (): Promise<string | null> => {
+  return null;
+  // --- REMOVED: Docker version detection (required docker.sock mount) ---
   if (!isDocker()) {
     return null;
   }
@@ -549,9 +549,11 @@ const getDockerVersion = async (): Promise<string | null> => {
 };
 
 /**
- * Query Docker API via Unix socket
+ * Query Docker API — REMOVED for security (required docker.sock)
  */
 const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
+  return null;
+  // --- REMOVED ---
   try {
     const dockerSocket = '/var/run/docker.sock';
     await fs.access(dockerSocket);
@@ -590,7 +592,7 @@ const queryDockerApi = async <T = any>(path: string): Promise<T | null> => {
 };
 
 /**
- * Get Docker statistics (containers, images, volumes, etc.)
+ * Get Docker statistics — REMOVED for security (required docker.sock)
  */
 const getDockerStats = async (): Promise<{
   version: string | null;
@@ -611,8 +613,8 @@ const getDockerStats = async (): Promise<{
     total: number;
   } | null;
 } | null> => {
-  // Try to access Docker socket even if not running in Docker
-  // This allows getting Docker stats when running locally (npm run dev) with Docker installed
+  return null;
+  // --- REMOVED ---
   const dockerSocket = '/var/run/docker.sock';
   
   try {
@@ -711,24 +713,7 @@ const getDockerStats = async (): Promise<{
  * Get disk usage (legacy - returns first disk or root)
  */
 const getDiskUsage = async (): Promise<{ total: number; free: number; used: number; percentage: number }> => {
-  const disks = await getAllDiskUsage();
-  if (disks.length > 0) {
-    // Return root disk (/) or first disk
-    const rootDisk = disks.find(d => d.mount === '/') || disks[0];
-    return {
-      total: rootDisk.total,
-      free: rootDisk.free,
-      used: rootDisk.used,
-      percentage: rootDisk.percentage
-    };
-  }
-  
-  return {
-    total: 0,
-    free: 0,
-    used: 0,
-    percentage: 0
-  };
+  return { total: 0, free: 0, used: 0, percentage: 0 };
 };
 
 /**
@@ -748,7 +733,6 @@ router.get('/server', async (_req, res) => {
     // Default to container/system values
     let hostname = os.hostname();
     let uptime = os.uptime();
-    let dockerVersion: string | null = null;
 
     // When running in Docker with host filesystem mounted, try to read
     // hostname and uptime from the host so that the dashboard reflects
@@ -805,18 +789,8 @@ router.get('/server', async (_req, res) => {
         debugLog(`[SystemServer] Error reading host uptime: ${error}`);
       }
 
-      // Try to get Docker version from host
-      dockerVersion = await getDockerVersion();
-      if (dockerVersion) {
-        debugLog(`[SystemServer] ✓ Found Docker version: ${dockerVersion}`);
-      } else {
-        debugLog(`[SystemServer] ⚠ Could not detect Docker version from host`);
-      }
     }
-    
-    const diskUsage = await getDiskUsage();
-    const allDisks = await getAllDiskUsage();
-    
+
     const systemInfo = {
       platform: os.platform(),
       arch: os.arch(),
@@ -824,8 +798,6 @@ router.get('/server', async (_req, res) => {
       uptime,
       nodeVersion: process.version,
       docker: isDocker(),
-      dockerVersion: dockerVersion || null,
-      dockerStats: await getDockerStats(),
       cpu: {
         cores: os.cpus().length,
         model: os.cpus()[0]?.model || 'Unknown',
@@ -836,20 +808,7 @@ router.get('/server', async (_req, res) => {
         free: ramUsage.free,
         used: ramUsage.used,
         percentage: Math.round(ramUsage.percentage * 100) / 100
-      },
-      disk: {
-        total: diskUsage.total,
-        free: diskUsage.free,
-        used: diskUsage.used,
-        percentage: Math.round(diskUsage.percentage * 100) / 100
-      },
-      disks: allDisks.map(d => ({
-        mount: d.mount,
-        total: d.total,
-        free: d.free,
-        used: d.used,
-        percentage: Math.round(d.percentage * 100) / 100
-      }))
+      }
     };
     
     res.json({
@@ -1080,59 +1039,7 @@ router.get('/network', async (_req, res) => {
   }
 });
 
-/**
- * GET /api/system/server/docker
- * Get Docker-specific information and statistics
- */
-router.get('/server/docker', async (_req, res) => {
-  try {
-    const dockerInfo = {
-      isDocker: isDocker(),
-      containerId: null as string | null,
-      image: null as string | null,
-      version: null as string | null,
-      stats: null as Awaited<ReturnType<typeof getDockerStats>> | null
-    };
-    
-    if (dockerInfo.isDocker) {
-      try {
-        // Try to get container ID from hostname (common in Docker)
-        dockerInfo.containerId = os.hostname();
-        
-        // Try to get image from environment
-        dockerInfo.image = process.env.DOCKER_IMAGE || null;
-        
-        // Get Docker stats (includes version and detailed stats)
-        dockerInfo.stats = await getDockerStats();
-        
-        // Fallback to getDockerVersion if stats didn't provide version
-        if (!dockerInfo.stats?.version) {
-        dockerInfo.version = await getDockerVersion();
-        } else {
-          dockerInfo.version = dockerInfo.stats.version;
-        }
-      } catch (error) {
-        logger.error('SystemServer', 'Error getting Docker info:', error);
-        // Try fallback version detection
-        dockerInfo.version = await getDockerVersion();
-      }
-    }
-    
-    res.json({
-      success: true,
-      result: dockerInfo
-    });
-  } catch (error) {
-    logger.error('SystemServer', 'Error getting Docker info:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: 'Failed to get Docker information',
-        code: 'DOCKER_ERROR'
-      }
-    });
-  }
-});
+// GET /api/system/server/docker — REMOVED for security (required docker.sock mount)
 
 export default router;
 

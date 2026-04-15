@@ -5,27 +5,18 @@
  * in NetworkScan.additionalInfo. Used after full scan when portScanEnabled is ON.
  */
 
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
+import { isValidIp, isValidPortRange } from '../utils/networkValidation.js';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const DEFAULT_PORT_RANGE = '1-10000';
 const NMAP_TIMEOUT_MS = 120000; // 2 minutes per host
 const MAX_ONLINE_HOSTS = 200;
-
-function isValidIp(ip: string): boolean {
-    const ipv4Regex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-    if (!ipv4Regex.test(ip)) return false;
-    return ip.split('.').map(Number).every(p => p >= 0 && p <= 255);
-}
-
-function isValidPortRange(range: string): boolean {
-    // Allow formats like "80", "1-1000", "22,80,443", "1-1000,8080"
-    return /^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(range);
-}
 
 export interface OpenPort {
     port: number;
@@ -48,8 +39,8 @@ let _portScanAbortRequested = false;
 export async function isNmapAvailable(): Promise<boolean> {
     try {
         const isWin = process.platform === 'win32';
-        const cmd = isWin ? 'where nmap' : 'which nmap';
-        await execAsync(cmd, { timeout: 5000 });
+        const cmd = isWin ? 'where' : 'which';
+        await execFileAsync(cmd, ['nmap'], { timeout: 5000 });
         return true;
     } catch {
         return false;
@@ -92,9 +83,9 @@ export async function runPortScan(
         throw new Error(`Invalid port range: ${portRange}`);
     }
     // -sT: TCP connect scan, -Pn: skip host discovery, -p: port range
-    const cmd = `nmap -sT -Pn -p ${portRange} ${ip}`;
+    // Using execFile (no shell) to prevent command injection
     try {
-        const { stdout } = await execAsync(cmd, {
+        const { stdout } = await execFileAsync('nmap', ['-sT', '-Pn', '-p', portRange, ip], {
             timeout: NMAP_TIMEOUT_MS,
             maxBuffer: 2 * 1024 * 1024
         });

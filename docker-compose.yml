@@ -70,16 +70,23 @@ services:
       # - IEEE OUI vendor database file (oui.txt)
       # - Application configuration
       - ./data:/app/data
-      # Mount host filesystem (read-only) to access real host metrics
-      # This allows the app to read hostname, disk usage, and other system info from the host
-      - /:/host:ro
-      # Mount host /proc and /sys separately for better compatibility
-      # These are used to read CPU, memory, network stats, and hostname
+      # Mount host /proc and /sys (read-only) for CPU, memory, network stats, ARP table, hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      # Mount Docker socket (read-only) to enable Docker version detection and stats
-      # Required for system server widget to display Docker information
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount specific host files needed for hostname resolution and system info
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/hosts:/host/etc/hosts:ro
+
+      # ⚠️  SECURITY: Docker socket access (OPTIONAL — disabled by default)
+      # Grants read access to Docker API. If the container is compromised,
+      # an attacker could inspect/control other containers.
+      # Only enable if you need Docker version/stats in the System widget.
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # ⚠️  SECURITY: Full host root mount (OPTIONAL — disabled by default)
+      # Mounts the entire host filesystem read-only. Required ONLY for host disk usage (df).
+      # If you don't need disk usage in the System widget, leave this disabled.
+      # - /:/host:ro
 
       # Optional: Mount external configuration file
       # Uncomment the line below to use an external config file
@@ -87,14 +94,18 @@ services:
 
     # Network capabilities required for network scanning (Plugin Scan Réseau)
     # NET_RAW: Required to send ICMP packets (ping) and arping (direct ARP requests)
-    # NET_ADMIN: Required for some network operations and ARP table access (ip neigh)
-    # These capabilities enable:
-    # - Network scanning (ping, MAC detection via ARP table + arping)
-    # - Vendor detection via Wireshark OUI database (38,000+ vendors)
-    # - Hostname resolution
+    # NET_ADMIN: Required for ARP table access (ip neigh) and network interface queries
+    # ⚠️  SECURITY: These capabilities expand the container's network attack surface.
+    #    They are required for ping/ARP scanning to work. If you don't use the
+    #    network scan plugin, you can safely remove them.
     cap_add:
       - NET_RAW
       - NET_ADMIN
+    # Drop all other capabilities and prevent privilege escalation
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
     # OPTIONAL: Use host network mode for better MAC/vendor detection
     # In bridge mode (default), the container reads the host's ARP table via /host/proc/net/arp.

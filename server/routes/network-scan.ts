@@ -45,7 +45,7 @@ const router = Router();
  *   autoDetect?: boolean (default: false)
  * }
  */
-router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/scan', requireAuth, requireAdmin, autoLog('network-scan', 'scan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { range, autoDetect } = req.body;
     const scanType = 'full'; // Scan complet toujours en mode 'full'
 
@@ -231,7 +231,7 @@ router.post('/scan', requireAuth, autoLog('network-scan', 'scan'), asyncHandler(
  * POST /api/network-scan/scan-stop
  * Request stop of the current full scan. Takes effect between current and next batch.
  */
-router.post('/scan-stop', requireAuth, autoLog('network-scan', 'scan-stop'), asyncHandler(async (_req: AuthenticatedRequest, res) => {
+router.post('/scan-stop', requireAuth, requireAdmin, autoLog('network-scan', 'scan-stop'), asyncHandler(async (_req: AuthenticatedRequest, res) => {
     try {
         networkScanService.requestStopScan();
         portScanService.requestPortScanAbort();
@@ -300,7 +300,7 @@ router.get('/port-scan-progress', requireAuth, asyncHandler(async (_req: Authent
  * POST /api/network-scan/port-scan-stop
  * Request stop of the background port scan (nmap). Takes effect between current and next host.
  */
-router.post('/port-scan-stop', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+router.post('/port-scan-stop', requireAuth, requireAdmin, asyncHandler(async (_req: AuthenticatedRequest, res) => {
     portScanService.requestPortScanAbort();
     res.json({
         success: true,
@@ -317,7 +317,7 @@ router.post('/port-scan-stop', requireAuth, asyncHandler(async (_req: Authentica
  *   scanType?: 'full' | 'quick' (default: 'quick')
  * }
  */
-router.post('/refresh', requireAuth, autoLog('network-scan', 'refresh'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/refresh', requireAuth, requireAdmin, autoLog('network-scan', 'refresh'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { scanType = 'quick' } = req.body;
 
     // Validate scanType
@@ -604,7 +604,7 @@ router.get('/config', requireAuth, asyncHandler(async (req: AuthenticatedRequest
  *   scanType?: 'full' | 'quick' (default: 'quick')
  * }
  */
-router.post('/config', requireAuth, autoLog('network-scan', 'config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/config', requireAuth, requireAdmin, autoLog('network-scan', 'config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { enabled, interval = 30, scanType = 'quick' } = req.body;
 
     if (typeof enabled !== 'boolean') {
@@ -713,7 +713,7 @@ router.get('/refresh-config', requireAuth, asyncHandler(async (req: Authenticate
  *   interval?: number (minutes: 5, 10, 15, 30, 60)
  * }
  */
-router.post('/refresh-config', requireAuth, autoLog('network-scan', 'refresh-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/refresh-config', requireAuth, requireAdmin, autoLog('network-scan', 'refresh-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { enabled, interval = 15 } = req.body;
 
     if (typeof enabled !== 'boolean') {
@@ -816,7 +816,7 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
  *   defaultAutoDetect?: boolean (default: false)
  * }
  */
-router.post('/default-config', requireAuth, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/default-config', requireAuth, requireAdmin, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { defaultRange = appConfig.defaultScanRange, defaultAutoDetect = false } = req.body;
     // defaultScanType retiré - scan complet toujours en mode 'full'
 
@@ -1455,7 +1455,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
  *   hostname?: string (optional)
  * }
  */
-router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/add-manual', requireAuth, requireAdmin, autoLog('network-scan', 'add-manual'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { ip, mac, hostname } = req.body;
     const scanType = 'full'; // Ajout manuel toujours en mode 'full'
 
@@ -1518,7 +1518,7 @@ router.post('/add-manual', requireAuth, autoLog('network-scan', 'add-manual'), a
  * DELETE /api/network-scan/:id
  * Delete a specific IP from history
  */
-router.delete('/:id', requireAuth, autoLog('network-scan', 'delete'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete('/:id', requireAuth, requireAdmin, autoLog('network-scan', 'delete'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.id;
 
     try {
@@ -1558,7 +1558,7 @@ router.delete('/:id', requireAuth, autoLog('network-scan', 'delete'), asyncHandl
  * Rescan a single IP address with full scan including port scan
  * Performs complete rescan: ping, MAC detection, hostname resolution, vendor detection, and port scan
  */
-router.post('/:id/rescan', requireAuth, autoLog('network-scan', 'rescan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:id/rescan', requireAuth, requireAdmin, autoLog('network-scan', 'rescan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.id;
 
     // Validate IP format
@@ -1641,7 +1641,7 @@ router.get('/blacklist', requireAuth, asyncHandler(async (req: AuthenticatedRequ
  * Add an IP to the blacklist
  * Body: { ip: string }
  */
-router.post('/blacklist/add', requireAuth, autoLog('network-scan', 'blacklist-add'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/blacklist/add', requireAuth, requireAdmin, autoLog('network-scan', 'blacklist-add'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { ip } = req.body;
 
     // Validate IP format
@@ -1689,7 +1689,7 @@ router.post('/blacklist/add', requireAuth, autoLog('network-scan', 'blacklist-ad
  * DELETE /api/network-scan/blacklist/:ip
  * Remove an IP from the blacklist
  */
-router.delete('/blacklist/:ip', requireAuth, autoLog('network-scan', 'blacklist-remove'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete('/blacklist/:ip', requireAuth, requireAdmin, autoLog('network-scan', 'blacklist-remove'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.ip;
 
     // Validate IP format
@@ -1730,7 +1730,7 @@ router.delete('/blacklist/:ip', requireAuth, autoLog('network-scan', 'blacklist-
  * POST /api/network-scan/:id/hostname
  * Update hostname for a specific IP
  */
-router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostname'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/:id/hostname', requireAuth, requireAdmin, autoLog('network-scan', 'update-hostname'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = req.params.id;
     const { hostname, hostnameSource } = req.body;
 
@@ -1807,7 +1807,7 @@ router.post('/:id/hostname', requireAuth, autoLog('network-scan', 'update-hostna
  *   }
  * }
  */
-router.post('/unified-config', requireAuth, autoLog('network-scan', 'unified-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/unified-config', requireAuth, requireAdmin, autoLog('network-scan', 'unified-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { enabled, fullScan, refresh } = req.body;
 
     if (typeof enabled !== 'boolean') {

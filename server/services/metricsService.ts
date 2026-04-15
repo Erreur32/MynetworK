@@ -127,33 +127,7 @@ export async function generatePrometheusMetrics(): Promise<string> {
                     }
                 }
                 
-                // Disk
-                if (sys.disks && Array.isArray(sys.disks)) {
-                    lines.push(`# HELP mynetwork_disk_total Total disk space in bytes`);
-                    lines.push(`# TYPE mynetwork_disk_total gauge`);
-                    lines.push(`# HELP mynetwork_disk_used Used disk space in bytes`);
-                    lines.push(`# TYPE mynetwork_disk_used gauge`);
-                    lines.push(`# HELP mynetwork_disk_free Free disk space in bytes`);
-                    lines.push(`# TYPE mynetwork_disk_free gauge`);
-                    lines.push(`# HELP mynetwork_disk_usage Disk usage percentage`);
-                    lines.push(`# TYPE mynetwork_disk_usage gauge`);
-                    
-                    sys.disks.forEach((disk: any, index: number) => {
-                        const mountpoint = (disk.mountpoint || disk.mount || `/disk${index}`).replace(/"/g, '\\"');
-                        const device = (disk.device || 'unknown').replace(/"/g, '\\"');
-                        const labels = `{mountpoint="${mountpoint}",device="${device}"}`;
-                        
-                        const diskTotal = toPrometheusNumber(disk.total);
-                        const diskUsed = toPrometheusNumber(disk.used);
-                        const diskFree = toPrometheusNumber(disk.free);
-                        const diskUsage = disk.percentage !== undefined ? toPrometheusNumber(disk.percentage) : (diskTotal > 0 && diskUsed > 0 ? (diskUsed / diskTotal) * 100 : 0);
-                        
-                        if (diskTotal > 0) lines.push(`mynetwork_disk_total${labels} ${diskTotal}`);
-                        if (diskUsed > 0) lines.push(`mynetwork_disk_used${labels} ${diskUsed}`);
-                        if (diskFree > 0) lines.push(`mynetwork_disk_free${labels} ${diskFree}`);
-                        if (diskUsage > 0) lines.push(`mynetwork_disk_usage${labels} ${diskUsage.toFixed(2)}`);
-                    });
-                }
+                // Disk metrics removed (feature disabled for security)
             }
         }
     } catch (error) {
@@ -571,26 +545,7 @@ export async function generateInfluxDBMetrics(): Promise<string> {
                     }
                 }
                 
-                // Disk
-                if (sys.disks && Array.isArray(sys.disks)) {
-                    sys.disks.forEach((disk: any) => {
-                        const mountpoint = (disk.mountpoint || disk.mount || 'unknown').replace(/[ ,=]/g, '_');
-                        const device = (disk.device || 'unknown').replace(/[ ,=]/g, '_');
-                        
-                        const diskTotal = toPrometheusNumber(disk.total);
-                        const diskUsed = toPrometheusNumber(disk.used);
-                        const diskFree = toPrometheusNumber(disk.free);
-                        
-                        if (diskTotal > 0 || diskUsed > 0 || diskFree > 0) {
-                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} total=${Math.round(diskTotal)}i,used=${Math.round(diskUsed)}i,free=${Math.round(diskFree)}i ${timestamp}`);
-                        }
-                        
-                        const diskUsage = disk.percentage !== undefined ? toPrometheusNumber(disk.percentage) : (diskTotal > 0 && diskUsed > 0 ? (diskUsed / diskTotal) * 100 : 0);
-                        if (diskUsage > 0) {
-                            lines.push(`mynetwork,type=disk,mountpoint=${mountpoint},device=${device} usage=${diskUsage.toFixed(2)} ${timestamp}`);
-                        }
-                    });
-                }
+                // Disk metrics removed (feature disabled for security)
             }
         }
     } catch (error) {

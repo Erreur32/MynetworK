@@ -1,26 +1,17 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler.js';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config.js';
+import { isValidPingTarget } from '../utils/networkValidation.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const router = Router();
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
-
-// Strict validation: only allow IPs or safe hostnames (no shell metacharacters)
-function isValidPingTarget(target: string): boolean {
-  // Allow IPv4 addresses
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(target)) {
-    return target.split('.').map(Number).every(p => p >= 0 && p <= 255);
-  }
-  // Allow safe hostnames (alphanumeric, dots, hyphens only)
-  return /^[a-zA-Z0-9][a-zA-Z0-9.\-]{0,253}[a-zA-Z0-9]$/.test(target);
-}
 
 interface PingResult {
   target: string;
@@ -135,7 +126,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
 
   try {
     // Run ping command with proper error handling
-    const { stdout } = await execAsync(`ping ${PING_FLAG} ${count} ${target}`, {
+    const { stdout } = await execFileAsync('ping', [PING_FLAG, String(count), target], {
       timeout: 30000,
       maxBuffer: 1024 * 1024 // 1MB buffer
     });
@@ -248,7 +239,7 @@ router.post('/run', asyncHandler(async (req, res) => {
     };
 
     try {
-      const { stdout } = await execAsync(`ping ${PING_FLAG} 10 ${pingTarget}`, { timeout: 15000 });
+      const { stdout } = await execFileAsync('ping', [PING_FLAG, '10', pingTarget], { timeout: 15000 });
       const stats = parsePingOutput(stdout);
       pingResult = {
         target: pingTarget,
