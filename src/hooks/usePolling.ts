@@ -46,13 +46,18 @@ export const usePolling = (
     };
   }, [enabled, interval, immediate]);
 
-  // Pause when tab is hidden (optional optimization)
+  // Pause when tab is hidden to save resources, resume when visible
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      } else if (!document.hidden && enabled) {
+      if (document.hidden) {
+        // Tab hidden: stop polling
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      } else if (!document.hidden && enabled && !intervalRef.current) {
+        // Tab visible again: fetch immediately and restart interval
+        // Only create interval if none exists (prevents accumulation)
         savedCallback.current();
         intervalRef.current = setInterval(() => {
           savedCallback.current();

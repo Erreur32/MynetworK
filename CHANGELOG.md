@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.81] - 2026-04-16
+
+### 🐛 Corrigé
+
+- **fix(critical): Memory leak in usePolling** — Tab visibility change handler created new intervals without clearing existing ones, causing interval accumulation (×6 polling hooks) on each hidden/visible cycle. Root cause of "Out of Memory" crash when staying on a tab
+- **fix: Redundant HTTP fallback polling** — Connection status was polled every 1s via HTTP even when WebSocket was active, doubling history writes. Fallback now only activates when WebSocket is disconnected, interval reduced to 5s
+
+---
+
 ## [0.7.80] - 2026-04-15
 
 ### BREAKING CHANGES (Docker)

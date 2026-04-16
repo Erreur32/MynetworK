@@ -408,10 +408,10 @@ const App: React.FC = () => {
       window.location.hostname !== '127.0.0.1' && 
       window.location.port === '3666';
   }, []); // Only calculate once, doesn't change during app lifetime
-  useConnectionWebSocket({ enabled: isFreeboxLoggedIn && !isDockerDev });
-  
-  // Fallback: If WebSocket is not connected, fetch connection status manually
-  // This ensures data is available even if WebSocket takes time to connect
+  const { isConnected: wsConnected } = useConnectionWebSocket({ enabled: isFreeboxLoggedIn && !isDockerDev });
+
+  // Fallback: If WebSocket is not connected, fetch connection status via HTTP polling
+  // When WebSocket IS connected, it handles updates — no need for HTTP polling
   useEffect(() => {
     if (isFreeboxLoggedIn && isUserAuthenticated) {
       // Initial fetch to populate data immediately (don't wait for WebSocket)
@@ -419,15 +419,17 @@ const App: React.FC = () => {
         console.log('[App] Freebox logged in, fetching initial connection status...');
       }
       fetchConnectionStatus();
-      
-      // Also fetch periodically as fallback if WebSocket fails
-      const fallbackInterval = setInterval(() => {
-        fetchConnectionStatus();
-      }, 1000); // Every 1 second as fallback (faster than before)
-      
-      return () => clearInterval(fallbackInterval);
+
+      // Only poll via HTTP if WebSocket is not connected
+      if (!wsConnected) {
+        const fallbackInterval = setInterval(() => {
+          fetchConnectionStatus();
+        }, 5000); // Every 5 seconds as fallback when WebSocket is down
+
+        return () => clearInterval(fallbackInterval);
+      }
     }
-  }, [isFreeboxLoggedIn, isUserAuthenticated, fetchConnectionStatus]);
+  }, [isFreeboxLoggedIn, isUserAuthenticated, wsConnected, fetchConnectionStatus]);
 
   // Polling only if user is authenticated AND Freebox is connected
   usePolling(fetchSystemInfo, {
