@@ -61,6 +61,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
   const { enabled = true, onFreeboxEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
   // In production, stop after 1 failed attempt to avoid console spam
   // In dev, allow 3 attempts for debugging
@@ -152,10 +153,14 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
       // Don't fetch immediately - wait for WebSocket to send data
       // The server will send connection_status and system_status via WebSocket
       // Only fetch if WebSocket doesn't send data within a reasonable time
-      setTimeout(() => {
+      if (fallbackFetchTimeoutRef.current) {
+        clearTimeout(fallbackFetchTimeoutRef.current);
+      }
+      fallbackFetchTimeoutRef.current = setTimeout(() => {
+        fallbackFetchTimeoutRef.current = null;
         // If still connected but no data received, do a fallback fetch
         if (wsRef.current?.readyState === WebSocket.OPEN && !isConnected) {
-      fetchConnectionStatus();
+          fetchConnectionStatus();
         }
       }, 2000); // Wait 2 seconds for WebSocket data
     };
@@ -329,6 +334,11 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+
+    if (fallbackFetchTimeoutRef.current) {
+      clearTimeout(fallbackFetchTimeoutRef.current);
+      fallbackFetchTimeoutRef.current = null;
     }
 
     if (wsRef.current) {

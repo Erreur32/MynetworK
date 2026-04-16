@@ -13,19 +13,46 @@ export const usePolling = (
   const { enabled = true, interval, immediate = true } = options;
   const savedCallback = useRef(callback);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const enabledRef = useRef(enabled);
+  const intervalMsRef = useRef(interval);
 
-  // Remember the latest callback
+  // Remember the latest callback and options
   useEffect(() => {
     savedCallback.current = callback;
   }, [callback]);
 
-  // Set up the interval
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
+  useEffect(() => {
+    intervalMsRef.current = interval;
+  }, [interval]);
+
+  // Helper to start/stop interval — always clears before creating
+  const startInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (enabledRef.current) {
+      intervalRef.current = setInterval(() => {
+        savedCallback.current();
+      }, intervalMsRef.current);
+    }
+  }, []);
+
+  const stopInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  // Set up the interval and visibility handler in a single effect
   useEffect(() => {
     if (!enabled) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      stopInterval();
       return;
     }
 
@@ -34,42 +61,26 @@ export const usePolling = (
       savedCallback.current();
     }
 
-    // Set up interval
-    intervalRef.current = setInterval(() => {
-      savedCallback.current();
-    }, interval);
+    // Start interval
+    startInterval();
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [enabled, interval, immediate]);
-
-  // Pause when tab is hidden to save resources, resume when visible
-  useEffect(() => {
+    // Pause when tab is hidden, resume when visible
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab hidden: stop polling
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-      } else if (!document.hidden && enabled && !intervalRef.current) {
-        // Tab visible again: fetch immediately and restart interval
-        // Only create interval if none exists (prevents accumulation)
+        stopInterval();
+      } else if (enabledRef.current) {
         savedCallback.current();
-        intervalRef.current = setInterval(() => {
-          savedCallback.current();
-        }, interval);
+        startInterval();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      stopInterval();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, interval]);
+  }, [enabled, interval, immediate, startInterval, stopInterval]);
 };
 
 // Hook for multiple polling intervals

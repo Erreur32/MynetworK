@@ -232,9 +232,17 @@ export const useTvStore = create<TvState>((set, get) => ({
         });
 
 
-        // Update cache with current time
+        // Update cache with current time, limit to 50 entries to prevent unbounded growth
         const newCache = new Map(get().epgCache);
         newCache.set(roundedTs, Date.now());
+        if (newCache.size > 50) {
+          // Remove oldest entries (Maps iterate in insertion order)
+          const excess = newCache.size - 50;
+          const keys = newCache.keys();
+          for (let i = 0; i < excess; i++) {
+            newCache.delete(keys.next().value!);
+          }
+        }
         set({ epgPrograms: allEntries, epgLoading: false, epgCache: newCache });
         return { rateLimited: false };
       } else {

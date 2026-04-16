@@ -130,7 +130,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         // console.log('[ConnectionStore] Processed history:', extendedHistory.length, 'points'); // Debug only
         // console.log('[ConnectionStore] First 3 data points:', extendedHistory.slice(0, 3)); // Debug only
         // console.log('[ConnectionStore] Stats - avgDown:', Math.round(extendedHistory.reduce((sum, p) => sum + p.download, 0) / extendedHistory.length), 'KB/s'); // Debug only
-        set({ extendedHistory, isLoading: false, rrdPermissionDenied: false });
+        // Cap to 500 points max to prevent memory bloat with long RRD durations (e.g. 7d)
+        const cappedHistory = extendedHistory.length > 500 ? extendedHistory.slice(-500) : extendedHistory;
+        set({ extendedHistory: cappedHistory, isLoading: false, rrdPermissionDenied: false });
       } else {
         // console.log('[ConnectionStore] No data in response, success:', response.success, 'result:', response.result); // Debug only
         set({ extendedHistory: [], isLoading: false });
@@ -211,8 +213,9 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
             sw     // Switch (Delta/Revolution) or secondary temp (Pop)
           };
         });
-        // console.log('[ConnectionStore] Processed temperature:', temperatureHistory.length, 'points, sample:', temperatureHistory[0]); // Debug only
-        set({ temperatureHistory });
+        // Cap to 500 points max to prevent memory bloat with long RRD durations (e.g. 7d)
+        const cappedHistory = temperatureHistory.length > 500 ? temperatureHistory.slice(-500) : temperatureHistory;
+        set({ temperatureHistory: cappedHistory });
       } else {
         // console.log('[ConnectionStore] No temperature data, success:', response.success, 'result:', response.result); // Debug only
       }

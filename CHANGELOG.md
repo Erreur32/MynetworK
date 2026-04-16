@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.82] - 2026-04-16
+
+### 🐛 Corrigé
+
+- **fix(critical): usePolling closure leak** — Two independent useEffect sharing intervalRef caused stale closures on visibility change. Merged into a single effect with startInterval/stopInterval helpers to prevent orphaned intervals (×6 active polling hooks)
+- **fix(critical): NetworkScanPage interval accumulation** — Scan/refresh polling intervals stored in React state (async) allowed double-click race conditions creating parallel intervals. Migrated to useRef with systematic clear-before-create
+- **fix: useConnectionWebSocket orphaned setTimeout** — Fallback fetch timeout in ws.onopen was not stored in a ref, causing orphaned timers on unmount. Now tracked via fallbackFetchTimeoutRef and cleared on disconnect
+- **fix: connectionStore unbounded RRD data** — extendedHistory and temperatureHistory from Freebox RRD could contain thousands of points with 7d duration. Capped both to 500 points max
+- **fix: tvStore epgCache unbounded growth** — EPG cache Map grew indefinitely without cleanup. Limited to 50 entries with oldest-first eviction
+
+---
+
 ## [0.7.81] - 2026-04-16
 
 ### 🐛 Corrigé

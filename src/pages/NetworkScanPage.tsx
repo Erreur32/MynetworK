@@ -195,7 +195,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [showRefreshDropdown, setShowRefreshDropdown] = useState(false); // État pour afficher/masquer le dropdown
     const refreshDropdownRef = useRef<HTMLDivElement>(null); // Référence pour fermer le dropdown au clic extérieur
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
-    const [scanPollingInterval, setScanPollingInterval] = useState<NodeJS.Timeout | null>(null);
+    const scanPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const [showAddIpModal, setShowAddIpModal] = useState(false);
     const [manualIp, setManualIp] = useState('');
     const [manualMac, setManualMac] = useState('');
@@ -595,11 +595,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Cleanup polling interval on unmount
     useEffect(() => {
         return () => {
-            if (scanPollingInterval) {
-                clearInterval(scanPollingInterval);
+            if (scanPollingIntervalRef.current) {
+                clearInterval(scanPollingIntervalRef.current);
+                scanPollingIntervalRef.current = null;
             }
         };
-    }, [scanPollingInterval]);
+    }, []);
 
     // Poll scan progress during auto scans
     useEffect(() => {
@@ -686,7 +687,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         setCurrentScanRange(scanRange || (autoDetect ? t('networkScan.scanTypes.autoDetect') : '192.168.1.0/24'));
         setScanProgress(null);
         setLastScanSummary(null);
-        
+
+        // Clear any existing polling interval before creating a new one
+        if (scanPollingIntervalRef.current) {
+            clearInterval(scanPollingIntervalRef.current);
+            scanPollingIntervalRef.current = null;
+        }
+
         // Start polling to refresh the list and progress during scan
         // Reduced frequency to 2 seconds to improve performance
         const interval = setInterval(async () => {
@@ -724,8 +731,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         setScanProgress(null);
                         setIsScanning(false);
                         setCurrentScanRange('');
-                        clearInterval(interval);
-                        setScanPollingInterval(null);
+                        if (scanPollingIntervalRef.current) {
+                            clearInterval(scanPollingIntervalRef.current);
+                            scanPollingIntervalRef.current = null;
+                        }
                         
                         // Final refresh after scan completes; then check if port scan started (nmap in background)
                         await fetchStats();
@@ -758,7 +767,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 // Ignore errors, progress is optional
             }
         }, 2000); // Refresh every 2 seconds during scan (reduced from 1s for better performance)
-        setScanPollingInterval(interval);
+        scanPollingIntervalRef.current = interval;
         
         try {
             // Start scan (returns immediately with "scan started" status)
@@ -782,8 +791,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 setIsScanning(false);
                 setCurrentScanRange('');
                 setScanProgress(null);
-                clearInterval(interval);
-                setScanPollingInterval(null);
+                if (scanPollingIntervalRef.current) {
+                    clearInterval(scanPollingIntervalRef.current);
+                    scanPollingIntervalRef.current = null;
+                }
                 alert(response.error?.message || t('networkScan.errors.scanStart'));
             }
         } catch (error: any) {
@@ -791,8 +802,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setIsScanning(false);
             setCurrentScanRange('');
             setScanProgress(null);
-            clearInterval(interval);
-            setScanPollingInterval(null);
+            if (scanPollingIntervalRef.current) {
+                clearInterval(scanPollingIntervalRef.current);
+                scanPollingIntervalRef.current = null;
+            }
             alert(t('networkScan.errors.scanStartWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
@@ -865,7 +878,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         setCurrentScanRange(t('networkScan.scanInfo.refreshingExisting'));
         setScanProgress(null);
         setLastScanSummary(null);
-        
+
+        // Clear any existing polling interval before creating a new one
+        if (scanPollingIntervalRef.current) {
+            clearInterval(scanPollingIntervalRef.current);
+            scanPollingIntervalRef.current = null;
+        }
+
         // Start polling to refresh the list during refresh
         // Reduced frequency to 2 seconds to improve performance
         const interval = setInterval(async () => {
@@ -885,7 +904,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 // Ignore errors, progress is optional
             }
         }, 2000); // Refresh every 2 seconds during refresh (reduced from 1s for better performance)
-        
+        scanPollingIntervalRef.current = interval;
+
         try {
             const response = await api.post<{
                 result?: {
@@ -925,7 +945,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setIsRefreshing(false);
             setCurrentScanRange('');
             setScanProgress(null);
-            clearInterval(interval);
+            if (scanPollingIntervalRef.current) {
+                clearInterval(scanPollingIntervalRef.current);
+                scanPollingIntervalRef.current = null;
+            }
         }
     };
 
