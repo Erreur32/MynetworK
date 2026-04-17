@@ -199,14 +199,13 @@ router.post('/scan', requireAuth, requireAdmin, autoLog('network-scan', 'scan'),
         let suggestion: string | undefined;
         
         if (error.message?.includes('too large') || error.message?.includes('Maximum 1000 IPs')) {
-            // Extract IP from range and suggest /24
-            const ipMatch = scanRange.slice(0, 50).match(/(\d+\.\d+\.\d+)\./);
-            if (ipMatch) {
-                const suggestedRange = `${ipMatch[1]}.0/24`;
-                errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;
-                suggestion = `Try using a smaller range like ${suggestedRange} (254 IPs)`;
+            // Extract the first 3 octets of the IP to suggest a /24 range, using string ops (no regex)
+            const parts = scanRange.slice(0, 50).split('.');
+            const octetsValid = parts.length >= 3 && parts.slice(0, 3).every((p) => /^\d{1,3}$/.test(p));
+            errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;
+            if (octetsValid) {
+                suggestion = `Try using a smaller range like ${parts[0]}.${parts[1]}.${parts[2]}.0/24 (254 IPs)`;
             } else {
-                errorMessage = `Network range too large. Maximum 1000 IPs allowed.`;
                 suggestion = `Try using a /24 subnet (e.g., 192.168.1.0/24)`;
             }
         } else if (error.message?.includes('ping') || error.message?.includes('Permission denied')) {

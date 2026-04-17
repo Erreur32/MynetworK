@@ -143,7 +143,7 @@ class FreeboxFirmwareCheckService {
       if (!blockTrimmed || blockTrimmed.length < 40) continue;
 
       // Try Server pattern: "Mise à jour du Freebox Server (Revolution/Pop/Delta/Ultra) 4.9.16"
-      const serverMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Server\s{0,5}\([^)]{1,50}\)\s{1,5}([\d.]+)/i);
+      const serverMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Server\s{0,5}\([^)]{1,50}\)\s{1,5}(\d{1,5}(?:\.\d{1,5}){1,3})/i);
       if (serverMatch) {
         const version = serverMatch[1];
         const dateMatch = blockTrimmed.match(DATE_PATTERN);
@@ -173,7 +173,7 @@ class FreeboxFirmwareCheckService {
       }
 
       // Try Player pattern: "Mise à jour du Freebox Player Mini 4k 3.7.1" or "Devialet/One 1.5.21" or "Révolution 1.3.54"
-      const playerMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Player\s{1,5}([^\d]{1,50}?)\s{1,5}([\d.]+)/i);
+      const playerMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Player\s{1,5}([^\d]{1,50}?)\s{1,5}(\d{1,5}(?:\.\d{1,5}){1,3})/i);
       if (playerMatch) {
         const model = playerMatch[1].trim().replace(/\s+/g, ' ');
         const version = playerMatch[2];

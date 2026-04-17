@@ -2496,12 +2496,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         <div className="text-sm">
                             {latencyTooltip.isOffline ? (
                                 <>
-                                    <span className="text-gray-400">{t('networkScan.tooltips.offSince', { date: '' }).replace(/\s*$/, '')}</span>
+                                    <span className="text-gray-400">{t('networkScan.tooltips.offSince', { date: '' }).trimEnd()}</span>
                                     <span className="text-amber-300 font-medium">{latencyTooltip.date}</span>
                                 </>
                             ) : (
                                 <>
-                                    <span className="text-gray-400">{t('networkScan.tooltips.lastPing', { date: '', latency: '' }).replace(/\s*:\s*$/, '')}</span>
+                                    <span className="text-gray-400">{(() => {
+                                        const s = t('networkScan.tooltips.lastPing', { date: '', latency: '' }).trimEnd();
+                                        return s.endsWith(':') ? s.slice(0, -1).trimEnd() : s;
+                                    })()}</span>
                                     <span className="text-cyan-300 font-medium">{latencyTooltip.date}</span>
                                     <span className="text-gray-400">: </span>
                                     <span className="text-emerald-300 font-medium">{latencyTooltip.latency}</span>

@@ -2529,10 +2529,16 @@ const UserProfileSection: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Validate email format
+  // Validate email format using string ops (avoids SonarCloud S5852 ReDoS hotspot)
   const validateEmail = (emailValue: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(emailValue);
+    if (!emailValue || emailValue.length > 254) return false;
+    if (/\s/.test(emailValue)) return false;
+    const atIdx = emailValue.indexOf('@');
+    if (atIdx <= 0 || atIdx !== emailValue.lastIndexOf('@')) return false;
+    const domain = emailValue.slice(atIdx + 1);
+    if (!domain) return false;
+    const dotIdx = domain.lastIndexOf('.');
+    return dotIdx > 0 && dotIdx < domain.length - 1;
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {

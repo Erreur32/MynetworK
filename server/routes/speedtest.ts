@@ -44,8 +44,9 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
       const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/);
       loss = lossMatch ? parseFloat(lossMatch[1]) : 0;
 
-      const rttMatch = output.match(/rtt min\/avg\/max\/mdev = ([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)/);
-      const macMatch = output.match(/round-trip min\/avg\/max\/stddev = ([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)/);
+      const numGroup = '(\\d+(?:\\.\\d+)?)';
+      const rttMatch = output.match(new RegExp(`rtt min/avg/max/mdev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`));
+      const macMatch = output.match(new RegExp(`round-trip min/avg/max/stddev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`));
 
       const match = rttMatch || macMatch;
       if (match) {

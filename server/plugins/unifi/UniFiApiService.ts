@@ -9,6 +9,13 @@
 
 import { logger } from '../../utils/logger.js';
 
+// Strip trailing '/' characters without using a regex (avoids SonarCloud S5852 ReDoS hotspot)
+const stripTrailingSlashes = (s: string): string => {
+    let end = s.length;
+    while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) end--;
+    return end === s.length ? s : s.slice(0, end);
+};
+
 // Create HTTPS agent with disabled certificate verification for UniFi self-signed certificates
 // This is considered acceptable here because communication is limited to the local UniFi
 // controller or trusted Site Manager API endpoints. Using undici Agent instead of global
@@ -239,7 +246,7 @@ export class UniFiApiService {
         // Controller API (local) - perform a best-effort logout
         if (this.isAuthenticated && this.sessionCookie && this.url) {
             try {
-                const baseUrl = this.url.replace(/\/+$/, '');
+                const baseUrl = stripTrailingSlashes(this.url);
                 // Use appropriate logout endpoint based on deployment type
                 const logoutUrl = this.deploymentType === 'unifios'
                     ? `${baseUrl}/api/auth/logout`
@@ -352,7 +359,7 @@ export class UniFiApiService {
             throw new Error('UniFi connection details not set');
         }
 
-        const baseUrl = this.url.trim().replace(/\/+$/, '');
+        const baseUrl = stripTrailingSlashes(this.url.trim());
         
         // Try UniFiOS login endpoint first
         try {
@@ -437,7 +444,7 @@ export class UniFiApiService {
         // Validate and clean URL
         let baseUrl = this.url.trim();
         // Remove trailing slashes
-        baseUrl = baseUrl.replace(/\/+$/, '');
+        baseUrl = stripTrailingSlashes(baseUrl);
         // Ensure URL has protocol
         if (!baseUrl.match(/^https?:\/\//)) {
             throw new Error(`Invalid UniFi URL format: "${baseUrl}". URL must start with http:// or https://`);
@@ -705,7 +712,7 @@ export class UniFiApiService {
         // Refresh session if missing or expired (singleflight + cooldown-aware)
         await this.ensureControllerSession();
 
-        const baseUrl = this.url.replace(/\/+$/, '');
+        const baseUrl = stripTrailingSlashes(this.url);
         const apiBase = this.getApiBasePath();
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const url = `${baseUrl}${apiBase}${normalizedPath}`;
@@ -808,7 +815,7 @@ export class UniFiApiService {
     private async controllerPost<T>(path: string, body: unknown): Promise<T> {
         if (!this.url) throw new Error('UniFi controller URL not set');
         await this.ensureControllerSession();
-        const baseUrl = this.url.replace(/\/+$/, '');
+        const baseUrl = stripTrailingSlashes(this.url);
         const apiBase = this.getApiBasePath();
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const url = `${baseUrl}${apiBase}${normalizedPath}`;
