@@ -24,6 +24,13 @@ export const useUnifiRealtimeStore = create<UnifiRealtimeState>((set) => ({
   isConnected: false,
 
   pushPoint: (download: number, upload: number) => {
+    // Skip history growth when the tab is hidden — prevents a render storm
+    // in recharts (ResponsiveContainer ResizeObserver loop → React #185)
+    // when the tab becomes visible again after accumulated WS messages.
+    if (typeof document !== 'undefined' && document.hidden) {
+      set({ download, upload });
+      return;
+    }
     const time = new Date().toLocaleTimeString('fr-FR', {
       hour: '2-digit',
       minute: '2-digit',

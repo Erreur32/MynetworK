@@ -297,7 +297,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
             </div>
             <div className="w-full" style={{ height: '256px', minHeight: '256px' }}>
                 {chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={256} minWidth={0} minHeight={256}>
+                    <ResponsiveContainer width="100%" height={256} minWidth={0} minHeight={256} debounce={100}>
                         <AreaChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis
