@@ -105,3 +105,6 @@ Thumbs.db
 .AppleDouble
 .LSOverride
 ._*
+
+# MemPalace local tooling (not shared across contributors)
+mempalace.yaml

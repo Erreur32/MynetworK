@@ -44,9 +44,9 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
       const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/); // NOSONAR S5852 linear-time regex
       loss = lossMatch ? parseFloat(lossMatch[1]) : 0;
 
-      const numGroup = '(\\d+(?:\\.\\d+)?)'; // NOSONAR S5852 linear-time regex fragment
-      const rttMatch = output.match(new RegExp(`rtt min/avg/max/mdev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`)); // NOSONAR S5852
-      const macMatch = output.match(new RegExp(`round-trip min/avg/max/stddev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`)); // NOSONAR S5852
+      const numGroup = String.raw`(\d+(?:\.\d+)?)`; // NOSONAR S5852 linear-time regex fragment
+      const rttMatch = new RegExp(`rtt min/avg/max/mdev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`).exec(output); // NOSONAR S5852
+      const macMatch = new RegExp(`round-trip min/avg/max/stddev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`).exec(output); // NOSONAR S5852
 
       const match = rttMatch || macMatch;
       if (match) {

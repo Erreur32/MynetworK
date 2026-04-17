@@ -3016,7 +3016,7 @@ function parseChangelogVersions(content: string): Array<{ version: string; date:
     const idx = block.indexOf('\n');
     const firstLine = idx >= 0 ? block.slice(0, idx) : block;
     const body = (idx >= 0 ? block.slice(idx) : '').replace(/^\s*\n+/, '').trim();
-    const m = firstLine.match(/^(.{1,200}?)\]\s{0,10}-\s{0,10}(.{0,500})$/);
+    const m = /^(.{1,200}?)\]\s{0,10}-\s{0,10}(.{0,500})$/.exec(firstLine);
     const version = m ? m[1].trim() : firstLine.replace(/\]\s*$/, '').trim();
     const date = m ? m[2].trim() : '';
     return { version, date, body };

@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger.js';
 // Strip trailing '/' characters without using a regex (avoids SonarCloud S5852 ReDoS hotspot)
 const stripTrailingSlashes = (s: string): string => {
     let end = s.length;
-    while (end > 0 && s.charCodeAt(end - 1) === 47 /* '/' */) end--;
+    while (end > 0 && s.codePointAt(end - 1) === 47 /* '/' */) end--;
     return end === s.length ? s : s.slice(0, end);
 };
 
