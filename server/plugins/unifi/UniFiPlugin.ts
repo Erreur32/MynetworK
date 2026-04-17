@@ -195,7 +195,7 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.84');
+        super('unifi', 'UniFi Controller', '0.7.85');
         this.apiService = new UniFiApiService();
     }
 
@@ -705,10 +705,45 @@ export class UniFiPlugin extends BasePlugin {
                 totalUpload: primaryHistory[primaryHistory.length - 1]?.tx_bytes || 0
             };
 
+            // Extract temperature from UDM gateway / Dream devices (general_temperature or temperatures[])
+            // Priority: gateway (UDM/UGW) > switch > AP
+            const pickGatewayDevice = (devs: any[]): any | undefined => {
+                const isGateway = (d: any) => {
+                    const t = (d.type || '').toString().toLowerCase();
+                    const m = (d.model || '').toString().toLowerCase();
+                    return t === 'ugw' || t === 'udm' || m.includes('udm') || m.includes('dream') || m.includes('ugw');
+                };
+                return devs.find(isGateway) || devs.find((d: any) => typeof d.general_temperature === 'number' || Array.isArray(d.temperatures));
+            };
+            const extractTempSensors = (d: any): Array<{ id: string; name: string; value: number }> => {
+                if (!d) return [];
+                if (Array.isArray(d.temperatures) && d.temperatures.length > 0) {
+                    return d.temperatures
+                        .map((s: any, idx: number) => ({
+                            id: (s?.id || s?.name || `sensor-${idx}`).toString(),
+                            name: (s?.name || s?.type || `Sensor ${idx + 1}`).toString(),
+                            value: typeof s?.value === 'number' ? Math.round(s.value) : 0,
+                        }))
+                        .filter((s: { value: number }) => s.value > 0);
+                }
+                if (typeof d.general_temperature === 'number' && d.general_temperature > 0) {
+                    return [{ id: 'gateway', name: d.name || d.model || 'Gateway', value: Math.round(d.general_temperature) }];
+                }
+                return [];
+            };
+            const tempSourceDevice = pickGatewayDevice(devices);
+            const unifiTempSensors = extractTempSensors(tempSourceDevice);
+            const unifiTemperature = unifiTempSensors.length > 0
+                ? Math.round(unifiTempSensors.reduce((a, s) => a + s.value, 0) / unifiTempSensors.length)
+                : undefined;
+
             // Normalize system stats
             const systemStats: any = {
                 // Uptime (in seconds) if available
                 uptime: sysinfo.uptime || 0,
+                // Temperature from gateway device (if exposed, e.g. UDM Pro/SE/Dream Router)
+                temperature: unifiTemperature,
+                temperatureSensors: unifiTempSensors,
                 // Controller / site display name when exposed by UniFi (e.g. "☠ UniFi Netwok 32")
                 name: sysinfo.name,
                 siteName: sysinfo.name,

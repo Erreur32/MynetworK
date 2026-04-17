@@ -132,6 +132,8 @@ interface HeaderProps {
     };
     system?: {
       uptime?: number;
+      temperature?: number;
+      temperatureSensors?: Array<{ id: string; name: string; value: number }>;
     };
     devices?: Array<{
       type?: string;
@@ -314,6 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showCpuTooltip, setShowCpuTooltip] = useState(false);
   const [showHddTooltip, setShowHddTooltip] = useState(false);
   const [showFanTooltip, setShowFanTooltip] = useState(false);
+  const [showUnifiTempTooltip, setShowUnifiTempTooltip] = useState(false);
   
   // State for current time (for search page and dashboard)
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -332,6 +335,8 @@ export const Header: React.FC<HeaderProps> = ({
   const cpuRef = React.useRef<HTMLDivElement | null>(null);
   const hddRef = React.useRef<HTMLDivElement | null>(null);
   const fanRef = React.useRef<HTMLDivElement | null>(null);
+  const unifiTempDashRef = React.useRef<HTMLDivElement | null>(null);
+  const unifiTempPageRef = React.useRef<HTMLDivElement | null>(null);
 
   // Set favicon dynamically based on current page
   // invert=true to make white SVG visible on light browser tab backgrounds
@@ -764,6 +769,36 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </>
             )}
+            {/* UniFi gateway temperature (UDM Pro/SE/Dream Router) */}
+            {typeof unifiStats?.system?.temperature === 'number' && (
+              <>
+                <div
+                  ref={unifiTempDashRef}
+                  className="cursor-pointer"
+                  onMouseEnter={() => setShowUnifiTempTooltip(true)}
+                  onMouseLeave={() => setShowUnifiTempTooltip(false)}
+                >
+                  <StatusBadge
+                    icon={<Cpu size={16} />}
+                    value={`${unifiStats.system.temperature}°C`}
+                    color="text-purple-400"
+                  />
+                </div>
+                <Tooltip
+                  show={showUnifiTempTooltip}
+                  title={t('header.cpuTemps')}
+                  items={
+                    unifiStats.system.temperatureSensors && unifiStats.system.temperatureSensors.length > 0
+                      ? unifiStats.system.temperatureSensors
+                      : [{ id: 'unifi-temp', name: 'Gateway', value: unifiStats.system.temperature }]
+                  }
+                  color="text-purple-400"
+                  unit="°C"
+                  parentRef={unifiTempDashRef}
+                  pluginName="UniFi"
+                />
+              </>
+            )}
           </>
         )}
 
@@ -938,6 +973,37 @@ export const Header: React.FC<HeaderProps> = ({
                       <span className="text-sm font-medium">{unifiWsConnected ? formatSpeed(unifiUl * 1024) : formatSpeed(unifiStats.network.upload || 0)}</span>
                     </div>
                   </div>
+                )}
+
+                {/* Temperature badge (UDM Pro/SE/Dream Router expose gateway temperature) */}
+                {typeof unifiStats.system?.temperature === 'number' && (
+                  <>
+                    <div
+                      ref={unifiTempPageRef}
+                      className="cursor-pointer"
+                      onMouseEnter={() => setShowUnifiTempTooltip(true)}
+                      onMouseLeave={() => setShowUnifiTempTooltip(false)}
+                    >
+                      <StatusBadge
+                        icon={<Cpu size={16} />}
+                        value={`${unifiStats.system.temperature}°C`}
+                        color="text-emerald-400"
+                      />
+                    </div>
+                    <Tooltip
+                      show={showUnifiTempTooltip}
+                      title={t('header.cpuTemps')}
+                      items={
+                        unifiStats.system.temperatureSensors && unifiStats.system.temperatureSensors.length > 0
+                          ? unifiStats.system.temperatureSensors
+                          : [{ id: 'unifi-temp', name: 'Gateway', value: unifiStats.system.temperature }]
+                      }
+                      color="text-emerald-400"
+                      unit="°C"
+                      parentRef={unifiTempPageRef}
+                      pluginName="UniFi"
+                    />
+                  </>
                 )}
 
                 {/* Uptime badge */}

@@ -745,6 +745,20 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             );
                         })()}
 
+                        {/* UniFi system state — temperature badge (when gateway exposes it, e.g. UDM Pro/SE/Dream Router) */}
+                        {pluginId === 'unifi' && isActive && typeof (stats.system as any)?.temperature === 'number' && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
+                                <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <StatusBadge
+                                        icon={<Cpu size={14} />}
+                                        value={`${(stats.system as any).temperature}°C`}
+                                        color="text-emerald-400"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* UniFi infrastructure details: Sites, APs, switches, clients, controller */}
                         {pluginId === 'unifi' && stats.devices && stats.devices.length > 0 && (
                             <div className="bg-[#1a1a1a] rounded-lg p-4 space-y-3 text-xs">
@@ -1495,17 +1509,6 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             </div>
                         )}
 
-                        {/* System Info (only temperature here, uptime globalisé en pied de carte) */}
-                        {stats.system && stats.system.temperature && (
-                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-1">
-                                    <div className="flex justify-between text-xs">
-                                        <span className="text-gray-400">{t('freebox.temperature')}</span>
-                                        <span className="text-gray-300">
-                                            {stats.system.temperature}°C
-                                        </span>
-                                    </div>
-                            </div>
-                        )}
                     </div>
                 ) : (
                     <div className="text-center py-4 text-gray-500 text-xs">

@@ -860,8 +860,8 @@ const App: React.FC = () => {
   if (currentPage === 'dashboard') {
     return renderPageWithFooter(
       <>
-        <Header 
-          systemInfo={systemInfo} 
+        <Header
+          systemInfo={systemInfo}
           connectionStatus={connectionStatus}
           pageType="dashboard"
           user={user || undefined}
@@ -871,6 +871,7 @@ const App: React.FC = () => {
           onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           onSearchClick={() => setCurrentPage('search')}
+          unifiStats={pluginStats['unifi'] || null}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader t={t} />}>
