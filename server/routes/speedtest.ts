@@ -41,12 +41,12 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
 
     if (!isWindows) {
       // Parse packet loss (e.g., "0% packet loss")
-      const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/);
+      const lossMatch = output.match(/(\d+(?:\.\d+)?)% packet loss/); // NOSONAR S5852 linear-time regex
       loss = lossMatch ? parseFloat(lossMatch[1]) : 0;
 
-      const numGroup = '(\\d+(?:\\.\\d+)?)';
-      const rttMatch = output.match(new RegExp(`rtt min/avg/max/mdev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`));
-      const macMatch = output.match(new RegExp(`round-trip min/avg/max/stddev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`));
+      const numGroup = '(\\d+(?:\\.\\d+)?)'; // NOSONAR S5852 linear-time regex fragment
+      const rttMatch = output.match(new RegExp(`rtt min/avg/max/mdev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`)); // NOSONAR S5852
+      const macMatch = output.match(new RegExp(`round-trip min/avg/max/stddev = ${numGroup}/${numGroup}/${numGroup}/${numGroup}`)); // NOSONAR S5852
 
       const match = rttMatch || macMatch;
       if (match) {

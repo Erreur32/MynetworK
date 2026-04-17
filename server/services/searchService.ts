@@ -43,7 +43,7 @@ function parseQuery(query: string): ParsedQuery {
     }
 
     // IP wildcard: 192.168.32.* or 192.168.32.1* (partial last octet)
-    if (trimmed.endsWith('*') && /^[\d.]{1,16}\*$/.test(trimmed)) {
+    if (trimmed.endsWith('*') && /^[\d.]{1,16}\*$/.test(trimmed)) { // NOSONAR S5852 bounded quantifier
         const prefix = trimmed.slice(0, -1); // part before *
         if (prefix.endsWith('.')) {
             const parts = prefix.slice(0, -1).split('.').map(Number);
