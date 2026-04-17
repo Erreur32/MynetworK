@@ -416,7 +416,7 @@ export const ThemeSection: React.FC = () => {
     const { t } = useTranslation();
     // Initialize with the currently active theme (from DOM or localStorage)
     const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
-        const htmlTheme = document.documentElement.getAttribute('data-theme');
+        const htmlTheme = document.documentElement.dataset.theme;
         if (htmlTheme && VALID_THEMES.includes(htmlTheme as Theme)) return htmlTheme as Theme;
         return getCurrentTheme();
     });
@@ -497,7 +497,7 @@ export const ThemeSection: React.FC = () => {
         // Sync currentTheme state with actual active theme from DOM
         // This ensures the UI reflects the theme that's actually applied
         const syncTheme = () => {
-            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const htmlTheme = document.documentElement.dataset.theme;
             const activeTheme = (htmlTheme && VALID_THEMES.includes(htmlTheme as Theme)) ? htmlTheme as Theme : getCurrentTheme();
             
             // Update state with active theme (setState will only trigger re-render if different)
@@ -524,7 +524,7 @@ export const ThemeSection: React.FC = () => {
     const loadThemeConfig = async () => {
         try {
             // Get current active theme from DOM (most reliable source of truth)
-            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const htmlTheme = document.documentElement.dataset.theme;
             const currentActiveTheme = (htmlTheme && VALID_THEMES.includes(htmlTheme as Theme)) ? htmlTheme as Theme : getCurrentTheme();
             
             // CRITICAL: Keep current active theme in state FIRST to prevent UI flicker
@@ -573,7 +573,7 @@ export const ThemeSection: React.FC = () => {
         } catch (error) {
             console.error('Failed to load theme config:', error);
             // On error, keep current active theme from DOM/localStorage (don't change it)
-            const htmlTheme = document.documentElement.getAttribute('data-theme');
+            const htmlTheme = document.documentElement.dataset.theme;
             const theme = (htmlTheme && VALID_THEMES.includes(htmlTheme as Theme)) ? htmlTheme as Theme : getCurrentTheme();
             setCurrentTheme(theme);
         }

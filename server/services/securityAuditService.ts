@@ -74,7 +74,7 @@ class SecurityAuditService {
 
         try {
             // Get logs from logging service
-            const allLogs = await loggingService.getLogs({
+            const allLogs = loggingService.getLogs({
                 limit: limit + offset,
                 resource: 'security',
                 action: action ? `security.${action}` : undefined,
@@ -118,7 +118,7 @@ class SecurityAuditService {
             const last24Hours = new Date(now.getTime() - (24 * 60 * 60 * 1000));
 
             // Get all security logs from last 24 hours
-            const recentLogs = await loggingService.getLogs({
+            const recentLogs = loggingService.getLogs({
                 limit: 10000,
                 resource: 'security',
                 startDate: last24Hours
