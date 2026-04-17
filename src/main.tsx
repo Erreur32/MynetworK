@@ -4,13 +4,14 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotificationToaster } from './components/NotificationToaster';
 import './index.css';
 import './styles/themes.css';
 import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.7.82';
+const APP_VERSION = '0.7.83';
 
 // Console log with colored background
 const logAppInfo = () => {
@@ -75,6 +76,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ErrorBoundary>
         <App />
+        <NotificationToaster />
       </ErrorBoundary>
     </BrowserRouter>
   </React.StrictMode>

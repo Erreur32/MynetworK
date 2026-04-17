@@ -47,6 +47,13 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         const status = response.result;
         set({ status, error: null });
 
+        // Skip history growth when the tab is hidden — prevents a render storm
+        // in chart components (recharts + ResponsiveContainer) when the tab
+        // becomes visible again.
+        if (typeof document !== 'undefined' && document.hidden) {
+          return;
+        }
+
         // Add to history for real-time chart
         const { history } = get();
         const newPoint: NetworkStat = {

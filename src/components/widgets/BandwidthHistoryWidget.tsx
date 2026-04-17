@@ -34,12 +34,10 @@ export const BandwidthHistoryWidget: React.FC<BandwidthHistoryWidgetProps> = ({
     unifiAvailable = false
 }) => {
     const { t } = useTranslation();
-    const {
-        history,
-        extendedHistory,
-        fetchExtendedHistory,
-        status
-    } = useConnectionStore();
+    const history = useConnectionStore(s => s.history);
+    const extendedHistory = useConnectionStore(s => s.extendedHistory);
+    const fetchExtendedHistory = useConnectionStore(s => s.fetchExtendedHistory);
+    const status = useConnectionStore(s => s.status);
 const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvailable ? 3600 : 0);
     const [source, setSource] = useState<BandwidthSource>(freeboxAvailable ? 'freebox' : 'unifi');
     const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);

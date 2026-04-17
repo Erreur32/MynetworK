@@ -6,7 +6,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Lightbulb, Palette, RefreshCw, Save, Eye, ChevronUp, ChevronDown, ChevronDown as ChevronDownIcon, Check } from 'lucide-react';
+import { Lightbulb, Palette, RefreshCw, Save, Eye, ChevronUp, ChevronDown, ChevronDown as ChevronDownIcon, Check, Bell, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
+import { useNotificationStore, playNotificationSound, type ToastPosition, type ToastTheme, type NotificationSoundType } from '../stores/notificationStore';
+import { Toggle } from './ui/Toggle';
 import { applyTheme, getCurrentTheme, getAvailableThemes, type Theme } from '../utils/themeManager';
 import { api } from '../api/client';
 import { Section, SettingRow } from '../pages/SettingsPage';
@@ -2308,9 +2311,173 @@ export const ThemeSection: React.FC = () => {
                     </div>
                     )}
                 </div>
- 
+
+                {/* Card: Notifications */}
+                <NotificationSettingsCard />
+
+
             </div>
         </Section>
+    );
+};
+
+const NotificationSettingsCard: React.FC = () => {
+    const prefs = useNotificationStore();
+    const { setPrefs, reset } = prefs;
+
+    const fireTest = (fn: () => void, soundType: NotificationSoundType = 'info') => {
+        fn();
+        if (prefs.soundEnabled) playNotificationSound(soundType);
+    };
+
+    const positions: { value: ToastPosition; label: string }[] = [
+        { value: 'top-left', label: '↖ Haut gauche' },
+        { value: 'top-center', label: '↑ Haut centre' },
+        { value: 'top-right', label: '↗ Haut droite' },
+        { value: 'bottom-left', label: '↙ Bas gauche' },
+        { value: 'bottom-center', label: '↓ Bas centre' },
+        { value: 'bottom-right', label: '↘ Bas droite' },
+    ];
+
+    const themes: { value: ToastTheme; label: string }[] = [
+        { value: 'dark', label: 'Sombre' },
+        { value: 'light', label: 'Clair' },
+        { value: 'system', label: 'Système' },
+    ];
+
+    return (
+        <div className="rounded-xl border border-theme bg-theme-secondary/40 p-6 shadow-sm space-y-5">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <Bell size={20} className="text-yellow-400 mt-0.5" />
+                    <div>
+                        <h3 className="text-base font-semibold text-theme-primary mb-1">Notifications</h3>
+                        <p className="text-sm text-theme-secondary">Personnalisez les notifications toast. Les changements sont sauvegardés automatiquement.</p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => { reset(); toast.info('Paramètres réinitialisés'); }}
+                    className="px-3 py-1.5 rounded-lg border border-theme bg-theme-secondary hover:border-red-500/50 text-xs text-theme-secondary hover:text-theme-primary transition-all flex items-center gap-1.5"
+                    title="Réinitialiser"
+                >
+                    <RotateCcw size={12} /> Reset
+                </button>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-theme-secondary uppercase tracking-wider mb-2 block">Position</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {positions.map((p) => (
+                        <button
+                            key={p.value}
+                            onClick={() => setPrefs({ position: p.value })}
+                            className={`px-3 py-2 rounded-lg border text-xs transition-all ${
+                                prefs.position === p.value
+                                    ? 'border-yellow-500 bg-yellow-500/10 text-theme-primary'
+                                    : 'border-theme bg-theme-secondary hover:border-yellow-500/50 text-theme-secondary'
+                            }`}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <NotifSlider label="Marge verticale" value={prefs.offsetY} min={0} max={200} step={4} unit="px" onCommit={(v) => setPrefs({ offsetY: v })} />
+                <NotifSlider label="Marge horizontale" value={prefs.offsetX} min={0} max={200} step={4} unit="px" onCommit={(v) => setPrefs({ offsetX: v })} />
+            </div>
+
+            <NotifSlider label="Durée d'affichage" value={prefs.duration} min={1000} max={15000} step={500} format={(v) => `${(v / 1000).toFixed(1)}s`} onCommit={(v) => setPrefs({ duration: v })} />
+
+            <div>
+                <label className="text-xs font-semibold text-theme-secondary uppercase tracking-wider mb-2 block">Thème</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {themes.map((th) => (
+                        <button
+                            key={th.value}
+                            onClick={() => setPrefs({ theme: th.value })}
+                            className={`px-3 py-2 rounded-lg border text-xs transition-all ${
+                                prefs.theme === th.value
+                                    ? 'border-yellow-500 bg-yellow-500/10 text-theme-primary'
+                                    : 'border-theme bg-theme-secondary hover:border-yellow-500/50 text-theme-secondary'
+                            }`}
+                        >
+                            {th.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <NotifSlider label="Toasts visibles simultanément" value={prefs.visibleToasts} min={1} max={9} step={1} onCommit={(v) => setPrefs({ visibleToasts: v })} />
+
+            <div className="space-y-3">
+                <NotifRow label="Couleurs riches (fond coloré)" checked={prefs.richColors} onChange={(v) => setPrefs({ richColors: v })} />
+                <NotifRow label="Bouton fermer (×)" checked={prefs.closeButton} onChange={(v) => setPrefs({ closeButton: v })} />
+                <NotifRow label="Empiler dépliés (sinon compact)" checked={prefs.expand} onChange={(v) => setPrefs({ expand: v })} />
+                <NotifRow label="Son sur notification" checked={prefs.soundEnabled} onChange={(v) => { setPrefs({ soundEnabled: v }); if (v) playNotificationSound('info'); }} />
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-theme-secondary uppercase tracking-wider mb-2 block">Tester</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <button onClick={() => fireTest(() => toast.success('Action réussie'), 'success')} className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-emerald-500/50 hover:bg-emerald-500/10 text-sm text-theme-primary transition-all">✓ Success</button>
+                    <button onClick={() => fireTest(() => toast.error('Une erreur est survenue'), 'error')} className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-red-500/50 hover:bg-red-500/10 text-sm text-theme-primary transition-all">✗ Error</button>
+                    <button onClick={() => fireTest(() => toast.warning('Attention requise'))} className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-amber-500/50 hover:bg-amber-500/10 text-sm text-theme-primary transition-all">⚠ Warning</button>
+                    <button onClick={() => fireTest(() => toast.info('Information utile'))} className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-blue-500/50 hover:bg-blue-500/10 text-sm text-theme-primary transition-all">ℹ Info</button>
+                    <button
+                        onClick={() => fireTest(() => {
+                            const id = toast.loading('Traitement en cours...');
+                            setTimeout(() => toast.success('Terminé !', { id }), 2000);
+                        }, 'success')}
+                        className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-purple-500/50 hover:bg-purple-500/10 text-sm text-theme-primary transition-all"
+                    >⏳ Loading</button>
+                    <button onClick={() => fireTest(() => toast('Message simple', { description: 'Avec une description détaillée' }))} className="px-3 py-2 rounded-lg border border-theme bg-theme-secondary hover:border-yellow-500/50 hover:bg-yellow-500/10 text-sm text-theme-primary transition-all">💬 Default</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const NotifRow: React.FC<{ label: string; checked: boolean; onChange: (v: boolean) => void }> = ({ label, checked, onChange }) => (
+    <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-theme-primary">{label}</span>
+        <Toggle checked={checked} onChange={onChange} />
+    </div>
+);
+
+// Slider that keeps the dragged value in local state and only commits to the store on release.
+// This avoids writing to localStorage (via zustand/persist) on every pointer tick.
+const NotifSlider: React.FC<{
+    label: string;
+    value: number;
+    min: number;
+    max: number;
+    step: number;
+    unit?: string;
+    format?: (v: number) => string;
+    onCommit: (v: number) => void;
+}> = ({ label, value, min, max, step, unit, format, onCommit }) => {
+    const [local, setLocal] = useState(value);
+    useEffect(() => { setLocal(value); }, [value]);
+    const display = format ? format(local) : `${local}${unit ?? ''}`;
+    return (
+        <div>
+            <label className="text-xs font-semibold text-theme-secondary uppercase tracking-wider mb-2 block">
+                {label} : {display}
+            </label>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={local}
+                onChange={(e) => setLocal(Number(e.target.value))}
+                onPointerUp={(e) => onCommit(Number((e.target as HTMLInputElement).value))}
+                onKeyUp={(e) => onCommit(Number((e.target as HTMLInputElement).value))}
+                className="w-full accent-yellow-500"
+            />
+        </div>
     );
 };
 

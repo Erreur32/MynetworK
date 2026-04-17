@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { X, LogIn, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { useUserAuthStore } from '../../stores/userAuthStore';
 
 interface UserLoginModalProps {
@@ -29,8 +30,11 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ isOpen, onClose,
         if (success) {
             setUsername('');
             setPassword('');
+            toast.success(`Bienvenue ${username}`);
             onSuccess?.();
             onClose();
+        } else {
+            toast.error('Échec de la connexion');
         }
     };
 

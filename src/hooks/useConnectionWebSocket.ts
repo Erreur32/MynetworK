@@ -172,8 +172,14 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
         if (message.type === 'connection_status' && message.data) {
           const status = message.data as ConnectionStatus;
 
-          // Update the store directly
+          // When tab is hidden, update status only — don't grow the history array.
+          // Prevents a render storm in chart components when the tab becomes visible again.
+          const hidden = typeof document !== 'undefined' && document.hidden;
+
           useConnectionStore.setState((state) => {
+            if (hidden) {
+              return { status, error: null };
+            }
             const newPoint = {
               time: new Date().toLocaleTimeString('fr-FR', {
                 hour: '2-digit',
@@ -192,6 +198,8 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
           });
         } else if (message.type === 'system_status' && message.data) {
           const systemData = message.data as SystemStatusData;
+
+          const hidden = typeof document !== 'undefined' && document.hidden;
 
           // Update system store with real-time data
           useSystemStore.setState((state) => {
@@ -235,6 +243,9 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
               uptime_val: systemData.uptime_val ?? state.info.uptime_val
             } : null;
 
+            if (hidden) {
+              return { info: updatedInfo };
+            }
             return {
               info: updatedInfo,
               temperatureHistory: [...state.temperatureHistory.slice(-299), newPoint] // Keep last 300 points (5 minutes)

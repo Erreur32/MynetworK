@@ -18,6 +18,7 @@ import {
 import { ActionButton, UnsupportedFeature } from './components/ui';
 import { LoginModal, UserLoginModal, TrafficHistoryModal, WifiSettingsModal, CreateVmModal, PluginConfigModal } from './components/modals';
 import AnimatedBackground from './components/AnimatedBackground';
+import { toast } from 'sonner';
 
 // Lazy load pages for code splitting
 // Use default exports when available, otherwise use named exports
@@ -517,26 +518,43 @@ const App: React.FC = () => {
 
   const handleReboot = async () => {
     if (confirm('Voulez-vous vraiment redémarrer la Freebox ?')) {
-      await reboot();
+      await toast.promise(reboot(), {
+        loading: 'Redémarrage de la Freebox...',
+        success: 'Freebox en cours de redémarrage',
+        error: 'Échec du redémarrage',
+      });
     }
   };
 
   const handleLogout = async () => {
-    // Logout from both systems
     userLogout();
     await freeboxLogout();
+    toast.success('Déconnexion réussie');
   };
 
   const handleVmToggle = async (id: string, start: boolean) => {
-    if (start) {
-      await startVm(id);
-    } else {
-      await stopVm(id);
+    try {
+      if (start) {
+        await startVm(id);
+        toast.success('VM démarrée');
+      } else {
+        await stopVm(id);
+        toast.success('VM arrêtée');
+      }
+    } catch (err) {
+      console.error('[App] VM toggle failed:', err);
+      toast.error(start ? 'Échec du démarrage de la VM' : 'Échec de l\'arrêt de la VM');
     }
   };
 
   const handleWifiToggle = async (bssId: string, enabled: boolean) => {
-    await toggleBss(bssId, enabled);
+    try {
+      await toggleBss(bssId, enabled);
+      toast.success(enabled ? 'WiFi activé' : 'WiFi désactivé');
+    } catch (err) {
+      console.error('[App] WiFi toggle failed:', err);
+      toast.error('Échec du changement WiFi');
+    }
   };
 
   // Clean up URL parameter 's' when leaving search page
