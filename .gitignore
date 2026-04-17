@@ -108,3 +108,4 @@ Thumbs.db
 
 # MemPalace local tooling (not shared across contributors)
 mempalace.yaml
+entities.json
