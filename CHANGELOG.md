@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.89] - 2026-04-18
+
+### ✨ Ajouté
+
+- **Collapsible changelog viewer** — Shared `ChangelogBlock` component reused in Info tab (expanded) and Update tab (collapsible, closed by default)
+- `update-version.sh` now captures commits since last `feat: Version X.Y.Z` and populates new CHANGELOG entry automatically
+
+### 🔧 Modifié
+
+- Backfilled CHANGELOG entries 0.7.83-0.7.88 and 0.2.1 from git history
+- Removed 18 empty placeholder entries (including malformed `## [0.]`)
+- SonarCloud code smells: `await` on async tasks + dataset typing
+
+### 🐛 Corrigé
+
+- **Dashboard React #185 on widget mount** — Force `isAnimationActive={false}` on `BandwidthHistoryWidget` Areas to break the recharts animation/polling data-identity loop
+
+---
+
 ## [0.7.88] - 2026-04-17
 
 ### 🐛 Corrigé
