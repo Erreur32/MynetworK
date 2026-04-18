@@ -4,18 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.89] - 2026-04-18
 
-### ✨ Ajouté
+### Added
 
 - **Collapsible changelog viewer** — Shared `ChangelogBlock` component reused in Info tab (expanded) and Update tab (collapsible, closed by default)
 - `update-version.sh` now captures commits since last `feat: Version X.Y.Z` and populates new CHANGELOG entry automatically
 
-### 🔧 Modifié
+### Changed
 
 - Backfilled CHANGELOG entries 0.7.83-0.7.88 and 0.2.1 from git history
 - Removed 18 empty placeholder entries (including malformed `## [0.]`)
 - SonarCloud code smells: `await` on async tasks + dataset typing
 
-### 🐛 Corrigé
+### Fixed
 
 - **Dashboard React #185 on widget mount** — Force `isAnimationActive={false}` on `BandwidthHistoryWidget` Areas to break the recharts animation/polling data-identity loop
 
@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.88] - 2026-04-17
 
-### 🐛 Corrigé
+### Fixed
 
 - **fix(dashboard): React #185 crash on tab resume** — Infinite render loop in `BandwidthHistoryWidget` when returning to an inactive tab
 - **unifiRealtimeStore**: skip history growth while `document.hidden`, mirroring the `connectionStore` guard
@@ -33,7 +33,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.87] - 2026-04-17
 
-### 🔧 Modifié
+### Changed
 
 - **SonarCloud code smells** (minor):
   - `UniFiApiService`: `charCodeAt` → `codePointAt` in `stripTrailingSlashes`
@@ -44,7 +44,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.86] - 2026-04-17
 
-### 🔧 Modifié
+### Changed
 
 - **SonarCloud S5852 false positives** — Flagged regex patterns are either linear-time (disjoint character classes, no nested quantifiers) or use bounded `{n,m}` quantifiers. Annotated with `NOSONAR` + justification.
 - Affected: `networkScanService`, `speedtest`, `freeboxFirmwareCheckService`, `plugins` route, `searchService`
@@ -53,14 +53,14 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.85] - 2026-04-17
 
-### ✨ Ajouté
+### Added
 
 - **UniFi gateway temperature badge with tooltip**
 - Backend extracts temperature from UDM gateway device (`general_temperature` or `temperatures[]`), exposes `systemStats.temperature` + `temperatureSensors`
 - Dashboard card: system state block with temp badge below mini-graphs
 - Header badges: purple CPU badge on dashboard, emerald badge on `/unifi` — hover tooltip listing individual sensors
 
-### 🔧 Modifié
+### Changed
 
 - Removed redundant flickering "Temperature" block from Freebox card footer (duplicated info; inconsistent `sys.temp_cpum` mapping on Ultra)
 
@@ -68,7 +68,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.84] - 2026-04-17
 
-### 🐛 Corrigé
+### Fixed
 
 - **SonarCloud S5852 ReDoS hotspots** — Replace potentially super-linear regex patterns with bounded equivalents or non-regex string operations
 - `UniFiApiService`: extracted `stripTrailingSlashes()` helper (5 occurrences)
@@ -83,7 +83,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.83] - 2026-04-17
 
-### ✨ Ajouté
+### Added
 
 - **Sonner toast notifications with customization panel**
 - Installed `sonner` for toast notifications (bottom-right, above footer)
@@ -92,7 +92,7 @@ All notable changes to this project will be documented in this file.
 - `NotificationToaster` wrapper that reactively applies prefs
 - `NotificationSettingsCard` in Theme section with live test buttons, Web Audio beep when sound enabled
 
-### 🔧 Modifié
+### Changed
 
 - Reuse existing `Toggle` UI component; sliders commit on pointer release to avoid localStorage thrashing during drag
 
@@ -100,7 +100,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.82] - 2026-04-16
 
-### 🐛 Corrigé
+### Fixed
 
 - **fix(critical): usePolling closure leak** — Two independent useEffect sharing intervalRef caused stale closures on visibility change. Merged into a single effect with startInterval/stopInterval helpers to prevent orphaned intervals (×6 active polling hooks)
 - **fix(critical): NetworkScanPage interval accumulation** — Scan/refresh polling intervals stored in React state (async) allowed double-click race conditions creating parallel intervals. Migrated to useRef with systematic clear-before-create
@@ -112,7 +112,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.81] - 2026-04-16
 
-### 🐛 Corrigé
+### Fixed
 
 - **fix(critical): Memory leak in usePolling** — Tab visibility change handler created new intervals without clearing existing ones, causing interval accumulation (×6 polling hooks) on each hidden/visible cycle. Root cause of "Out of Memory" crash when staying on a tab
 - **fix: Redundant HTTP fallback polling** — Connection status was polled every 1s via HTTP even when WebSocket was active, doubling history writes. Fallback now only activates when WebSocket is disconnected, interval reduced to 5s
@@ -477,19 +477,19 @@ cap_drop:
 
 ## [0.7.52] - 2026-04-08
 
-### 🐛 Fixed
+### Fixed
 - **Update check error messages**: show actual GitHub rate limit error instead of misleading "Registry requires authentication" — includes reset time and GITHUB_TOKEN hint
 
 ---
 
 ## [0.7.51] - 2026-04-08
 
-### ✨ Added
+### Added
 - **Update check frequency selector**: configurable check interval (1h/6h/12h/24h/7d) in administration settings
 - **Docker GHCR status**: shows build availability (green/orange) when update available, with `docker compose pull` command
 - **Release notes**: display changelog excerpt and link when update available
 
-### 🔧 Changed
+### Changed
 - **Bandwidth chart toggle**: Freebox/UniFi source switch moved to period filter bar, blue for both (was orange for Freebox)
 - **Bandwidth legend**: removed "Scale: history (RRD)" label — period label now shown for both sources
 - **Plugin Status cards**: removed borders from firmware/last scan sub-cards for cleaner look
@@ -499,17 +499,17 @@ cap_drop:
 
 ## [0.7.50] - 2026-04-08
 
-### 🛡️ Security
+### Security
 - **CORS restriction**: replaced permissive `origin: true` with whitelist — `*.myoueb.fr`, localhost, and private networks (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
 
-### 🐛 Fixed
+### Fixed
 - **CodeQL badge**: use GitHub native badge URL for dynamic workflow (shields.io doesn't support workflow IDs)
 
 ---
 
 ## [0.7.49] - 2026-04-08
 
-### ✨ Added
+### Added
 - **OSSF Scorecard** workflow — weekly supply chain security scoring with public dashboard
 - **Dependency Review** workflow — blocks PRs introducing high-severity vulnerable dependencies
 - **Security badges** on both READMEs (CodeQL, OSSF Scorecard)
@@ -518,13 +518,13 @@ cap_drop:
 
 ## [0.7.48] - 2026-04-08
 
-### 🛡️ Security
+### Security
 - **Rate limiting**: `express-rate-limit` middleware — 100 req/min API, 10 req/min network scans
 - **Regex injection fix**: full regex character escape in dynamic `new RegExp()` (networkScanService avahi-browse)
 - **ReDoS prevention**: truncate user input before regex match in network-scan route
 - **URL validation fix**: replace `url.includes('unifi.ui.com')` with proper `new URL(url).hostname` check in UniFi plugin
 
-### 🔧 Changed
+### Changed
 - **`.gitignore` cleanup**: removed 13 redundant entries, reorganized sections, added AI tools patterns (Cursor, Copilot, Gemini)
 - **GitHub repo**: disabled unused Projects feature, added 20 SEO topics
 - **CodeQL alerts**: resolved 21/24 alerts (dismissed false positives with documented reasons)
@@ -533,7 +533,7 @@ cap_drop:
 
 ## [0.7.47] - 2026-04-08
 
-### ✨ Added
+### Added
 - **URL-based routing**: React Router with clean URLs (`/settings`, `/network-scan`, `/unifi`, etc.) — browser back/forward, bookmarkable pages
 - **WebSocket authentication**: JWT token verification on all WS upgrade requests (`/ws/connection`, `/ws/logs`, `/ws/unifi`)
 - **Security headers**: Helmet.js middleware (CSP, X-Frame-Options, X-Content-Type-Options, HSTS)
@@ -541,18 +541,18 @@ cap_drop:
 - **Graceful SIGINT shutdown**: proper cleanup handler for Ctrl+C (matches existing SIGTERM handler)
 - **CLAUDE.md**: project context file for Claude Code
 
-### 🔧 Changed
+### Changed
 - **JWT hardening**: explicit `algorithm: 'HS256'` in `jwt.sign()` and `algorithms: ['HS256']` in `jwt.verify()` to prevent algorithm confusion attacks
 - **Register endpoint**: role whitelist (`user`, `viewer` only) — prevents passing arbitrary role values
 - **Console cleanup**: replaced 60+ raw `console.log/error/warn` calls with structured `logger` service across all backend files
 - **Source maps disabled** in production build — prevents exposing TypeScript source code
 
-### 🛡️ Security
+### Security
 - **Command injection fixes**: strict IP validation before all shell commands in `networkScanService`, `portScanService`, `speedtest` routes
 - **Input validation**: `isValidPingTarget()` for speedtest target, `isValidPortRange()` for nmap port ranges
 - **Sensitive files**: added `CLAUDE.md`, `.claude/` to `.gitignore`
 
-### 🗑️ Removed
+### Removed
 - Unused `flag-icons` dependency
 - Stale `App.tsx.backup` file
 
@@ -560,30 +560,30 @@ cap_drop:
 
 ## [0.7.46] - 2026-04-07
 
-### ✨ Added
+### Added
 - **Smart history purge**: new "Keep first & last per IP" option — retains oldest and most recent history entry per device, deletes everything in between (massive DB size reduction while preserving initial and current state)
 - **Compound index** `network_scans(status, last_seen)` for faster offline IP purge queries
 
-### 🔧 Changed
+### Changed
 - **getStats() optimization**: replaced 4 separate COUNT queries with a single aggregated query (4x faster)
 - **getStatisticsBatch() optimization**: replaced N+1 per-IP loop (3 queries × N IPs) with a single batch query using GROUP BY (100x faster for large networks)
 - **History insert**: stopped writing redundant `ping_latency` to `network_scan_history` (already stored in `latency_measurements`)
 
-### 🐛 Fixed
+### Fixed
 - **Database health toast**: fixed broken i18n keys `admin.db.*` → `admin.database.*` (critical/warning toasts were showing raw key names)
 
 ---
 
 ## [0.7.45] - 2026-04-07
 
-### ✨ Added
+### Added
 - **Uptime badges**: color-coded uptime badges on Freebox, UniFi and Server cards (green 30d+, blue 7d+, orange 1d+, red <24h)
 - **Uptime RichTooltip**: structured tooltip explaining the color code on hover
 - **Plugin config modal**: clicking a plugin in "Plugin Status" opens its config modal directly
 - **UniFi historical bandwidth**: 1h/6h/24h/7d periods fetch from UniFi controller report API
 - **Freebox mode badge**: orange badge for bridge mode, green for router in Network Summary
 
-### 🔧 Changed
+### Changed
 - **Database Performance tab**: removed dangerous SQLite options (WAL mode, sync, cache, busy timeout), kept only Docker toggle + read-only config info
 - **Database tabs**: moved data stats to "Health & Actions" tab, renamed "Data & Retention" to "Retention"
 - **Database card (Server System)**: replaced WAL/Cache/Mode with health status badge (OK/Warning/Critical)
@@ -595,12 +595,12 @@ cap_drop:
 
 ## [0.7.44] - 2026-04-07
 
-### ✨ Added
+### Added
 - **UniFi real-time mini graph**: dashboard card now shows live bandwidth immediately on page load (no more 5s cold start)
 - **UniFi historical bandwidth**: 1h/6h/24h/7d periods now fetch data from the UniFi controller's built-in report API (persistent data, like Freebox RRD)
 - **HTTP bandwidth-realtime endpoint**: new `/api/plugins/unifi/bandwidth-realtime` for lightweight polling fallback
 
-### 🔧 Changed
+### Changed
 - UniFi live graph: removed animation fade effect in live mode for both Freebox and UniFi (clean real-time updates like Freebox)
 - UniFi WebSocket polling interval reduced from 3s to 1s for true real-time bandwidth
 - `fetchWanBandwidth()` now fetches fresh device data each call instead of using stale cached gateway object
@@ -608,7 +608,7 @@ cap_drop:
 - Background bandwidth sampling starts at server boot (data ready before first client connects)
 - WebSocket reconnect attempts increased from 1 to 5 in production
 
-### 🐛 Fixed
+### Fixed
 - UniFi mini graph always showing 0: was using stale cached gateway device with frozen byte counters
 - UniFi live bandwidth alternating real/zero values: caused by background and WebSocket polling interleaving
 
@@ -616,7 +616,7 @@ cap_drop:
 
 ## [0.7.43] - 2026-04-07
 
-### 🔧 Changed
+### Changed
 - Reduce Docker log noise: downgrade verbose WebSocket, polling, and keep-alive logs from info to debug
 - Remove RRD console.log sample dumps from connection routes
 - Remove JSON.stringify config dumps from network-scan and scheduler logs
@@ -627,7 +627,7 @@ cap_drop:
 
 ## [0.7.42] - 2026-04-07
 
-### ✨ Added
+### Added
 - **Threats table**: new columns — Action, Service, Direction, Signature, Dst Port, Flow Count (matching UniFi OS layout)
 - **Threat Map**: Leaflet dark map with clustered attack origin markers, GeoIP resolution, country sidebar filter
 - **Threat Map Live mode**: animated attack arcs with pulsing origin dots, color-coded by severity
@@ -635,7 +635,7 @@ cap_drop:
 - **GeoIP endpoints**: `/api/plugins/unifi/threats/geo/:ip`, batch resolve, server-geo for attack arcs
 - **Table/Map toggle**: switch between table and map views within the Threats tab
 
-### 🔧 Changed
+### Changed
 - v2 traffic-flows API now paginates automatically (up to 20k entries for 30d, was capped at 500)
 - recentFlows limit scales with time range (200 for 1h → 2000 for 30d)
 - Backend extracts service, direction, signature, ports, flowCount from UniFi API responses
@@ -644,7 +644,7 @@ cap_drop:
 
 ## [0.7.41] - 2026-04-06
 
-### 🐛 Fixed
+### Fixed
 - Update check: properly authenticate with GHCR anonymous token before checking manifest (was false positive on 401)
 - Update check: require ALL CI check runs to be completed before showing update notification (was triggering while build still in progress)
 
@@ -652,14 +652,14 @@ cap_drop:
 
 ## [0.7.40] - 2026-04-06
 
-### 🔧 Changed
+### Changed
 - Bump vite from 6.4.1 to 6.4.2 (security fix: path traversal + server.fs check)
 
 ---
 
 ## [0.7.39] - 2026-04-06
 
-### ✨ Added
+### Added
 - Dedicated `/ws/unifi` WebSocket for real-time bandwidth (3s polling, independent of Freebox)
 - Lightweight `fetchWanBandwidth()` on UniFiPlugin (stat/dashboard only)
 - UniFi realtime Zustand store + `useUnifiWebSocket` hook
@@ -668,14 +668,14 @@ cap_drop:
 - Y-axis unit labels on bandwidth charts
 - LIVE badge indicator on TrafficTab when WebSocket is connected
 
-### 🔧 Changed
+### Changed
 - PluginSummaryCard, BandwidthHistoryWidget, TrafficTab now use WebSocket real-time data
 - Header displays UniFi realtime bandwidth when WebSocket connected
 - Plugin Status card and Bandwidth chart aligned on same dashboard row
 - Plugin Status card: fixed height, compact margins, scrollable content
 - Docker build optimized: drop arm/v7, improve layer caching, npm cache mount
 
-### 🐛 Fixed
+### Fixed
 - Removed duplicate "Analyse trafic UniFi" from Overview events sub-tab
 - BandwidthHistoryWidget defaults to Live mode when UniFi-only
 - Fix update-version.sh: scan-reseau name mismatch and README badge regex
@@ -684,24 +684,24 @@ cap_drop:
 
 ## [0.7.28] - 2026-04-06
 
-### ✨ Ajouté
+### Added
 
-- **UniFi — Bande passante** : nouvel onglet *Bandwidth* avec graphique AreaChart (download/upload) et support multi-WAN pour CloudGateway (UCG Ultra, UDM Pro) — détection automatique des interfaces WAN, sélecteur WAN intégré dans le header du graphique.
-- **UniFi — WAN bytes CloudGateway** : extraction des compteurs cumulatifs depuis le device gateway (`wan1_rx_bytes`, `uplink.rx_bytes`, `network_table`, `wan_stats`) en fallback du endpoint `stat/dashboard` qui ne retourne pas de données WAN sur UniFiOS.
-- **Format horaire 12h/24h** : nouvelle option dans les paramètres Généraux (à côté de la langue) — préférence persistée en localStorage, appliquée à l'horloge du header.
-- **Footer — pages Freebox & UniFi** : boutons *Search* et *Administration* toujours visibles (icônes seules sur Freebox pour économiser la place).
+- **UniFi — Bandwidth**: new *Bandwidth* tab with AreaChart graph (download/upload) and multi-WAN support for CloudGateway (UCG Ultra, UDM Pro) — automatic detection of WAN interfaces, WAN selector integrated into the graph header.
+- **UniFi — WAN bytes CloudGateway**: extraction of cumulative counters from the gateway device (`wan1_rx_bytes`, `uplink.rx_bytes`, `network_table`, `wan_stats`) as fallback for the `stat/dashboard` endpoint which returns no WAN data on UniFiOS.
+- **12h/24h time format**: new option in General settings (next to language) — preference persisted in localStorage, applied to the header clock.
+- **Footer — Freebox & UniFi pages**: *Search* and *Administration* buttons always visible (icons-only on Freebox to save space).
 
-### 🔧 Modifié
+### Changed
 
-- **Onglet Debug UniFi** : masqué en production, visible uniquement en mode développement (`import.meta.env.DEV`).
-- **Footer Freebox** : suppression du bouton *Options* en double (icône Administration remplace l'engrenage redondant).
-- **Logger — redaction étendue** : ajout de `key` (mot de passe WiFi Freebox/UniFi), `psk`, `secret`, `passphrase`, `wpa*`, `app_token`, `private_key`, `credential` dans les patterns sensibles — ces champs sont maintenant masqués `[REDACTED]` dans tous les logs y compris en mode debug.
-- **Sécurité logs** : remplacement de tous les `console.log/warn/error` dans `freeboxNativeWebSocket.ts`, `FreeboxPlugin.ts`, `freeboxApi.ts`, `FreeboxApiService.ts`, `routes/wifi.ts` et `routes/plugins.ts` par le logger centralisé — les logs verbeux ne s'affichent qu'en mode debug activé.
-- **Logs Docker** : timestamps des logs serveur en heure locale (respect de la variable `TZ`) au lieu de UTC.
+- **UniFi Debug tab**: hidden in production, visible only in development mode (`import.meta.env.DEV`).
+- **Freebox footer**: removed the duplicate *Options* button (Administration icon replaces the redundant gear).
+- **Logger — extended redaction**: added `key` (Freebox/UniFi WiFi password), `psk`, `secret`, `passphrase`, `wpa*`, `app_token`, `private_key`, `credential` to sensitive patterns — these fields are now masked `[REDACTED]` in all logs including debug mode.
+- **Log security**: replaced all `console.log/warn/error` calls in `freeboxNativeWebSocket.ts`, `FreeboxPlugin.ts`, `freeboxApi.ts`, `FreeboxApiService.ts`, `routes/wifi.ts` and `routes/plugins.ts` with the centralized logger — verbose logs only show in debug mode.
+- **Docker logs**: server log timestamps in local time (respecting the `TZ` variable) instead of UTC.
 
-### 🐛 Corrigé
+### Fixed
 
-- **UniFi — historique bandwidth par WAN** : chaque interface WAN a son propre buffer d'historique ; le changement de WAN recharge le graphique correspondant.
+- **UniFi — per-WAN bandwidth history**: each WAN interface has its own history buffer; switching WAN reloads the corresponding graph.
 
 ---
 
@@ -709,7 +709,7 @@ cap_drop:
 
 ### Security
 
-- **path-to-regexp** : mise à jour `8.3.0 → 8.4.0` — corrige **CVE-2026-4926** (GHSA-j3q9-mxjg-w52f) et **CVE-2026-4923** (GHSA-27v5-c462-wpq7) : restriction du backtracking sur les wildcards répétés et rejet des combinaisons de routes optionnelles trop larges (> 256).
+- **path-to-regexp**: updated `8.3.0 → 8.4.0` — fixes **CVE-2026-4926** (GHSA-j3q9-mxjg-w52f) and **CVE-2026-4923** (GHSA-27v5-c462-wpq7): restricted backtracking on repeated wildcards and rejection of too-wide optional route combinations (> 256).
 
 ---
 
@@ -725,7 +725,7 @@ cap_drop:
 
 ### Fixed again
 
-- **Docker** : suppression de `FROM --platform=$TARGETPLATFORM` (redondant avec Buildx) pour réduire les warnings `RedundantTargetPlatform` pendant le build multi-arch.
+- **Docker**: removed `FROM --platform=$TARGETPLATFORM` (redundant with Buildx) to reduce `RedundantTargetPlatform` warnings during multi-arch build.
 
 ---
 
@@ -733,7 +733,7 @@ cap_drop:
 
 ### Fixed
 
-- **Docker** : suppression de `FROM --platform=$TARGETPLATFORM` (redondant avec Buildx) pour réduire les warnings `RedundantTargetPlatform` pendant le build multi-arch.
+- **Docker**: removed `FROM --platform=$TARGETPLATFORM` (redundant with Buildx) to reduce `RedundantTargetPlatform` warnings during multi-arch build.
 
 ---
 
@@ -741,8 +741,8 @@ cap_drop:
 
 ### Fixed
 
-- **UniFi — erreurs 429 (Too Many Requests)** : prévention des rafales de login en cas d'appels parallèles (mutualisation de l'authentification) + cooldown après rate-limit (`Retry-After` si présent, sinon backoff par défaut) afin d'éviter de déclencher la limite « login attempt » côté UniFi.
-- **Logs** : niveau debug/verbose **désactivé par défaut** ; ajout d'une redaction centralisée pour masquer automatiquement les données sensibles dans les logs (password, apiKey, tokens, headers `Authorization`, cookies / session) ; suppression des logs UniFi trop bavards (username, preview de clé, `console.*`).
+- **UniFi — 429 errors (Too Many Requests)**: prevent login bursts on parallel calls (authentication sharing) + cooldown after rate-limit (`Retry-After` if present, otherwise default backoff) to avoid triggering the "login attempt" limit on the UniFi side.
+- **Logs**: debug/verbose level **disabled by default**; added centralized redaction to automatically mask sensitive data in logs (password, apiKey, tokens, `Authorization` headers, cookies / session); removed overly verbose UniFi logs (username, key preview, `console.*`).
 
 ---
 
@@ -750,17 +750,17 @@ cap_drop:
 
 ### Fixed
 
-- **Logs (buffer)** : sérialisation des `Error` avec `name`, `message` et `stack` dans `logBuffer` — les erreurs UniFi / plugins ne s’affichent plus comme `[{}]` dans le flux de logs.
-- **Surveillance latence** : min/max des statistiques calculés avec `reduce` au lieu de `Math.max(...)` / `Math.min(...)` sur de grands tableaux, supprimant l’erreur « Maximum call stack size exceeded » sur l’endpoint batch des stats (`LatencyMonitoring`).
+- **Logs (buffer)**: `Error` serialization with `name`, `message` and `stack` in `logBuffer` — UniFi / plugin errors no longer show as `[{}]` in the log stream.
+- **Latency monitoring**: stats min/max computed with `reduce` instead of `Math.max(...)` / `Math.min(...)` on large arrays, removing the "Maximum call stack size exceeded" error on the batch stats endpoint (`LatencyMonitoring`).
 
 ### Added
 
-- **Scan réseau — plages autorisées** : `isScanRangeAuthorized()` — scan limité aux sous-réseaux où le serveur a une adresse LAN détectée (hors interfaces Docker / overlay) **ou** à la plage enregistrée dans les options (`network_scan_default`) ; `10.10.x.x` non considéré comme LAN auto (configuration explicite requise) ; `resolveScanRangeFromAppConfig()` pour le planificateur (même logique que l’API : `defaultRange` + `defaultAutoDetect`) ; réponse **403** avec code `SCAN_RANGE_NOT_ALLOWED` sur `POST /scan` si la plage est refusée ; message d’erreur explicite lorsque la liste d’IPs à scanner est vide après exclusions.
+- **Network scan — authorized ranges**: `isScanRangeAuthorized()` — scan limited to subnets where the server has a detected LAN address (excluding Docker / overlay interfaces) **or** to the range saved in options (`network_scan_default`); `10.10.x.x` not considered as auto-LAN (explicit configuration required); `resolveScanRangeFromAppConfig()` for the scheduler (same logic as the API: `defaultRange` + `defaultAutoDetect`); **403** response with code `SCAN_RANGE_NOT_ALLOWED` on `POST /scan` if the range is refused; explicit error message when the IP list to scan is empty after exclusions.
 
 ### Changed
 
-- **`NetworkScanService`** : collecte des /24 éligibles via `collectEligibleLanSlash24s()` ; `getMachineLanRanges()` ; `getNetworkRange()` et détection IPv4 (`family` `IPv4` ou `4`).
-- **`isDockerIp`** : `10.10.x.x` traité comme overlay (exclusion refresh / génération de liste) sauf si l’adresse est couverte par la plage configurée en Admin.
+- **`NetworkScanService`**: eligible /24 collection via `collectEligibleLanSlash24s()`; `getMachineLanRanges()`; `getNetworkRange()` and IPv4 detection (`family` `IPv4` or `4`).
+- **`isDockerIp`**: `10.10.x.x` treated as overlay (excluded from refresh / list generation) unless the address is covered by the range configured in Admin.
 
 ---
 
@@ -768,9 +768,9 @@ cap_drop:
 
 ### Fixed
 
-- **TypeScript (`tsc --noEmit`)** : alignement des génériques `api.get` / `api.post` sur le type du **payload** `result` (et non l’enveloppe `{ success, result }`) — widgets résumé réseau, `updateStore`, section admin base de données et appels associés.
-- **Serveur** : `NetworkScanService.isDockerIp` / `isIpInRange` exposés pour les routes ; `UnifiedAutoScanConfig.fullScan.scanType` optionnel (migration anciennes configs) ; `metricsCollector` : état `databaseMetrics` initialisé ; `NetworkScanRepository.getDatabaseStats` : compteur `offlineScans` ; purge DB : utilisation de `scansCount` / `historyCount` / `offlineScans` ; `wiresharkVendorService` : suppression des clés OUI dupliquées dans le jeu par défaut, normalisation `String()` pour champs `unknown` avant `.trim()`.
-- **UI** : `AreaChart` sans `isAnimationActive` (animation sur les `Area`) ; `MultiSourceWidget` : `onPluginClick(plugin.id)` ; `SystemNetworkWidget` / `SystemServerWidget` : historique mappé vers `NetworkStat` (`time` depuis `timestamp`) pour `BarChart` ; `PhonePage` : signatures `TFunction` (i18next) ; `TvPage` : `useTranslation` dans `ProgramTooltip` / `EpgProgramCard`, `RecordingFormModal` avec `number` de chaîne optionnel ; `SettingsPage` : typage des réponses API (stats DB, rétention, estimate, vendors Wireshark, priorités plugins, perf SQLite), normalisation onglet admin `users` → `general`, interpolation `admin.debug.warningManyLogs` avec `count` numérique ; `Button` : prop `title` ; indicateur refresh plugins en `aria-label`.
+- **TypeScript (`tsc --noEmit`)**: aligned `api.get` / `api.post` generics on the **payload** type `result` (not the `{ success, result }` envelope) — network summary widgets, `updateStore`, admin database section and related calls.
+- **Server**: `NetworkScanService.isDockerIp` / `isIpInRange` exposed for routes; `UnifiedAutoScanConfig.fullScan.scanType` optional (old config migration); `metricsCollector`: `databaseMetrics` state initialized; `NetworkScanRepository.getDatabaseStats`: `offlineScans` counter; DB purge: use of `scansCount` / `historyCount` / `offlineScans`; `wiresharkVendorService`: removal of duplicate OUI keys in the default set, `String()` normalization for `unknown` fields before `.trim()`.
+- **UI**: `AreaChart` without `isAnimationActive` (animation on the `Area`); `MultiSourceWidget`: `onPluginClick(plugin.id)`; `SystemNetworkWidget` / `SystemServerWidget`: history mapped to `NetworkStat` (`time` from `timestamp`) for `BarChart`; `PhonePage`: `TFunction` signatures (i18next); `TvPage`: `useTranslation` in `ProgramTooltip` / `EpgProgramCard`, `RecordingFormModal` with optional channel `number`; `SettingsPage`: typed API responses (DB stats, retention, estimate, Wireshark vendors, plugin priorities, SQLite perf), admin `users` → `general` tab normalization, `admin.debug.warningManyLogs` interpolation with numeric `count`; `Button`: `title` prop; plugins refresh indicator as `aria-label`.
 
 ---
 
@@ -778,7 +778,7 @@ cap_drop:
 
 ### Added
 
-- **Release notes 0.7.19**: ajout de l'entree de version dans le changelog et preparation du message de commit associe via `commit.txt`.
+- **Release notes 0.7.19**: added version entry to changelog and prepared the associated commit message via `commit.txt`.
 
 ---
 
@@ -786,7 +786,7 @@ cap_drop:
 
 ### Added
 
-- **Release notes 0.7.18**: ajout de l'entree de version dans le changelog et preparation du message de commit associe via `commit.txt`.
+- **Release notes 0.7.18**: added version entry to changelog and prepared the associated commit message via `commit.txt`.
 
 ---
 
@@ -794,11 +794,11 @@ cap_drop:
 
 ### Added
 
-- **Vérification des mises à jour — Validation build CI** : le service de check ne signale plus une version comme disponible sans avoir vérifié que son build GitHub CI est validé ; nouvelle fonction `isBuildValidated()` qui interroge l'API GitHub Check Runs (`/commits/{sha}/check-runs`) — un tag n'est retenu que si son commit a au moins un check run `conclusion: success` et aucun `failure`/`cancelled` ; si aucun check run n'existe → version ignorée ; en cas d'erreur réseau ou rate limit → fallback permissif pour ne pas bloquer la détection
+- **Update check — CI build validation**: the check service no longer reports a version as available without verifying its GitHub CI build is validated; new `isBuildValidated()` function that queries the GitHub Check Runs API (`/commits/{sha}/check-runs`) — a tag is kept only if its commit has at least one check run with `conclusion: success` and no `failure`/`cancelled`; if no check run exists → version ignored; on network error or rate limit → permissive fallback to avoid blocking detection
 
 ### Fixed
 
-- **Build — Chunks trop volumineux (> 600 kB)** : découpage `manualChunks` Rollup revu dans `vite.config.ts` ; nouveau chunk `vendor-markdown` pour `react-markdown` + `remark-gfm` et leurs dépendances transitives (`unified`, `mdast`, `hast`, `micromark`, `vfile`) ; nouveau chunk `vendor-i18n` pour `i18next` / `react-i18next` / `i18next-browser-languagedetector` ; chunk `vendor-charts` étendu aux sous-paquets `d3-*` ; exclusion React corrigée (filtre sur chemin complet `/react/` pour éviter d'exclure `react-markdown` et `react-i18next`)
+- **Build — Oversized chunks (> 600 kB)**: reworked Rollup `manualChunks` in `vite.config.ts`; new `vendor-markdown` chunk for `react-markdown` + `remark-gfm` and their transitive dependencies (`unified`, `mdast`, `hast`, `micromark`, `vfile`); new `vendor-i18n` chunk for `i18next` / `react-i18next` / `i18next-browser-languagedetector`; `vendor-charts` chunk extended to `d3-*` sub-packages; fixed React exclusion (full `/react/` path filter to avoid excluding `react-markdown` and `react-i18next`)
 
 ---
 
@@ -806,21 +806,21 @@ cap_drop:
 
 ### Fixed
 
-- **Plugin Scanner — Détection vendor** : réorganisation des méthodes de résolution MAC pour fiabiliser la détection en mode Docker bridge ; la table ARP (`/host/proc/net/arp`) est désormais consultée **en premier** (instantané, alimentée après chaque ping) au lieu de `ip neigh get` (timeout 3 s, inutilisable en bridge Docker)
+- **Scanner plugin — Vendor detection**: reorganized MAC resolution methods to improve detection reliability in Docker bridge mode; the ARP table (`/host/proc/net/arp`) is now consulted **first** (instant, populated after each ping) instead of `ip neigh get` (3s timeout, unusable in Docker bridge)
 
 ### Added
 
-- **Plugin Scanner — `arping`** : ajout d'`arping` au Dockerfile (Alpine) et comme nouvelle méthode de détection MAC (Method 2) ; envoie une requête ARP directe pour obtenir le MAC sans dépendre de la table ARP passive — fiable en mode natif et `network_mode: host`, échoue silencieusement en bridge Docker (comportement attendu)
-- **Plugin Scanner — Fallback vendor par hostname** : nouvelle méthode `getVendorFromHostname()` avec 60+ patterns reconnus (boxes FR : Freebox/Livebox/Bbox/SFR ; Apple, Google/Android, Amazon, Samsung, Ubiquiti, Cisco, TP-Link, ASUS, Netgear, D-Link, Synology, QNAP, consoles, IoT Shelly/ESP32/Tasmota, Raspberry Pi, etc.) ; s'active uniquement si `scanner` est dans `vendorPriority` et seulement quand vendor est vide après tous les lookups OUI/MAC
-- **`docker-compose.yml`** : ajout d'un commentaire documentant l'option `network_mode: host` pour activer la détection MAC maximale via `arping` sur le réseau LAN physique
+- **Scanner plugin — `arping`**: added `arping` to the Dockerfile (Alpine) and as a new MAC detection method (Method 2); sends a direct ARP request to obtain the MAC without relying on the passive ARP table — reliable in native mode and `network_mode: host`, fails silently in Docker bridge (expected behavior)
+- **Scanner plugin — Hostname vendor fallback**: new `getVendorFromHostname()` method with 60+ recognized patterns (FR boxes: Freebox/Livebox/Bbox/SFR; Apple, Google/Android, Amazon, Samsung, Ubiquiti, Cisco, TP-Link, ASUS, Netgear, D-Link, Synology, QNAP, consoles, IoT Shelly/ESP32/Tasmota, Raspberry Pi, etc.); activates only if `scanner` is in `vendorPriority` and only when vendor is empty after all OUI/MAC lookups
+- **`docker-compose.yml`**: added a comment documenting the `network_mode: host` option to enable maximum MAC detection via `arping` on the physical LAN
 
-- **Scanner — Colonne Status** : pour les équipements **offline**, affichage compact de la date du **dernier vu** directement à côté de l'icône rouge (`XCircle 14px` + date en `10px/60%` opacity) ; format ultra-court adaptatif : `< 1m` → `5m` → `3h` → `2d` → `27/03` → `2025` ; colonne élargie de `w-16` à `w-20` ; tooltip existant inchangé (date complète au survol)
+- **Scanner — Status column**: for **offline** devices, compact display of the **last seen** date next to the red icon (`XCircle 14px` + date at `10px/60%` opacity); ultra-short adaptive format: `< 1m` → `5m` → `3h` → `2d` → `27/03` → `2025`; column widened from `w-16` to `w-20`; existing tooltip unchanged (full date on hover)
 
 ### Notes
 
-- L'ordre des méthodes MAC est désormais : ARP table (passive) → arping (active L2) → ip neigh → arp-scan → arp -n
-- Le fallback hostname respecte la configuration `vendorPriority` : ne s'active que si `scanner` figure dans la liste de priorité configurée
-- DB vendor Wireshark : 38 625 entrées chargées depuis `oui.txt` (inchangé)
+- MAC method order is now: ARP table (passive) → arping (active L2) → ip neigh → arp-scan → arp -n
+- The hostname fallback respects the `vendorPriority` configuration: only activates if `scanner` is in the configured priority list
+- Wireshark vendor DB: 38,625 entries loaded from `oui.txt` (unchanged)
 
 ---
 
@@ -828,7 +828,7 @@ cap_drop:
 
 ### Fixed
 
-- **Sécurité (Dependabot)** : vulnérabilité Rollup (high) — Arbitrary File Write via Path Traversal (GHSA-mw96-cpmx-2vgc) ; override `rollup` `>=4.59.0` dans `package.json` pour forcer la version corrigée en dépendance transitive (Vite)
+- **Security (Dependabot)**: Rollup vulnerability (high) — Arbitrary File Write via Path Traversal (GHSA-mw96-cpmx-2vgc); `rollup` override `>=4.59.0` in `package.json` to force the fixed version as a transitive dependency (Vite)
 
 ---
 
@@ -836,10 +836,10 @@ cap_drop:
 
 ### Added
 
-- **Administration > Général > Mises à jour** : bouton « Vérifier maintenant » sous « Vérification automatique des mises à jour » pour forcer une vérification (bypass du cache 12h) ; notification sur la même page : en cours (« Vérification… »), à jour (vert), mise à jour disponible avec version (ambre), ou erreur (rouge)
-- **Backend** : `GET /api/updates/check?force=1` (ou `force=true`) pour forcer un check sans cache ; `getCheckResultForce()` dans `updateCheckService`
-- **Update store** : `checkForUpdatesForce()` appelle l’API force et retourne le résultat pour l’affichage de la notification
-- i18n : `admin.updateCheck.checking`, `admin.updateCheck.upToDate`, `admin.updateCheck.updateAvailableVersion` (FR/EN)
+- **Administration > General > Updates**: "Check now" button under "Automatic update check" to force a check (bypass the 12h cache); same-page notification: in progress ("Checking…"), up to date (green), update available with version (amber), or error (red)
+- **Backend**: `GET /api/updates/check?force=1` (or `force=true`) to force a check without cache; `getCheckResultForce()` in `updateCheckService`
+- **Update store**: `checkForUpdatesForce()` calls the force API and returns the result for notification display
+- i18n: `admin.updateCheck.checking`, `admin.updateCheck.upToDate`, `admin.updateCheck.updateAvailableVersion` (FR/EN)
 
 ---
 
@@ -847,23 +847,23 @@ cap_drop:
 
 ### Added
 
-- **Administration > Plugins** : disposition verticale des cartes (une carte par ligne, empilées) ; cartes élargies avec plus de padding et d’options directement dans chaque carte
-- **Plugin Freebox** : section « Freebox firmware check » intégrée dans la carte Freebox (options firmware dans la carte), section pliable (repliée par défaut) avec en-tête cliquable et chevron (▶ / ▼)
-- **Scanner** : bouton « Stop » / « Arrêt » pendant un full scan (remplace « Scan ») pour arrêter le scan en cours ; API `POST /api/network-scan/scan-stop` et flag `requestStopScan` côté backend
-- **Scanner** : filtres par statut en badges colorés (All / Online / Offline) avec bordure et ring sur l’actif, transparence renforcée pour inactifs ; tooltips explicatifs sur les effectifs (total, online, offline) dans l’en-tête du tableau
-- **Scanner** : rescan manuel désactivé pour les IP offline (bouton grisé + tooltip) ; toast succès + icône CheckCircle après rescan ; rafraîchissement liste en arrière-plan pour éviter « serveur indisponible » ; toasts à la place des alert pour les erreurs
-- i18n : `admin.logsUserLogin`, `networkScan.tooltips.headerTotal/headerOnline/headerOffline`, `networkScan.success.rescanDone/rescanDoneRefreshFailed/scanStopRequested`, `networkScan.buttons.stop`, `networkScan.tooltips.stopScan/rescanOfflineDisabled`, `networkScan.filters.statusFilterLabel`, erreurs `scanStop` (FR/EN)
+- **Administration > Plugins**: vertical card layout (one card per row, stacked); wider cards with more padding and options directly in each card
+- **Freebox plugin**: "Freebox firmware check" section integrated into the Freebox card (firmware options in the card), collapsible section (collapsed by default) with clickable header and chevron (▶ / ▼)
+- **Scanner**: "Stop" button during a full scan (replaces "Scan") to stop the current scan; API `POST /api/network-scan/scan-stop` and `requestStopScan` flag on the backend
+- **Scanner**: status filters as colored badges (All / Online / Offline) with border and ring on the active one, reinforced transparency for inactive ones; explanatory tooltips on totals (total, online, offline) in the table header
+- **Scanner**: manual rescan disabled for offline IPs (grayed button + tooltip); success toast + CheckCircle icon after rescan; background list refresh to avoid "server unavailable"; toasts instead of alerts for errors
+- i18n: `admin.logsUserLogin`, `networkScan.tooltips.headerTotal/headerOnline/headerOffline`, `networkScan.success.rescanDone/rescanDoneRefreshFailed/scanStopRequested`, `networkScan.buttons.stop`, `networkScan.tooltips.stopScan/rescanOfflineDisabled`, `networkScan.filters.statusFilterLabel`, `scanStop` errors (FR/EN)
 
 ### Modified
 
-- **Administration > Général** : Localisation (fuseau horaire + langue de l’interface) regroupée dans la section « Mon profil » (même cadre) ; sous-titre « Région et langue » (au lieu de « Localisation ») avec style renforcé (text-sm, font-semibold, theme-secondary)
-- **Administration > Général** : section « Gestion des utilisateurs » déplacée en 2ᵉ colonne sous « Configuration réseau » et renommée « Logs connexion utilisateurs »
-- **Administration > Général** : suppression des sections séparées « Localisation » et « Langue de l’interface » ; suppression de la section dédiée « Freebox firmware check » de l’onglet Général (déplacée dans Plugins > carte Freebox)
-- **Scanner** : menu déroulant filtre statut remplacé par trois boutons-badges (All, Online, Offline) ; affichage des effectifs online/offline sur la ligne des filtres avec tooltips ; tooltip sur le badge total en-tête
-- **Scanner** : logique rescan (succès immédiat en UI, refresh en arrière-plan, erreurs en toast)
-- i18n : `admin.localization` mis à jour (« Region & language » / « Région et langue »)
-- Composant `FreeboxFirmwareCheckSection` extrait dans `src/components/FreeboxFirmwareCheckSection.tsx` et réutilisé dans la carte plugin Freebox
-- Backend : `networkScanService` — flag `scanStopRequested` et sortie de boucle entre batches pour arrêt du scan à la demande
+- **Administration > General**: Localization (timezone + UI language) grouped in the "My profile" section (same frame); subtitle "Region and language" (instead of "Localization") with reinforced style (text-sm, font-semibold, theme-secondary)
+- **Administration > General**: "User management" section moved to 2nd column under "Network configuration" and renamed "User login logs"
+- **Administration > General**: removed separate "Localization" and "Interface language" sections; removed the dedicated "Freebox firmware check" section from the General tab (moved to Plugins > Freebox card)
+- **Scanner**: status filter dropdown replaced with three badge-buttons (All, Online, Offline); online/offline totals displayed on the filter line with tooltips; tooltip on the total header badge
+- **Scanner**: rescan logic (immediate UI success, background refresh, errors in toast)
+- i18n: `admin.localization` updated ("Region & language" / "Région et langue")
+- `FreeboxFirmwareCheckSection` component extracted into `src/components/FreeboxFirmwareCheckSection.tsx` and reused in the Freebox plugin card
+- Backend: `networkScanService` — `scanStopRequested` flag and loop exit between batches for on-demand scan stop
 
 ---
 
@@ -871,18 +871,18 @@ cap_drop:
 
 ### Added
 
-**Scanner réseau (NetworkScanPage) – Tooltips style MAC**
-- Colonne **IP** : tooltip au survol « Cliquer pour en savoir plus sur cette IP » (style flottant identique aux autres colonnes)
-- Colonne **Monit** : tooltip explicatif (à quoi sert le monitoring, activation du graph Latency scatter) + actions selon l’état (activer / désactiver, voir le graphique)
-- Icône **Scatter** (quand le monitoring est activé) : tooltip « Ouvre le tableau Latency scatter » + « Cliquer pour ouvrir »
-- Colonne **Actions** : tooltips indépendants par bouton (Rescan, Bannir, Supprimer) au lieu d’un seul tooltip sur toute la cellule
-- Carte **Info Scans** : badge **ON** / **OFF** à côté du titre selon l’état du plugin scan-réseau (actif/inactif) ; tooltip accessibilité « Plugin actif » / « Plugin inactif »
+**Network scanner (NetworkScanPage) – MAC-style tooltips**
+- **IP** column: hover tooltip "Click to learn more about this IP" (floating style identical to other columns)
+- **Monit** column: explanatory tooltip (what monitoring is for, Latency scatter graph activation) + actions depending on state (enable / disable, view graph)
+- **Scatter** icon (when monitoring is enabled): tooltip "Opens the Latency scatter table" + "Click to open"
+- **Actions** column: independent per-button tooltips (Rescan, Ban, Delete) instead of a single tooltip on the whole cell
+- **Scan Info** card: **ON** / **OFF** badge next to the title based on scan-reseau plugin state (active/inactive); accessibility tooltip "Plugin active" / "Plugin inactive"
 
 ### Modified
 
-- **Info Scans** : suppression du libellé « Auto » et du badge ON/OFF associé à côté du titre (seul le badge plugin reste)
-- **En-tête Scanner** : suppression de l’indicateur « Active » (point vert + texte) à côté du bouton Configuration
-- i18n (networkScan) : `stats.pluginActive`, `stats.pluginInactive`, `tooltips.monitoringDescription`, `tooltips.openScatterTable`, `tooltips.clickToOpenScatter`, `tooltips.clickToKnowMoreIp` (FR/EN)
+- **Scan Info**: removed the "Auto" label and its associated ON/OFF badge next to the title (only the plugin badge remains)
+- **Scanner header**: removed the "Active" indicator (green dot + text) next to the Configuration button
+- i18n (networkScan): `stats.pluginActive`, `stats.pluginInactive`, `tooltips.monitoringDescription`, `tooltips.openScatterTable`, `tooltips.clickToOpenScatter`, `tooltips.clickToKnowMoreIp` (FR/EN)
 
 ---
 
@@ -890,25 +890,25 @@ cap_drop:
 
 ### Added
 
-**Vérification des mises à jour (12h)**
-- Service backend `updateCheckService` : cache 12h, scheduler toutes les 12h quand activé
-- API `GET /api/updates/check` retourne `lastCheckAt` (ISO) ; résultat mis en cache
-- `POST /api/updates/config` démarre ou arrête le scheduler selon `enabled`
-- Au démarrage du serveur, le scheduler est lancé si la config « update check » est activée en base
-- Bannière de mise à jour dans le Header : visible quand une nouvelle version est disponible et le check activé, masquable (bouton fermer) ; masquage persisté par version dans `localStorage` (`mynetwork_update_banner_dismissed`)
+**Update check (12h)**
+- `updateCheckService` backend service: 12h cache, scheduler every 12h when enabled
+- API `GET /api/updates/check` returns `lastCheckAt` (ISO); cached result
+- `POST /api/updates/config` starts or stops the scheduler based on `enabled`
+- On server startup, the scheduler launches if "update check" config is enabled in DB
+- Update banner in the Header: visible when a new version is available and check is enabled, dismissible (close button); dismissal persisted per version in `localStorage` (`mynetwork_update_banner_dismissed`)
 
 **Administration > Info**
-- Onglet Info repensé : carte projet (logo 96×96, nom, description, version | licence), vrais badges GitHub (shields.io) : MynetworK (version dynamique), Status, Docker, GHCR, Build, React, TypeScript, License ; liens sur GHCR et Build
-- Badges stats repo (Étoiles, Forks, Issues) en petits badges sous le bouton « Voir sur GitHub », sans cadre « Repository stats »
-- Section « À propos » avec icône et description longue (i18n)
-- Section « Technologies » (même style cyan que À propos)
-- i18n : `admin.updateCheck.lastCheck`, `admin.repoStatsTitle`, `admin.aboutTitle`, `admin.aboutDescription`, `admin.issuesCount` (FR/EN)
+- Info tab redesigned: project card (96×96 logo, name, description, version | license), real GitHub (shields.io) badges: MynetworK (dynamic version), Status, Docker, GHCR, Build, React, TypeScript, License; links on GHCR and Build
+- Repo stats badges (Stars, Forks, Issues) as small badges under the "View on GitHub" button, no "Repository stats" frame
+- "About" section with icon and long description (i18n)
+- "Technologies" section (same cyan style as About)
+- i18n: `admin.updateCheck.lastCheck`, `admin.repoStatsTitle`, `admin.aboutTitle`, `admin.aboutDescription`, `admin.issuesCount` (FR/EN)
 
 ### Modified
 
-- **Administration > Général** : section « Vérification automatique des mises à jour » n’affiche plus que la **dernière vérification** (date/heure) lorsque activée ; suppression de l’affichage des versions et du bloc « vérification manuelle désactivée »
-- **Update store** : type `UpdateInfo` avec `lastCheckAt` ; `checkForUpdates` enregistre `result.lastCheckAt` et met à jour `lastCheck`
-- **Routes updates** : suppression du code orphelin (ancienne logique GET /check) ; uniquement GET /check, GET /config, POST /config
+- **Administration > General**: "Automatic update check" section now only shows the **last check** (date/time) when enabled; removed version display and "manual check disabled" block
+- **Update store**: `UpdateInfo` type with `lastCheckAt`; `checkForUpdates` saves `result.lastCheckAt` and updates `lastCheck`
+- **Update routes**: removed orphan code (old GET /check logic); only GET /check, GET /config, POST /config
 
 ---
 
@@ -916,8 +916,8 @@ cap_drop:
 
 ### Fixed
 
-- **Sécurité (Dependabot) :** Mise à jour de `qs` 6.14.1 → 6.14.2 (CVE arrayLimit bypass, DoS via memory exhaustion)
-- **scripts/update-version.sh :** Ajout de la mise à jour de la version dans `package-lock.json` (racine + packages."")
+- **Security (Dependabot):** Updated `qs` 6.14.1 → 6.14.2 (CVE arrayLimit bypass, DoS via memory exhaustion)
+- **scripts/update-version.sh:** Added version update in `package-lock.json` (root + packages."")
 
 ---
 
@@ -925,22 +925,22 @@ cap_drop:
 
 ### Added
 
-**Freebox – Notifications de mise à jour firmware**
-- Service backend qui scrape périodiquement dev.freebox.fr/blog pour les dernières versions (Server + Player)
-- API : `GET /api/plugins/freebox/firmware-check`, routes config (get/post), force check
-- Dashboard : badge firmware sur une seule ligne avec version et changelog au survol (PluginSummaryCard)
-- Page Freebox : bandeau de notification avec changelog dépliable (expanded par défaut)
-- Header : indicateur de mise à jour (↑) à côté de la version firmware sur la page Freebox
-- Administration > Général : section « Vérification firmware Freebox » (toggle, intervalle 1h–24h, vérifier maintenant)
-- i18n : clés `freebox.firmwareUpdate.*` et `admin.freeboxFirmwareCheck.*` (FR/EN)
-- Décodage des entités HTML dans le changelog (`&rsquo;` → `'`, accents, etc.) — backend + `src/utils/textUtils.ts`
-- Utilitaire partagé `compareVersions()` extrait dans `server/utils/version.ts`
+**Freebox – Firmware update notifications**
+- Backend service that periodically scrapes dev.freebox.fr/blog for the latest versions (Server + Player)
+- API: `GET /api/plugins/freebox/firmware-check`, config routes (get/post), force check
+- Dashboard: single-line firmware badge with version and changelog on hover (PluginSummaryCard)
+- Freebox page: notification banner with expandable changelog (expanded by default)
+- Header: update indicator (↑) next to the firmware version on the Freebox page
+- Administration > General: "Freebox firmware check" section (toggle, 1h–24h interval, check now)
+- i18n: `freebox.firmwareUpdate.*` and `admin.freeboxFirmwareCheck.*` keys (FR/EN)
+- HTML entity decoding in the changelog (`&rsquo;` → `'`, accents, etc.) — backend + `src/utils/textUtils.ts`
+- Shared `compareVersions()` utility extracted into `server/utils/version.ts`
 
 ### Fixed
 
-- **PluginsPage :** ajout de `onNavigateToSettings` à l’interface `PluginsPageProps`
-- **Header :** ajout de `onSearchClick` à l’interface `HeaderProps`
-- **SpeedtestWidget :** suppression des props invalides (`downloadSpeed`, `uploadSpeed`, etc.) — le composant ne prend aucun prop
+- **PluginsPage:** added `onNavigateToSettings` to the `PluginsPageProps` interface
+- **Header:** added `onSearchClick` to the `HeaderProps` interface
+- **SpeedtestWidget:** removed invalid props (`downloadSpeed`, `uploadSpeed`, etc.) — the component takes no props
 
 ---
 
@@ -948,14 +948,14 @@ cap_drop:
 
 ### Fixed
 
-- **UniFi (Events):** Doublon de texte supprimé sur le message « Aucun événement » (ligne avec apostrophe typographique `’` U+2019) — affichage uniquement via `t('unifi.noEventDetected')`.
+- **UniFi (Events):** Duplicate text removed on the "No event" message (line with typographic apostrophe `’` U+2019) — display only via `t('unifi.noEventDetected')`.
 
 ### Modified
 
-- **UniFi i18n – terminologie :** Alignement sur « Appareil(s) » en français : clés `equipments`, `totalEquipments`, `offlineDevices`, `offlineDevicesMessage` en FR (au lieu de « Équipements ») ; EN inchangé (Devices).
-- **PluginSummaryCard (onglet Analyse UniFi):** Libellé « Équipements » en dur remplacé par `t('unifi.equipments')` pour cohérence i18n.
-- **UniFi – Clients:** Qualité du signal (Excellent, Bon, Moyen, Faible) passée en clés i18n (`unifi.excellent`, `unifi.good`, `unifi.average`, `unifi.weak`).
-- **Versions:** Toutes les références de version mises à jour à 0.7.5 (package.json, version.ts, main.tsx, plugins Freebox, UniFi, Scan Réseau).
+- **UniFi i18n – terminology:** Aligned on "Appareil(s)" in French: `equipments`, `totalEquipments`, `offlineDevices`, `offlineDevicesMessage` keys in FR (instead of "Équipements"); EN unchanged (Devices).
+- **PluginSummaryCard (UniFi Analysis tab):** Hardcoded "Équipements" label replaced with `t('unifi.equipments')` for i18n consistency.
+- **UniFi – Clients:** Signal quality (Excellent, Good, Average, Weak) moved to i18n keys (`unifi.excellent`, `unifi.good`, `unifi.average`, `unifi.weak`).
+- **Versions:** All version references updated to 0.7.5 (package.json, version.ts, main.tsx, Freebox, UniFi, Network Scan plugins).
 
 ---
 
@@ -1044,7 +1044,7 @@ cap_drop:
 - ✅ Dockerfile : ARG `TARGETPLATFORM` / `BUILDPLATFORM`, stage builder et runtime en `FROM --platform=$TARGETPLATFORM` pour une image finale cohérente par arch
 - ✅ Compilation des modules natifs (ex. better-sqlite3) pour l’arch cible (builder sur TARGETPLATFORM), plus de risque « wrong ELF class » sur ARM
 
-### 🔧 Modifié
+### Changed
 
 **Docker - Workflow**
 - 🔧 `docker-publish.yml` : `platforms: linux/amd64,linux/arm64,linux/arm/v7` (QEMU + Buildx déjà en place)
@@ -1057,7 +1057,7 @@ cap_drop:
 
 ## [0.5.6] - 2026-02-07
 
-### ✨ Ajouté
+### Added
 
 **UniFi - NAT / Gateway & Ports**
 - ✅ Résumé gateway dans les stats système : `gatewaySummary` (IP, nom, modèle, WAN/LAN ports, `portCount`) et `natRulesCount`
@@ -1068,7 +1068,7 @@ cap_drop:
 **Freebox - Administration plugins**
 - ✅ Avertissement dans la modale de configuration du plugin Freebox lorsque le plugin est désactivé : inviter à activer le plugin pour la découverte automatique
 
-### 🔧 Modifié
+### Changed
 
 **UniFi - Backend**
 - 🔧 Correction TypeScript : `getNetworkConfig().catch()` retourne un objet avec `dhcpRange: undefined` pour garder un type cohérent
@@ -1078,7 +1078,7 @@ cap_drop:
 
 ## [0.5.5] - 2026-02-04
 
-### ✨ Ajouté
+### Added
 
 **Thème / Réglages - Animation "All"**
 - ✅ Option pour choisir les animations incluses dans le cycle (cases à cocher par animation)
@@ -1089,7 +1089,7 @@ cap_drop:
 - ✅ Application de l'opacité au chargement de l'app (themeManager) : prise en compte sur toutes les pages (dashboard, réglages, etc.), pas seulement après passage par la page Réglages
 - ✅ Chargement de l'opacité depuis l'API thème si disponible (cohérence multi-onglets / serveur)
 
-### 🔧 Modifié
+### Changed
 
 **Thème / Réglages - Organisation**
 - 🔧 Personnalisation des couleurs du thème déplacée au-dessus de la section Animation
@@ -1115,7 +1115,7 @@ cap_drop:
 ---
  
 
-### ✨ Ajouté
+### Added
 
 **UniFi - Onglet NAT**
 - ✅ Nouvel onglet "NAT" dans la page UniFi (placé après "Vue d'ensemble")
@@ -1130,7 +1130,7 @@ cap_drop:
 - ✅ Route API `GET /api/plugins/unifi/nat` pour exposer les règles NAT au frontend
 - ✅ Normalisation des données : mapping des champs UniFi vers un format standardisé (id, name, enabled, protocol, dst_port, fwd_port, fwd_host, src, comment)
 
-### 🔧 Modifié
+### Changed
 
 **UniFi - Optimisation du Refresh NAT**
 - 🔧 Séparation du chargement initial (`isInitialLoading`) et du refresh périodique (`isRefreshing`)
@@ -1143,7 +1143,7 @@ cap_drop:
 
 ## [0.5.3] - 2026-02-03
 
-### ✨ Ajouté
+### Added
 
 **Dashboard - Récapitulatif Réseau Séparé**
 - ✅ Création de deux widgets distincts : `NetworkSummaryDashboardWidget` (dashboard principal) et `NetworkSummaryFreeboxWidget` (page Freebox)
@@ -1161,7 +1161,7 @@ cap_drop:
 - ✅ Exposition de `dhcpRange` dans les stats système du plugin UniFi
 - ✅ Transmission de la plage DHCP au frontend via l'API `/api/dashboard/network-summary`
 
-### 🔧 Modifié
+### Changed
 
 **Dashboard - Récapitulatif Réseau**
 - 🔧 Suppression du doublon "Gestionnaire d'IPs Réseau (UniFi)" dans le widget dashboard (les informations DHCP UniFi sont maintenant uniquement dans la section dédiée)
@@ -1184,7 +1184,7 @@ cap_drop:
 
 ## [0.5.2] - 2026-02-03
 
-### ✨ Ajouté
+### Added
 
 **Scanner Réseau - Système de Blacklist IPs**
 - ✅ Nouveau service `ipBlacklistService.ts` pour gérer la blacklist des IPs bannies
@@ -1205,7 +1205,7 @@ cap_drop:
 - ✅ Bouton "Rescanner" dans la section de détails d'une IP unique
 - ✅ Rafraîchissement automatique des résultats après le rescan pour afficher les ports mis à jour
 
-### 🔧 Modifié
+### Changed
 
 **Scanner Réseau - Respect du Range Configuré**
 - 🔧 Fonction `refreshExistingIps()` : filtrage par range configuré avant de scanner les IPs existantes
@@ -1225,7 +1225,7 @@ cap_drop:
 - 🔧 Nettoyage dans `App.tsx` via `useEffect` qui surveille les changements de page
 - 🔧 Nettoyage dans `SearchPage.tsx` via wrapper `handleBack` et cleanup `useEffect`
 
-### 🐛 Corrigé
+### Fixed
 
 **Scanner Réseau - Problèmes d'Affichage**
 - 🐛 Correction : les IPs Docker (10.10.1.x, 172.17-31.x.x) n'apparaissent plus même si elles ne sont pas dans le range configuré
@@ -1236,13 +1236,13 @@ cap_drop:
 
 ## [0.5.1] - 2026-01-23
 
-### ✨ Ajouté
+### Added
 
 **Page de Recherche - Historique**
 - ✅ Bouton "Effacer tout" dans le modal d'historique de recherche pour supprimer tout l'historique d'un clic
 - ✅ Bouton visible uniquement si l'historique n'est pas vide
 
-### 🔧 Modifié
+### Changed
 
 **Page de Recherche - Interface**
 - 🔧 Suppression du div vide au-dessus du champ de recherche
@@ -1263,7 +1263,7 @@ cap_drop:
 
 ## [0.5.0] - 2026-02-01
 
-### ✨ Ajouté
+### Added
 
 **Gestion des Thèmes - Sélection d'Animation Améliorée**
 - ✅ Nouvelle section "Sélection de l'animation" avec grille multi-colonnes (2/3/4/5/6 colonnes selon la taille d'écran)
@@ -1277,7 +1277,7 @@ cap_drop:
 - ✅ Opacité fonctionne indépendamment de l'état de l'animation (même si animation désactivée)
 - ✅ Réorganisation logique : Opacité → Thèmes → Animations → Paramètres
 
-### 🔧 Modifié
+### Changed
 
 **Gestion des Thèmes - Menu de Sélection d'Animation**
 - 🔧 Menu de sélection d'animation modernisé : menu déroulant centré à l'écran au lieu d'un simple select
@@ -1291,7 +1291,7 @@ cap_drop:
 - 🔧 L'activation/désactivation se fait maintenant uniquement via l'option "NON" dans la grille d'animations
 - 🔧 Section "Vitesse d'animation" et "Paramètres d'animation" affichées uniquement si animation activée
 
-### 🗑️ Supprimé
+### Removed
 
 **Thème Media Background**
 - 🗑️ Suppression complète du thème "Media Background" (animation.99.media-background)
@@ -1302,7 +1302,7 @@ cap_drop:
 
 ## [0.4.8] - 2026-02-01
 
-### ✨ Ajouté
+### Added
 
 **Dashboard - Récapitulatif Réseau**
 - ✅ Nouvelle route **GET /api/dashboard/network-summary** : agrégation Freebox (LAN, DMZ, DHCP, NAT) + UniFi (gateway, DHCP, clients)
@@ -1320,7 +1320,7 @@ cap_drop:
 - ✅ **getNetworkConfig()** dans UniFiApiService : appel à `/api/s/<site>/rest/networkconf` pour lire `dhcpd_enabled` sur le réseau LAN
 - ✅ Exposition de **dhcpEnabled** dans les stats système du plugin UniFi (dashboard et récap réseau)
 
-### 🔧 Modifié
+### Changed
 
 **Page Recherche - Colonne AP/Switch**
 - 🔧 Backend (searchService) : déduction de **is_wireless** / **is_wired** à partir de `ap_name` ou `sw_name` lorsque les flags sont absents sur les clients UniFi
@@ -1329,7 +1329,7 @@ cap_drop:
 **Dashboard**
 - 🔧 Récapitulatif Réseau : source de données unique via `/api/dashboard/network-summary` (remplace les appels directs Freebox LAN/DHCP)
 
-### 🐛 Corrigé
+### Fixed
 
 - 🐛 Colonne AP/Switch vide ("--") pour certains clients UniFi lorsque l’API ne renvoie pas is_wired/is_wireless : utilisation de ap_name/sw_name pour déduire le type et afficher WiFi/Filaire
 
@@ -1337,7 +1337,7 @@ cap_drop:
 
 ## [0.4.7] - 2026-02-01
 
-### ✨ Ajouté
+### Added
 
 **Page Recherche**
 - ✅ Bouton **Historique** dans la section Filtres : ouvre un modal avec l’historique des recherches (requête, options exact/étendu, case, actif)
@@ -1347,7 +1347,7 @@ cap_drop:
 - ✅ Couleurs par catégorie de ports : **Système** (orange/ambre), **Docker** (indigo, ports 2375/2376), reste (cyan) — page Recherche et tooltip Scan Réseau
 - ✅ Catégorie **Docker** dans les ports (préparation détection)
 
-### 🔧 Modifié
+### Changed
 
 **Page Recherche**
 - 🔧 Suppression du bloc de sélection des plugins sous la barre de recherche (recherche sur tous les plugins actifs)
@@ -1362,7 +1362,7 @@ cap_drop:
 - 🔧 `bump-version.js` : mise à jour des plugins serveur (Freebox, UniFi, Scan Réseau) en plus de package.json, version.ts, main.tsx, README, Header
 - 🔧 Plugins serveur synchronisés à la version 0.4.7
 
-### 🐛 Corrigé
+### Fixed
 
 - 🐛 Badge connexion : si pas WiFi ou RSSI invalide, affichage « Filaire » (bleu) au lieu du badge WiFi grisé
 
@@ -1370,7 +1370,7 @@ cap_drop:
 
 ## [0.4.6] - 2026-02-01
 
-### 🔧 Modifié
+### Changed
 
 - 🔧 Mise à jour de version (package.json, src/constants/version.ts, plugins serveur) pour invalidation du cache navigateur
 - 🔧 Synchronisation des versions dans tous les fichiers du projet
@@ -1379,7 +1379,7 @@ cap_drop:
 
 ## [0.4.5] - 2026-01-31
 
-### ✨ Ajouté
+### Added
 
 **Scan Réseau - Scan de ports (nmap)**
 - ✅ Option "Scanner les ports ouverts après chaque scan complet" dans la config du scan auto (section Scan complet)
@@ -1395,7 +1395,7 @@ cap_drop:
 - ✅ Carte **"Ports ouverts (machine)"** dans la fiche détail d’une IP (recherche par IP exacte)
 - ✅ Affichage de la liste des ports ouverts (scanner/nmap), date du dernier scan, ou "Aucun port ouvert" / "Non scanné"
 
-### 🔧 Modifié
+### Changed
 
 **Scan Réseau - Configuration unifiée**
 - 🔧 Config unifiée étendue : `fullScan.portScanEnabled` (booléen) pour activer/désactiver le scan de ports après full scan
@@ -1405,7 +1405,7 @@ cap_drop:
 - 🔧 Auto-détection : priorité au mode **Controller** si URL/username/password sont présents ; passage en Site Manager uniquement si URL unifi.ui.com + API key valide, ou si seule une API key est fournie
 - 🔧 Nettoyage des paramètres de test (route test) : en mode controller, suppression de `apiKey` des settings de test pour éviter un basculement incorrect vers Site Manager (correction Docker vs npm dev)
 
-### 🐛 Corrigé
+### Fixed
 
 **Plugin UniFi - Validation en Docker**
 - 🐛 Correction du cas où le plugin fonctionnait en `npm run dev` mais échouait en Docker avec "Site Manager API error: 401" : la config Controller n’est plus écrasée par une API key résiduelle lors du test ou de l’initialisation
@@ -1414,7 +1414,7 @@ cap_drop:
 
 ## [0.4.4] - 2026-01-25
 
-### ✨ Ajouté
+### Added
 
 **Plugin UniFi - Affichage du Type de Déploiement**
 - ✅ Badge "Type:" affiché sur la carte du plugin UniFi quand connecté
@@ -1431,7 +1431,7 @@ cap_drop:
 - ✅ Support complet de la documentation officielle UniFi API
 - ✅ Détection automatique du mode Site Manager (cloud) si API key fournie
 
-### 🔧 Modifié
+### Changed
 
 **Plugin UniFi - Gestion des Erreurs Améliorée**
 - 🔧 Messages d'erreur détaillés pour les erreurs réseau (ECONNREFUSED, timeout, SSL)
@@ -1462,7 +1462,7 @@ cap_drop:
 - 🔧 Correction de l'erreur "Invalid frame header" pour les accès via IP
 - 🔧 Gestion améliorée des erreurs WebSocket avec messages informatifs
 
-### 🐛 Corrigé
+### Fixed
 
 **Plugin UniFi - Bouton de Test**
 - 🐛 Correction du problème où le bouton "Tester" cassait le plugin après configuration
@@ -1484,7 +1484,7 @@ cap_drop:
 
 ## [0.4.3] - 2026-01-24
 
-### ✨ Ajouté
+### Added
 
 **Plugin UniFi - Gestion des Erreurs 429 (Rate Limiting)**
 - ✅ Système de retry avec backoff exponentiel pour les erreurs 429 (Too Many Requests)
@@ -1494,7 +1494,7 @@ cap_drop:
 - ✅ Réinitialisation automatique des compteurs après succès
 - ✅ Évite les tentatives trop fréquentes qui déclenchent des erreurs 429
 
-### 🔧 Modifié
+### Changed
 
 **Plugin UniFi - Amélioration du Bouton "Tester"**
 - 🔧 Restauration garantie de la configuration originale même en cas d'erreur
@@ -1516,7 +1516,7 @@ cap_drop:
 - 🔧 Messages d'erreur améliorés pour aider au débogage
 - 🔧 Évite les erreurs de connexion WebSocket en mode développement
 
-### 🐛 Corrigé
+### Fixed
 
 **Plugin UniFi - Test de Connexion**
 - 🐛 Correction du problème où le test cassait le plugin après une configuration réussie
@@ -1527,7 +1527,7 @@ cap_drop:
 
 ## [0.4.2] - 2026-01-23
 
-### ✨ Ajouté
+### Added
 
 **Freebox - Backup Complet de Configuration**
 - ✅ Nouvelle section "Backup complet Freebox" dans l'onglet Backup
@@ -1551,7 +1551,7 @@ cap_drop:
 - ✅ Affichage conditionnel uniquement si le plugin Freebox est actif et connecté
 - ✅ Affichage des informations réseau essentielles directement sur le dashboard
 
-### 🔧 Modifié
+### Changed
 
 **Freebox - Réorganisation de l'Onglet Réseau**
 - 🔧 Séparation des catégories en blocs distincts pour une meilleure organisation
@@ -1575,7 +1575,7 @@ cap_drop:
 
 ## [0.4.1] - 2026-01-21
 
-### ✨ Ajouté
+### Added
 
 **Freebox - Filtrage MAC WiFi**
 - ✅ Ajout de la section "Filtrage MAC" dans les paramètres WiFi Freebox
@@ -1594,7 +1594,7 @@ cap_drop:
 - ✅ Ajout automatique des fichiers au staging area pour le commit
 - ✅ Gestion des versions invalides (comme `--help`) avec valeur par défaut
 
-### 🔧 Modifié
+### Changed
 
 **Scripts - update-version.sh**
 - 🔧 Amélioration de la logique de détection des modifications Git
@@ -1606,7 +1606,7 @@ cap_drop:
 
 ## [0.4.0] - 2026-01-13
 
-### ✨ Ajouté
+### Added
 
 **Recherche - Support des Paramètres d'URL**
 - ✅ Support du paramètre `?s=IP` dans l'URL pour rechercher directement une IP
@@ -1637,7 +1637,7 @@ cap_drop:
 - ✅ Exemples de formats de ranges supportés dans la documentation
 - ✅ Explications des différences entre mode strict (1 IP) et mode étendu (ranges)
 
-### 🔧 Modifié
+### Changed
 
 **Recherche - Navigation**
 - 🔧 Lecture du paramètre `s` depuis l'URL en priorité (au lieu de sessionStorage)
@@ -1654,7 +1654,7 @@ cap_drop:
 - 🔧 Comportement de la touche Enter adaptatif selon l'état du ping
 - 🔧 Affichage contextuel de l'aide ping avec informations selon le mode actif
 
-### 🐛 Corrigé
+### Fixed
 
 **Ping - Affichage**
 - ✅ Correction de l'affichage "undefinedms" : vérification de l'existence de la latence avant affichage
@@ -1665,7 +1665,7 @@ cap_drop:
 
 ## [0.3.9] - 2025-01-02
 
-### 🐛 Corrigé
+### Fixed
 
 **Erreur de Compilation - Double Déclaration de Variable**
 - 🐛 Correction de la double déclaration de `routePath` dans `getHostMachineIP()` (ligne 405)
@@ -1684,7 +1684,7 @@ cap_drop:
 - `docker-compose.local.yml` : Ajout de `DASHBOARD_PORT` dans la section `environment`
 - `docker-compose.dev.yml` : Variable déjà présente, vérification effectuée
 
-### 🔧 Modifié
+### Changed
 
 **Noms de Conteneurs Docker**
 - 🔧 Ajout de `container_name` explicite dans tous les fichiers docker-compose
@@ -1707,7 +1707,7 @@ cap_drop:
 
 ## [0.3.8] - 2025-01-02
 
-### 🔒 Sécurité
+### Security
 
 **Agents HTTPS Personnalisés pour Freebox et UniFi**
 - 🔒 Remplacement de `NODE_TLS_REJECT_UNAUTHORIZED = '0'` global par des agents HTTPS sélectifs
@@ -1721,7 +1721,7 @@ cap_drop:
 - `server/plugins/freebox/FreeboxApiService.ts` : Agent HTTPS personnalisé pour le plugin Freebox
 - `server/plugins/unifi/UniFiApiService.ts` : Agent HTTPS personnalisé pour le plugin UniFi
 
-### 🔧 Modifié
+### Changed
 
 **Détection IP Machine Hôte dans Docker**
 - 🔧 Amélioration de `getHostMachineIP()` dans `server/index.ts` pour lire l'IP réelle depuis `/host/proc/net/route`
@@ -1735,7 +1735,7 @@ cap_drop:
 - 🔧 Suppression du code de suppression d'avertissement TLS dans `server/index.ts` (lignes 1-35)
 - 🔧 Code plus propre et maintenable sans interception d'avertissements
 
-### 🐛 Corrigé
+### Fixed
 
 **Avertissement StorageType.persistent en Production**
 - 🐛 Suppression de l'avertissement déprécié `StorageType.persistent is deprecated` en production Docker
@@ -1746,7 +1746,7 @@ cap_drop:
 **Fichiers Modifiés**
 - `src/main.tsx` : Ajout de la suppression conditionnelle de l'avertissement StorageType.persistent
 
-### 📝 Documentation
+### Documentation
 
 **Amélioration de la Documentation**
 - 📝 Commentaires détaillés expliquant l'utilisation des agents HTTPS personnalisés
@@ -1757,7 +1757,7 @@ cap_drop:
 
 ## [0.3.7] - 2025-01-02
 
-### 🔧 Modifié
+### Changed
 
 **Affichage des Disques dans SystemServerWidget**
 - 🔧 Remplacement des chemins système (`/etc/resolv.conf`, `/etc/hostname`, `/etc/hosts`) par des noms génériques ("Disque 1", "Disque 2", etc.)
@@ -1769,7 +1769,7 @@ cap_drop:
 - 🔧 Suppression des logs de debug dans `NetworkScanPage` (onDataChanged, Local state cleared, All data refreshed)
 - 🔧 Conservation uniquement des logs d'erreur essentiels pour le debugging
 
-### ♿ Accessibilité
+### Accessibility
 
 **Amélioration de l'Accessibilité des Formulaires**
 - ♿ Ajout d'attributs `id` et `name` à tous les champs de formulaire manquants
@@ -1790,7 +1790,7 @@ cap_drop:
 
 ## [0.3.6] - 2025-01-01
 
-### ⚡ Optimisé
+### Optimized
 
 **Chargement de l'Onglet Plugins**
 - ✅ Temps de chargement réduit de plusieurs secondes à < 500ms
@@ -1822,7 +1822,7 @@ cap_drop:
 - ✅ Validation des données reçues (structure, types)
 - ✅ Filtrage des plugins invalides avec warnings console
 
-### 🔧 Modifié
+### Changed
 
 **Route `/api/plugins` - Architecture**
 - 🔧 Retrait des appels `testPluginConnection()` systématiques pour chaque plugin activé
@@ -1844,7 +1844,7 @@ cap_drop:
 - 🔧 Validation de chaque plugin (id, name, enabled, version)
 - 🔧 Filtrage automatique des plugins invalides
 
-### 📝 Documentation
+### Documentation
 
 **Optimisation Performance**
 - 📝 Commentaires détaillés expliquant les optimisations dans le code
@@ -1854,7 +1854,7 @@ cap_drop:
 
 ## [0.3.6] - 2025-12-30
 
-### 🐛 Corrigé
+### Fixed
 
 **Route `/api/network-scan/database-size-estimate` - Erreur 404**
 - ✅ Correction de l'erreur 404 sur l'endpoint `/api/network-scan/database-size-estimate`
@@ -1866,7 +1866,7 @@ cap_drop:
 - ✅ Le badge "Full Scan" affiche maintenant toujours "Complet" au lieu de "Rapide"
 - ✅ Le dernier scan de type "full" affiche correctement "Complet" dans les deux interfaces
 
-### ✨ Ajouté
+### Added
 
 **Badge Plage IP**
 - ✅ Ajout d'un badge cyan affichant la plage IP scannée dans le widget dashboard
@@ -1880,7 +1880,7 @@ cap_drop:
 - ✅ Indicateurs visuels (flèches) pour toutes les colonnes triables
 - ✅ La colonne "Actions" reste non triable comme prévu
 
-### 🔧 Modifié
+### Changed
 
 **Réorganisation Section "Info Scans"**
 - 🔧 Le "Dernier Scan" est maintenant affiché sous les sections "Full Scan" et "Refresh"
@@ -1901,7 +1901,7 @@ cap_drop:
 
 ## [0.3.4] - 2025-12-30
 
-### 🐛 Corrigé
+### Fixed
 
 **Freebox Revolution - Appels Simultanés Multiples**
 - ✅ Implémentation d'un système de verrous par endpoint pour éviter les appels simultanés multiples au même endpoint
@@ -1921,7 +1921,7 @@ cap_drop:
 - ✅ Maximum 2 tentatives supplémentaires (3 appels au total) pour éviter de surcharger la Freebox
 - ✅ Délais de retry : 1s puis 2s (backoff exponentiel)
 
-### ✨ Ajouté
+### Added
 
 **Système de Verrous par Endpoint**
 - ✅ Nouvelle méthode `requestWithLock()` pour éviter les appels simultanés multiples au même endpoint
@@ -1940,7 +1940,7 @@ cap_drop:
 - ✅ Activation uniquement pour Revolution et uniquement sur endpoints lents
 - ✅ Détection automatique des erreurs `AbortError` pour déclencher le retry
 
-### 🔧 Modifié
+### Changed
 
 **FreeboxApiService - Architecture des Requêtes**
 - 🔧 Toutes les méthodes publiques utilisent maintenant `requestWithLock()` au lieu de `request()` directement
@@ -1963,7 +1963,7 @@ cap_drop:
 
 ## [0.3.3] - 2025-12-30
 
-### 🐛 Corrigé
+### Fixed
 
 **Freebox Plugin - WebSocket au Démarrage**
 - ✅ Le WebSocket Freebox ne démarre plus si le plugin est désactivé
@@ -1980,7 +1980,7 @@ cap_drop:
 - ✅ Protection renforcée contre les appels simultanés multiples aux mêmes endpoints
 - ✅ Réduction des erreurs `AbortError` grâce à une meilleure gestion des requêtes parallèles
 
-### ✨ Ajouté
+### Added
 
 **Optimisation Détection MAC - Cache des Stats Plugins**
 - ✅ Cache des stats Freebox/UniFi pendant le scan pour éviter les appels répétés à `getStats()`
@@ -1993,7 +1993,7 @@ cap_drop:
 - ✅ Recommandations d'utilisation ajoutées pour guider les utilisateurs
 - ✅ Notes explicatives sur le comportement avec les vendors vides/invalides
 
-### 🔧 Modifié
+### Changed
 
 **NetworkScanService - Cache des Stats Plugins**
 - 🔧 Ajout de `cachedFreeboxStats`, `cachedUniFiStats`, `cacheTimestamp` pour le cache
@@ -2019,7 +2019,7 @@ cap_drop:
 
 ## [0.3.2] - 2025-12-30
 
-### 🐛 Corrigé
+### Fixed
 
 **Détection MAC dans Docker - Plugins en Priorité**
 - ✅ Réorganisation de `getMacAddress()` pour utiliser les plugins activés (Freebox, UniFi) EN PREMIER selon la configuration de priorité
@@ -2037,14 +2037,14 @@ cap_drop:
 - ✅ `getVendorWithSource()` utilise déjà le plugin "scanner" dans la priorité par défaut
 - ✅ La plupart des MAC adresses peuvent être identifiées via la base de données OUI même sans plugins
 
-### ✨ Ajouté
+### Added
 
 **Détection MAC - Méthode UniFi**
 - ✅ Nouvelle méthode `getMacFromUniFi(ip: string)` dans `NetworkScanService`
 - ✅ Support complet de la détection MAC depuis UniFi Controller
 - ✅ Recherche par IP dans les devices UniFi (access points, switches, clients)
 
-### 🔧 Modifié
+### Changed
 
 **NetworkScanService - Ordre de Détection MAC**
 - 🔧 `getMacAddress()` réorganisé pour essayer les plugins activés en premier selon la priorité configurée
@@ -2066,7 +2066,7 @@ cap_drop:
 
 ## [0.3.1] - 2025-12-30
 
-### 🐛 Corrigé
+### Fixed
 
 **Freebox Revolution - Appels Répétés et Timeouts**
 - ✅ Protection contre les appels simultanés multiples à `getStats()` pour éviter la surcharge
@@ -2081,7 +2081,7 @@ cap_drop:
 - ✅ Log du contenu complet du premier BSS si aucun réseau n'est trouvé
 - ✅ Meilleure gestion des cas où le SSID est dans un champ non standard
 
-### 🔧 Modifié
+### Changed
 
 **FreeboxPlugin - Protection Concurrente**
 - 🔧 Ajout de `isGettingStats` et `statsPromise` pour protéger contre les appels simultanés
@@ -2105,7 +2105,7 @@ cap_drop:
 
 ## [0.3.0] - 2025-12-29
 
-### 🐛 Corrigé
+### Fixed
 
 **Scan Réseau - Erreur 504 Gateway Timeout**
 - ✅ Correction de l'erreur 504 lors des scans longs (>60 secondes)
@@ -2113,7 +2113,7 @@ cap_drop:
 - ✅ Plus de timeout HTTP : le scan continue en arrière-plan pendant que le frontend suit le progrès
 - ✅ Résolution définitive du problème de timeout sur les scans de grandes plages réseau
 
-### ✨ Ajouté
+### Added
 
 **Scan Réseau - Architecture Asynchrone**
 - ✅ Route POST `/api/network-scan/scan` retourne immédiatement avec statut "scan démarré"
@@ -2127,7 +2127,7 @@ cap_drop:
 - ✅ Méthode `getLastScanResult()` pour récupérer les résultats après completion
 - ✅ Nettoyage automatique des résultats lors du démarrage d'un nouveau scan
 
-### 🔧 Modifié
+### Changed
 
 **Route POST `/api/network-scan/scan`**
 - 🔧 Scan démarré en arrière-plan avec `Promise.then()` au lieu d'attendre la completion
@@ -2148,7 +2148,7 @@ cap_drop:
 
 ## [0.2.8] - 2025-12-29
 
-### 🐛 Corrigé
+### Fixed
 
 **Scan Réseau - Gestion des IPs Offline**
 - ✅ Correction : Les nouvelles IPs offline jamais découvertes ne sont plus créées dans la base de données
@@ -2176,7 +2176,7 @@ cap_drop:
 - ✅ Ajout du support de la variable d'environnement `HOST_IP` pour spécifier l'IP de l'hôte
 - ✅ Documentation ajoutée dans docker-compose.local.yml pour configurer HOST_IP
 
-### ✨ Ajouté
+### Added
 
 **Interface Utilisateur - Affichage Durée Scan**
 - ✅ Affichage de la durée du scan dans les résultats avec format lisible
@@ -2191,7 +2191,7 @@ cap_drop:
 - ✅ Recommandations de configuration pour réseau très lent (>50ms latence)
 - ✅ Commandes de diagnostic pour identifier les problèmes
 
-### 🔧 Modifié
+### Changed
 
 **Service Scan Réseau - Traitement des Résultats**
 - 🔧 Amélioration du traitement des promesses rejetées avec gestion explicite
@@ -2211,7 +2211,7 @@ cap_drop:
 ---
 ## [0.2.7] - 2025-12-29
 
-### 🐛 Corrigé
+### Fixed
 
 **Scan Réseau - IPs Manquantes (Bug Critique)**
 - ✅ Correction du problème "une IP sur deux" manquante lors des scans
@@ -2225,7 +2225,7 @@ cap_drop:
 - ✅ Correction de l'erreur de compilation : `The symbol "isFirstAttempt" has already been declared`
 - ✅ Suppression de la déclaration dupliquée dans la détection MAC
 
-### ✨ Ajouté
+### Added
 
 **Interface Utilisateur - Affichage Durée Scan**
 - ✅ Affichage de la durée du scan dans les résultats (format lisible : "1m 23s" ou "45.2s")
@@ -2241,7 +2241,7 @@ cap_drop:
 - ✅ Commandes de diagnostic pour identifier les problèmes de latence
 - ✅ Instructions pour ajuster les timeouts et la concurrence selon le réseau
 
-### 🔧 Modifié
+### Changed
 
 **Service Scan Réseau - Traitement des Résultats**
 - 🔧 Amélioration du traitement des résultats de ping avec gestion explicite des promesses rejetées
@@ -2253,7 +2253,7 @@ cap_drop:
 
 ## [0.2.6] - 2025-12-28
 
-### 🐛 Corrigé
+### Fixed
 
 **Exports Prometheus - Parsing des Valeurs**
 - ✅ Correction de l'erreur `strconv.ParseFloat: parsing "[object": invalid syntax`
@@ -2279,7 +2279,7 @@ cap_drop:
 - ✅ Conversion sécurisée de toutes les valeurs avec `toPrometheusNumber()`
 - ✅ Arrondi correct des valeurs entières pour InfluxDB (`i` suffix)
 
-### 🔧 Modifié
+### Changed
 
 **Service Métriques - Architecture**
 - 🔧 Ajout de la fonction utilitaire `toPrometheusNumber()` pour centraliser la conversion des valeurs
@@ -2291,7 +2291,7 @@ cap_drop:
 
 ## [0.2.5] - 2025-12-28
 
-### ✨ Ajouté
+### Added
 
 **Monitoring de Latence - Système Complet**
 - 📊 Nouveau système de monitoring de latence inspiré de Lagident
@@ -2333,7 +2333,7 @@ cap_drop:
 - 🏷️ Badges "Complet" et "Rapide" alignés avec la page principale
 - 📐 Format identique pour cohérence visuelle
 
-### 🔧 Modifié
+### Changed
 
 **Scanner Réseau - Parsing de Latence**
 - 🔧 Parsing amélioré pour conserver les valeurs décimales (parseFloat au lieu de parseInt)
@@ -2357,7 +2357,7 @@ cap_drop:
 - 🖱️ Hover uniforme sur toutes les lignes avec fond #1d1d1d
 - 📐 Transitions fluides pour tous les effets visuels
 
-### 🐛 Corrigé
+### Fixed
 
 **Monitoring de Latence - Valeurs à 0ms**
 - ✅ Correction du problème où toutes les valeurs affichaient 0ms dans le graphique
@@ -2381,7 +2381,7 @@ cap_drop:
 
 ## [0.2.4] - 2025-12-27
 
-### ✨ Ajouté
+### Added
 
 **Page Scan Réseau - Protection contre les Scans Multiples**
 - 🛡️ Protection côté serveur pour empêcher les scans simultanés
@@ -2395,7 +2395,7 @@ cap_drop:
 - 🔍 Scan immédiat de l'IP ajoutée avec détection MAC et hostname
 - 💾 Enregistrement dans la base de données avec source "manual"
 
-### 🔧 Modifié
+### Changed
 
 **Page Scan Réseau - Affichage des Prochains Scans**
 - 🎨 Amélioration du visuel des prochains scans (Full Scan et Refresh)
@@ -2410,7 +2410,7 @@ cap_drop:
 - 🔍 Détection améliorée des pings Linux vers Windows avec indicateurs `icmp_seq=`
 - ✅ Acceptation des latences de 0ms comme pings réussis
 
-### 🐛 Corrigé
+### Fixed
 
 **Scanner Réseau - Détection Windows**
 - ✅ Correction du problème où les PC Windows n'étaient pas détectés lors des scans
@@ -2426,7 +2426,7 @@ cap_drop:
 
 ## [0.2.3] - 2025-12-24
 
-### ✨ Ajouté
+### Added
 
 **Recherche Exacte IP - Agrégation Complète des Données**
 - 🔍 Nouvelle route API `/api/search/ip-details/:ip` pour agrégation des données depuis Scanner, Freebox et UniFi
@@ -2457,7 +2457,7 @@ cap_drop:
 - 📊 Application des couleurs dans tous les affichages de latence (ping, scanner, résultats)
 - 🎯 Fonctions utilitaires `getLatencyColor()` et `getLatencyBgColor()` pour cohérence visuelle
 
-### 🔧 Modifié
+### Changed
 
 **Recherche Exacte IP - Normalisation des Données**
 - 🔄 Normalisation du SSID depuis plusieurs champs possibles (`ssid`, `essid`, `wifi_ssid`, `wlan_ssid`)
@@ -2475,7 +2475,7 @@ cap_drop:
 - 🔌 Badge Port avec icône Cable pour les connexions filaires
 - 🎨 Badges colorés pour le type de connexion (WiFi orange, Filaire gris)
 
-### 🐛 Corrigé
+### Fixed
 
 **Recherche Exacte IP - Données UniFi**
 - ✅ Correction de la récupération des clients UniFi depuis `devices` array avec `type === 'client'`
@@ -2496,7 +2496,7 @@ cap_drop:
 
 ## [0.2.2] - 2025-12-23
 
-### ✨ Ajouté
+### Added
 
 **Plugin Scan Réseau - Sauvegarde des Préférences Utilisateur**
 - 💾 Sauvegarde automatique des préférences dans localStorage (filtre de statut, tri, nombre de résultats)
@@ -2515,7 +2515,7 @@ cap_drop:
 - 📍 Barre de recherche déplacée sur la même ligne que les menus de filtre
 - 🎯 Alignement parfait de la hauteur avec les autres éléments de contrôle
 
-### 🔧 Modifié
+### Changed
 
 **Plugin Scan Réseau - Comportement par Défaut**
 - 🔄 Filtre de statut par défaut changé de `'all'` à `'online'` pour afficher uniquement les IPs en ligne
@@ -2545,7 +2545,7 @@ cap_drop:
 - 🔧 Correction de l'erreur d'hydratation React pour `<colgroup>` (suppression des espaces blancs)
 - 📐 Toutes les balises `<col>` sur une seule ligne pour respecter les règles HTML strictes de React
 
-### 🐛 Corrigé
+### Fixed
 
 **Authentification & Thème**
 - ✅ Correction de l'erreur 401 au démarrage lors du chargement du thème (`/api/settings/theme`)
@@ -2575,21 +2575,21 @@ cap_drop:
 
 ## [0.2.1] - 2025-12-23
 
-### ✨ Ajouté
+### Added
 
-- Migration complète vers la base de données officielle IEEE OUI (standards-oui.ieee.org)
-- Parser dédié pour le format IEEE OUI multi-lignes
-- Détection MAC/Vendor depuis Freebox améliorée (`getMacFromFreebox`, `getVendorFromFreeboxByIp`)
-- Bouton "Supprimer tous les scans réseau" dans le modal de configuration
-- Effet 3D sur les mini barres graphiques avec base noire accentuée
-- Refactoring "Info Scans" : boutons côte à côte, stats en dessous
-- Animation pulse sur les lignes du tableau pendant les scans automatiques
+- Full migration to the official IEEE OUI database (standards-oui.ieee.org)
+- Dedicated parser for the multi-line IEEE OUI format
+- Improved MAC/Vendor detection from Freebox (`getMacFromFreebox`, `getVendorFromFreeboxByIp`)
+- "Delete all network scans" button in the configuration modal
+- 3D effect on mini bar charts with accented black base
+- "Scan Info" refactor: buttons side-by-side, stats below
+- Row pulse animation during automatic scans
 
-### 🔧 Modifié
+### Changed
 
-- Base vendors : migration de Wireshark GitHub/GitLab vers IEEE OUI officiel
-- Tableau des résultats : colonnes adaptatives (`table-auto`), texte sur 2 lignes, ordre MAC/Hostname échangé
-- Mini barres graphiques : couleurs moins flashy, base noire >50% hauteur, effet 3D complet
+- Vendor database: migrated from Wireshark GitHub/GitLab to the official IEEE OUI source
+- Results table: adaptive columns (`table-auto`), 2-line text, MAC/Hostname order swapped
+- Mini bar charts: softer colors, black base >50% height, full 3D effect
 
 ---
 

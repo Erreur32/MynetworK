@@ -2379,6 +2379,7 @@ const GeneralNetworkSection: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [initialPublicUrl, setInitialPublicUrl] = useState('');
+  const [noteOpen, setNoteOpen] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -2489,11 +2490,21 @@ const GeneralNetworkSection: React.FC = () => {
       </div>
       
       <div className="text-xs text-gray-500 mt-2 p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-        <p className="font-medium text-gray-400 mb-1">💡 {t('admin.general.noteTitle')} :</p>
-        <ul className="list-disc list-inside space-y-1 ml-2">
-          <li>{t('admin.general.publicUrlFormatHint')}</li>
-          <li>{t('admin.general.publicUrlEmptyHint')}</li>
-        </ul>
+        <button
+          type="button"
+          onClick={() => setNoteOpen(o => !o)}
+          className="w-full flex items-center justify-between text-left"
+          aria-expanded={noteOpen}
+        >
+          <p className="font-medium text-gray-400">💡 {t('admin.general.noteTitle')} :</p>
+          <ChevronDown size={14} className={`text-gray-400 transition-transform ${noteOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {noteOpen && (
+          <ul className="list-disc list-inside space-y-1 ml-2 mt-2">
+            <li>{t('admin.general.publicUrlFormatHint')}</li>
+            <li>{t('admin.general.publicUrlEmptyHint')}</li>
+          </ul>
+        )}
       </div>
     </div>
   );
