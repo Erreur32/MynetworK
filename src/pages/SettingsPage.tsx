@@ -14,6 +14,7 @@ import {
   Monitor,
   Database,
   ChevronLeft,
+  ChevronDown,
   Loader2,
   AlertCircle,
   Save,
@@ -2167,6 +2168,9 @@ const UpdateCheckSection: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Collapsible changelog — closed by default */}
+      <ChangelogBlock collapsible />
     </div>
   );
 };
@@ -3023,37 +3027,121 @@ function parseChangelogVersions(content: string): Array<{ version: string; date:
   });
 }
 
+// Shared Changelog block: fetches /api/info/changelog and renders a version selector + markdown body.
+// When `collapsible`, shown as an expandable panel closed by default (used in Update section).
+const ChangelogBlock: React.FC<{ collapsible?: boolean }> = ({ collapsible = false }) => {
+  const { t } = useTranslation();
+  const [versions, setVersions] = useState<Array<{ version: string; date: string; body: string }>>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(!collapsible);
+
+  useEffect(() => {
+    const fetchChangelog = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await api.get<{ content: string }>('/api/info/changelog');
+        if (response.success && response.result?.content) {
+          setVersions(parseChangelogVersions(response.result.content));
+          setSelectedIndex(0);
+        } else {
+          setError((response as { error?: { message?: string } })?.error?.message || t('admin.changelogLoadError'));
+        }
+      } catch {
+        setError(t('admin.changelogLoadError'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (open) fetchChangelog();
+  }, [t, open]);
+
+  const inner = (
+    <>
+      {loading && (
+        <div className="flex items-center gap-2 text-theme-secondary">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">{t('common.loading')}</span>
+        </div>
+      )}
+      {error && <p className="text-sm text-amber-500">{error}</p>}
+      {!loading && versions.length > 0 && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-sm text-theme-secondary">{t('admin.changelogVersionLabel')}:</span>
+            <select
+              value={selectedIndex}
+              onChange={(e) => setSelectedIndex(Number(e.target.value))}
+              className="px-3 py-1.5 bg-theme border border-gray-700 rounded-lg text-sm text-theme-primary focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+              aria-label={t('admin.changelogShowOtherVersions')}
+            >
+              {versions.map((v, i) => (
+                <option key={i} value={i}>
+                  {v.version}{v.date ? ` (${v.date})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="max-h-[480px] overflow-auto rounded border border-theme bg-gray-900/50 p-4">
+            <div className="changelog-markdown text-sm text-theme-secondary [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-teal-400 [&_h1]:border-b [&_h1]:border-teal-500/30 [&_h1]:pb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-cyan-400 [&_h2]:border-b [&_h2]:border-cyan-500/30 [&_h2]:pb-1 [&_h3]:text-base [&_h3]:font-medium [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3]:text-amber-400 [&_h4]:text-sm [&_h4]:font-medium [&_h4]:mt-2 [&_h4]:mb-1 [&_h4]:text-emerald-400 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_p]:my-2 [&_code]:bg-gray-800 [&_code]:text-teal-300 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:border [&_code]:border-gray-700 [&_pre]:bg-gray-900 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:border [&_pre]:border-gray-700 [&_pre]:border-l-4 [&_pre]:border-l-teal-500 [&_pre]:my-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:border-0 [&_pre_code]:text-gray-200 [&_a]:text-blue-400 [&_a]:underline hover:[&_a]:text-blue-300 [&_strong]:font-semibold [&_strong]:text-amber-300">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children, ...props }) => {
+                    const resolved = href?.startsWith('http') ? href : href?.startsWith('#') ? `${GITHUB_REPO_URL}${href}` : `${GITHUB_REPO_URL}/blob/main/${href ?? ''}`;
+                    return (
+                      <a href={resolved} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300" {...props}>
+                        {children}
+                      </a>
+                    );
+                  }
+                }}
+              >
+                {versions[selectedIndex]?.body ?? ''}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  if (collapsible) {
+    return (
+      <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-cyan-500">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between text-left"
+          aria-expanded={open}
+        >
+          <h3 className="text-lg font-semibold text-cyan-400">{t('admin.changelogTitle')}</h3>
+          <ChevronDown size={20} className={`text-cyan-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {open && <div className="mt-3">{inner}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-cyan-500">
+      <h3 className="text-lg font-semibold text-cyan-400 mb-3">{t('admin.changelogTitle')}</h3>
+      {inner}
+    </div>
+  );
+};
+
 // Info Section Component (for Administration > Info tab)
 // Displays project card, GitHub repo stats (small badges), About, Technologies, and Changelog.
 const InfoSection: React.FC = () => {
   const { t } = useTranslation();
-  const [changelogVersions, setChangelogVersions] = useState<Array<{ version: string; date: string; body: string }>>([]);
-  const [selectedVersionIndex, setSelectedVersionIndex] = useState(0);
   const [repoStats, setRepoStats] = useState<{ stars: number; forks: number; watchers: number; open_issues: number } | null>(null);
-  const [changelogLoading, setChangelogLoading] = useState(true);
   const [repoStatsLoading, setRepoStatsLoading] = useState(true);
-  const [changelogError, setChangelogError] = useState<string | null>(null);
   const [repoStatsError, setRepoStatsError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchChangelog = async () => {
-      setChangelogLoading(true);
-      setChangelogError(null);
-      try {
-        const response = await api.get<{ content: string }>('/api/info/changelog');
-        if (response.success && response.result?.content) {
-          const versions = parseChangelogVersions(response.result.content);
-          setChangelogVersions(versions);
-          setSelectedVersionIndex(0);
-        } else {
-          setChangelogError((response as { error?: { message?: string } })?.error?.message || t('admin.changelogLoadError'));
-        }
-      } catch {
-        setChangelogError(t('admin.changelogLoadError'));
-      } finally {
-        setChangelogLoading(false);
-      }
-    };
     const fetchRepoStats = async () => {
       setRepoStatsLoading(true);
       setRepoStatsError(null);
@@ -3070,7 +3158,6 @@ const InfoSection: React.FC = () => {
         setRepoStatsLoading(false);
       }
     };
-    fetchChangelog();
     fetchRepoStats();
   }, [t]);
 
@@ -3174,57 +3261,8 @@ const InfoSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Changelog (latest version by default, selector for other versions) */}
-          <div className="p-4 bg-theme-secondary rounded-lg border border-theme border-l-4 border-l-cyan-500">
-            <h3 className="text-lg font-semibold text-cyan-400 mb-3">{t('admin.changelogTitle')}</h3>
-            {changelogLoading && (
-              <div className="flex items-center gap-2 text-theme-secondary">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">{t('common.loading')}</span>
-              </div>
-            )}
-            {changelogError && (
-              <p className="text-sm text-amber-500">{changelogError}</p>
-            )}
-            {!changelogLoading && changelogVersions.length > 0 && (
-              <>
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                  <span className="text-sm text-theme-secondary">{t('admin.changelogVersionLabel')}:</span>
-                  <select
-                    value={selectedVersionIndex}
-                    onChange={(e) => setSelectedVersionIndex(Number(e.target.value))}
-                    className="px-3 py-1.5 bg-theme border border-gray-700 rounded-lg text-sm text-theme-primary focus:outline-none focus:ring-2 focus:ring-teal-500/50"
-                    aria-label={t('admin.changelogShowOtherVersions')}
-                  >
-                    {changelogVersions.map((v, i) => (
-                      <option key={i} value={i}>
-                        {v.version}{v.date ? ` (${v.date})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="max-h-[480px] overflow-auto rounded border border-theme bg-gray-900/50 p-4">
-                  <div className="changelog-markdown text-sm text-theme-secondary [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-teal-400 [&_h1]:border-b [&_h1]:border-teal-500/30 [&_h1]:pb-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:text-cyan-400 [&_h2]:border-b [&_h2]:border-cyan-500/30 [&_h2]:pb-1 [&_h3]:text-base [&_h3]:font-medium [&_h3]:mt-2.5 [&_h3]:mb-1 [&_h3]:text-amber-400 [&_h4]:text-sm [&_h4]:font-medium [&_h4]:mt-2 [&_h4]:mb-1 [&_h4]:text-emerald-400 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_p]:my-2 [&_code]:bg-gray-800 [&_code]:text-teal-300 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:border [&_code]:border-gray-700 [&_pre]:bg-gray-900 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:border [&_pre]:border-gray-700 [&_pre]:border-l-4 [&_pre]:border-l-teal-500 [&_pre]:my-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:border-0 [&_pre_code]:text-gray-200 [&_a]:text-blue-400 [&_a]:underline hover:[&_a]:text-blue-300 [&_strong]:font-semibold [&_strong]:text-amber-300">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children, ...props }) => {
-                          const resolved = href?.startsWith('http') ? href : href?.startsWith('#') ? `${GITHUB_REPO_URL}${href}` : `${GITHUB_REPO_URL}/blob/main/${href ?? ''}`;
-                          return (
-                            <a href={resolved} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300" {...props}>
-                              {children}
-                            </a>
-                          );
-                        }
-                      }}
-                    >
-                      {changelogVersions[selectedVersionIndex]?.body ?? ''}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Changelog (shared component, expanded here) */}
+          <ChangelogBlock />
         </div>
       </Section>
     </div>

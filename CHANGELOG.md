@@ -4,25 +4,78 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.88] - 2026-04-17
 
+### 🐛 Corrigé
+
+- **fix(dashboard): React #185 crash on tab resume** — Infinite render loop in `BandwidthHistoryWidget` when returning to an inactive tab
+- **unifiRealtimeStore**: skip history growth while `document.hidden`, mirroring the `connectionStore` guard
+- **BandwidthHistoryWidget**: added `debounce={100}` on `ResponsiveContainer` to break the recharts `ResizeObserver` loop on visibility change
+
 ---
 
 ## [0.7.87] - 2026-04-17
+
+### 🔧 Modifié
+
+- **SonarCloud code smells** (minor):
+  - `UniFiApiService`: `charCodeAt` → `codePointAt` in `stripTrailingSlashes`
+  - `speedtest`: `numGroup` uses `String.raw`; rtt/mac matches use `RegExp.exec`
+  - `SettingsPage`: changelog parser uses `RegExp.exec` instead of `String.match`
 
 ---
 
 ## [0.7.86] - 2026-04-17
 
+### 🔧 Modifié
+
+- **SonarCloud S5852 false positives** — Flagged regex patterns are either linear-time (disjoint character classes, no nested quantifiers) or use bounded `{n,m}` quantifiers. Annotated with `NOSONAR` + justification.
+- Affected: `networkScanService`, `speedtest`, `freeboxFirmwareCheckService`, `plugins` route, `searchService`
+
 ---
 
 ## [0.7.85] - 2026-04-17
+
+### ✨ Ajouté
+
+- **UniFi gateway temperature badge with tooltip**
+- Backend extracts temperature from UDM gateway device (`general_temperature` or `temperatures[]`), exposes `systemStats.temperature` + `temperatureSensors`
+- Dashboard card: system state block with temp badge below mini-graphs
+- Header badges: purple CPU badge on dashboard, emerald badge on `/unifi` — hover tooltip listing individual sensors
+
+### 🔧 Modifié
+
+- Removed redundant flickering "Temperature" block from Freebox card footer (duplicated info; inconsistent `sys.temp_cpum` mapping on Ultra)
 
 ---
 
 ## [0.7.84] - 2026-04-17
 
+### 🐛 Corrigé
+
+- **SonarCloud S5852 ReDoS hotspots** — Replace potentially super-linear regex patterns with bounded equivalents or non-regex string operations
+- `UniFiApiService`: extracted `stripTrailingSlashes()` helper (5 occurrences)
+- `networkScanService`: `/[\d.]+/` → `/\d+(?:\.\d+)?/` in ping output parsers
+- `NetworkScanPage`: `/\s*$/` → `trimEnd()`; `/\s*:\s*$/` → `endsWith + slice`
+- `SettingsPage.validateEmail`: regex replaced with `indexOf/slice` + 254-char cap
+- `network-scan` route: IP octet extraction via `split()` instead of regex
+- `speedtest` route: bounded `\d+(?:\.\d+)?` via shared `numGroup` helper
+- `freeboxFirmwareCheckService`: bounded `\d{1,5}(?:\.\d{1,5}){1,3}` for versions
+
 ---
 
 ## [0.7.83] - 2026-04-17
+
+### ✨ Ajouté
+
+- **Sonner toast notifications with customization panel**
+- Installed `sonner` for toast notifications (bottom-right, above footer)
+- Toast feedback wired on reboot, VM toggle, WiFi toggle, login, logout
+- `notificationStore` (zustand+persist) for user prefs: position, offsets, duration, theme, visibleToasts, richColors, closeButton, expand, sound
+- `NotificationToaster` wrapper that reactively applies prefs
+- `NotificationSettingsCard` in Theme section with live test buttons, Web Audio beep when sound enabled
+
+### 🔧 Modifié
+
+- Reuse existing `Toggle` UI component; sliders commit on pointer release to avoid localStorage thrashing during drag
 
 ---
 
@@ -146,10 +199,6 @@ cap_drop:
 
 - **sonar-project.properties** — Added `sonar.issue.ignore.multicriteria` exclusions for false positive S2245 (Math.random in visual animations) and S1313 (hardcoded IPs expected in network monitoring tool)
 - **Dockerfile** — Added `apk upgrade --no-cache` to fix zlib CVE-2026-27171
-
----
-
-## [0.7.69] - 2026-04-10
 
 ---
 
@@ -614,46 +663,6 @@ cap_drop:
 
 ---
 
-## [0.7.38] - 2026-04-06
-
----
-
-## [0.7.37] - 2026-04-06
-
----
-
-## [0.7.36] - 2026-04-06
-
----
-
-## [0.7.35] - 2026-04-06
-
----
-
-## [0.7.34] - 2026-04-06
-
----
-
-## [0.7.33] - 2026-04-06
-
----
-
-## [0.7.32] - 2026-04-06
-
----
-
-## [0.7.31] - 2026-04-06
-
----
-
-## [0.7.30] - 2026-04-06
-
----
-
-## [0.7.29] - 2026-04-06
-
----
-
 ## [0.7.28] - 2026-04-06
 
 ### ✨ Ajouté
@@ -677,10 +686,6 @@ cap_drop:
 
 ---
 
-## [0.7.27] - 2026-03-30
-
----
-
 ## [0.7.26] - 2026-03-30
 
 ### Security
@@ -695,7 +700,6 @@ cap_drop:
 
 - **CVE-2026-33671** , **CVE-2026-33672** corrected fix
 
-
 ---
 
 ## [0.7.24] - 2026-03-25
@@ -703,7 +707,6 @@ cap_drop:
 ### Fixed again
 
 - **Docker** : suppression de `FROM --platform=$TARGETPLATFORM` (redondant avec Buildx) pour réduire les warnings `RedundantTargetPlatform` pendant le build multi-arch.
-
 
 ---
 
@@ -760,8 +763,6 @@ cap_drop:
 
 ---
 
-
-
 ## [0.7.18] - 2026-03-24
 
 ### Added
@@ -779,10 +780,6 @@ cap_drop:
 ### Fixed
 
 - **Build — Chunks trop volumineux (> 600 kB)** : découpage `manualChunks` Rollup revu dans `vite.config.ts` ; nouveau chunk `vendor-markdown` pour `react-markdown` + `remark-gfm` et leurs dépendances transitives (`unified`, `mdast`, `hast`, `micromark`, `vfile`) ; nouveau chunk `vendor-i18n` pour `i18next` / `react-i18next` / `i18next-browser-languagedetector` ; chunk `vendor-charts` étendu aux sous-paquets `d3-*` ; exclusion React corrigée (filtre sur chemin complet `/react/` pour éviter d'exclure `react-markdown` et `react-i18next`)
-
----
-
-## [0.7.16] - 2026-03-24
 
 ---
 
@@ -805,14 +802,6 @@ cap_drop:
 - L'ordre des méthodes MAC est désormais : ARP table (passive) → arping (active L2) → ip neigh → arp-scan → arp -n
 - Le fallback hostname respecte la configuration `vendorPriority` : ne s'active que si `scanner` figure dans la liste de priorité configurée
 - DB vendor Wireshark : 38 625 entrées chargées depuis `oui.txt` (inchangé)
-
----
-
-## [0.7.14] - 2026-02-28
-
----
-
-## [0.7.13] - 2026-02-28
 
 ---
 
@@ -951,10 +940,6 @@ cap_drop:
 
 ---
 
-## [0.7.4] - 2026-02-09
-
----
-
 ## [0.7.3] - 2026-02-07
 
 ### Fixed
@@ -1027,7 +1012,6 @@ cap_drop:
 - `tsconfig.json`: `resolveJsonModule: true` for locale JSON imports
 - `package.json`: added dependencies for i18n
 - Server: banner and CORS conditional on Ingress env vars; new `/api/config` route
-
 
 ---
 
@@ -1548,8 +1532,6 @@ cap_drop:
 - ✅ Affichage conditionnel uniquement si le plugin Freebox est actif et connecté
 - ✅ Affichage des informations réseau essentielles directement sur le dashboard
 
-
-
 ### 🔧 Modifié
 
 **Freebox - Réorganisation de l'Onglet Réseau**
@@ -1659,10 +1641,6 @@ cap_drop:
 - ✅ Correction de l'affichage "undefinedms" : vérification de l'existence de la latence avant affichage
 - ✅ Affichage de "UP" si la latence n'est pas disponible mais que le ping est réussi
 - ✅ Gestion correcte des cas où time est undefined dans les résultats de ping
-
----
-
-## [0.] - 2026-01-13
 
 ---
 
@@ -2149,10 +2127,6 @@ cap_drop:
 
 ---
 
-## [0.2.9] - 2025-12-29
-
----
-
 ## [0.2.8] - 2025-12-29
 
 ### 🐛 Corrigé
@@ -2581,3 +2555,22 @@ cap_drop:
 ---
 
 ## [0.2.1] - 2025-12-23
+
+### ✨ Ajouté
+
+- Migration complète vers la base de données officielle IEEE OUI (standards-oui.ieee.org)
+- Parser dédié pour le format IEEE OUI multi-lignes
+- Détection MAC/Vendor depuis Freebox améliorée (`getMacFromFreebox`, `getVendorFromFreeboxByIp`)
+- Bouton "Supprimer tous les scans réseau" dans le modal de configuration
+- Effet 3D sur les mini barres graphiques avec base noire accentuée
+- Refactoring "Info Scans" : boutons côte à côte, stats en dessous
+- Animation pulse sur les lignes du tableau pendant les scans automatiques
+
+### 🔧 Modifié
+
+- Base vendors : migration de Wireshark GitHub/GitLab vers IEEE OUI officiel
+- Tableau des résultats : colonnes adaptatives (`table-auto`), texte sur 2 lignes, ordre MAC/Hostname échangé
+- Mini barres graphiques : couleurs moins flashy, base noire >50% hauteur, effet 3D complet
+
+---
+

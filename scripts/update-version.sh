@@ -171,14 +171,39 @@ if grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md 2>/dev/null; then
     # Mettre à jour la date si nécessaire
     sed -i "s/^## \[$NEW_VERSION\] - .*/## [$NEW_VERSION] - $CURRENT_DATE/" CHANGELOG.md
 else
-    # Créer un fichier temporaire avec la nouvelle entrée (sans template vide)
+    # Récupérer les commits depuis le dernier bump de version pour pré-remplir le changelog
+    COMMIT_LINES=""
+    if command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
+        LAST_VERSION_COMMIT=$(git log --grep="^feat: Version" --pretty=format:"%H" -n 1 2>/dev/null)
+        if [ -n "$LAST_VERSION_COMMIT" ]; then
+            COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges "${LAST_VERSION_COMMIT}..HEAD" 2>/dev/null)
+        fi
+        if [ -z "$COMMIT_LINES" ]; then
+            COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges -n 10 2>/dev/null)
+        fi
+    fi
+
+    # Créer un fichier temporaire avec la nouvelle entrée
     TEMP_CHANGELOG=$(mktemp)
-    cat > "$TEMP_CHANGELOG" << EOF
+    if [ -n "$COMMIT_LINES" ]; then
+        cat > "$TEMP_CHANGELOG" << EOF
+## [$NEW_VERSION] - $CURRENT_DATE
+
+### Changes
+
+$COMMIT_LINES
+
+---
+
+EOF
+    else
+        cat > "$TEMP_CHANGELOG" << EOF
 ## [$NEW_VERSION] - $CURRENT_DATE
 
 ---
 
 EOF
+    fi
 
     # Créer un fichier temporaire pour le nouveau CHANGELOG
     TEMP_OUTPUT=$(mktemp)

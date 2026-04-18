@@ -347,7 +347,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 fill={COLORS.blue}
                                 fillOpacity={0.3}
                                 name={t('system.download')}
-                                isAnimationActive={selectedRange !== 0}
+                                isAnimationActive={false}
                                 hide={hiddenSeries.has('download')}
                             />
                             <Area
@@ -358,7 +358,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 fill={COLORS.green}
                                 fillOpacity={0.3}
                                 name={t('system.upload')}
-                                isAnimationActive={selectedRange !== 0}
+                                isAnimationActive={false}
                                 hide={hiddenSeries.has('upload')}
                             />
                         </AreaChart>
