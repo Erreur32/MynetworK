@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.90] - 2026-05-02
+
+### Security
+
+- Bumped `postcss` to `^8.5.10` (installed: 8.5.13) to address GHSA-qx2v-qp2m-jg93 (XSS via unescaped `</style>` sequences in CSS AST stringification). PostCSS is build-time only (Tailwind/Vite); runtime exposure was nil but the OSV alert is now resolved.
+
+### Changed
+
+- `package.json`: direct `postcss` dependency `^8.4.47` → `^8.5.10`. `package-lock.json` regenerated; transitive consumers (autoprefixer, tailwindcss/postcss-*, vite) dedupe to 8.5.13.
+
 ## [0.7.89] - 2026-04-18
 
 ### Added
