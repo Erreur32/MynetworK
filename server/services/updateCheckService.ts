@@ -149,21 +149,35 @@ async function isBuildValidated(sha: string, headers: Record<string, string>): P
       logger.warn('Updates', `Cannot verify build status for ${sha}: ${response.status}`);
       return true;
     }
-    const data = await response.json() as { total_count: number; check_runs: Array<{ status: string; conclusion: string | null; name: string }> };
+    const data = await response.json() as { total_count: number; check_runs: Array<{ status: string; conclusion: string | null; name: string; started_at?: string }> };
     if (data.total_count === 0) {
       // No check runs → build not validated
       logger.warn('Updates', `No CI check runs found for commit ${sha.slice(0, 7)} — skipping`);
       return false;
     }
-    // ALL check runs must be completed (no in_progress or queued)
-    const allCompleted = data.check_runs.every(r => r.status === 'completed');
+    // Deduplicate by name, keeping the most recently started run.
+    // Avoids orphaned in_progress reruns invalidating an already-successful build.
+    const latestByName = new Map<string, { status: string; conclusion: string | null; name: string; started_at?: string }>();
+    for (const run of data.check_runs) {
+      const existing = latestByName.get(run.name);
+      if (!existing) {
+        latestByName.set(run.name, run);
+        continue;
+      }
+      const aT = run.started_at ? Date.parse(run.started_at) : 0;
+      const bT = existing.started_at ? Date.parse(existing.started_at) : 0;
+      if (aT >= bT) latestByName.set(run.name, run);
+    }
+    const runs = Array.from(latestByName.values());
+    // ALL latest check runs must be completed (no in_progress or queued)
+    const allCompleted = runs.every(r => r.status === 'completed');
     if (!allCompleted) {
-      const pending = data.check_runs.filter(r => r.status !== 'completed').map(r => r.name);
+      const pending = runs.filter(r => r.status !== 'completed').map(r => r.name);
       logger.info('Updates', `Build not finished for ${sha.slice(0, 7)} — pending: ${pending.join(', ')}`);
       return false;
     }
-    const hasFailed = data.check_runs.some(r => r.conclusion === 'failure' || r.conclusion === 'cancelled');
-    const hasSuccess = data.check_runs.some(r => r.conclusion === 'success');
+    const hasFailed = runs.some(r => r.conclusion === 'failure' || r.conclusion === 'cancelled');
+    const hasSuccess = runs.some(r => r.conclusion === 'success');
     return hasSuccess && !hasFailed;
   } catch (e) {
     logger.warn('Updates', `Build validation check failed: ${e instanceof Error ? e.message : String(e)}`);

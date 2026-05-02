@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.91] - 2026-05-02
+
+### Fixed
+
+- Update check: dedupe CI check-runs by name in build validation. Orphaned `in_progress` reruns were invalidating already-successful `build-and-push` runs, causing newer versions to be skipped from the update check (e.g. v0.7.90 not surfaced despite the GHCR image being published).
+
+---
+
 ## [0.7.90] - 2026-05-02
 
 ### Security
