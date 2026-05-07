@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.92] - 2026-05-07
+
+### Changed
+
+- **Dependencies**: bumped `express-rate-limit` `^8.3.2` → `^8.5.1` and transitive `ip-address` `10.1.0` → `10.2.0` (Dependabot group update, PR #16). Both are minor bumps with no API changes.
+
+### CI
+
+- Skip SonarCloud job on Dependabot PRs (`if: github.actor != 'dependabot[bot]'`). Dependabot's restricted token can't access `SONAR_TOKEN`, which was producing a spurious red check on every dependency bump.
+
+---
+
 ## [0.7.91] - 2026-05-02
 
 ### Fixed
