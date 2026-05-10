@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.97] - 2026-05-10
+
+### Changes
+
+- fix(topology): scan-reseau ICMP success now ORs `metadata.active=true` onto existing Freebox/UniFi nodes (per MAC). Devices the scanner just pinged are now shown online even when the Freebox ARP cache claims otherwise. Snapshot schema bumped to v11 to invalidate stale caches.
+- fix(topology): header counters dedupe by canonical MAC and skip stale Freebox-only offline entries — the inflated "wired clients" count caused by Freebox DHCP cache + double attribution is gone.
+- fix(topology): wired/wifi classification prefers wifi when a client has both attributions (UniFi wifi authoritative over Freebox ethernet default).
+- feat(topology): side panel — switch links list shows `[Pn]` port badge + friendly client name (was showing raw MAC), sorted by port number. AP/repeater cards get a new "Wi-Fi summary" block (client count, aggregate speed, breakdown by SSID and band) and per-link rows show SSID · band · signal · speed on a second line.
+- feat(topology): side panel widened to `w-96` (`w-[28rem]` on lg+) so the new wifi columns fit without truncation.
+- feat(topology): auto fitView on first data load and on layout-mode change (Grouped / Tree / Horizontal). Periodic poll updates no longer steal pan/zoom.
+
+---
+
 ## [0.7.96] - 2026-05-10
 
 ### Changes

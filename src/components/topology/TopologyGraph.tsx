@@ -81,6 +81,18 @@ const EDGE_COLOR: Record<EdgeMedium, string> = {
     uplink: '#a78bfa'    // violet/mauve — distinct from amber gateways
 };
 
+const PORT_BADGE_CLASS: Record<EdgeMedium, string> = {
+    uplink:   'bg-purple-500/20 text-purple-200 border-purple-400/40',
+    wifi:     'bg-sky-500/20 text-sky-200 border-sky-400/40',
+    ethernet: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+};
+
+const EDGE_ICON_COLOR: Record<EdgeMedium, string> = {
+    uplink:   'text-purple-400',
+    wifi:     'text-sky-400',
+    ethernet: 'text-emerald-400'
+};
+
 const nodeTypes = { topology: TopologyNodeCard, topologyGroup: TopologyGroupNode };
 
 const LAYOUT_MODES: Array<{ id: LayoutMode; icon: React.ElementType; key: string }> = [
@@ -555,14 +567,51 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
 
     const handlePaneClick = useCallback(() => setSelectedId(null), []);
 
+    // Auto-fit the view in two cases:
+    //  1. First time nodes appear (page load / tab switch back / filter reset)
+    //  2. Layout mode change (Grouped / Tree / Horizontal)
+    // We don't refit on every periodic poll — that would steal pan/zoom from
+    // the user.
+    //
+    // The refs are updated INSIDE the timer callback (not in the effect body),
+    // because React 18 strict mode runs effects twice in dev: setup → cleanup
+    // → setup. Updating refs in the body would make the second setup see the
+    // refs already up-to-date and bail, so fitView would never fire in dev.
+    const lastFittedCountRef = useRef(0);
+    const lastFittedModeRef = useRef<LayoutMode | null>(null);
+    useEffect(() => {
+        const count = layouted.nodes.length;
+        if (count === 0) return;
+        const firstLoad = lastFittedCountRef.current === 0;
+        const modeChanged = lastFittedModeRef.current !== null && lastFittedModeRef.current !== mode;
+        if (!firstLoad && !modeChanged) return;
+        const id = globalThis.setTimeout(() => {
+            reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 });
+            lastFittedCountRef.current = count;
+            lastFittedModeRef.current = mode;
+        }, 200);
+        return () => globalThis.clearTimeout(id);
+    }, [layouted, mode]);
+
+    const nodeLabelById = useMemo(
+        () => new Map(filteredGraph.nodes.map(n => [n.id, n.label])),
+        [filteredGraph.nodes]
+    );
     const selectedNode = useMemo(
         () => (selectedId ? filteredGraph.nodes.find(n => n.id === selectedId) ?? null : null),
         [filteredGraph.nodes, selectedId]
     );
-    const selectedEdges = useMemo(
-        () => (selectedId ? filteredGraph.edges.filter(e => e.source === selectedId || e.target === selectedId) : []),
-        [filteredGraph.edges, selectedId]
-    );
+    // Sort by port-on-this-device ascending so the side panel shows P1, P2, …
+    // before the wifi/portless rows.
+    const selectedEdges = useMemo(() => {
+        if (!selectedId) return [];
+        const list = filteredGraph.edges.filter(e => e.source === selectedId || e.target === selectedId);
+        const portOf = (e: typeof list[number]): number => {
+            const p = e.source === selectedId ? e.portIndex : e.localPortIndex;
+            return typeof p === 'number' && p > 0 ? p : Number.MAX_SAFE_INTEGER;
+        };
+        return list.slice().sort((a, b) => portOf(a) - portOf(b));
+    }, [filteredGraph.edges, selectedId]);
 
     return (
         <div className="relative rounded-xl border border-slate-700 overflow-hidden bg-slate-950" style={{ height }}>
@@ -804,7 +853,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 const kindAccent = NODE_KIND_LEGEND.find(k => k.id === selectedNode.kind);
                 const accentBar = kindAccent?.bar ?? 'bg-slate-500';
                 return (
-                <div className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border-2 border-slate-600 bg-slate-800 shadow-2xl">
+                <div className="absolute top-3 right-3 w-96 lg:w-[28rem] max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border-2 border-slate-600 bg-slate-800 shadow-2xl">
                     <div className={`h-1 ${accentBar}`} />
                     <div className="flex items-start justify-between gap-2 p-4 border-b border-slate-700">
                         <div className="min-w-0">
@@ -867,27 +916,92 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                 </div>
                             );
                         })()}
+                        {(selectedNode.kind === 'ap' || selectedNode.kind === 'repeater') && (() => {
+                            const wifiOut = selectedEdges.filter(e => e.medium === 'wifi' && e.source === selectedNode.id);
+                            if (wifiOut.length === 0) return null;
+                            const bySsid = new Map<string, { count: number; bands: Set<string> }>();
+                            for (const e of wifiOut) {
+                                const key = e.ssid || '—';
+                                const entry = bySsid.get(key) ?? { count: 0, bands: new Set<string>() };
+                                entry.count++;
+                                if (e.band) entry.bands.add(e.band);
+                                bySsid.set(key, entry);
+                            }
+                            const totalSpeed = wifiOut.reduce((s, e) => s + (e.linkSpeedMbps ?? 0), 0);
+                            const speedLabel = formatSpeed(totalSpeed) ?? '—';
+                            return (
+                                <div className="pt-2 border-t border-slate-700 space-y-1.5">
+                                    <div className="text-xs uppercase tracking-wide text-slate-400">
+                                        {t('topology.detail.wifiSummary')}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiClients')}</div>
+                                            <div className="font-mono text-sky-200">{wifiOut.length}</div>
+                                        </div>
+                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiTotal')}</div>
+                                            <div className="font-mono text-sky-200">{speedLabel}</div>
+                                        </div>
+                                    </div>
+                                    {bySsid.size > 0 && (
+                                        <div className="space-y-1">
+                                            {Array.from(bySsid.entries()).map(([ssid, info]) => (
+                                                <div key={ssid} className="flex items-center justify-between gap-2 text-[11px] bg-slate-700/30 rounded px-2 py-1">
+                                                    <span className="truncate text-slate-200" title={ssid}>{ssid}</span>
+                                                    <span className="flex-none text-slate-400 font-mono">
+                                                        {info.count} · {Array.from(info.bands).sort().join('/') || '—'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                         {selectedEdges.length > 0 && (
                             <div className="pt-2 border-t border-slate-700">
                                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">{t('topology.detail.links')}</div>
                                 <div className="space-y-1.5">
-                                    {selectedEdges.map(e => (
-                                        <div key={e.id} className="flex items-center gap-2 text-xs">
-                                            {e.medium === 'wifi' ? (
-                                                <Wifi size={12} className="text-sky-400 flex-none" />
-                                            ) : (
-                                                <Cable size={12} className="text-emerald-400 flex-none" />
-                                            )}
-                                            <span className="text-slate-300 truncate">
-                                                {e.source === selectedNode.id ? '→' : '←'} {e.source === selectedNode.id ? e.target.replace(/^mac:/, '') : e.source.replace(/^mac:/, '')}
-                                            </span>
-                                            {(e.linkSpeedMbps || e.band) && (
-                                                <span className="ml-auto text-slate-400 font-mono">
-                                                    {buildEdgeLabel(e)}
+                                    {selectedEdges.map(e => {
+                                        const isOutgoing = e.source === selectedNode.id;
+                                        const otherId = isOutgoing ? e.target : e.source;
+                                        const otherLabel = nodeLabelById.get(otherId) ?? otherId.replace(/^mac:/, '');
+                                        const port = isOutgoing ? e.portIndex : e.localPortIndex;
+                                        const isWifi = e.medium === 'wifi';
+                                        const hasPort = typeof port === 'number' && port > 0;
+                                        const portBadge = hasPort ? `P${port}` : (isOutgoing ? '→' : '←');
+                                        const speedTxt = formatSpeed(e.linkSpeedMbps) ?? null;
+                                        return (
+                                            <div key={e.id} className={`flex items-start gap-2 text-xs px-1.5 py-1 rounded ${isWifi ? 'bg-sky-500/5' : ''}`}>
+                                                {isWifi ? (
+                                                    <Wifi size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR.wifi}`} />
+                                                ) : (
+                                                    <Cable size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR[e.medium]}`} />
+                                                )}
+                                                <span className={`flex-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border ${PORT_BADGE_CLASS[e.medium]} ${hasPort ? '' : 'opacity-50'}`}>
+                                                    {portBadge}
                                                 </span>
-                                            )}
-                                        </div>
-                                    ))}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-slate-200 truncate" title={otherLabel}>{otherLabel}</div>
+                                                    {isWifi && (e.ssid || e.band || speedTxt || typeof e.signal === 'number') && (
+                                                        <div className="grid grid-cols-[1fr_auto] gap-x-2 mt-0.5 text-[10px] text-slate-400 leading-tight">
+                                                            <span className="truncate" title={e.ssid ?? ''}>
+                                                                {e.ssid ?? '—'}{e.band ? ` · ${e.band}` : ''}
+                                                            </span>
+                                                            <span className="font-mono whitespace-nowrap">
+                                                                {typeof e.signal === 'number' ? `${e.signal} dBm` : ''}
+                                                                {speedTxt ? `${typeof e.signal === 'number' ? ' · ' : ''}${speedTxt}` : ''}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {!isWifi && speedTxt && (
+                                                    <span className="ml-auto text-slate-400 font-mono whitespace-nowrap">{speedTxt}</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

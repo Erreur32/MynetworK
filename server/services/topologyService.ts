@@ -44,7 +44,10 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // 9 — Switch / gateway ports flagged as uplink based on child uplink_remote_port.
 // 10 — Devices store metadata.localUplinkPortIdxs (number[]) — plural to
 //      support LAG / multi-uplink, each member port gets a top-card chip.
-const SCHEMA_VERSION = 10;
+// 11 — Scan-reseau ICMP success now ORs metadata.active=true onto existing
+//      Freebox/UniFi nodes (per-MAC), so a host the scanner just pinged is
+//      online even when the Freebox ARP cache claims otherwise.
+const SCHEMA_VERSION = 11;
 
 interface SwitchPort {
     idx: number;
@@ -782,15 +785,31 @@ class TopologyService {
             const mac = normalizeMac(rec.mac);
             const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
             const existing = nodes.get(id);
+            const lastSeen = rec.lastSeen instanceof Date
+                ? Math.floor(rec.lastSeen.getTime() / 1000)
+                : undefined;
+            const isOnline = rec.status === 'online';
             if (existing) {
                 addSource(existing, 'scan-reseau');
                 if (existing.ip === undefined && rec.ip) existing.ip = rec.ip;
                 if (existing.vendor === undefined && rec.vendor) existing.vendor = rec.vendor;
+                // A fresh ICMP success is a stronger liveness signal than
+                // Freebox's stale ARP cache or UniFi's last_seen window —
+                // OR it in, but never flip true→false from the scanner
+                // (a UniFi AP with state===1 stays online even if its mgmt
+                // IP didn't answer the last sweep).
+                if (isOnline) {
+                    if (!existing.metadata) existing.metadata = {};
+                    existing.metadata.active = true;
+                    const prevSeen = typeof existing.metadata.last_seen === 'number'
+                        ? existing.metadata.last_seen
+                        : 0;
+                    if (lastSeen && lastSeen > prevSeen) {
+                        existing.metadata.last_seen = lastSeen;
+                    }
+                }
                 continue;
             }
-            const lastSeen = rec.lastSeen instanceof Date
-                ? Math.floor(rec.lastSeen.getTime() / 1000)
-                : undefined;
             nodes.set(id, {
                 id,
                 kind: 'client',
@@ -800,7 +819,7 @@ class TopologyService {
                 vendor: rec.vendor,
                 sources: ['scan-reseau'],
                 metadata: {
-                    active: rec.status === 'online',
+                    active: isOnline,
                     last_seen: lastSeen
                 }
             });

@@ -125,7 +125,19 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
 
     const stats = useMemo(() => {
         if (!graph) return null;
-        const kinds = graph.nodes.reduce<Record<string, number>>((acc, n) => {
+        // Dedupe nodes by canonical MAC before counting. The backend already
+        // merges by MAC when building the snapshot, but scan-reseau records
+        // without a MAC fall back to id=`scan:${ip}` and may double a device
+        // that another plugin reported with its real MAC. Scanner-only nodes
+        // (no MAC) are kept under their own id (can't be deduped).
+        const seen = new Set<string>();
+        const uniqueNodes = graph.nodes.filter(n => {
+            const key = n.mac ? n.mac.toLowerCase() : `id:${n.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        const kinds = uniqueNodes.reduce<Record<string, number>>((acc, n) => {
             acc[n.kind] = (acc[n.kind] ?? 0) + 1;
             return acc;
         }, {});
@@ -133,20 +145,30 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
         let offline = 0;
         let wifiClients = 0;
         let wiredClients = 0;
-        const parentMediumByClient = new Map<string, 'ethernet' | 'wifi' | 'uplink'>();
+        // A client may have several parent edges (e.g. UniFi sees it on Wi-Fi
+        // AND Freebox sees it via its LAN port). Track BOTH bits per client
+        // and prefer wifi when both are present — UniFi's wifi attribution is
+        // authoritative; Freebox often defaults to ethernet for any host
+        // without explicit `ap.connectivity_type === 'wifi'`.
+        const hasWifiEdge = new Set<string>();
+        const hasEthernetEdge = new Set<string>();
         for (const e of graph.edges) {
-            // Edges go parent → child in the model. Each non-uplink edge tells
-            // us how the target client is attached to the network.
             if (e.medium === 'uplink') continue;
-            parentMediumByClient.set(e.target, e.medium);
+            if (e.medium === 'wifi') hasWifiEdge.add(e.target);
+            else if (e.medium === 'ethernet') hasEthernetEdge.add(e.target);
         }
-        for (const n of graph.nodes) {
+        for (const n of uniqueNodes) {
             if (n.metadata?.active === false) offline++;
             else online++;
             if (n.kind === 'client' || n.kind === 'unknown') {
-                const m = parentMediumByClient.get(n.id);
-                if (m === 'wifi') wifiClients++;
-                else if (m === 'ethernet') wiredClients++;
+                // Skip clients that ONLY Freebox knows about and that are
+                // offline — those are stale DHCP cache entries the Freebox
+                // hangs onto for days. They inflate the wired count without
+                // representing real devices.
+                const freeboxOnly = n.sources.length === 1 && n.sources[0] === 'freebox';
+                if (freeboxOnly && n.metadata?.active === false) continue;
+                if (hasWifiEdge.has(n.id)) wifiClients++;
+                else if (hasEthernetEdge.has(n.id)) wiredClients++;
             }
         }
         const infra = (kinds.gateway ?? 0) + (kinds.switch ?? 0) + (kinds.ap ?? 0) + (kinds.repeater ?? 0);

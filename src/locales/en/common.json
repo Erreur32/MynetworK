@@ -107,7 +107,10 @@
       "ports": "Ports",
       "portsUp": "Up",
       "portsPoe": "PoE",
-      "portsTotal": "Aggregate"
+      "portsTotal": "Aggregate",
+      "wifiSummary": "Wi-Fi summary",
+      "wifiClients": "Clients",
+      "wifiTotal": "Aggregate"
     },
     "legend": {
       "title": "Legend",
