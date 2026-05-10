@@ -916,49 +916,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                 </div>
                             );
                         })()}
-                        {(selectedNode.kind === 'ap' || selectedNode.kind === 'repeater') && (() => {
-                            const wifiOut = selectedEdges.filter(e => e.medium === 'wifi' && e.source === selectedNode.id);
-                            if (wifiOut.length === 0) return null;
-                            const bySsid = new Map<string, { count: number; bands: Set<string> }>();
-                            for (const e of wifiOut) {
-                                const key = e.ssid || '—';
-                                const entry = bySsid.get(key) ?? { count: 0, bands: new Set<string>() };
-                                entry.count++;
-                                if (e.band) entry.bands.add(e.band);
-                                bySsid.set(key, entry);
-                            }
-                            const totalSpeed = wifiOut.reduce((s, e) => s + (e.linkSpeedMbps ?? 0), 0);
-                            const speedLabel = formatSpeed(totalSpeed) ?? '—';
-                            return (
-                                <div className="pt-2 border-t border-slate-700 space-y-1.5">
-                                    <div className="text-xs uppercase tracking-wide text-slate-400">
-                                        {t('topology.detail.wifiSummary')}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
-                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiClients')}</div>
-                                            <div className="font-mono text-sky-200">{wifiOut.length}</div>
-                                        </div>
-                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
-                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiTotal')}</div>
-                                            <div className="font-mono text-sky-200">{speedLabel}</div>
-                                        </div>
-                                    </div>
-                                    {bySsid.size > 0 && (
-                                        <div className="space-y-1">
-                                            {Array.from(bySsid.entries()).map(([ssid, info]) => (
-                                                <div key={ssid} className="flex items-center justify-between gap-2 text-[11px] bg-slate-700/30 rounded px-2 py-1">
-                                                    <span className="truncate text-slate-200" title={ssid}>{ssid}</span>
-                                                    <span className="flex-none text-slate-400 font-mono">
-                                                        {info.count} · {Array.from(info.bands).sort((a, b) => a.localeCompare(b)).join('/') || '—'}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
+                        {(selectedNode.kind === 'ap' || selectedNode.kind === 'repeater') && (
+                            <WifiSummaryBlock selectedNodeId={selectedNode.id} edges={selectedEdges} t={t} />
+                        )}
                         {selectedEdges.length > 0 && (
                             <div className="pt-2 border-t border-slate-700">
                                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">{t('topology.detail.links')}</div>
@@ -1081,6 +1041,67 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     );
 };
 
+interface SsidAggregate { count: number; bands: Set<string> }
+
+function aggregateBySsid(wifiEdges: TopologyEdgeIn[]): Map<string, SsidAggregate> {
+    const out = new Map<string, SsidAggregate>();
+    for (const e of wifiEdges) {
+        const key = e.ssid || '—';
+        const entry = out.get(key) ?? { count: 0, bands: new Set<string>() };
+        entry.count++;
+        if (e.band) entry.bands.add(e.band);
+        out.set(key, entry);
+    }
+    return out;
+}
+
+function formatSsidBands(bands: Set<string>): string {
+    return Array.from(bands).sort((a, b) => a.localeCompare(b)).join('/') || '—';
+}
+
+interface WifiSummaryBlockProps {
+    selectedNodeId: string;
+    edges: TopologyEdgeIn[];
+    t: (k: string) => string;
+}
+
+const WifiSummaryBlock: React.FC<WifiSummaryBlockProps> = ({ selectedNodeId, edges, t }) => {
+    const wifiOut = edges.filter(e => e.medium === 'wifi' && e.source === selectedNodeId);
+    if (wifiOut.length === 0) return null;
+    const bySsid = aggregateBySsid(wifiOut);
+    const totalSpeed = wifiOut.reduce((s, e) => s + (e.linkSpeedMbps ?? 0), 0);
+    const speedLabel = formatSpeed(totalSpeed) ?? '—';
+    return (
+        <div className="pt-2 border-t border-slate-700 space-y-1.5">
+            <div className="text-xs uppercase tracking-wide text-slate-400">{t('topology.detail.wifiSummary')}</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiClients')}</div>
+                    <div className="font-mono text-sky-200">{wifiOut.length}</div>
+                </div>
+                <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.wifiTotal')}</div>
+                    <div className="font-mono text-sky-200">{speedLabel}</div>
+                </div>
+            </div>
+            {bySsid.size > 0 && (
+                <div className="space-y-1">
+                    {Array.from(bySsid.entries()).map(([ssid, info]) => (
+                        <SsidRow key={ssid} ssid={ssid} count={info.count} bandsText={formatSsidBands(info.bands)} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const SsidRow: React.FC<{ ssid: string; count: number; bandsText: string }> = ({ ssid, count, bandsText }) => (
+    <div className="flex items-center justify-between gap-2 text-[11px] bg-slate-700/30 rounded px-2 py-1">
+        <span className="truncate text-slate-200" title={ssid}>{ssid}</span>
+        <span className="flex-none text-slate-400 font-mono">{count} · {bandsText}</span>
+    </div>
+);
+
 interface EdgeRowProps {
     edge: TopologyEdgeIn;
     selectedNodeId: string;
@@ -1108,7 +1129,8 @@ const EdgeRow: React.FC<EdgeRowProps> = ({ edge, selectedNodeId, nodeLabelById }
     const hasPort = typeof port === 'number' && port > 0;
     const portBadge = buildPortBadgeText(hasPort, port, isOutgoing);
     const speedTxt = formatSpeed(edge.linkSpeedMbps) ?? null;
-    const wifiSsidLine = `${edge.ssid ?? '—'}${edge.band ? ` · ${edge.band}` : ''}`;
+    const bandSuffix = edge.band ? ` · ${edge.band}` : '';
+    const wifiSsidLine = `${edge.ssid ?? '—'}${bandSuffix}`;
     const wifiMetaLine = buildWifiMetaLine(edge, speedTxt);
     const showWifiMeta = isWifi && (edge.ssid || edge.band || speedTxt || typeof edge.signal === 'number');
     return (

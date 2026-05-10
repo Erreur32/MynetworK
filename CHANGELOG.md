@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.98] - 2026-05-10
+
+### Changes
+
+- refactor(topology): SonarCloud cleanup — extract `WifiSummaryBlock` + `SsidRow` components from the side-panel JSX (was nested 5 levels deep), flatten the SSID-line nested template literal via a `bandSuffix` variable.
+- refactor(topology): SonarCloud cleanup (already on `main` since v0.7.97) — split `collectScanReseauOverlay` / `stats` useMemo into named helpers (`mergeScanReseauIntoExisting`, `buildScanReseauNode`, `dedupeNodesByMac`, `buildEdgeMediumSets`, `classifyClientMedium`, `computeTopologyStats`), extract `EdgeRow` component, switch `bands.sort()` to `localeCompare`. Pure no-behaviour-change.
+- docs(readme): add the topology screenshot to the "other screenshots" gallery.
+
+---
+
 ## [0.7.97] - 2026-05-10
 
 ### Changes
