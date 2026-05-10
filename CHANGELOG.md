@@ -4,18 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [0.7.93] - 2026-05-10
 
-### Changes
+### Added
 
-- feat: Version 0.7.92 - Update
-- ci(sonarcloud): skip on Dependabot PRs
-- chore(deps): bump ip-address
-- fix(updates): dedupe CI check-runs by name in build validation
-- release: v0.7.90 — bump postcss to 8.5.10+ (GHSA-qx2v-qp2m-jg93)
-- docs(changelog): normalize to English; feat(admin): collapsible Network Config note
-- feat: Version 0.7.89 - Update
-- feat(admin): collapsible changelog viewer, auto-populate CHANGELOG from git
-- refactor: fix SonarCloud code smells (await + dataset)
-- ci: re-trigger SonarCloud after disabling Automatic Analysis
+- **Network topology page** (`/topology`): interactive graph of devices, links and bandwidth, aggregated from active plugins (Freebox + UniFi + scan-reseau). Three layout modes — Grouped clusters (graphviz-style), Tree (left-right hierarchy) and Horizontal (top-down with multi-row client wrapping). Filter panel (sources / types / status) is collapsible. Brand SVG logos for Freebox and UniFi infrastructure nodes, side panel with full device details, fit-view button, and a minimap that appears only when zoomed in.
+- **Topology snapshot model** in SQLite (`topology_snapshots`, single row): `GET /api/topology` returns the cached snapshot instantly; `POST /api/topology/refresh` (admin) recomputes from plugins. No realtime polling — updates run via daily cron at 04:00 plus a one-shot initial build at boot when no snapshot exists.
+- **WAN edge**: automatic link from the UniFi gateway(s) to the Freebox box so the diagram reflects the real ISP → Freebox → UCG → switches/APs → clients hierarchy.
+- **Stale Freebox cache filter**: devices reported only by Freebox while inactive (typically migrated to UniFi DHCP and still cached on the box) are classified as `stale` and hidden by default. Toggle to show them is in the filter panel.
+- **Header navigation**: Search and Topology badges on the dashboard and topology pages; Topology entry alongside Search/Administration in the footer (navigation, not a plugin shortcut).
+
+### Changed
+
+- `UniFiPlugin` exposes `getTopologyData()` returning raw devices + clients without the bandwidth/sysinfo bundle from `getStats()`.
+- `Header` accepts a new `onTopologyClick` prop; `Footer` filters tabs and plugin shortcuts on the topology page.
+- Added `@xyflow/react` and `dagre` for the interactive graph viewer.
 
 ---
 
