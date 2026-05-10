@@ -508,27 +508,6 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 
 
 
-## Analytics (Privacy)
-
-MynetworK includes **anonymous usage analytics** powered by [Rybbit](https://github.com/rybbit-io/rybbit), a privacy-focused, open-source analytics platform. This helps the maintainers understand how the application is used (page views only) without collecting any personal data.
-
-- **No cookies** — Rybbit is cookie-free
-- **No personal data** — no IP addresses, no user identifiers, no tracking across sites
-- **Page views only** — only page navigation events are recorded
-- **Self-hosted** — the analytics server is self-hosted, data never reaches third parties
-- **Opt-out at build time** — set `VITE_ANALYTICS_SITE_ID=""` to disable completely:
-  ```bash
-  docker build --build-arg VITE_ANALYTICS_SITE_ID="" .
-  ```
-
-Analytics are baked into the frontend at Docker build time via these build args (defined in `Dockerfile`):
-```
-VITE_ANALYTICS_HOST=https://way.myoueb.fr
-VITE_ANALYTICS_SITE_ID=b537d015834e
-```
-
-If both variables are empty or unset, **no analytics code runs at all**.
-
 ## Security
 
 - **JWT authentication** - Secure tokens with expiration

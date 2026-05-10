@@ -79,18 +79,6 @@ import {
   ExternalLink
 } from 'lucide-react';
 
-// Initialize Rybbit analytics via script tag (opt-in: only active when env vars are set)
-const analyticsHost = import.meta.env.VITE_ANALYTICS_HOST;
-const analyticsSiteId = import.meta.env.VITE_ANALYTICS_SITE_ID;
-if (analyticsHost && analyticsSiteId && !document.querySelector('script[data-site-id]')) {
-  const s = document.createElement('script');
-  s.src = `${analyticsHost}/api/script.js`;
-  s.dataset.siteId = analyticsSiteId;
-  s.dataset.disableSessionReplay = 'true';
-  s.defer = true;
-  document.head.appendChild(s);
-}
-
 // Freebox firmware update banner (shown on Freebox page when update available)
 const FreeboxFirmwareBanner: React.FC = () => {
   const { t } = useTranslation();
@@ -180,7 +168,6 @@ const PageLoader = ({ t }: { t: (key: string) => string }) => (
 
 const App: React.FC = () => {
   const { t } = useTranslation();
-  // Rybbit script tag handles page tracking automatically
   // User authentication (JWT) - New system
   const { isAuthenticated: isUserAuthenticated, isLoading: userAuthLoading, checkAuth: checkUserAuth, logout: userLogout, user } = useUserAuthStore();
   

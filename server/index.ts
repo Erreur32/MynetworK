@@ -217,10 +217,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://way.myoueb.fr", "https://static.cloudflareinsights.com"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // Required for Tailwind/inline styles in index.html
       imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "ws:", "wss:", "https://way.myoueb.fr"],
+      connectSrc: ["'self'", "ws:", "wss:"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       // frame-ancestors is set dynamically per-request below
