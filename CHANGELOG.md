@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.96] - 2026-05-10
+
+### Changes
+
+- refactor(topology): SonarCloud fixes — split `extractSwitchPorts` into `parsePoePower` / `isPoeActive` / `buildSwitchPort` to bring cognitive complexity back under 15, switch to `Number.parseFloat` / `Number.NaN`, drop the nested template literal in the Uplink chip tooltip
+
+---
+
 ## [0.7.95] - 2026-05-10
 
 ### Changes
