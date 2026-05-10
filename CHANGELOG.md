@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.95] - 2026-05-10
+
+### Changes
+
+- feat(topology): multi-uplink (LAG) support — every member port gets its own mauve "Uplink" chip on top of the switch card, with its own React Flow target handle so each cable lands on the right port
+- feat(topology): PoE indicator switched from full-cell colour to a small amber dot in the corner — a PoE port now keeps its real category colour (uplink mauve, fibre cyan, client green) instead of being masked
+- fix(topology): port-aware uplink edges fall back to the centre-top handle when the target switch has no chip for that port (≤12-port grid required) — was causing React Flow to silently drop the edge
+- fix(topology): UniFi PoE detection accepts firmware variants where `poe_power` is a string ("5.234") and `poe_enable` / `poe_mode` carry the active state
+- refactor(topology): card-card derivation memoised; per-edge target lookup switched from O(N×M) `find` to a `Map` for large topologies; bumped snapshot schema to v10 to invalidate the singular-uplink-port cache
+- chore: remove Rybbit analytics — no more telemetry, ever
+- docs(readme): add Dependencies & supply-chain section
+- fix(header): use globalSearch label on /search to match other pages
+
+---
+
 ## [0.7.94] - 2026-05-10
 
 ### Changes

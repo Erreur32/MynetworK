@@ -17,7 +17,8 @@ export interface SwitchPort {
     speed?: number;
     poe?: boolean;
     media?: string;
-    uplink?: boolean;
+    uplink?: boolean;       // receives a child cascade (parent-side)
+    localUplink?: boolean;  // this device's outgoing uplink (goes upstream)
 }
 
 export interface ClientConnection {
@@ -41,7 +42,7 @@ export interface TopologyNodeData extends Record<string, unknown> {
     host_type?: string;
     connection?: ClientConnection;
     editingMode?: boolean;
-    localUplinkPortIdx?: number;
+    localUplinkPortIdxs?: number[];
 }
 
 function formatConnSpeed(mbps?: number): string | undefined {
@@ -126,6 +127,9 @@ const SWITCH_INLINE_PORTS_MAX = 12;
 const PORT_CELL_WIDTH = 22;
 const INFRA_CARD_WIDTH = 240;
 const CLIENT_CARD_WIDTH = 170;
+const UPLINK_CHIP_W = 58;
+const UPLINK_CHIP_GAP = 6;
+const HIDDEN_HANDLE_CLASS = '!opacity-0 !w-1 !h-1 !border-0';
 
 function pickCardWidth(d: TopologyNodeData): number {
     const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
@@ -148,19 +152,26 @@ function isFibrePort(port: SwitchPort): boolean {
 
 function pickPortClass(port: SwitchPort): string {
     if (!port.up) return 'bg-slate-700/70 text-slate-500 border-slate-600/40';
-    if (port.uplink) return 'bg-purple-500 text-white border-purple-300';
+    if (port.uplink || port.localUplink) return 'bg-purple-500 text-white border-purple-300';
     if (isFibrePort(port)) return 'bg-cyan-500 text-white border-cyan-300';
-    if (port.poe) return 'bg-amber-400 text-amber-950 border-amber-300';
     return 'bg-emerald-500 text-white border-emerald-300';
 }
 
+function portCategoryLabel(port: SwitchPort): string {
+    if (!port.up) return 'Down — pas de lien (slate)';
+    if (port.localUplink) return 'Uplink → parent (mauve)';
+    if (port.uplink) return 'Uplink ← enfant (mauve)';
+    if (isFibrePort(port)) return 'Fibre / SFP+ (cyan)';
+    return 'Client filaire (vert)';
+}
+
 function portTooltip(port: SwitchPort): string {
-    const status = port.up ? `${port.speed ?? '?'} Mbps` : 'Down';
-    const poe = port.poe ? ' · PoE' : '';
-    const uplink = port.uplink ? ' · uplink' : '';
-    const name = port.name ? ` (${port.name})` : '';
-    const media = port.media ? ` · ${port.media}` : '';
-    return `Port ${port.idx}${name} — ${status}${poe}${uplink}${media}`;
+    const name = port.name ? ` — ${port.name}` : '';
+    const category = portCategoryLabel(port);
+    const speedSeg = port.up && port.speed ? ` · ${port.speed} Mbps` : '';
+    const mediaSeg = port.media ? ` · ${port.media}` : '';
+    const poeSeg = port.poe && port.up ? '\n• Point ambre = PoE actif' : '';
+    return `Port ${port.idx}${name}\n• ${category}${speedSeg}${mediaSeg}${poeSeg}`;
 }
 
 export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm'; wrap?: boolean }> = ({ ports, cellSize = 'sm', wrap = true }) => {
@@ -172,9 +183,15 @@ export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | '
                 <div
                     key={p.idx}
                     title={portTooltip(p)}
-                    className={`flex items-center justify-center rounded-sm border font-mono font-bold leading-none ${cls} ${pickPortClass(p)}`}
+                    className={`relative flex items-center justify-center rounded-sm border font-mono font-bold leading-none ${cls} ${pickPortClass(p)}`}
                 >
                     {p.idx}
+                    {p.poe && p.up && (
+                        <span
+                            className="absolute -top-1 -right-1 block w-2 h-2 rounded-full bg-amber-400 ring-1 ring-amber-200 shadow-md pointer-events-none"
+                            aria-label="PoE active"
+                        />
+                    )}
                 </div>
             ))}
         </div>
@@ -216,41 +233,55 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const labelClass = pickLabelClass(inactive, isInfra);
 
     const cardWidth = pickCardWidth(d);
-    // Compute the local uplink port's column index so we can render a small
-    // mauve "[N]" indicator on TOP of the switch card aligned above the
-    // matching cell in the bottom port grid. Visually conveys "this is the
-    // port that uplinks upstream", and it doubles as the visual anchor for
-    // the incoming uplink edge.
-    const sortedPorts = d.ports ? [...d.ports].sort((a, b) => a.idx - b.idx) : null;
-    const uplinkGridIdx = sortedPorts && d.localUplinkPortIdx
-        ? sortedPorts.findIndex(p => p.idx === d.localUplinkPortIdx)
-        : -1;
-    const showTopUplink = uplinkGridIdx >= 0
-        && sortedPorts !== null
-        && sortedPorts.length <= SWITCH_INLINE_PORTS_MAX;
-    const uplinkXPx = showTopUplink ? 17 + uplinkGridIdx * 20 : 0;
+    // Mauve "Uplink" chip on TOP of the card, with its own target Handle.
+    // Bottom grid hides uplink ports so the chip doesn't visually duplicate them.
+    const { uplinkPorts, bottomPorts, showUplinkChips } = React.useMemo(() => {
+        const sp = d.ports ? [...d.ports].sort((a, b) => a.idx - b.idx) : null;
+        const set = new Set(d.localUplinkPortIdxs ?? []);
+        const inline = sp !== null && sp.length <= SWITCH_INLINE_PORTS_MAX;
+        const up = sp ? sp.filter(p => set.has(p.idx)) : [];
+        const show = up.length > 0 && inline;
+        const bp = sp && show ? sp.filter(p => !set.has(p.idx)) : sp;
+        return { uplinkPorts: up, bottomPorts: bp, showUplinkChips: show };
+    }, [d.ports, d.localUplinkPortIdxs]);
+    const uplinkChipsTotalW = uplinkPorts.length * UPLINK_CHIP_W
+        + Math.max(0, uplinkPorts.length - 1) * UPLINK_CHIP_GAP;
+    const uplinkChipsStartX = Math.max(8, (cardWidth - uplinkChipsTotalW) / 2);
 
     return (
         <div
             style={{ width: `${cardWidth}px` }}
             className={`relative rounded-lg border-2 shadow-md transition-all overflow-visible bg-slate-900 ${borderClass} ${ringClass}`}
         >
-            {showTopUplink && (
-                <div
-                    className="absolute z-20 flex items-center justify-center w-[18px] h-[14px] rounded-sm border bg-purple-500 text-white border-purple-300 text-[8px] font-mono font-bold leading-none shadow"
-                    style={{ left: `${uplinkXPx - 9}px`, top: '-9px' }}
-                    title={`Uplink port ${d.localUplinkPortIdx}`}
-                >
-                    {d.localUplinkPortIdx}
-                </div>
-            )}
-            {/* Tinted overlay (active) or muted gray (offline) over solid slate-900 base */}
+            {showUplinkChips && uplinkPorts.map((p, i) => {
+                const x = uplinkChipsStartX + i * (UPLINK_CHIP_W + UPLINK_CHIP_GAP);
+                const handleX = x + UPLINK_CHIP_W / 2;
+                const label = uplinkPorts.length > 1 ? `Uplink ${i + 1}` : 'Uplink';
+                return (
+                    <React.Fragment key={`uplink-${p.idx}`}>
+                        <div
+                            className="absolute z-20 flex items-center justify-center rounded-sm border bg-purple-500 text-white border-purple-300 text-[9px] font-bold uppercase tracking-wide leading-none shadow whitespace-nowrap pointer-events-none"
+                            style={{ left: `${x}px`, top: '-10px', width: `${UPLINK_CHIP_W}px`, height: '16px' }}
+                            title={`${label} — port ${p.idx}${p.speed ? ` · ${p.speed} Mbps` : ''}`}
+                        >
+                            {label}
+                        </div>
+                        <Handle
+                            id={`pt${p.idx}`}
+                            type="target"
+                            position={Position.Top}
+                            style={{ left: `${handleX}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
+                        />
+                    </React.Fragment>
+                );
+            })}
             <div
                 className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${tintClass}`}
             />
-            <Handle id="t" type="target" position={Position.Top} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
-            <Handle id="tl" type="target" position={Position.Left} className="!bg-pink-400/70 !border-pink-300/70 !w-2 !h-2" />
-            <Handle id="sr" type="source" position={Position.Right} className="!bg-white/40 !border-white/40 !w-2 !h-2" />
+            {/* Invisible anchors — React Flow needs these to exist so edges can attach. */}
+            <Handle id="t" type="target" position={Position.Top} className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="tl" type="target" position={Position.Left} className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="sr" type="source" position={Position.Right} className={HIDDEN_HANDLE_CLASS} />
             <div className="relative flex items-center gap-2 p-2.5">
                 <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor}`}>
                     <Icon size={18} />
@@ -279,42 +310,25 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     })()}
                 </div>
             </div>
-            {(d.kind === 'switch' || d.kind === 'gateway') && d.ports && d.ports.length > 0 && (
+            {bottomPorts && bottomPorts.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
                     <SwitchPortGrid
-                        ports={d.ports}
+                        ports={bottomPorts}
                         cellSize="xs"
-                        wrap={d.ports.length > SWITCH_INLINE_PORTS_MAX}
+                        wrap={bottomPorts.length > SWITCH_INLINE_PORTS_MAX}
                     />
-                    {/* Per-port handles aligned with each port cell. Two
-                        handles per port:
-                          - Source on the BOTTOM (id="p${idx}") for outgoing
-                            ethernet edges to clients / downstream uplinks
-                          - Target on the TOP (id="pt${idx}") for incoming
-                            uplink edges from a parent device, so the line
-                            lands on the right port at both ends instead of
-                            on the centre-top of the card.
-                        Only emitted for inline (single-row) port grids;
-                        wrapped 24-port switches stay on the default handles. */}
-                    {d.ports.length <= SWITCH_INLINE_PORTS_MAX && d.ports.map((p, gridIdx) => {
-                        // 8 px padding + 9 px (half cell) + idx * (18 px cell + 2 px gap)
+                    {/* Source-only per-port handles. Uplink targets live on the top chips. */}
+                    {bottomPorts.length <= SWITCH_INLINE_PORTS_MAX && bottomPorts.map((p, gridIdx) => {
+                        // x = grid pad (8) + half cell (9) + gridIdx * (cell 18 + gap 2)
                         const xPx = 17 + gridIdx * 20;
-                        const styleHandle = { background: 'transparent', border: 'none', width: 4, height: 4 } as const;
                         return (
-                            <React.Fragment key={`port-handles-${p.idx}`}>
-                                <Handle
-                                    id={`p${p.idx}`}
-                                    type="source"
-                                    position={Position.Bottom}
-                                    style={{ ...styleHandle, left: `${xPx}px` }}
-                                />
-                                <Handle
-                                    id={`pt${p.idx}`}
-                                    type="target"
-                                    position={Position.Top}
-                                    style={{ ...styleHandle, left: `${xPx}px` }}
-                                />
-                            </React.Fragment>
+                            <Handle
+                                key={`p${p.idx}`}
+                                id={`p${p.idx}`}
+                                type="source"
+                                position={Position.Bottom}
+                                style={{ left: `${xPx}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
+                            />
                         );
                     })}
                 </div>
@@ -332,7 +346,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     </div>
                 );
             })()}
-            <Handle id="s" type="source" position={Position.Bottom} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
+            <Handle id="s" type="source" position={Position.Bottom} className={HIDDEN_HANDLE_CLASS} />
         </div>
     );
 };

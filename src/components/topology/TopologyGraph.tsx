@@ -44,8 +44,8 @@ interface TopologyNodeIn {
         signal?: number;
         model?: string;
         host_type?: string;
-        ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean; media?: string; uplink?: boolean }>;
-        localUplinkPortIdx?: number;
+        ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean; media?: string; uplink?: boolean; localUplink?: boolean }>;
+        localUplinkPortIdxs?: number[];
     };
 }
 
@@ -167,21 +167,23 @@ function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: numb
 //    via the left-side target handle so labels sit cleanly along the
 //    AP-to-client branch
 //  - Port-aware (TB only): when an ethernet/uplink edge carries port info
-//    and the source/target switch fits its port grid on a single row,
-//    land the line on the matching port handle so the cable visually exits
-//    AND enters from the right physical port. portIndex maps to the
-//    source-side port handle (`p${idx}`); localPortIndex maps to the
-//    target-side port handle (`pt${idx}`).
+//    AND we can confirm the matching handle exists on the destination
+//    card (i.e. the target's localUplinkPortIdxs contains the port), land
+//    the line on `pt${idx}`. Otherwise fall back to the default 't' handle
+//    so React Flow doesn't drop the edge entirely.
 function pickEdgeHandles(
     mode: LayoutMode,
     isWifi: boolean,
     portIndex: number | undefined,
-    localPortIndex: number | undefined
+    localPortIndex: number | undefined,
+    targetHasUplinkChip: boolean
 ): { source: string; target: string } {
     if (mode === 'tree') return { source: 'sr', target: 'tl' };
     const portAware = !isWifi && typeof portIndex === 'number';
     const source = portAware ? `p${portIndex}` : 's';
-    const localPortAware = !isWifi && typeof localPortIndex === 'number';
+    const localPortAware = !isWifi
+        && typeof localPortIndex === 'number'
+        && targetHasUplinkChip;
     let target: string;
     if (localPortAware) target = `pt${localPortIndex}`;
     else if (mode === 'grouped' && isWifi) target = 'tl';
@@ -455,6 +457,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             });
         }
 
+        const nodeById = new Map(filteredGraph.nodes.map(n => [n.id, n]));
+
         const rfNodes: Node[] = filteredGraph.nodes.map(n => ({
             id: n.id,
             type: 'topology',
@@ -470,7 +474,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 ports: n.metadata?.ports,
                 host_type: n.metadata?.host_type,
                 connection: parentConnByClient.get(n.id),
-                localUplinkPortIdx: n.metadata?.localUplinkPortIdx
+                localUplinkPortIdxs: n.metadata?.localUplinkPortIdxs
             } satisfies TopologyNodeData
         }));
 
@@ -487,7 +491,17 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             // mauve with right-angle routing pushed wide on the sides so it
             // doesn't overlap the parent→client edges. Ethernet: solid.
             const dasharray = pickEdgeDashArray(isWifi, isUplink);
-            const handles = pickEdgeHandles(mode, isWifi, e.portIndex, e.localPortIndex);
+            // `pt${idx}` only exists when the target renders an Uplink chip for that port
+            // (inline grid, ≤12 ports, port in localUplinkPortIdxs). Falling back avoids
+            // React Flow silently dropping the edge when the chip isn't there.
+            const targetNode = nodeById.get(e.target);
+            const targetUplinks = targetNode?.metadata?.localUplinkPortIdxs;
+            const targetPortsCount = targetNode?.metadata?.ports?.length ?? 0;
+            const targetHasUplinkChip = typeof e.localPortIndex === 'number'
+                && targetUplinks?.includes(e.localPortIndex) === true
+                && targetPortsCount > 0
+                && targetPortsCount <= 12;
+            const handles = pickEdgeHandles(mode, isWifi, e.portIndex, e.localPortIndex, targetHasUplinkChip);
             const pathOptions = pickEdgePathOptions(isUplink, isWifi);
             const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi);
             return {

@@ -44,9 +44,11 @@ export interface TopologyNode {
             poe?: boolean;
             media?: string;
             uplink?: boolean;
+            localUplink?: boolean;
         }>;
-        /** Port number on THIS device that goes upstream (UniFi uplink.port_idx). */
-        localUplinkPortIdx?: number;
+        /** Port numbers on THIS device that go upstream. Plural to support
+         *  LAG / multi-uplink setups (each member port gets its own indicator). */
+        localUplinkPortIdxs?: number[];
         [key: string]: unknown;
     };
 }

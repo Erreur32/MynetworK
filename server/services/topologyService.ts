@@ -42,7 +42,9 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // 7 — Drop any non-uplink edge connecting two infra nodes (switch/AP/box).
 // 8 — Gateway port_table (fibre + RJ45) now embedded just like switches.
 // 9 — Switch / gateway ports flagged as uplink based on child uplink_remote_port.
-const SCHEMA_VERSION = 9;
+// 10 — Devices store metadata.localUplinkPortIdxs (number[]) — plural to
+//      support LAG / multi-uplink, each member port gets a top-card chip.
+const SCHEMA_VERSION = 10;
 
 interface SwitchPort {
     idx: number;
@@ -51,12 +53,16 @@ interface SwitchPort {
     speed?: number; // Mbps
     poe?: boolean;
     media?: string; // 'GE', 'SFP+', 'XG', '10G', etc.
-    uplink?: boolean; // true if this port carries an uplink to a child device
+    /** Receives a downstream device's uplink (this device is the parent of the cascade). */
+    uplink?: boolean;
+    /** This device's own uplink port — the cable goes UPstream from here. */
+    localUplink?: boolean;
 }
 
 function extractSwitchPorts(
     dev: Record<string, any>,
-    uplinkPortIdx?: Set<number>
+    uplinkPortIdx?: Set<number>,
+    localUplinkPortIdx?: Set<number>
 ): SwitchPort[] | undefined {
     const table = dev.port_table;
     if (!Array.isArray(table) || table.length === 0) return undefined;
@@ -66,7 +72,17 @@ function extractSwitchPorts(
         if (idx === null || idx <= 0) continue;
         const speedRaw = p.speed;
         const speed = typeof speedRaw === 'number' && speedRaw > 0 ? speedRaw : undefined;
-        const poeActive = Boolean(p.poe_enable) && typeof p.poe_power === 'number' && p.poe_power > 0;
+        // poe_power can be a string ("5.234") or number depending on firmware
+        const poePowerNum = typeof p.poe_power === 'number'
+            ? p.poe_power
+            : typeof p.poe_power === 'string'
+                ? parseFloat(p.poe_power)
+                : NaN;
+        const poeMode = typeof p.poe_mode === 'string' ? p.poe_mode.toLowerCase() : '';
+        const poeEnabled = p.poe_enable === true
+            || p.poe_enable === 'true'
+            || (poeMode !== '' && poeMode !== 'off');
+        const poeActive = poeEnabled && Number.isFinite(poePowerNum) && poePowerNum > 0;
         const mediaRaw = p.media ?? p.if_type;
         ports.push({
             idx,
@@ -75,7 +91,8 @@ function extractSwitchPorts(
             speed,
             poe: poeActive,
             media: typeof mediaRaw === 'string' ? mediaRaw : undefined,
-            uplink: uplinkPortIdx?.has(idx) === true
+            uplink: uplinkPortIdx?.has(idx) === true,
+            localUplink: localUplinkPortIdx?.has(idx) === true
         });
     }
     if (ports.length === 0) return undefined;
@@ -319,6 +336,46 @@ function pickUniFiDeviceKind(
     return mapUniFiDeviceKind(type, model);
 }
 
+// Different UniFi firmwares put the uplink local port under different keys.
+function readUniFiLocalUplinkPort(dev: Record<string, any>): number | undefined {
+    const raw = dev.uplink?.port_idx ?? dev.uplink?.local_port ?? dev.uplink?.uplink_local_port;
+    return typeof raw === 'number' && raw > 0 ? raw : undefined;
+}
+
+// Collect local uplink ports — supports LAG / multi-uplink via per-port
+// is_uplink flags, falling back to device.uplink.* for older firmwares.
+function collectLocalUplinkPortIdxs(dev: Record<string, any>): number[] {
+    const out: number[] = [];
+    if (Array.isArray(dev.port_table)) {
+        for (const p of dev.port_table) {
+            if (p?.is_uplink === true && typeof p.port_idx === 'number' && p.port_idx > 0) {
+                if (!out.includes(p.port_idx)) out.push(p.port_idx);
+            }
+        }
+    }
+    if (out.length === 0) {
+        const single = readUniFiLocalUplinkPort(dev);
+        if (single !== undefined) out.push(single);
+    }
+    out.sort((a, b) => a - b);
+    return out;
+}
+
+function logMissingLocalUplinkPort(
+    dev: Record<string, any>,
+    kind: NodeKind,
+    mac: string,
+    localUplinkPortIdxs: number[]
+): void {
+    if (localUplinkPortIdxs.length > 0) return;
+    if (kind !== 'switch' && kind !== 'gateway') return;
+    if (!dev.uplink) return;
+    const t = String(dev.type ?? '').toLowerCase();
+    if (t !== 'usw' && t !== 'ugw' && t !== 'udm') return;
+    const keys = Object.keys(dev.uplink).slice(0, 16).join(',');
+    logger.debug('Topology', `UniFi ${t} "${dev.name ?? mac}" has uplink object but no port_idx / local_port — uplink keys: ${keys}`);
+}
+
 function buildUniFiDeviceNode(
     dev: Record<string, any>,
     id: string,
@@ -328,9 +385,11 @@ function buildUniFiDeviceNode(
 ): TopologyNode {
     const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
     const kind = pickUniFiDeviceKind(existing, dev.type, dev.model);
-    const ports = (kind === 'switch' || kind === 'gateway') ? extractSwitchPorts(dev, uplinkPorts) : undefined;
-    const localUplinkRaw = dev.uplink?.port_idx ?? dev.uplink?.local_port ?? dev.uplink?.uplink_local_port;
-    const localUplinkPortIdx = typeof localUplinkRaw === 'number' && localUplinkRaw > 0 ? localUplinkRaw : undefined;
+    const localUplinkPortIdxs = collectLocalUplinkPortIdxs(dev);
+    logMissingLocalUplinkPort(dev, kind, mac, localUplinkPortIdxs);
+    const ports = (kind === 'switch' || kind === 'gateway')
+        ? extractSwitchPorts(dev, uplinkPorts, new Set(localUplinkPortIdxs))
+        : undefined;
     const node: TopologyNode = {
         id,
         kind,
@@ -346,7 +405,7 @@ function buildUniFiDeviceNode(
             active: dev.state === 1,
             last_seen: dev.last_seen,
             ports,
-            localUplinkPortIdx
+            localUplinkPortIdxs: localUplinkPortIdxs.length > 0 ? localUplinkPortIdxs : undefined
         }
     };
     addSource(node, 'unifi');
@@ -392,8 +451,7 @@ function processUniFiDevice(
         //  - localPortIndex = port on this device (where the cable lands)
         const remotePortRaw = dev.uplink?.uplink_remote_port ?? dev.uplink?.remote_port;
         const portIndex = typeof remotePortRaw === 'number' && remotePortRaw > 0 ? remotePortRaw : undefined;
-        const localPortRaw = dev.uplink?.port_idx ?? dev.uplink?.local_port ?? dev.uplink?.uplink_local_port;
-        const localPortIndex = typeof localPortRaw === 'number' && localPortRaw > 0 ? localPortRaw : undefined;
+        const localPortIndex = readUniFiLocalUplinkPort(dev);
         const linkSpeedRaw = dev.uplink?.speed ?? dev.uplink?.full_duplex_speed;
         const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0 ? linkSpeedRaw : undefined;
         const upId = `unifi:uplink:${uplinkMac}->${mac}`;
