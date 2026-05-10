@@ -199,25 +199,14 @@ function placeChildrenInGroup(
     return out;
 }
 
-function groupedLayout(
-    nodes: Node[],
-    edges: Edge[]
-): { nodes: Node[]; edges: Edge[] } {
-    const infraNodes = nodes.filter(isInfra);
-    const clientNodes = nodes.filter(n => !isInfra(n));
-    const nodeById = new Map(nodes.map(n => [n.id, n] as const));
-
-    const parentByClient = buildParentMap(edges, nodeById);
-    const childrenByParent = bucketChildren(clientNodes, parentByClient, ORPHAN_PARENT);
-    const dims = computeGroupedDims(childrenByParent);
-
-    const groupNodes: Node[] = [];
-    for (const [parent, children] of childrenByParent) {
-        const dim = dims.get(parent);
-        if (!dim) continue;
-        groupNodes.push(buildGroupNode(parent, children.length, dim, nodeById));
-    }
-
+function buildGroupedDagre(
+    infraNodes: Node[],
+    groupNodes: Node[],
+    edges: Edge[],
+    childrenByParent: Map<string, string[]>,
+    dims: Map<string, GroupedDim>,
+    nodeById: Map<string, Node>
+): dagre.graphlib.Graph {
     const g = new dagre.graphlib.Graph();
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: 'TB', nodesep: 30, ranksep: 70, marginx: 20, marginy: 20 });
@@ -233,10 +222,12 @@ function groupedLayout(
     for (const parent of childrenByParent.keys()) {
         if (parent !== ORPHAN_PARENT) g.setEdge(parent, `group:${parent}`);
     }
-
     dagre.layout(g);
+    return g;
+}
 
-    const positionedInfra: Node[] = infraNodes.map(n => {
+function positionGroupedInfra(infraNodes: Node[], g: dagre.graphlib.Graph): Node[] {
+    return infraNodes.map(n => {
         const pos = g.node(n.id);
         return {
             ...n,
@@ -245,8 +236,14 @@ function groupedLayout(
             position: { x: (pos?.x ?? 0) - NODE_WIDTH / 2, y: (pos?.y ?? 0) - NODE_HEIGHT / 2 }
         };
     });
+}
 
-    const positionedGroups: Node[] = groupNodes.map(grp => {
+function positionGroupedGroups(
+    groupNodes: Node[],
+    dims: Map<string, GroupedDim>,
+    g: dagre.graphlib.Graph
+): Node[] {
+    return groupNodes.map(grp => {
         const pid = getGroupParentId(grp, ORPHAN_PARENT);
         const dim = dims.get(pid);
         const pos = g.node(grp.id);
@@ -257,12 +254,35 @@ function groupedLayout(
             position: { x: (pos?.x ?? 0) - w / 2, y: (pos?.y ?? 0) - h / 2 }
         };
     });
+}
+
+function groupedLayout(
+    nodes: Node[],
+    edges: Edge[]
+): { nodes: Node[]; edges: Edge[] } {
+    const infraNodes = nodes.filter(isInfra);
+    const clientNodes = nodes.filter(n => !isInfra(n));
+    const nodeById = new Map(nodes.map(n => [n.id, n] as const));
+
+    const parentByClient = buildParentMap(edges, nodeById);
+    const childrenByParent = bucketChildren(clientNodes, parentByClient, ORPHAN_PARENT);
+    const dims = computeGroupedDims(childrenByParent);
+
+    const groupNodes: Node[] = [];
+    for (const [parent, children] of childrenByParent) {
+        const dim = dims.get(parent);
+        if (dim) groupNodes.push(buildGroupNode(parent, children.length, dim, nodeById));
+    }
+
+    const g = buildGroupedDagre(infraNodes, groupNodes, edges, childrenByParent, dims, nodeById);
+
+    const positionedInfra = positionGroupedInfra(infraNodes, g);
+    const positionedGroups = positionGroupedGroups(groupNodes, dims, g);
 
     const positionedClients: Node[] = [];
     for (const [parent, children] of childrenByParent) {
         const dim = dims.get(parent);
-        if (!dim) continue;
-        positionedClients.push(...placeChildrenInGroup(parent, children, clientNodes, dim));
+        if (dim) positionedClients.push(...placeChildrenInGroup(parent, children, clientNodes, dim));
     }
 
     const visibleEdges = edges.filter(e => isInfraInfraEdge(e, nodeById));
@@ -298,26 +318,33 @@ const WRAPPED_VGAP = 18;
 const WRAPPED_CLIENT_VGAP = 50;
 const WRAPPED_SUBTREE_PAD = 60;
 
+function pickWrappedBase(
+    parent: Node | undefined,
+    dim: WrappedDim,
+    orphanX: number
+): { baseX: number; baseY: number; nextOrphanX: number } {
+    if (parent) {
+        return {
+            baseX: parent.position.x + NODE_WIDTH / 2 - dim.w / 2,
+            baseY: parent.position.y + NODE_HEIGHT + WRAPPED_CLIENT_VGAP,
+            nextOrphanX: orphanX
+        };
+    }
+    return {
+        baseX: orphanX,
+        baseY: 0,
+        nextOrphanX: orphanX - dim.w - 80
+    };
+}
+
 function placeWrappedChildren(
     parent: Node | undefined,
-    parentId: string,
     children: string[],
     clientNodes: Node[],
     dim: WrappedDim,
     orphanX: number
 ): { nodes: Node[]; nextOrphanX: number } {
-    let baseX: number;
-    let baseY: number;
-    let nextOrphanX = orphanX;
-    if (parent) {
-        baseX = parent.position.x + NODE_WIDTH / 2 - dim.w / 2;
-        baseY = parent.position.y + NODE_HEIGHT + WRAPPED_CLIENT_VGAP;
-    } else {
-        baseX = orphanX;
-        baseY = 0;
-        nextOrphanX = orphanX - dim.w - 80;
-    }
-
+    const { baseX, baseY, nextOrphanX } = pickWrappedBase(parent, dim, orphanX);
     const out: Node[] = [];
     children.forEach((cid, idx) => {
         const c = clientNodes.find(node => node.id === cid);
@@ -334,8 +361,6 @@ function placeWrappedChildren(
             }
         });
     });
-    // Touch parentId so it's used (helps debugging when an orphan bucket lands at parentId === ORPHAN)
-    void parentId;
     return { nodes: out, nextOrphanX };
 }
 
@@ -387,7 +412,7 @@ function wrappedTreeLayout(
         const dim = dims.get(parentId);
         if (!dim) continue;
         const parent = positionedInfra.find(n => n.id === parentId);
-        const placed = placeWrappedChildren(parent, parentId, children, clientNodes, dim, orphanX);
+        const placed = placeWrappedChildren(parent, children, clientNodes, dim, orphanX);
         positionedClients.push(...placed.nodes);
         orphanX = placed.nextOrphanX;
     }

@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle } from 'lucide-react';
+import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable } from 'lucide-react';
 
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
@@ -55,6 +55,20 @@ function pickInfraIcon(_kind: NodeKind, sources: SourcePlugin[]): React.ElementT
     return null;
 }
 
+// Small connection-type badge in the top-right corner: tells you at a glance
+// whether a switch is wired or an AP serves Wi-Fi. The brand SVG remains the
+// main icon so both pieces of info are visible.
+const KIND_BADGE: Partial<Record<NodeKind, { icon: React.ElementType; bg: string; ring: string; title: string }>> = {
+    ap:       { icon: Wifi,  bg: 'bg-sky-500',     ring: 'ring-sky-300/60',     title: 'Wi-Fi' },
+    repeater: { icon: Wifi,  bg: 'bg-purple-500',  ring: 'ring-purple-300/60',  title: 'Wi-Fi' },
+    switch:   { icon: Cable, bg: 'bg-emerald-500', ring: 'ring-emerald-300/60', title: 'Ethernet' }
+};
+
+function pickLabelClass(inactive: boolean, isInfra: boolean): string {
+    if (inactive) return 'text-slate-400';
+    return isInfra ? 'text-white' : 'text-slate-100';
+}
+
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
@@ -62,30 +76,27 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
     const Icon = BrandIcon ?? style.icon;
     const inactive = d.active === false;
+    const borderClass = inactive ? 'border-slate-600/40' : style.border;
+    const ringClass = selected ? `ring-2 ${style.ring}` : '';
+    const tintClass = inactive ? 'from-slate-700/30 to-slate-800/15' : style.tint;
+    const iconWrapperColor = inactive ? 'text-slate-500' : style.iconColor;
+    const labelClass = pickLabelClass(inactive, isInfra);
 
     return (
         <div
-            className={`relative w-[200px] rounded-lg border-2 shadow-md transition-all overflow-hidden bg-slate-900
-                ${inactive ? 'border-slate-600/40' : style.border}
-                ${selected ? `ring-2 ${style.ring}` : ''}`}
+            className={`relative w-[200px] rounded-lg border-2 shadow-md transition-all overflow-hidden bg-slate-900 ${borderClass} ${ringClass}`}
         >
             {/* Tinted overlay (active) or muted gray (offline) over solid slate-900 base */}
             <div
-                className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${
-                    inactive ? 'from-slate-700/30 to-slate-800/15' : style.tint
-                }`}
+                className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${tintClass}`}
             />
             <Handle type="target" position={Position.Top} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
             <div className="relative flex items-center gap-2 p-2.5">
-                <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${
-                    inactive ? 'text-slate-500' : style.iconColor
-                }`}>
+                <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor}`}>
                     <Icon size={18} />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-semibold truncate ${
-                        inactive ? 'text-slate-400' : (isInfra ? 'text-white' : 'text-slate-100')
-                    }`}>
+                    <div className={`text-sm font-semibold truncate ${labelClass}`}>
                         {d.label || '—'}
                     </div>
                     {d.ip && (
@@ -95,6 +106,19 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     )}
                 </div>
             </div>
+            {(() => {
+                const badge = KIND_BADGE[d.kind];
+                if (!badge) return null;
+                const BadgeIcon = badge.icon;
+                return (
+                    <div
+                        title={badge.title}
+                        className={`absolute top-1 right-1 z-10 flex items-center justify-center w-4 h-4 rounded-full ${badge.bg} ring-1 ${badge.ring} shadow`}
+                    >
+                        <BadgeIcon size={9} className="text-white" strokeWidth={3} />
+                    </div>
+                );
+            })()}
             <Handle type="source" position={Position.Bottom} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
         </div>
     );

@@ -194,13 +194,18 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
                 </div>
             )}
 
-            {loading ? (
-                <Card title="">
-                    <div className="p-8 text-center text-theme-secondary text-sm">
-                        {t('topology.loading')}
-                    </div>
-                </Card>
-            ) : !graph ? (
+            {(() => {
+                if (loading) {
+                    return (
+                        <Card title="">
+                            <div className="p-8 text-center text-theme-secondary text-sm">
+                                {t('topology.loading')}
+                            </div>
+                        </Card>
+                    );
+                }
+                if (graph) return null;
+                return (
                 <Card title="">
                     <div className="p-10 text-center space-y-4">
                         <div className="mx-auto w-14 h-14 rounded-full bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center">
@@ -224,7 +229,10 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
                         )}
                     </div>
                 </Card>
-            ) : (
+                );
+            })()}
+
+            {!loading && graph && (
                 <>
                     {/* Stat tiles */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

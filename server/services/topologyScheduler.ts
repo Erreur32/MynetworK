@@ -39,13 +39,15 @@ export function startTopologyScheduler(): void {
     });
     logger.success('TopologyScheduler', `Daily topology refresh scheduled (${DAILY_EXPRESSION})`);
 
-    // First-run: build an initial snapshot if none exists. Delay so plugins
-    // have time to log in before we hammer their APIs.
+    // Initial build: rebuild on boot if no snapshot exists OR if the stored
+    // snapshot uses an outdated layout convention (topologyService.getStored()
+    // returns null for stale schema). Delay so plugins have time to log in.
     initialBuildTimer = setTimeout(async () => {
         try {
-            const existing = TopologySnapshotRepository.get();
-            if (existing) return;
-            logger.info('TopologyScheduler', 'No snapshot found, computing initial snapshot');
+            const fresh = await topologyService.getStored();
+            if (fresh) return;
+            const reason = TopologySnapshotRepository.get() ? 'stale schema' : 'no snapshot';
+            logger.info('TopologyScheduler', `Initial build triggered (${reason})`);
             const graph = await topologyService.buildAndSave();
             logger.success(
                 'TopologyScheduler',

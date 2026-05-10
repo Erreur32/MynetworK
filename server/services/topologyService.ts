@@ -30,6 +30,10 @@ import type {
 } from '../types/topology.js';
 
 const FREEBOX_BOX_ID = 'freebox:box';
+// Bump when the snapshot shape or layout convention changes so stale rows
+// in SQLite are auto-invalidated and a fresh build is triggered.
+// 2 — edge direction switched to parent → child (dagre TB).
+const SCHEMA_VERSION = 2;
 
 interface FreeboxL3Connectivity {
     addr?: string;
@@ -370,7 +374,13 @@ function processUniFiClient(
 
 class TopologyService {
     async getStored(): Promise<TopologyGraph | null> {
-        return TopologySnapshotRepository.get();
+        const stored = TopologySnapshotRepository.get();
+        if (!stored) return null;
+        if (stored.schema_version !== SCHEMA_VERSION) {
+            // Stale snapshot from an older layout convention — force a rebuild.
+            return null;
+        }
+        return stored;
     }
 
     async buildAndSave(): Promise<TopologyGraph> {
@@ -402,7 +412,8 @@ class TopologyService {
             nodes: Array.from(nodes.values()),
             edges: Array.from(edges.values()),
             sources,
-            computed_at: new Date().toISOString()
+            computed_at: new Date().toISOString(),
+            schema_version: SCHEMA_VERSION
         };
     }
 

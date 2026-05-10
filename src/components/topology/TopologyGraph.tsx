@@ -62,9 +62,12 @@ interface TopologyGraphProps {
     height?: string;
 }
 
+// Edge palette deliberately picked to avoid clashing with the node tints
+// (gateway=amber, switch=emerald, AP=sky, repeater=purple). Uplinks stay amber
+// because they always go INTO a gateway (same colour family is intentional).
 const EDGE_COLOR: Record<EdgeMedium, string> = {
-    ethernet: '#34d399',
-    wifi: '#38bdf8',
+    ethernet: '#a3e635', // lime — distinct from emerald switches
+    wifi: '#f472b6',     // pink — distinct from sky APs and purple repeaters
     uplink: '#f59e0b'
 };
 
@@ -125,6 +128,12 @@ function toggleSet<T>(set: Set<T>, value: T): Set<T> {
     if (next.has(value)) next.delete(value);
     else next.add(value);
     return next;
+}
+
+function pickChipClass(disabled: boolean, active: boolean, activeBg: string): string {
+    if (disabled) return 'opacity-40 cursor-not-allowed border-slate-800 text-slate-500';
+    if (active) return activeBg;
+    return 'border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-600';
 }
 
 function formatSpeed(mbps?: number): string | undefined {
@@ -247,9 +256,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 labelStyle: { fill: '#e2e8f0', fontSize: 10, fontWeight: 500 },
                 style: {
                     stroke: color,
-                    strokeWidth: isUplink ? 2.5 : 1.5,
-                    strokeDasharray: isUplink ? '6 3' : undefined,
-                    opacity: 0.85
+                    strokeWidth: isUplink ? 2.5 : 1.6,
+                    strokeDasharray: isUplink ? '6 3' : undefined
                 },
                 markerEnd: marker,
                 data: { medium: e.medium, linkSpeedMbps: e.linkSpeedMbps, portIndex: e.portIndex, ssid: e.ssid, band: e.band, signal: e.signal }
@@ -320,18 +328,13 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                         const count = sourceCounts[src];
                         const chip = SOURCE_CHIP[src];
                         const disabled = count === 0;
+                        const chipClass = pickChipClass(disabled, active, chip.activeBg);
                         return (
                             <button
                                 key={src}
-                                onClick={() => !disabled && setSourceFilter(prev => toggleSet(prev, src))}
+                                onClick={() => disabled || setSourceFilter(prev => toggleSet(prev, src))}
                                 disabled={disabled}
-                                className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded border transition-colors ${
-                                    disabled
-                                        ? 'opacity-40 cursor-not-allowed border-slate-800 text-slate-500'
-                                        : active
-                                            ? chip.activeBg
-                                            : 'border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-600'
-                                }`}
+                                className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded border transition-colors ${chipClass}`}
                             >
                                 <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />
                                 <span>{chip.label}</span>
@@ -508,9 +511,13 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                         {selectedNode.metadata?.model && (
                             <DetailRow icon={<Tag size={14} />} label={t('topology.detail.model')} value={String(selectedNode.metadata.model)} />
                         )}
-                        {selectedNode.metadata?.ssid && (
-                            <DetailRow icon={<Wifi size={14} />} label={t('topology.detail.ssid')} value={`${selectedNode.metadata.ssid}${selectedNode.metadata.band ? ` (${selectedNode.metadata.band})` : ''}`} />
-                        )}
+                        {selectedNode.metadata?.ssid && (() => {
+                            const band = selectedNode.metadata.band ? ` (${selectedNode.metadata.band})` : '';
+                            const ssidValue = `${selectedNode.metadata.ssid}${band}`;
+                            return (
+                                <DetailRow icon={<Wifi size={14} />} label={t('topology.detail.ssid')} value={ssidValue} />
+                            );
+                        })()}
                         {selectedEdges.length > 0 && (
                             <div className="pt-2 border-t border-slate-700">
                                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">{t('topology.detail.links')}</div>
@@ -558,13 +565,13 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                             <div className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">{t('topology.legend.links')}</div>
                             <div className="flex flex-wrap gap-x-3 gap-y-1">
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 h-0.5 bg-emerald-400 inline-block" /> {t('topology.legend.ethernet')}
+                                    <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.ethernet }} /> {t('topology.legend.ethernet')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 h-0.5 bg-sky-400 inline-block" /> {t('topology.legend.wifi')}
+                                    <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.wifi }} /> {t('topology.legend.wifi')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 inline-block" style={{ borderTop: '2px dashed #f59e0b' }} /> {t('topology.legend.uplink')}
+                                    <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.uplink}` }} /> {t('topology.legend.uplink')}
                                 </span>
                             </div>
                         </div>

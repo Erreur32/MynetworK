@@ -58,4 +58,5 @@ export interface TopologyGraph {
     edges: TopologyEdge[];
     sources: SourcePlugin[];
     computed_at: string; // ISO 8601
+    schema_version?: number;
 }

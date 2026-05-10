@@ -294,7 +294,7 @@ export const Footer: React.FC<FooterProps> = ({
           })()}
 
           {/* Show Administration button on dashboard, search, network-scan, unifi and topology pages */}
-          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi' || currentPage === 'topology') && !visibleTabs.find(t => t.id === 'settings') && (
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi' || currentPage === 'topology') && !visibleTabs.some(t => t.id === 'settings') && (
             <button
               onClick={() => {
                 sessionStorage.setItem('adminMode', 'true');
