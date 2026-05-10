@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Search,
   X,
-  Package
+  Package,
+  Network as NetworkIcon
 } from 'lucide-react';
 import logoUltra from '../../icons/logo_ultra.svg';
 import logoMynetworK from '../../icons/logo_mynetwork.svg';
@@ -125,6 +126,7 @@ interface HeaderProps {
   onUsersClick?: () => void;
   onLogout?: () => void;
   onSearchClick?: () => void;
+  onTopologyClick?: () => void;
   unifiStats?: {
     network?: {
       download?: number;
@@ -300,6 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
   onUsersClick,
   onLogout,
   onSearchClick,
+  onTopologyClick,
   unifiStats
 }) => {
   const { t, i18n } = useTranslation();
@@ -604,8 +607,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
         
-        {/* Search icon/badge - Only on dashboard, next to logo */}
-        {pageType === 'dashboard' && onSearchClick && (
+        {/* Search icon/badge - On dashboard and topology, next to logo */}
+        {(pageType === 'dashboard' || pageType === 'topology') && onSearchClick && (
           <>
             {/* Mobile: Only icon */}
             <button
@@ -627,6 +630,42 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex flex-col leading-tight">
                 <span className="font-semibold text-theme-primary">{t('header.search')}</span>
                 <span className="text-[10px] text-gray-400 font-normal">{t('header.globalSearch')}</span>
+              </div>
+            </button>
+          </>
+        )}
+
+        {/* Topology icon/badge - On dashboard and topology, next to search */}
+        {(pageType === 'dashboard' || pageType === 'topology') && onTopologyClick && (
+          <>
+            {/* Mobile: Only icon */}
+            <button
+              onClick={onTopologyClick}
+              className={`md:hidden flex items-center justify-center w-10 h-10 rounded-lg border transition-colors ${
+                pageType === 'topology'
+                  ? 'bg-sky-500/20 border-sky-400/40 text-sky-200'
+                  : 'bg-theme-secondary border-theme text-theme-primary hover:bg-theme-primary'
+              }`}
+              title={t('nav.topology')}
+            >
+              <NetworkIcon size={20} />
+            </button>
+            {/* Desktop: Full badge */}
+            <button
+              onClick={onTopologyClick}
+              className={`hidden md:flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors text-left ${
+                pageType === 'topology'
+                  ? 'bg-gradient-to-r from-indigo-500/20 via-sky-500/20 to-emerald-500/20 border-sky-400/40 hover:from-indigo-500/30 hover:via-sky-500/30 hover:to-emerald-500/30'
+                  : 'bg-theme-secondary border-theme hover:bg-theme-primary'
+              }`}
+              title={t('nav.topology')}
+            >
+              <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                <NetworkIcon className="w-7 h-7 text-sky-400" />
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="font-semibold text-theme-primary">{t('nav.topology')}</span>
+                <span className="text-[10px] text-gray-400 font-normal">{t('topology.title')}</span>
               </div>
             </button>
           </>

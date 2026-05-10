@@ -195,7 +195,7 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.7.92');
+        super('unifi', 'UniFi Controller', '0.7.93');
         this.apiService = new UniFiApiService();
     }
 
@@ -508,6 +508,26 @@ export class UniFiPlugin extends BasePlugin {
             await this.apiService.logout();
         }
         await super.stop();
+    }
+
+    /**
+     * Return raw devices + clients for topology computation.
+     * Kept separate from getStats() to avoid pulling unrelated data
+     * (bandwidth history, port forwarding, sysinfo) when the topology
+     * service only needs the device/client graph.
+     */
+    async getTopologyData(): Promise<{ devices: import('./UniFiApiService.js').UniFiDevice[]; clients: any[] }> {
+        if (!this.isEnabled()) {
+            throw new Error('UniFi plugin is not enabled');
+        }
+        if (!this.apiService.isLoggedIn()) {
+            await this.start();
+        }
+        const [devices, clients] = await Promise.all([
+            this.apiService.getDevices(),
+            this.apiService.getClients()
+        ]);
+        return { devices, clients };
     }
 
     async getStats(): Promise<PluginStats> {

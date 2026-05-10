@@ -52,7 +52,80 @@
     "administration": "Administration",
     "options": "Options",
     "updateAvailable": "Mise à jour dispo",
-    "ips": "IPs"
+    "ips": "IPs",
+    "topology": "Topologie"
+  },
+  "topology": {
+    "title": "Topologie réseau",
+    "subtitle": "Carte des appareils, des liens et des débits, calculée depuis vos plugins actifs.",
+    "beta": "Bêta",
+    "refresh": "Actualiser",
+    "refreshing": "Actualisation…",
+    "computeNow": "Calculer maintenant",
+    "loading": "Chargement de la topologie…",
+    "fetchError": "Échec du chargement de la topologie",
+    "refreshError": "Échec de l'actualisation — vérifiez les connexions plugin",
+    "justNow": "à l'instant",
+    "minutesAgo": "il y a {{count}} min",
+    "hoursAgo": "il y a {{count}} h",
+    "daysAgo": "il y a {{count}} j",
+    "sources": "Sources de données",
+    "noSources": "Aucune source active",
+    "previewBanner": "Graphe interactif bientôt disponible — snapshot backend prêt.",
+    "nodesPreview": "{{count}} nœuds · {{edges}} liens",
+    "stats": {
+      "nodes": "Nœuds",
+      "infrastructure": "Infrastructure",
+      "wired": "Liens filaires",
+      "wireless": "Liens Wi-Fi"
+    },
+    "empty": {
+      "title": "Aucun snapshot",
+      "cta": "Calculez le premier snapshot pour visualiser votre topologie.",
+      "noPlugin": "Aucun plugin compatible activé",
+      "noPluginCta": "Activez Freebox ou UniFi pour construire une topologie utile."
+    },
+    "kind": {
+      "gateway": "Passerelle",
+      "switch": "Switch",
+      "ap": "Point d'accès",
+      "repeater": "Répéteur",
+      "client": "Client",
+      "unknown": "Inconnu"
+    },
+    "detail": {
+      "ip": "IP",
+      "mac": "MAC",
+      "vendor": "Constructeur",
+      "model": "Modèle",
+      "ssid": "Wi-Fi",
+      "links": "Liens"
+    },
+    "legend": {
+      "ethernet": "Ethernet",
+      "wifi": "Wi-Fi",
+      "uplink": "Uplink"
+    },
+    "layout": {
+      "grouped": "Groupé",
+      "tree": "Arborescent",
+      "horizontal": "Horizontal"
+    },
+    "filters": {
+      "title": "Filtres",
+      "activeBadge": "Actif",
+      "sources": "Sources",
+      "types": "Types",
+      "status": "Statut",
+      "reset": "Réinitialiser"
+    },
+    "status": {
+      "online": "En ligne",
+      "offline": "Hors ligne",
+      "stale": "Cache",
+      "staleHint": "Appareils vus uniquement par Freebox alors qu'inactifs — probablement du cache après migration vers UniFi DHCP"
+    },
+    "fitView": "Recentrer"
   },
   "header": {
     "search": "Recherche",

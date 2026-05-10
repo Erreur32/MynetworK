@@ -259,6 +259,15 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Topology snapshot table (single row, id = 1, overwritten on refresh)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS topology_snapshots (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            graph_json TEXT NOT NULL,
+            computed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // Token blacklist table (persists revoked JWT tokens across restarts)
     database.exec(`
         CREATE TABLE IF NOT EXISTS token_blacklist (

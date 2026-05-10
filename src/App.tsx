@@ -35,6 +35,7 @@ const UnifiedDashboardPage = lazy(() => import('./pages/UnifiedDashboardPage').t
 const UniFiPage = lazy(() => import('./pages/UniFiPage').then(m => ({ default: m.UniFiPage })));
 const SearchPage = lazy(() => import('./pages/SearchPage').then(m => ({ default: m.SearchPage })));
 const NetworkScanPage = lazy(() => import('./pages/NetworkScanPage').then(m => ({ default: m.NetworkScanPage })));
+const TopologyPage = lazy(() => import('./pages/TopologyPage').then(m => ({ default: m.TopologyPage })));
 import { usePolling } from './hooks/usePolling';
 import { useConnectionWebSocket } from './hooks/useConnectionWebSocket';
 import { useBackgroundAnimation } from './hooks/useBackgroundAnimation';
@@ -231,6 +232,7 @@ const App: React.FC = () => {
     '/logs': 'logs',
     '/search': 'search',
     '/network-scan': 'network-scan',
+    '/topology': 'topology',
   }), []);
 
   const routePaths: Record<PageType, string> = useMemo(() => ({
@@ -248,6 +250,7 @@ const App: React.FC = () => {
     'logs': '/logs',
     'search': '/search',
     'network-scan': '/network-scan',
+    'topology': '/topology',
   }), []);
 
   // Support sub-paths: /unifi/traffic → 'unifi', /settings/general → 'settings'
@@ -820,8 +823,8 @@ const App: React.FC = () => {
   if (currentPage === 'network-scan') {
     return renderPageWithFooter(
       <>
-        <Header 
-          systemInfo={systemInfo} 
+        <Header
+          systemInfo={systemInfo}
           connectionStatus={connectionStatus}
           pageType="network-scan"
           onHomeClick={handleHomeClick}
@@ -840,6 +843,33 @@ const App: React.FC = () => {
                 navigate(`/search?s=${encodeURIComponent(ip)}`);
               }}
             />
+          </Suspense>
+        </main>
+      </>
+    );
+  }
+
+  // Render Topology page
+  if (currentPage === 'topology') {
+    return renderPageWithFooter(
+      <>
+        <Header
+          systemInfo={systemInfo}
+          connectionStatus={connectionStatus}
+          pageType="topology"
+          onHomeClick={handleHomeClick}
+          user={user || undefined}
+          onSettingsClick={handleSettingsClick}
+          onAdminClick={handleAdminClick}
+          onProfileClick={handleProfileClick}
+          onUsersClick={handleUsersClick}
+          onLogout={handleLogout}
+          onSearchClick={() => setCurrentPage('search')}
+          onTopologyClick={() => setCurrentPage('topology')}
+        />
+        <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
+          <Suspense fallback={<PageLoader t={t} />}>
+            <TopologyPage onBack={() => setCurrentPage('dashboard')} />
           </Suspense>
         </main>
       </>
@@ -871,6 +901,7 @@ const App: React.FC = () => {
           onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           onSearchClick={() => setCurrentPage('search')}
+          onTopologyClick={() => setCurrentPage('topology')}
           unifiStats={pluginStats['unifi'] || null}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">

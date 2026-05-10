@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.93] - 2026-05-10
+
+### Changes
+
+- feat: Version 0.7.92 - Update
+- ci(sonarcloud): skip on Dependabot PRs
+- chore(deps): bump ip-address
+- fix(updates): dedupe CI check-runs by name in build validation
+- release: v0.7.90 — bump postcss to 8.5.10+ (GHSA-qx2v-qp2m-jg93)
+- docs(changelog): normalize to English; feat(admin): collapsible Network Config note
+- feat: Version 0.7.89 - Update
+- feat(admin): collapsible changelog viewer, auto-populate CHANGELOG from git
+- refactor: fix SonarCloud code smells (await + dataset)
+- ci: re-trigger SonarCloud after disabling Automatic Analysis
+
+---
+
 ## [0.7.92] - 2026-05-07
 
 ### Changed

@@ -11,3 +11,4 @@ export { UnifiedDashboardPage } from './UnifiedDashboardPage';
 export { UniFiPage } from './UniFiPage';
 export { SearchPage } from './SearchPage';
 export { NetworkScanPage } from './NetworkScanPage';
+export { TopologyPage } from './TopologyPage';

@@ -278,6 +278,8 @@ import searchRoutes from './routes/search.js';
 import networkScanRoutes from './routes/network-scan.js';
 import latencyMonitoringRoutes from './routes/latency-monitoring.js';
 import databaseRoutes from './routes/database.js';
+import topologyRoutes from './routes/topology.js';
+import { startTopologyScheduler } from './services/topologyScheduler.js';
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
 import './services/networkScanScheduler.js';
@@ -337,6 +339,15 @@ setTimeout(() => {
     }
 }, 7500);
 
+// Start topology scheduler (daily 04:00 + initial build at boot if no snapshot)
+setTimeout(() => {
+    try {
+        startTopologyScheduler();
+    } catch (error) {
+        logger.error('Server', 'Failed to start topology scheduler:', error);
+    }
+}, 8000);
+
 
 // Rate limiting
 import { apiLimiter, scanLimiter } from './middleware/rateLimiter.js';
@@ -357,6 +368,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/network-scan', networkScanRoutes);
 app.use('/api/latency-monitoring', latencyMonitoringRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/topology', topologyRoutes);
 
 // Existing Freebox routes (kept for backward compatibility)
 app.use('/api/auth', authRoutes);

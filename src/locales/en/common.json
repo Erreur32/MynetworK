@@ -52,7 +52,80 @@
     "administration": "Administration",
     "options": "Options",
     "updateAvailable": "Update available",
-    "ips": "IPs"
+    "ips": "IPs",
+    "topology": "Topology"
+  },
+  "topology": {
+    "title": "Network topology",
+    "subtitle": "Map of devices, links and bandwidth, computed from your active plugins.",
+    "beta": "Beta",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "computeNow": "Compute now",
+    "loading": "Loading topology…",
+    "fetchError": "Failed to load topology",
+    "refreshError": "Refresh failed — check plugin connections",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} d ago",
+    "sources": "Data sources",
+    "noSources": "No active source",
+    "previewBanner": "Interactive graph coming next — backend snapshot ready.",
+    "nodesPreview": "{{count}} nodes · {{edges}} links",
+    "stats": {
+      "nodes": "Nodes",
+      "infrastructure": "Infrastructure",
+      "wired": "Wired links",
+      "wireless": "Wireless links"
+    },
+    "empty": {
+      "title": "No snapshot yet",
+      "cta": "Compute the first snapshot to see your network topology.",
+      "noPlugin": "No compatible plugin enabled",
+      "noPluginCta": "Enable Freebox or UniFi to build a meaningful topology."
+    },
+    "kind": {
+      "gateway": "Gateway",
+      "switch": "Switch",
+      "ap": "Access point",
+      "repeater": "Repeater",
+      "client": "Client",
+      "unknown": "Unknown"
+    },
+    "detail": {
+      "ip": "IP",
+      "mac": "MAC",
+      "vendor": "Vendor",
+      "model": "Model",
+      "ssid": "Wi-Fi",
+      "links": "Links"
+    },
+    "legend": {
+      "ethernet": "Ethernet",
+      "wifi": "Wi-Fi",
+      "uplink": "Uplink"
+    },
+    "layout": {
+      "grouped": "Grouped",
+      "tree": "Tree",
+      "horizontal": "Horizontal"
+    },
+    "filters": {
+      "title": "Filters",
+      "activeBadge": "Active",
+      "sources": "Sources",
+      "types": "Types",
+      "status": "Status",
+      "reset": "Reset"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "stale": "Stale",
+      "staleHint": "Devices only seen by Freebox while inactive — likely cached after migration to UniFi DHCP"
+    },
+    "fitView": "Fit"
   },
   "header": {
     "search": "Search",

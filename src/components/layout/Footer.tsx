@@ -14,12 +14,13 @@ import {
   Users,
   FileText,
   AlertTriangle,
-  Search
+  Search,
+  Network as NetworkIcon
 } from 'lucide-react';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { usePluginStore } from '../../stores/pluginStore';
 
-export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search' | 'network-scan';
+export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search' | 'network-scan' | 'topology';
 
 interface FooterProps {
   currentPage?: PageType;
@@ -86,8 +87,17 @@ export const Footer: React.FC<FooterProps> = ({
       
       // On network-scan page: show the same tabs as on the dashboard
       if (currentPage === 'network-scan') {
-        if (tab.id === 'freebox' || 
-            tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' || 
+        if (tab.id === 'freebox' ||
+            tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' ||
+            tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
+          return false;
+        }
+      }
+
+      // On topology page: same as dashboard (hide Freebox-related tabs)
+      if (currentPage === 'topology') {
+        if (tab.id === 'freebox' ||
+            tab.id === 'tv' || tab.id === 'phone' || tab.id === 'files' ||
             tab.id === 'vms' || tab.id === 'analytics' || tab.id === 'settings') {
           return false;
         }
@@ -246,8 +256,8 @@ export const Footer: React.FC<FooterProps> = ({
             );
           })}
           
-          {/* Show Search button on dashboard, search, network-scan and unifi pages */}
-          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi') && (
+          {/* Show Search button on dashboard, search, network-scan, unifi and topology pages */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi' || currentPage === 'topology') && (
             <button
               onClick={() => onPageChange?.('search')}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
@@ -261,8 +271,30 @@ export const Footer: React.FC<FooterProps> = ({
             </button>
           )}
 
-          {/* Show Administration button on dashboard, search, network-scan and unifi pages */}
-          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi') && !visibleTabs.find(t => t.id === 'settings') && (
+          {/* Topology button (next to Search — it's a navigation item, not a plugin shortcut) */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi' || currentPage === 'topology') && (() => {
+            const fb = plugins.find(p => p.id === 'freebox');
+            const u = plugins.find(p => p.id === 'unifi');
+            const ok = (fb?.enabled && fb?.connectionStatus) || (u?.enabled && u?.connectionStatus);
+            if (!ok) return null;
+            const isActive = currentPage === 'topology';
+            return (
+              <button
+                onClick={() => onPageChange?.('topology')}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${
+                  isActive
+                    ? 'btn-theme-active border-theme-hover text-theme-primary'
+                    : 'btn-theme border-transparent text-theme-secondary hover:bg-theme-tertiary hover:text-theme-primary'
+                }`}
+              >
+                <NetworkIcon size={18} className={isActive ? 'text-accent-primary' : ''} />
+                <span className="text-sm font-medium whitespace-nowrap">{t('nav.topology')}</span>
+              </button>
+            );
+          })()}
+
+          {/* Show Administration button on dashboard, search, network-scan, unifi and topology pages */}
+          {(currentPage === 'dashboard' || currentPage === 'search' || currentPage === 'network-scan' || currentPage === 'unifi' || currentPage === 'topology') && !visibleTabs.find(t => t.id === 'settings') && (
             <button
               onClick={() => {
                 sessionStorage.setItem('adminMode', 'true');
@@ -414,7 +446,6 @@ export const Footer: React.FC<FooterProps> = ({
                     <span className="hidden sm:inline text-sm font-medium">IPs</span>
                   </button>
                 )}
-
               </>
             );
           })()}
