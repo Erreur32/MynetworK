@@ -55,6 +55,7 @@ interface TopologyEdgeIn {
     medium: EdgeMedium;
     linkSpeedMbps?: number;
     portIndex?: number;
+    localPortIndex?: number;
     ssid?: string;
     band?: string;
     signal?: number;
@@ -164,20 +165,26 @@ function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: numb
 //  - Grouped (TB): source bottom, target top — except Wi-Fi which routes
 //    via the left-side target handle so labels sit cleanly along the
 //    AP-to-client branch
-//  - Port-aware: when an ethernet edge carries a portIndex AND the source
-//    switch fits its port grid on a single row, we land the line at the
-//    matching port handle (`p${idx}`) so the cable visually exits from the
-//    right port. Only honored in TB layouts; LR (tree) keeps the right-side
-//    handle since per-port handles sit on the bottom.
+//  - Port-aware (TB only): when an ethernet/uplink edge carries port info
+//    and the source/target switch fits its port grid on a single row,
+//    land the line on the matching port handle so the cable visually exits
+//    AND enters from the right physical port. portIndex maps to the
+//    source-side port handle (`p${idx}`); localPortIndex maps to the
+//    target-side port handle (`pt${idx}`).
 function pickEdgeHandles(
     mode: LayoutMode,
     isWifi: boolean,
-    portIndex: number | undefined
+    portIndex: number | undefined,
+    localPortIndex: number | undefined
 ): { source: string; target: string } {
     if (mode === 'tree') return { source: 'sr', target: 'tl' };
     const portAware = !isWifi && typeof portIndex === 'number';
     const source = portAware ? `p${portIndex}` : 's';
-    const target = mode === 'grouped' && isWifi ? 'tl' : 't';
+    const localPortAware = !isWifi && typeof localPortIndex === 'number';
+    let target: string;
+    if (localPortAware) target = `pt${localPortIndex}`;
+    else if (mode === 'grouped' && isWifi) target = 'tl';
+    else target = 't';
     return { source, target };
 }
 
@@ -478,7 +485,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             // mauve with right-angle routing pushed wide on the sides so it
             // doesn't overlap the parent→client edges. Ethernet: solid.
             const dasharray = pickEdgeDashArray(isWifi, isUplink);
-            const handles = pickEdgeHandles(mode, isWifi, e.portIndex);
+            const handles = pickEdgeHandles(mode, isWifi, e.portIndex, e.localPortIndex);
             const pathOptions = pickEdgePathOptions(isUplink, isWifi);
             const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi);
             return {

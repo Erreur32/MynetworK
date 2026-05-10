@@ -262,21 +262,37 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                         cellSize="xs"
                         wrap={d.ports.length > SWITCH_INLINE_PORTS_MAX}
                     />
-                    {/* Per-port source handles aligned with each port cell —
-                        edges that carry portIndex use sourceHandle="p${idx}"
-                        so the line visually exits from the right port. Only
-                        emitted for inline (single-row) port grids; wrapped
-                        24-port switches stay on the default bottom handle. */}
-                    {d.ports.length <= SWITCH_INLINE_PORTS_MAX && d.ports.map((p, gridIdx) => (
-                        <Handle
-                            key={`p${p.idx}`}
-                            id={`p${p.idx}`}
-                            type="source"
-                            position={Position.Bottom}
-                            // 8px container padding + 9px (half cell) + idx * (18px cell + 2px gap)
-                            style={{ left: `${17 + gridIdx * 20}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
-                        />
-                    ))}
+                    {/* Per-port handles aligned with each port cell. Two
+                        handles per port:
+                          - Source on the BOTTOM (id="p${idx}") for outgoing
+                            ethernet edges to clients / downstream uplinks
+                          - Target on the TOP (id="pt${idx}") for incoming
+                            uplink edges from a parent device, so the line
+                            lands on the right port at both ends instead of
+                            on the centre-top of the card.
+                        Only emitted for inline (single-row) port grids;
+                        wrapped 24-port switches stay on the default handles. */}
+                    {d.ports.length <= SWITCH_INLINE_PORTS_MAX && d.ports.map((p, gridIdx) => {
+                        // 8 px padding + 9 px (half cell) + idx * (18 px cell + 2 px gap)
+                        const xPx = 17 + gridIdx * 20;
+                        const styleHandle = { background: 'transparent', border: 'none', width: 4, height: 4 } as const;
+                        return (
+                            <React.Fragment key={`port-handles-${p.idx}`}>
+                                <Handle
+                                    id={`p${p.idx}`}
+                                    type="source"
+                                    position={Position.Bottom}
+                                    style={{ ...styleHandle, left: `${xPx}px` }}
+                                />
+                                <Handle
+                                    id={`pt${p.idx}`}
+                                    type="target"
+                                    position={Position.Top}
+                                    style={{ ...styleHandle, left: `${xPx}px` }}
+                                />
+                            </React.Fragment>
+                        );
+                    })}
                 </div>
             )}
             {(() => {

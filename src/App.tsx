@@ -763,6 +763,7 @@ const App: React.FC = () => {
           onUsersClick={handleUsersClick}
           onLogout={handleLogout}
           onSearchClick={() => setCurrentPage('search')}
+          onTopologyClick={() => setCurrentPage('topology')}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader t={t} />}>

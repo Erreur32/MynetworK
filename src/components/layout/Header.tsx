@@ -636,7 +636,7 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         {/* Topology icon/badge - On dashboard and topology, next to search */}
-        {(pageType === 'dashboard' || pageType === 'topology') && onTopologyClick && (
+        {(pageType === 'dashboard' || pageType === 'topology' || pageType === 'search') && onTopologyClick && (
           <>
             {/* Mobile: Only icon */}
             <button

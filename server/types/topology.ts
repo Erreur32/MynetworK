@@ -55,7 +55,14 @@ export interface TopologyEdge {
     target: string;
     medium: EdgeMedium;
     linkSpeedMbps?: number;
+    /** Port index on the SOURCE device (e.g. port on the switch where the
+     *  edge exits). Used by the source-side per-port handle. */
     portIndex?: number;
+    /** Port index on the TARGET device (e.g. the uplink port on a child
+     *  switch where the parent's cable lands). Used by the target-side
+     *  per-port handle so uplink edges align with the right port on both
+     *  ends, not just the parent. */
+    localPortIndex?: number;
     ssid?: string;
     band?: string;
     signal?: number;

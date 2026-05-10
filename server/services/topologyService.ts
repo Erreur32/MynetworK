@@ -383,12 +383,14 @@ function processUniFiDevice(
 
     const uplinkMac = readUniFiUplinkMac(dev);
     if (uplinkMac && uplinkMac !== mac) {
-        // Capture the parent's port index so the rendered uplink edge can
-        // exit the right port on the switch (matches the client-edge port
-        // alignment behaviour). Falls back to undefined when UniFi doesn't
-        // expose it for this firmware.
+        // Capture both ports so the rendered uplink edge can land on the
+        // right physical port at BOTH ends:
+        //  - portIndex     = port on the parent (where the cable enters)
+        //  - localPortIndex = port on this device (where the cable lands)
         const remotePortRaw = dev.uplink?.uplink_remote_port ?? dev.uplink?.remote_port;
         const portIndex = typeof remotePortRaw === 'number' && remotePortRaw > 0 ? remotePortRaw : undefined;
+        const localPortRaw = dev.uplink?.port_idx ?? dev.uplink?.local_port ?? dev.uplink?.uplink_local_port;
+        const localPortIndex = typeof localPortRaw === 'number' && localPortRaw > 0 ? localPortRaw : undefined;
         const linkSpeedRaw = dev.uplink?.speed ?? dev.uplink?.full_duplex_speed;
         const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0 ? linkSpeedRaw : undefined;
         const upId = `unifi:uplink:${uplinkMac}->${mac}`;
@@ -399,6 +401,7 @@ function processUniFiDevice(
             medium: 'uplink',
             linkSpeedMbps,
             portIndex,
+            localPortIndex,
             source_plugin: 'unifi'
         });
     } else {
