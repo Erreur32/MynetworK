@@ -20,7 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
 import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info } from 'lucide-react';
-import { TopologyNodeCard, type TopologyNodeData } from './TopologyNodeCard';
+import { TopologyNodeCard, SwitchPortGrid, type TopologyNodeData } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
 import { layoutGraph, type LayoutMode } from './topologyLayout';
 
@@ -261,7 +261,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 id: e.id,
                 source: e.source,
                 target: e.target,
-                type: isUplink ? 'smoothstep' : 'smoothstep',
+                type: 'smoothstep',
                 animated: isWifi,
                 label,
                 labelBgPadding: [6, 3] as [number, number],
@@ -531,6 +531,34 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                             const ssidValue = `${selectedNode.metadata.ssid}${band}`;
                             return (
                                 <DetailRow icon={<Wifi size={14} />} label={t('topology.detail.ssid')} value={ssidValue} />
+                            );
+                        })()}
+                        {selectedNode.kind === 'switch' && selectedNode.metadata?.ports && selectedNode.metadata.ports.length > 0 && (() => {
+                            const ports = selectedNode.metadata.ports;
+                            const upCount = ports.filter(p => p.up).length;
+                            const poeCount = ports.filter(p => p.poe).length;
+                            const totalSpeed = ports.filter(p => p.up).reduce((s, p) => s + (p.speed ?? 0), 0);
+                            const speedLabel = totalSpeed >= 1000 ? `${(totalSpeed / 1000).toFixed(1)} Gbps` : `${totalSpeed} Mbps`;
+                            return (
+                                <div className="pt-2 border-t border-slate-700 space-y-1.5">
+                                    <div className="text-xs uppercase tracking-wide text-slate-400">
+                                        {t('topology.detail.ports')}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.portsUp')}</div>
+                                            <div className="font-mono text-slate-100">{upCount} / {ports.length}</div>
+                                        </div>
+                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.portsPoe')}</div>
+                                            <div className="font-mono text-amber-200">{poeCount}</div>
+                                        </div>
+                                        <div className="bg-slate-700/40 rounded px-2 py-1.5">
+                                            <div className="text-[10px] uppercase tracking-wide text-slate-500">{t('topology.detail.portsTotal')}</div>
+                                            <div className="font-mono text-emerald-200">{speedLabel}</div>
+                                        </div>
+                                    </div>
+                                </div>
                             );
                         })()}
                         {selectedEdges.length > 0 && (

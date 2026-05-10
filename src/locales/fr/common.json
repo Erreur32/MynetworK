@@ -103,7 +103,11 @@
       "vendor": "Constructeur",
       "model": "Modèle",
       "ssid": "Wi-Fi",
-      "links": "Liens"
+      "links": "Liens",
+      "ports": "Ports",
+      "portsUp": "Up",
+      "portsPoe": "PoE",
+      "portsTotal": "Agrégé"
     },
     "legend": {
       "title": "Légende",

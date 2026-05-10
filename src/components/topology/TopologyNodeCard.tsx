@@ -91,21 +91,22 @@ function portTooltip(port: SwitchPort): string {
     return `Port ${port.idx}${name} — ${status}${poe}`;
 }
 
-const SwitchPortGrid: React.FC<{ ports: SwitchPort[] }> = ({ ports }) => (
-    <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
+export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm' }> = ({ ports, cellSize = 'sm' }) => {
+    const cls = cellSize === 'sm' ? 'w-[22px] h-[18px] text-[9px]' : 'w-[18px] h-[14px] text-[8px]';
+    return (
         <div className="flex flex-wrap gap-0.5">
             {ports.map(p => (
                 <div
                     key={p.idx}
                     title={portTooltip(p)}
-                    className={`flex items-center justify-center w-[18px] h-[14px] rounded-sm border text-[8px] font-mono font-bold leading-none ${pickPortClass(p)}`}
+                    className={`flex items-center justify-center rounded-sm border font-mono font-bold leading-none ${cls} ${pickPortClass(p)}`}
                 >
                     {p.idx}
                 </div>
             ))}
         </div>
-    </div>
-);
+    );
+};
 
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
@@ -145,7 +146,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                 </div>
             </div>
             {d.kind === 'switch' && d.ports && d.ports.length > 0 && (
-                <SwitchPortGrid ports={d.ports} />
+                <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
+                    <SwitchPortGrid ports={d.ports} cellSize="xs" />
+                </div>
             )}
             {(() => {
                 const badge = KIND_BADGE[d.kind];

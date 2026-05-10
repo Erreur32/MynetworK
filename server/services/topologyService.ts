@@ -34,7 +34,8 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // in SQLite are auto-invalidated and a fresh build is triggered.
 // 2 — edge direction switched to parent → child (dagre TB).
 // 3 — switch nodes now embed UniFi port_table (front-panel view).
-const SCHEMA_VERSION = 3;
+// 4 — Freebox → UniFi WAN cascade re-introduced for DMZ setups.
+const SCHEMA_VERSION = 4;
 
 interface SwitchPort {
     idx: number;
@@ -414,6 +415,19 @@ function buildUniFiClientEdge(
     };
 }
 
+function readUniFiClientParentMac(cli: Record<string, any>, isWired: boolean): string | null {
+    // UniFi reports the upstream MAC under multiple keys depending on
+    // firmware/site-manager. Try the most common ones in priority order.
+    const wired = [cli.sw_mac, cli.last_uplink_mac, cli.uplink_mac, cli.last_sw_mac];
+    const wireless = [cli.ap_mac, cli.last_ap_mac, cli.last_uplink_mac, cli.uplink_mac];
+    const candidates = isWired ? wired : wireless;
+    for (const c of candidates) {
+        const n = normalizeMac(c);
+        if (n) return n;
+    }
+    return null;
+}
+
 function processUniFiClient(
     cli: UniFiClient,
     nodes: Map<string, TopologyNode>,
@@ -425,8 +439,13 @@ function processUniFiClient(
     const isWired = cli.is_wired === true;
     nodes.set(id, buildUniFiClientNode(cli, id, mac, isWired, nodes.get(id)));
 
-    const parentMac = normalizeMac(isWired ? cli.sw_mac : cli.ap_mac);
-    if (!parentMac || parentMac === mac) return;
+    const parentMac = readUniFiClientParentMac(cli as Record<string, any>, isWired);
+    if (!parentMac || parentMac === mac) {
+        if (isWired) {
+            logger.debug('Topology', `UniFi wired client ${cli.name ?? cli.hostname ?? mac} has no sw_mac (cli keys: ${Object.keys(cli).slice(0, 12).join(',')})`);
+        }
+        return;
+    }
     const edge = buildUniFiClientEdge(cli, mac, parentMac, isWired);
     edges.set(edge.id, edge);
 }
@@ -462,10 +481,26 @@ class TopologyService {
             this.collectScanReseauOverlay(nodes);
         });
 
-        // No synthetic WAN edge between Freebox and UniFi gateway: even though
-        // the UCG physically uplinks to a Freebox LAN port, they manage two
-        // independent networks (different DHCP, different topology). Keeping
-        // them as separate roots in the layout makes that distinction visible.
+        // WAN cascade: when both Freebox and a UniFi gateway are present,
+        // link the gateway under the Freebox so DMZ / bridged setups read
+        // top-down (Freebox = WAN modem, UCG = router behind it). Edge medium
+        // is 'uplink' so it inherits the mauve dashed style.
+        if (nodes.has(FREEBOX_BOX_ID)) {
+            for (const node of nodes.values()) {
+                if (node.kind !== 'gateway') continue;
+                if (node.id === FREEBOX_BOX_ID) continue;
+                if (!node.sources.includes('unifi')) continue;
+                const wanId = `wan:freebox->${node.id}`;
+                if (edges.has(wanId)) continue;
+                edges.set(wanId, {
+                    id: wanId,
+                    source: FREEBOX_BOX_ID,
+                    target: node.id,
+                    medium: 'uplink',
+                    source_plugin: 'unifi'
+                });
+            }
+        }
 
         return {
             nodes: Array.from(nodes.values()),
