@@ -154,3 +154,11 @@
   background-size: 80px 100%, 100% 60px;
   animation: ps3-scan calc(8 * var(--animation-speed, 1) * 1s) ease-in-out infinite;
 }
+
+/* Topology: marching-ants effect on cluster borders for Wi-Fi groups */
+@keyframes topology-marching-ants {
+  to { stroke-dashoffset: -20; }
+}
+.topology-cluster-marching {
+  animation: topology-marching-ants 1.2s linear infinite;
+}

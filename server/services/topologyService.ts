@@ -310,6 +310,25 @@ function buildUniFiDeviceNode(
     return node;
 }
 
+function readUniFiUplinkMac(dev: Record<string, any>): string | null {
+    // UniFi exposes the uplink MAC under several fields depending on firmware
+    // and on whether we hit Site Manager (cloud) or the local controller.
+    // Try them all so cascaded switches (USW → USW → UCG) link up properly.
+    const candidates: unknown[] = [
+        dev.uplink?.uplink_mac,
+        dev.uplink?.mac,
+        dev.uplink?.parent_mac,
+        dev.uplink_mac,
+        dev.last_uplink_mac,
+        dev.parent_mac
+    ];
+    for (const c of candidates) {
+        const normalized = normalizeMac(c);
+        if (normalized) return normalized;
+    }
+    return null;
+}
+
 function processUniFiDevice(
     dev: Record<string, any>,
     nodes: Map<string, TopologyNode>,
@@ -320,7 +339,7 @@ function processUniFiDevice(
     const id = macNodeId(mac);
     nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id)));
 
-    const uplinkMac = normalizeMac(dev.uplink?.uplink_mac);
+    const uplinkMac = readUniFiUplinkMac(dev);
     if (uplinkMac && uplinkMac !== mac) {
         const upId = `unifi:uplink:${uplinkMac}->${mac}`;
         edges.set(upId, {
@@ -330,6 +349,11 @@ function processUniFiDevice(
             medium: 'uplink',
             source_plugin: 'unifi'
         });
+    } else {
+        const t = String(dev.type ?? '').toLowerCase();
+        if (t === 'usw' || t === 'uap') {
+            logger.debug('Topology', `UniFi device "${dev.name ?? mac}" (${t}) has no uplink_mac — uplink keys present: ${dev.uplink ? Object.keys(dev.uplink).join(',') : 'none'}`);
+        }
     }
 }
 
