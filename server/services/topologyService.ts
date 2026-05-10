@@ -35,7 +35,14 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // 2 — edge direction switched to parent → child (dagre TB).
 // 3 — switch nodes now embed UniFi port_table (front-panel view).
 // 4 — Freebox → UniFi WAN cascade re-introduced for DMZ setups.
-const SCHEMA_VERSION = 4;
+// 5 — Freebox-sourced edges to UniFi infra are pruned so the lime ethernet
+//     edges no longer point at Freebox; UCG keeps the uplinks via UniFi.
+// 6 — Also prune Freebox-sourced edges to clients already attached to a
+//     UniFi switch / AP, so wired clients don't show double connections.
+// 7 — Drop any non-uplink edge connecting two infra nodes (switch/AP/box).
+// 8 — Gateway port_table (fibre + RJ45) now embedded just like switches.
+// 9 — Switch / gateway ports flagged as uplink based on child uplink_remote_port.
+const SCHEMA_VERSION = 9;
 
 interface SwitchPort {
     idx: number;
@@ -43,9 +50,14 @@ interface SwitchPort {
     up: boolean;
     speed?: number; // Mbps
     poe?: boolean;
+    media?: string; // 'GE', 'SFP+', 'XG', '10G', etc.
+    uplink?: boolean; // true if this port carries an uplink to a child device
 }
 
-function extractSwitchPorts(dev: Record<string, any>): SwitchPort[] | undefined {
+function extractSwitchPorts(
+    dev: Record<string, any>,
+    uplinkPortIdx?: Set<number>
+): SwitchPort[] | undefined {
     const table = dev.port_table;
     if (!Array.isArray(table) || table.length === 0) return undefined;
     const ports: SwitchPort[] = [];
@@ -55,17 +67,43 @@ function extractSwitchPorts(dev: Record<string, any>): SwitchPort[] | undefined 
         const speedRaw = p.speed;
         const speed = typeof speedRaw === 'number' && speedRaw > 0 ? speedRaw : undefined;
         const poeActive = Boolean(p.poe_enable) && typeof p.poe_power === 'number' && p.poe_power > 0;
+        const mediaRaw = p.media ?? p.if_type;
         ports.push({
             idx,
             name: typeof p.name === 'string' ? p.name : undefined,
             up: Boolean(p.up),
             speed,
-            poe: poeActive
+            poe: poeActive,
+            media: typeof mediaRaw === 'string' ? mediaRaw : undefined,
+            uplink: uplinkPortIdx?.has(idx) === true
         });
     }
     if (ports.length === 0) return undefined;
     ports.sort((a, b) => a.idx - b.idx);
     return ports;
+}
+
+function buildUplinkPortMap(devices: Array<Record<string, any>>): Map<string, Set<number>> {
+    // For each device with an uplink, register the remote port index on the
+    // parent (so the parent's port_table can mark that port as an uplink).
+    const map = new Map<string, Set<number>>();
+    for (const dev of devices) {
+        const parentMac = normalizeMac(
+            dev.uplink?.uplink_mac ??
+            dev.uplink?.mac ??
+            dev.uplink?.parent_mac ??
+            dev.uplink_mac ??
+            dev.last_uplink_mac ??
+            dev.parent_mac
+        );
+        const remotePort = dev.uplink?.uplink_remote_port ?? dev.uplink?.remote_port;
+        if (!parentMac) continue;
+        if (typeof remotePort !== 'number' || remotePort <= 0) continue;
+        const set = map.get(parentMac) ?? new Set<number>();
+        set.add(remotePort);
+        map.set(parentMac, set);
+    }
+    return map;
 }
 
 interface FreeboxL3Connectivity {
@@ -285,11 +323,12 @@ function buildUniFiDeviceNode(
     dev: Record<string, any>,
     id: string,
     mac: string,
-    existing: TopologyNode | undefined
+    existing: TopologyNode | undefined,
+    uplinkPorts?: Set<number>
 ): TopologyNode {
     const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
     const kind = pickUniFiDeviceKind(existing, dev.type, dev.model);
-    const ports = kind === 'switch' ? extractSwitchPorts(dev) : undefined;
+    const ports = (kind === 'switch' || kind === 'gateway') ? extractSwitchPorts(dev, uplinkPorts) : undefined;
     const node: TopologyNode = {
         id,
         kind,
@@ -333,12 +372,14 @@ function readUniFiUplinkMac(dev: Record<string, any>): string | null {
 function processUniFiDevice(
     dev: Record<string, any>,
     nodes: Map<string, TopologyNode>,
-    edges: Map<string, TopologyEdge>
+    edges: Map<string, TopologyEdge>,
+    uplinkPortsByMac?: Map<string, Set<number>>
 ): void {
     const mac = normalizeMac(dev.mac);
     if (!mac) return;
     const id = macNodeId(mac);
-    nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id)));
+    const uplinkPorts = uplinkPortsByMac?.get(mac);
+    nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id), uplinkPorts));
 
     const uplinkMac = readUniFiUplinkMac(dev);
     if (uplinkMac && uplinkMac !== mac) {
@@ -502,6 +543,53 @@ class TopologyService {
             }
         }
 
+        // Drop Freebox-sourced edges that are redundant with UniFi-sourced
+        // ones. Two scenarios:
+        //   (a) Freebox → UniFi infrastructure (UCG / USW / UAP). Freebox
+        //       sees them as wired LAN clients, but the real uplink path
+        //       goes through UniFi (UCG → switch → AP). The synthetic WAN
+        //       cascade keeps the Freebox → UCG edge, which is the only
+        //       semantically correct Freebox → UniFi edge.
+        //   (b) Freebox → wired client when UniFi already knows which
+        //       switch port the client sits on. The UniFi edge is more
+        //       accurate, so drop the Freebox one to avoid drawing the
+        //       same client connected to both Freebox and a switch.
+        const UNIFI_INFRA_KINDS = new Set(['gateway', 'switch', 'ap', 'repeater']);
+        const clientsWithUniFiParent = new Set<string>();
+        for (const edge of edges.values()) {
+            if (edge.source_plugin !== 'unifi') continue;
+            if (edge.medium === 'uplink') continue;
+            const target = nodes.get(edge.target);
+            if (target && (target.kind === 'client' || target.kind === 'unknown')) {
+                clientsWithUniFiParent.add(target.id);
+            }
+        }
+        for (const [edgeId, edge] of edges) {
+            if (edge.source_plugin !== 'freebox') continue;
+            if (edge.source !== FREEBOX_BOX_ID) continue;
+            const target = nodes.get(edge.target);
+            if (!target) continue;
+            const isUnifiInfra = UNIFI_INFRA_KINDS.has(target.kind) && target.sources.includes('unifi');
+            const dupClient = clientsWithUniFiParent.has(target.id);
+            if (isUnifiInfra || dupClient) edges.delete(edgeId);
+        }
+
+        // Belt-and-braces: any non-uplink edge connecting two infra nodes is
+        // dropped. Two switches / a switch and a gateway / a Freebox and an
+        // AP — they should only be linked via uplink edges (the topology
+        // backbone). Anything else is a Freebox/UniFi double-counting that
+        // would draw redundant lines.
+        const ALL_INFRA = new Set(['gateway', 'switch', 'ap', 'repeater']);
+        for (const [edgeId, edge] of edges) {
+            if (edge.medium === 'uplink') continue;
+            const s = nodes.get(edge.source);
+            const t = nodes.get(edge.target);
+            if (!s || !t) continue;
+            if (ALL_INFRA.has(s.kind) && ALL_INFRA.has(t.kind)) {
+                edges.delete(edgeId);
+            }
+        }
+
         return {
             nodes: Array.from(nodes.values()),
             edges: Array.from(edges.values()),
@@ -550,8 +638,10 @@ class TopologyService {
         edges: Map<string, TopologyEdge>
     ): Promise<void> {
         const { devices, clients } = await plugin.getTopologyData();
-        for (const dev of devices as Array<Record<string, any>>) {
-            processUniFiDevice(dev, nodes, edges);
+        const rawDevices = devices as Array<Record<string, any>>;
+        const uplinkPortsByMac = buildUplinkPortMap(rawDevices);
+        for (const dev of rawDevices) {
+            processUniFiDevice(dev, nodes, edges, uplinkPortsByMac);
         }
         for (const cli of clients as UniFiClient[]) {
             processUniFiClient(cli, nodes, edges);

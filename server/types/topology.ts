@@ -42,6 +42,8 @@ export interface TopologyNode {
             up: boolean;
             speed?: number;
             poe?: boolean;
+            media?: string;
+            uplink?: boolean;
         }>;
         [key: string]: unknown;
     };

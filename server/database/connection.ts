@@ -268,6 +268,17 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // Topology manual node positions — one row per dragged node, used to
+    // override dagre-computed positions on subsequent renders.
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS topology_node_positions (
+            node_id TEXT PRIMARY KEY,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // Token blacklist table (persists revoked JWT tokens across restarts)
     database.exec(`
         CREATE TABLE IF NOT EXISTS token_blacklist (
