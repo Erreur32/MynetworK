@@ -45,6 +45,8 @@ export interface TopologyNode {
             media?: string;
             uplink?: boolean;
         }>;
+        /** Port number on THIS device that goes upstream (UniFi uplink.port_idx). */
+        localUplinkPortIdx?: number;
         [key: string]: unknown;
     };
 }

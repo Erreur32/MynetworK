@@ -41,6 +41,7 @@ export interface TopologyNodeData extends Record<string, unknown> {
     host_type?: string;
     connection?: ClientConnection;
     editingMode?: boolean;
+    localUplinkPortIdx?: number;
 }
 
 function formatConnSpeed(mbps?: number): string | undefined {
@@ -215,11 +216,34 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const labelClass = pickLabelClass(inactive, isInfra);
 
     const cardWidth = pickCardWidth(d);
+    // Compute the local uplink port's column index so we can render a small
+    // mauve "[N]" indicator on TOP of the switch card aligned above the
+    // matching cell in the bottom port grid. Visually conveys "this is the
+    // port that uplinks upstream", and it doubles as the visual anchor for
+    // the incoming uplink edge.
+    const sortedPorts = d.ports ? [...d.ports].sort((a, b) => a.idx - b.idx) : null;
+    const uplinkGridIdx = sortedPorts && d.localUplinkPortIdx
+        ? sortedPorts.findIndex(p => p.idx === d.localUplinkPortIdx)
+        : -1;
+    const showTopUplink = uplinkGridIdx >= 0
+        && sortedPorts !== null
+        && sortedPorts.length <= SWITCH_INLINE_PORTS_MAX;
+    const uplinkXPx = showTopUplink ? 17 + uplinkGridIdx * 20 : 0;
+
     return (
         <div
             style={{ width: `${cardWidth}px` }}
-            className={`relative rounded-lg border-2 shadow-md transition-all overflow-hidden bg-slate-900 ${borderClass} ${ringClass}`}
+            className={`relative rounded-lg border-2 shadow-md transition-all overflow-visible bg-slate-900 ${borderClass} ${ringClass}`}
         >
+            {showTopUplink && (
+                <div
+                    className="absolute z-20 flex items-center justify-center w-[18px] h-[14px] rounded-sm border bg-purple-500 text-white border-purple-300 text-[8px] font-mono font-bold leading-none shadow"
+                    style={{ left: `${uplinkXPx - 9}px`, top: '-9px' }}
+                    title={`Uplink port ${d.localUplinkPortIdx}`}
+                >
+                    {d.localUplinkPortIdx}
+                </div>
+            )}
             {/* Tinted overlay (active) or muted gray (offline) over solid slate-900 base */}
             <div
                 className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${tintClass}`}

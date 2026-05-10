@@ -329,6 +329,8 @@ function buildUniFiDeviceNode(
     const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
     const kind = pickUniFiDeviceKind(existing, dev.type, dev.model);
     const ports = (kind === 'switch' || kind === 'gateway') ? extractSwitchPorts(dev, uplinkPorts) : undefined;
+    const localUplinkRaw = dev.uplink?.port_idx ?? dev.uplink?.local_port ?? dev.uplink?.uplink_local_port;
+    const localUplinkPortIdx = typeof localUplinkRaw === 'number' && localUplinkRaw > 0 ? localUplinkRaw : undefined;
     const node: TopologyNode = {
         id,
         kind,
@@ -343,7 +345,8 @@ function buildUniFiDeviceNode(
             firmware: dev.firmware_version || dev.version,
             active: dev.state === 1,
             last_seen: dev.last_seen,
-            ports
+            ports,
+            localUplinkPortIdx
         }
     };
     addSource(node, 'unifi');

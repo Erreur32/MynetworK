@@ -45,6 +45,7 @@ interface TopologyNodeIn {
         model?: string;
         host_type?: string;
         ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean; media?: string; uplink?: boolean }>;
+        localUplinkPortIdx?: number;
     };
 }
 
@@ -468,7 +469,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 active: n.metadata?.active,
                 ports: n.metadata?.ports,
                 host_type: n.metadata?.host_type,
-                connection: parentConnByClient.get(n.id)
+                connection: parentConnByClient.get(n.id),
+                localUplinkPortIdx: n.metadata?.localUplinkPortIdx
             } satisfies TopologyNodeData
         }));
 

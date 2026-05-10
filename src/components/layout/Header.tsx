@@ -635,7 +635,22 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
 
-        {/* Topology icon/badge - On dashboard and topology, next to search */}
+        {/* Search badge - Only on search page (static, not clickable) — kept
+            BEFORE the Topology shortcut so on /search the order reads
+            "Search" then "Topology" left-to-right. */}
+        {pageType === 'search' && (
+          <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
+            <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+              <Search className="w-7 h-7 text-accent-primary" />
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="font-semibold text-theme-primary">{t('header.search')}</span>
+              <span className="text-[10px] text-gray-400 font-normal">{t('header.search')}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Topology icon/badge - On dashboard, topology and search */}
         {(pageType === 'dashboard' || pageType === 'topology' || pageType === 'search') && onTopologyClick && (
           <>
             {/* Mobile: Only icon */}
@@ -669,19 +684,6 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </button>
           </>
-        )}
-        
-        {/* Search badge - Only on search page, next to logo badge */}
-        {pageType === 'search' && (
-          <div className="flex items-center gap-3 bg-theme-secondary px-3 py-2 rounded-lg border border-theme">
-            <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
-              <Search className="w-7 h-7 text-accent-primary" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold text-theme-primary">{t('header.search')}</span>
-              <span className="text-[10px] text-gray-400 font-normal">{t('header.search')}</span>
-            </div>
-          </div>
         )}
       </div>
 
