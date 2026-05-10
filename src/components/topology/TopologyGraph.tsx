@@ -71,12 +71,11 @@ interface TopologyGraphProps {
 }
 
 // Edge palette deliberately picked to avoid clashing with the node tints
-// (gateway=amber, switch=emerald, AP=sky, repeater=purple). Uplinks stay amber
-// because they always go INTO a gateway (same colour family is intentional).
+// (gateway=amber, switch=emerald, AP=sky, repeater=purple).
 const EDGE_COLOR: Record<EdgeMedium, string> = {
     ethernet: '#a3e635', // lime — distinct from emerald switches
     wifi: '#f472b6',     // pink — distinct from sky APs and purple repeaters
-    uplink: '#f59e0b'
+    uplink: '#a78bfa'    // violet/mauve — distinct from amber gateways
 };
 
 const nodeTypes = { topology: TopologyNodeCard, topologyGroup: TopologyGroupNode };
@@ -254,20 +253,22 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             const label = buildEdgeLabel(e);
             const marker: EdgeMarkerType = { type: MarkerType.ArrowClosed, color };
             // Wi-Fi: animated dashed line (marching-ants) so the wireless
-            // relationship to the AP is unambiguous. Uplink: thicker dashed,
-            // not animated. Ethernet: solid.
+            // relationship to the AP is unambiguous. Uplink: thicker dashed
+            // mauve with right-angle routing pushed wide on the sides so it
+            // doesn't overlap the parent→client edges. Ethernet: solid.
             const dasharray = isWifi ? '5 4' : (isUplink ? '6 3' : undefined);
             return {
                 id: e.id,
                 source: e.source,
                 target: e.target,
-                type: 'smoothstep',
+                type: isUplink ? 'smoothstep' : 'smoothstep',
                 animated: isWifi,
                 label,
                 labelBgPadding: [6, 3] as [number, number],
                 labelBgBorderRadius: 4,
                 labelBgStyle: { fill: 'rgba(15,23,42,0.85)', fillOpacity: 0.85 },
                 labelStyle: { fill: '#e2e8f0', fontSize: 10, fontWeight: 500 },
+                pathOptions: isUplink ? { offset: 60, borderRadius: 14 } : undefined,
                 style: {
                     stroke: color,
                     strokeWidth: isUplink ? 2.5 : (isWifi ? 1.8 : 1.6),
@@ -585,7 +586,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                     <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.wifi}` }} /> {t('topology.legend.wifi')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.uplink}` }} /> {t('topology.legend.uplink')}
+                                    <span className="w-3 inline-block" style={{ borderTop: `2.5px dashed ${EDGE_COLOR.uplink}` }} /> {t('topology.legend.uplink')}
                                 </span>
                             </div>
                         </div>
