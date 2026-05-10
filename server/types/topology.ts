@@ -36,6 +36,13 @@ export interface TopologyNode {
         ssid?: string;
         signal?: number;
         band?: string;
+        ports?: Array<{
+            idx: number;
+            name?: string;
+            up: boolean;
+            speed?: number;
+            poe?: boolean;
+        }>;
         [key: string]: unknown;
     };
 }

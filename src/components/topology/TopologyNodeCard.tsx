@@ -10,6 +10,14 @@ import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable } from 'luc
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 
+export interface SwitchPort {
+    idx: number;
+    name?: string;
+    up: boolean;
+    speed?: number;
+    poe?: boolean;
+}
+
 export interface TopologyNodeData extends Record<string, unknown> {
     kind: NodeKind;
     label: string;
@@ -18,6 +26,7 @@ export interface TopologyNodeData extends Record<string, unknown> {
     vendor?: string;
     sources: SourcePlugin[];
     active?: boolean;
+    ports?: SwitchPort[];
 }
 
 const KIND_STYLE: Record<NodeKind, { icon: React.ElementType; ring: string; tint: string; iconColor: string; border: string }> = {
@@ -69,6 +78,35 @@ function pickLabelClass(inactive: boolean, isInfra: boolean): string {
     return isInfra ? 'text-white' : 'text-slate-100';
 }
 
+function pickPortClass(port: SwitchPort): string {
+    if (!port.up) return 'bg-slate-700/70 text-slate-500 border-slate-600/40';
+    if (port.poe) return 'bg-amber-400 text-amber-950 border-amber-300';
+    return 'bg-emerald-500 text-white border-emerald-300';
+}
+
+function portTooltip(port: SwitchPort): string {
+    const status = port.up ? `${port.speed ?? '?'} Mbps` : 'Down';
+    const poe = port.poe ? ' · PoE' : '';
+    const name = port.name ? ` (${port.name})` : '';
+    return `Port ${port.idx}${name} — ${status}${poe}`;
+}
+
+const SwitchPortGrid: React.FC<{ ports: SwitchPort[] }> = ({ ports }) => (
+    <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
+        <div className="flex flex-wrap gap-0.5">
+            {ports.map(p => (
+                <div
+                    key={p.idx}
+                    title={portTooltip(p)}
+                    className={`flex items-center justify-center w-[18px] h-[14px] rounded-sm border text-[8px] font-mono font-bold leading-none ${pickPortClass(p)}`}
+                >
+                    {p.idx}
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
@@ -106,6 +144,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     )}
                 </div>
             </div>
+            {d.kind === 'switch' && d.ports && d.ports.length > 0 && (
+                <SwitchPortGrid ports={d.ports} />
+            )}
             {(() => {
                 const badge = KIND_BADGE[d.kind];
                 if (!badge) return null;

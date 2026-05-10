@@ -36,7 +36,15 @@ interface TopologyNodeIn {
     mac?: string;
     vendor?: string;
     sources: SourcePlugin[];
-    metadata?: { active?: boolean; ssid?: string; band?: string; signal?: number; model?: string; host_type?: string };
+    metadata?: {
+        active?: boolean;
+        ssid?: string;
+        band?: string;
+        signal?: number;
+        model?: string;
+        host_type?: string;
+        ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean }>;
+    };
 }
 
 interface TopologyEdgeIn {
@@ -234,7 +242,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 mac: n.mac,
                 vendor: n.vendor,
                 sources: n.sources,
-                active: n.metadata?.active
+                active: n.metadata?.active,
+                ports: n.metadata?.ports
             } satisfies TopologyNodeData
         }));
 

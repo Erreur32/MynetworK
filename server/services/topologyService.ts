@@ -33,7 +33,39 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // Bump when the snapshot shape or layout convention changes so stale rows
 // in SQLite are auto-invalidated and a fresh build is triggered.
 // 2 — edge direction switched to parent → child (dagre TB).
-const SCHEMA_VERSION = 2;
+// 3 — switch nodes now embed UniFi port_table (front-panel view).
+const SCHEMA_VERSION = 3;
+
+interface SwitchPort {
+    idx: number;
+    name?: string;
+    up: boolean;
+    speed?: number; // Mbps
+    poe?: boolean;
+}
+
+function extractSwitchPorts(dev: Record<string, any>): SwitchPort[] | undefined {
+    const table = dev.port_table;
+    if (!Array.isArray(table) || table.length === 0) return undefined;
+    const ports: SwitchPort[] = [];
+    for (const p of table) {
+        const idx = typeof p?.port_idx === 'number' ? p.port_idx : null;
+        if (idx === null || idx <= 0) continue;
+        const speedRaw = p.speed;
+        const speed = typeof speedRaw === 'number' && speedRaw > 0 ? speedRaw : undefined;
+        const poeActive = Boolean(p.poe_enable) && typeof p.poe_power === 'number' && p.poe_power > 0;
+        ports.push({
+            idx,
+            name: typeof p.name === 'string' ? p.name : undefined,
+            up: Boolean(p.up),
+            speed,
+            poe: poeActive
+        });
+    }
+    if (ports.length === 0) return undefined;
+    ports.sort((a, b) => a.idx - b.idx);
+    return ports;
+}
 
 interface FreeboxL3Connectivity {
     addr?: string;
@@ -255,9 +287,11 @@ function buildUniFiDeviceNode(
     existing: TopologyNode | undefined
 ): TopologyNode {
     const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
+    const kind = pickUniFiDeviceKind(existing, dev.type, dev.model);
+    const ports = kind === 'switch' ? extractSwitchPorts(dev) : undefined;
     const node: TopologyNode = {
         id,
-        kind: pickUniFiDeviceKind(existing, dev.type, dev.model),
+        kind,
         label: dev.name || modelStr || existing?.label || mac,
         ip: existing?.ip ?? dev.ip,
         mac,
@@ -268,7 +302,8 @@ function buildUniFiDeviceNode(
             model: modelStr,
             firmware: dev.firmware_version || dev.version,
             active: dev.state === 1,
-            last_seen: dev.last_seen
+            last_seen: dev.last_seen,
+            ports
         }
     };
     addSource(node, 'unifi');
