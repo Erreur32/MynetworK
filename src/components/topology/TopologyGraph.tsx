@@ -93,7 +93,7 @@ const ALL_KINDS: NodeKind[] = ['gateway', 'switch', 'ap', 'repeater', 'client', 
 
 type Status = 'online' | 'offline' | 'stale';
 const ALL_STATUS: Status[] = ['online', 'offline', 'stale'];
-const DEFAULT_STATUS: Status[] = ['online']; // online only by default (offline + stale opt-in)
+const DEFAULT_STATUS: Status[] = ['online', 'offline']; // hide stale Freebox cache by default; online + offline both visible
 
 const STATUS_CHIP: Record<Status, { icon: React.ElementType; activeBg: string }> = {
     online:  { icon: CircleDot, activeBg: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-100' },
@@ -241,14 +241,19 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         const rfEdges: Edge[] = filteredGraph.edges.map(e => {
             const color = EDGE_COLOR[e.medium];
             const isUplink = e.medium === 'uplink';
+            const isWifi = e.medium === 'wifi';
             const label = buildEdgeLabel(e);
             const marker: EdgeMarkerType = { type: MarkerType.ArrowClosed, color };
+            // Wi-Fi: animated dashed line (marching-ants) so the wireless
+            // relationship to the AP is unambiguous. Uplink: thicker dashed,
+            // not animated. Ethernet: solid.
+            const dasharray = isWifi ? '5 4' : (isUplink ? '6 3' : undefined);
             return {
                 id: e.id,
                 source: e.source,
                 target: e.target,
                 type: 'smoothstep',
-                animated: e.medium === 'wifi',
+                animated: isWifi,
                 label,
                 labelBgPadding: [6, 3] as [number, number],
                 labelBgBorderRadius: 4,
@@ -256,8 +261,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 labelStyle: { fill: '#e2e8f0', fontSize: 10, fontWeight: 500 },
                 style: {
                     stroke: color,
-                    strokeWidth: isUplink ? 2.5 : 1.6,
-                    strokeDasharray: isUplink ? '6 3' : undefined
+                    strokeWidth: isUplink ? 2.5 : (isWifi ? 1.8 : 1.6),
+                    strokeDasharray: dasharray
                 },
                 markerEnd: marker,
                 data: { medium: e.medium, linkSpeedMbps: e.linkSpeedMbps, portIndex: e.portIndex, ssid: e.ssid, band: e.band, signal: e.signal }
@@ -568,7 +573,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                     <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.ethernet }} /> {t('topology.legend.ethernet')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.wifi }} /> {t('topology.legend.wifi')}
+                                    <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.wifi}` }} /> {t('topology.legend.wifi')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.uplink}` }} /> {t('topology.legend.uplink')}
