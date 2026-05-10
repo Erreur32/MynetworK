@@ -270,6 +270,55 @@ See `Docs/nginx.example.conf` for a complete HTTP/HTTPS setup.
 
 `JWT_SECRET` is loaded at server startup in `server/services/authService.ts` from `process.env.JWT_SECRET`. If unset, the default value is used and a warning is logged. The secret is used to sign tokens on login and verify them on authenticated requests.
 
+## Dependencies & supply-chain
+
+MynetworK runs entirely on your machine and only talks to the network equipment you configure (Freebox / UniFi / your LAN). It never phones home. The full list of npm packages it ships is in [`package.json`](./package.json); below is what's important to know.
+
+### Runtime — backend (Node / Express)
+
+| Package | Used for | Notes |
+| --- | --- | --- |
+| `express` | HTTP server | Stable, widely audited |
+| `helmet` | Security headers (CSP, HSTS, X-Frame-Options…) | Defense-in-depth |
+| `express-rate-limit` | API and write-route throttling, IPv6-aware | |
+| `compression` | gzip responses | |
+| `cors` | CORS rules | Tight defaults |
+| `bcrypt` | Password hashing | |
+| `jsonwebtoken` | Issue / verify JWTs | See `JWT_SECRET` above |
+| `better-sqlite3` | Local DB (data, sessions, scans, topology snapshots, manual placements) | Database file lives in the mounted `./data` volume — back it up like any DB |
+| `node-cron` | Daily topology refresh + scheduled scans | Local only, no internet |
+| `ws` | WebSockets for live UI updates | Listens on the same port as the HTTP server |
+
+### Runtime — frontend (React / Vite)
+
+| Package | Used for | Notes |
+| --- | --- | --- |
+| `react` / `react-dom` | UI framework | |
+| `react-router-dom` | Client-side routing | |
+| `zustand` | State management | |
+| `i18next` / `react-i18next` | English / French translations | |
+| `recharts` | Bar / line charts on the dashboard | Brings `d3-shape`, `d3-scale`, `d3-array`, etc. as transitive deps |
+| `@xyflow/react` (React Flow) | Interactive topology graph (`/topology`) | Brings `d3-zoom`, `d3-drag`, `d3-selection`, `d3-interpolate` |
+| `dagre` | Tree / hierarchical layout for the topology | |
+| `html-to-image` | PNG / SVG export of the topology | Runs entirely in the browser, no upload |
+| `jspdf` | PDF export of the topology (A4, raster) | Browser-only |
+| `lucide-react` | Icon set | |
+| `react-markdown` + `remark-gfm` | Render the in-app changelog | Sanitised |
+| `leaflet` + `leaflet.markercluster` | Map view | |
+| `sonner` | Toast notifications | |
+
+### Security considerations
+
+- **No telemetry.** None of these packages call out to a third-party server when the app runs. The Docker container does not need outbound internet to function — it only reaches the LAN equipment you configure.
+- **Export libraries (`html-to-image`, `jspdf`)** are 100 % client-side. Generated PNG / PDF / SVG files stay in your browser; nothing is uploaded.
+- **Topology stack (`@xyflow/react`, `dagre`)** runs in the browser and on a SQLite-backed snapshot. The snapshot only contains data your active plugins already have access to (Freebox / UniFi devices on your LAN).
+- **Charts stack (`recharts`)** renders local data only.
+- **Supply chain.** Dependabot is enabled on this repo and proposes weekly updates. Snyk runs on every push (`Snyk Security` in CI). SonarCloud runs on every push to flag suspicious changes.
+- **Reproducible builds.** `package-lock.json` is committed. The published Docker image is built from a tagged commit by GitHub Actions (`Build & Push Docker Image` workflow) and pushed to GHCR, so you can verify what's running.
+- **Updating.** Pull the new image from GHCR (`docker compose pull && docker compose up -d`). The version that's running is shown in the UI footer and at startup in the container logs.
+
+If you spot a security issue, please open a private GitHub security advisory rather than a public issue.
+
 ## Configuration 
 
 #### Configuration methods (recommended order)
