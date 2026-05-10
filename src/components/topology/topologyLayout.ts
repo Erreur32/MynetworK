@@ -23,10 +23,48 @@ import type { TopologyNodeData } from './TopologyNodeCard';
 
 export type LayoutMode = 'tree' | 'horizontal' | 'grouped';
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 70;
+// Network infrastructure cards (gateway, switch, AP, repeater) — bigger
+// than the client cards so they read clearly even in a sea of small clients.
+const NODE_WIDTH = 240;
+const NODE_HEIGHT = 76;
+const CLIENT_NODE_WIDTH = 170;
 
-const CLIENT_W = 200;
+const SWITCH_INLINE_PORTS_MAX = 12;
+const PORT_CELL_WIDTH = 22;
+
+function portsFor(node: Node): TopologyNodeData['ports'] {
+    const data = node.data as TopologyNodeData | undefined;
+    if (!data) return undefined;
+    if (data.kind !== 'switch' && data.kind !== 'gateway') return undefined;
+    return data.ports;
+}
+
+function isInfraData(data: TopologyNodeData | undefined): boolean {
+    if (!data) return false;
+    return data.kind === 'gateway' || data.kind === 'switch' || data.kind === 'ap' || data.kind === 'repeater';
+}
+
+export function getNodeWidth(node: Node): number {
+    const data = node.data as TopologyNodeData | undefined;
+    if (!isInfraData(data)) return CLIENT_NODE_WIDTH;
+    const ports = portsFor(node);
+    if (ports && ports.length > 0 && ports.length <= SWITCH_INLINE_PORTS_MAX) {
+        return Math.max(NODE_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
+    }
+    return NODE_WIDTH;
+}
+
+function nodeHeightFor(node: Node): number {
+    const data = node.data as TopologyNodeData | undefined;
+    if (!isInfraData(data)) return CLIENT_H;
+    const ports = portsFor(node);
+    if (!ports || ports.length === 0) return NODE_HEIGHT;
+    const fitsInline = ports.length <= SWITCH_INLINE_PORTS_MAX;
+    const rows = fitsInline ? 1 : Math.ceil(ports.length / 8);
+    return NODE_HEIGHT + rows * 18 + 6;
+}
+
+const CLIENT_W = CLIENT_NODE_WIDTH;
 const CLIENT_H = 56;
 const CLIENT_GAP_X = 10;
 const CLIENT_GAP_Y = 8;
@@ -106,7 +144,9 @@ function dagreLayout(
         marginy: 20
     });
 
-    for (const node of nodes) g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    for (const node of nodes) {
+        g.setNode(node.id, { width: getNodeWidth(node), height: nodeHeightFor(node) });
+    }
     for (const edge of edges) g.setEdge(edge.source, edge.target);
 
     dagre.layout(g);
@@ -114,13 +154,15 @@ function dagreLayout(
     const isHorizontal = direction === 'LR';
     const positioned: Node[] = nodes.map(node => {
         const pos = g.node(node.id);
+        const w = getNodeWidth(node);
+        const h = nodeHeightFor(node);
         return {
             ...node,
             targetPosition: isHorizontal ? Position.Left : Position.Top,
             sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
             position: {
-                x: (pos?.x ?? 0) - NODE_WIDTH / 2,
-                y: (pos?.y ?? 0) - NODE_HEIGHT / 2
+                x: (pos?.x ?? 0) - w / 2,
+                y: (pos?.y ?? 0) - h / 2
             }
         };
     });
@@ -128,17 +170,31 @@ function dagreLayout(
     return { nodes: positioned, edges };
 }
 
-interface GroupedDim { w: number; h: number; cols: number }
+interface GroupedDim { w: number; h: number; cols: number; vGap: number }
 
-function computeGroupedDims(childrenByParent: Map<string, string[]>): Map<string, GroupedDim> {
+const WIFI_CLUSTER_VGAP = 32; // taller gap so the wifi edge label fits
+const WIFI_CLUSTER_COLS = 1;  // single column for wifi: each client gets its own row & left-side edge
+const WIRED_FLAT_MAX_COLS = 12; // wired switch clients laid flat on a single row up to this count, then wraps
+
+function isWifiCluster(parentId: string, nodeById: Map<string, Node>): boolean {
+    const parent = nodeById.get(parentId);
+    const data = parent?.data as TopologyNodeData | undefined;
+    return data?.kind === 'ap' || data?.kind === 'repeater';
+}
+
+function computeGroupedDims(childrenByParent: Map<string, string[]>, nodeById: Map<string, Node>): Map<string, GroupedDim> {
     const dims = new Map<string, GroupedDim>();
     for (const [parent, children] of childrenByParent) {
+        const wifi = isWifiCluster(parent, nodeById);
         const n = children.length;
-        const cols = Math.max(1, Math.min(5, Math.ceil(Math.sqrt(n / 1.6))));
+        const cols = wifi
+            ? WIFI_CLUSTER_COLS
+            : Math.max(1, Math.min(WIRED_FLAT_MAX_COLS, n));
+        const vGap = wifi ? WIFI_CLUSTER_VGAP : CLIENT_GAP_Y;
         const rows = Math.ceil(n / cols);
         const w = cols * CLIENT_W + (cols - 1) * CLIENT_GAP_X + GROUP_PAD * 2;
-        const h = rows * CLIENT_H + (rows - 1) * CLIENT_GAP_Y + GROUP_PAD_TOP + GROUP_PAD;
-        dims.set(parent, { w, h, cols });
+        const h = rows * CLIENT_H + (rows - 1) * vGap + GROUP_PAD_TOP + GROUP_PAD;
+        dims.set(parent, { w, h, cols, vGap });
     }
     return dims;
 }
@@ -192,7 +248,7 @@ function placeChildrenInGroup(
             sourcePosition: Position.Bottom,
             position: {
                 x: GROUP_PAD + col * (CLIENT_W + CLIENT_GAP_X),
-                y: GROUP_PAD_TOP + row * (CLIENT_H + CLIENT_GAP_Y)
+                y: GROUP_PAD_TOP + row * (CLIENT_H + dim.vGap)
             }
         });
     });
@@ -211,7 +267,9 @@ function buildGroupedDagre(
     g.setDefaultEdgeLabel(() => ({}));
     g.setGraph({ rankdir: 'TB', nodesep: 30, ranksep: 70, marginx: 20, marginy: 20 });
 
-    for (const n of infraNodes) g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    for (const n of infraNodes) {
+        g.setNode(n.id, { width: getNodeWidth(n), height: nodeHeightFor(n) });
+    }
     for (const grp of groupNodes) {
         const dim = dims.get(getGroupParentId(grp, ORPHAN_PARENT));
         if (dim) g.setNode(grp.id, { width: dim.w, height: dim.h });
@@ -229,11 +287,13 @@ function buildGroupedDagre(
 function positionGroupedInfra(infraNodes: Node[], g: dagre.graphlib.Graph): Node[] {
     return infraNodes.map(n => {
         const pos = g.node(n.id);
+        const w = getNodeWidth(n);
+        const h = nodeHeightFor(n);
         return {
             ...n,
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
-            position: { x: (pos?.x ?? 0) - NODE_WIDTH / 2, y: (pos?.y ?? 0) - NODE_HEIGHT / 2 }
+            position: { x: (pos?.x ?? 0) - w / 2, y: (pos?.y ?? 0) - h / 2 }
         };
     });
 }
@@ -256,6 +316,16 @@ function positionGroupedGroups(
     });
 }
 
+/**
+ * Grouped layout — infra hierarchy with clients clustered under their parent.
+ *
+ * The cluster container itself is rendered as a transparent group (no
+ * coloured border / title), so visually only the infra cards and the client
+ * cards are visible — but each parent infra still reserves enough space for
+ * its children, who appear in a tidy grid right below.
+ */
+const CLUSTER_VGAP = 24; // vertical gap between an infra card and its client cluster below
+
 function groupedLayout(
     nodes: Node[],
     edges: Edge[]
@@ -266,30 +336,88 @@ function groupedLayout(
 
     const parentByClient = buildParentMap(edges, nodeById);
     const childrenByParent = bucketChildren(clientNodes, parentByClient, ORPHAN_PARENT);
-    const dims = computeGroupedDims(childrenByParent);
+    const dims = computeGroupedDims(childrenByParent, nodeById);
 
-    const groupNodes: Node[] = [];
-    for (const [parent, children] of childrenByParent) {
-        const dim = dims.get(parent);
-        if (dim) groupNodes.push(buildGroupNode(parent, children.length, dim, nodeById));
+    // Lay out the infra hierarchy with dagre. Each infra reserves enough
+    // height for its child cluster below so siblings don't overlap.
+    const g = new dagre.graphlib.Graph();
+    g.setDefaultEdgeLabel(() => ({}));
+    g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 90, marginx: 30, marginy: 30 });
+
+    for (const n of infraNodes) {
+        const baseW = getNodeWidth(n);
+        const baseH = nodeHeightFor(n);
+        const dim = dims.get(n.id);
+        const w = dim ? Math.max(baseW, dim.w) : baseW;
+        const h = dim ? baseH + CLUSTER_VGAP + dim.h : baseH;
+        g.setNode(n.id, { width: w, height: h });
     }
+    for (const e of edges) {
+        if (isInfraInfraEdge(e, nodeById)) g.setEdge(e.source, e.target);
+    }
+    dagre.layout(g);
 
-    const g = buildGroupedDagre(infraNodes, groupNodes, edges, childrenByParent, dims, nodeById);
+    // Place each infra at the TOP of its reserved bounding box so its client
+    // cluster fits in the space below.
+    const positionedInfra: Node[] = infraNodes.map(n => {
+        const baseW = getNodeWidth(n);
+        const baseH = nodeHeightFor(n);
+        const dim = dims.get(n.id);
+        const fullH = dim ? baseH + CLUSTER_VGAP + dim.h : baseH;
+        const pos = g.node(n.id);
+        return {
+            ...n,
+            targetPosition: Position.Top,
+            sourcePosition: Position.Bottom,
+            position: {
+                x: (pos?.x ?? 0) - baseW / 2,
+                y: (pos?.y ?? 0) - fullH / 2
+            }
+        };
+    });
 
-    const positionedInfra = positionGroupedInfra(infraNodes, g);
-    const positionedGroups = positionGroupedGroups(groupNodes, dims, g);
-
+    // Place clients absolutely (no parent/extent constraint) so they can be
+    // freely dragged once persistence is wired up.
     const positionedClients: Node[] = [];
+    let orphanX = -600;
     for (const [parent, children] of childrenByParent) {
         const dim = dims.get(parent);
-        if (dim) positionedClients.push(...placeChildrenInGroup(parent, children, clientNodes, dim));
-    }
+        if (!dim) continue;
+        const parentInfra = positionedInfra.find(n => n.id === parent);
 
-    const visibleEdges = edges.filter(e => isInfraInfraEdge(e, nodeById));
+        let baseX: number;
+        let baseY: number;
+        if (parentInfra) {
+            const parentW = getNodeWidth(parentInfra);
+            const parentH = nodeHeightFor(parentInfra);
+            baseX = parentInfra.position.x + parentW / 2 - dim.w / 2;
+            baseY = parentInfra.position.y + parentH + CLUSTER_VGAP;
+        } else {
+            baseX = orphanX;
+            baseY = 0;
+            orphanX -= dim.w + 80;
+        }
+
+        children.forEach((cid, idx) => {
+            const c = clientNodes.find(node => node.id === cid);
+            if (!c) return;
+            const col = idx % dim.cols;
+            const row = Math.floor(idx / dim.cols);
+            positionedClients.push({
+                ...c,
+                targetPosition: Position.Top,
+                sourcePosition: Position.Bottom,
+                position: {
+                    x: baseX + GROUP_PAD + col * (CLIENT_W + CLIENT_GAP_X),
+                    y: baseY + row * (CLIENT_H + dim.vGap)
+                }
+            });
+        });
+    }
 
     return {
-        nodes: [...positionedGroups, ...positionedInfra, ...positionedClients],
-        edges: visibleEdges
+        nodes: [...positionedInfra, ...positionedClients],
+        edges
     };
 }
 
@@ -382,8 +510,10 @@ function wrappedTreeLayout(
 
     for (const n of infraNodes) {
         const dim = dims.get(n.id);
-        const w = dim ? Math.max(NODE_WIDTH, dim.w) + WRAPPED_SUBTREE_PAD : NODE_WIDTH;
-        const h = dim ? NODE_HEIGHT + WRAPPED_CLIENT_VGAP + dim.h : NODE_HEIGHT;
+        const baseW = getNodeWidth(n);
+        const baseH = nodeHeightFor(n);
+        const w = dim ? Math.max(baseW, dim.w) + WRAPPED_SUBTREE_PAD : baseW;
+        const h = dim ? baseH + WRAPPED_CLIENT_VGAP + dim.h : baseH;
         g.setNode(n.id, { width: w, height: h });
     }
     for (const e of edges) {
@@ -393,14 +523,16 @@ function wrappedTreeLayout(
 
     const positionedInfra: Node[] = infraNodes.map(n => {
         const dim = dims.get(n.id);
-        const h = dim ? NODE_HEIGHT + WRAPPED_CLIENT_VGAP + dim.h : NODE_HEIGHT;
+        const baseW = getNodeWidth(n);
+        const baseH = nodeHeightFor(n);
+        const h = dim ? baseH + WRAPPED_CLIENT_VGAP + dim.h : baseH;
         const pos = g.node(n.id);
         return {
             ...n,
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
             position: {
-                x: (pos?.x ?? 0) - NODE_WIDTH / 2,
+                x: (pos?.x ?? 0) - baseW / 2,
                 y: (pos?.y ?? 0) - h / 2
             }
         };

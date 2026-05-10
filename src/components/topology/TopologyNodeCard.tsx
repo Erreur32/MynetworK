@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable } from 'lucide-react';
+import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv } from 'lucide-react';
 
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
@@ -16,6 +16,17 @@ export interface SwitchPort {
     up: boolean;
     speed?: number;
     poe?: boolean;
+    media?: string;
+    uplink?: boolean;
+}
+
+export interface ClientConnection {
+    medium: 'wifi' | 'ethernet';
+    speedMbps?: number;
+    ssid?: string;
+    band?: string;
+    signal?: number;
+    portIndex?: number;
 }
 
 export interface TopologyNodeData extends Record<string, unknown> {
@@ -27,6 +38,38 @@ export interface TopologyNodeData extends Record<string, unknown> {
     sources: SourcePlugin[];
     active?: boolean;
     ports?: SwitchPort[];
+    host_type?: string;
+    connection?: ClientConnection;
+    editingMode?: boolean;
+}
+
+function formatConnSpeed(mbps?: number): string | undefined {
+    if (!mbps || mbps <= 0) return undefined;
+    if (mbps >= 1000) return `${(mbps / 1000).toFixed(mbps % 1000 === 0 ? 0 : 1)} Gbps`;
+    return `${mbps} Mbps`;
+}
+
+function buildConnectionLabel(c: ClientConnection): string | null {
+    if (c.medium === 'wifi') {
+        const parts: string[] = [];
+        if (c.ssid) parts.push(c.ssid);
+        if (c.band) parts.push(c.band);
+        const sp = formatConnSpeed(c.speedMbps);
+        if (sp) parts.push(sp);
+        return parts.length > 0 ? parts.join(' · ') : null;
+    }
+    const parts: string[] = [];
+    if (typeof c.portIndex === 'number') parts.push(`Port ${c.portIndex}`);
+    const sp = formatConnSpeed(c.speedMbps);
+    if (sp) parts.push(sp);
+    return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function isFreeboxPlayer(d: TopologyNodeData): boolean {
+    const ht = (d.host_type ?? '').toLowerCase();
+    if (ht.startsWith('freebox_player')) return true;
+    const label = (d.label ?? '').toLowerCase();
+    return label.includes('freebox player') || label.includes('pop tv') || label.includes('freebox pop');
 }
 
 const KIND_STYLE: Record<NodeKind, { icon: React.ElementType; ring: string; tint: string; iconColor: string; border: string }> = {
@@ -78,8 +121,34 @@ function pickLabelClass(inactive: boolean, isInfra: boolean): string {
     return isInfra ? 'text-white' : 'text-slate-100';
 }
 
+const SWITCH_INLINE_PORTS_MAX = 12;
+const PORT_CELL_WIDTH = 22;
+const INFRA_CARD_WIDTH = 240;
+const CLIENT_CARD_WIDTH = 170;
+
+function pickCardWidth(d: TopologyNodeData): number {
+    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
+    if (!isInfra) return CLIENT_CARD_WIDTH;
+    const ports = (d.kind === 'switch' || d.kind === 'gateway') ? d.ports : undefined;
+    if (ports && ports.length > 0 && ports.length <= SWITCH_INLINE_PORTS_MAX) {
+        return Math.max(INFRA_CARD_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
+    }
+    return INFRA_CARD_WIDTH;
+}
+
+function isFibrePort(port: SwitchPort): boolean {
+    const m = (port.media ?? '').toLowerCase();
+    if (m.includes('sfp') || m.includes('fiber') || m.includes('fibre')) return true;
+    // 10G/XG without explicit media is overwhelmingly SFP+ in UniFi gear
+    if (m === 'xg' || m === '10g') return true;
+    if (port.up && (port.speed ?? 0) >= 10000) return true;
+    return false;
+}
+
 function pickPortClass(port: SwitchPort): string {
     if (!port.up) return 'bg-slate-700/70 text-slate-500 border-slate-600/40';
+    if (port.uplink) return 'bg-purple-500 text-white border-purple-300';
+    if (isFibrePort(port)) return 'bg-cyan-500 text-white border-cyan-300';
     if (port.poe) return 'bg-amber-400 text-amber-950 border-amber-300';
     return 'bg-emerald-500 text-white border-emerald-300';
 }
@@ -87,14 +156,17 @@ function pickPortClass(port: SwitchPort): string {
 function portTooltip(port: SwitchPort): string {
     const status = port.up ? `${port.speed ?? '?'} Mbps` : 'Down';
     const poe = port.poe ? ' · PoE' : '';
+    const uplink = port.uplink ? ' · uplink' : '';
     const name = port.name ? ` (${port.name})` : '';
-    return `Port ${port.idx}${name} — ${status}${poe}`;
+    const media = port.media ? ` · ${port.media}` : '';
+    return `Port ${port.idx}${name} — ${status}${poe}${uplink}${media}`;
 }
 
-export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm' }> = ({ ports, cellSize = 'sm' }) => {
+export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm'; wrap?: boolean }> = ({ ports, cellSize = 'sm', wrap = true }) => {
     const cls = cellSize === 'sm' ? 'w-[22px] h-[18px] text-[9px]' : 'w-[18px] h-[14px] text-[8px]';
+    const wrapClass = wrap ? 'flex-wrap' : 'flex-nowrap';
     return (
-        <div className="flex flex-wrap gap-0.5">
+        <div className={`flex ${wrapClass} gap-0.5`}>
             {ports.map(p => (
                 <div
                     key={p.idx}
@@ -108,28 +180,46 @@ export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | '
     );
 };
 
+function pickClientIcon(d: TopologyNodeData, fallback: React.ElementType): React.ElementType {
+    if (isFreeboxPlayer(d)) return Tv;
+    return fallback;
+}
+
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
     const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
-    const Icon = BrandIcon ?? style.icon;
+    const ClientIcon = !isInfra ? pickClientIcon(d, style.icon) : null;
+    const Icon = BrandIcon ?? ClientIcon ?? style.icon;
     const inactive = d.active === false;
     const borderClass = inactive ? 'border-slate-600/40' : style.border;
-    const ringClass = selected ? `ring-2 ${style.ring}` : '';
+    // When in edit mode and selected: bright amber pulsing halo so the user
+    // can see at a glance which card the keyboard arrows / nudge buttons
+    // will move. Outside edit mode, fall back to the kind-tinted ring.
+    const editingActive = d.editingMode === true && selected;
+    let ringClass = '';
+    if (editingActive) {
+        ringClass = 'ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 animate-pulse';
+    } else if (selected) {
+        ringClass = `ring-2 ${style.ring}`;
+    }
     const tintClass = inactive ? 'from-slate-700/30 to-slate-800/15' : style.tint;
     const iconWrapperColor = inactive ? 'text-slate-500' : style.iconColor;
     const labelClass = pickLabelClass(inactive, isInfra);
 
+    const cardWidth = pickCardWidth(d);
     return (
         <div
-            className={`relative w-[200px] rounded-lg border-2 shadow-md transition-all overflow-hidden bg-slate-900 ${borderClass} ${ringClass}`}
+            style={{ width: `${cardWidth}px` }}
+            className={`relative rounded-lg border-2 shadow-md transition-all overflow-hidden bg-slate-900 ${borderClass} ${ringClass}`}
         >
             {/* Tinted overlay (active) or muted gray (offline) over solid slate-900 base */}
             <div
                 className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${tintClass}`}
             />
-            <Handle type="target" position={Position.Top} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
+            <Handle id="t" type="target" position={Position.Top} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
+            <Handle id="tl" type="target" position={Position.Left} className="!bg-pink-400/70 !border-pink-300/70 !w-2 !h-2" />
             <div className="relative flex items-center gap-2 p-2.5">
                 <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor}`}>
                     <Icon size={18} />
@@ -143,11 +233,32 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                             inactive ? 'text-slate-500' : 'text-slate-300'
                         }`}>{d.ip}</div>
                     )}
+                    {!isInfra && d.connection && (() => {
+                        const conn = d.connection;
+                        const labelText = buildConnectionLabel(conn);
+                        if (!labelText) return null;
+                        const ConnIcon = conn.medium === 'wifi' ? Wifi : Cable;
+                        const chip = inactive
+                            ? 'bg-slate-700/50 text-slate-400 border-slate-600/40'
+                            : conn.medium === 'wifi'
+                                ? 'bg-pink-500/15 text-pink-200 border-pink-400/40'
+                                : 'bg-lime-500/15 text-lime-200 border-lime-400/40';
+                        return (
+                            <div className={`mt-1 inline-flex items-center gap-1 px-1.5 py-px rounded border text-[10px] max-w-full ${chip}`}>
+                                <ConnIcon size={10} className="flex-none" />
+                                <span className="truncate">{labelText}</span>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
-            {d.kind === 'switch' && d.ports && d.ports.length > 0 && (
+            {(d.kind === 'switch' || d.kind === 'gateway') && d.ports && d.ports.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
-                    <SwitchPortGrid ports={d.ports} cellSize="xs" />
+                    <SwitchPortGrid
+                        ports={d.ports}
+                        cellSize="xs"
+                        wrap={d.ports.length > SWITCH_INLINE_PORTS_MAX}
+                    />
                 </div>
             )}
             {(() => {
@@ -163,7 +274,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     </div>
                 );
             })()}
-            <Handle type="source" position={Position.Bottom} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
+            <Handle id="s" type="source" position={Position.Bottom} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
         </div>
     );
 };

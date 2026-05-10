@@ -162,3 +162,29 @@
 .topology-cluster-marching {
   animation: topology-marching-ants 1.2s linear infinite;
 }
+
+/* Topology: dark theme on the React Flow controls bar (+/-, fit, lock) */
+.react-flow__controls {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgb(51, 65, 85) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-bottom: 1px solid rgb(51, 65, 85) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background: rgba(51, 65, 85, 0.9) !important;
+}
+.react-flow__controls-button svg {
+  fill: rgb(226, 232, 240) !important;
+  max-width: 14px;
+  max-height: 14px;
+}

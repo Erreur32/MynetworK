@@ -153,37 +153,54 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
         return { kinds, online, offline, wifiClients, wiredClients, infra };
     }, [graph]);
 
+    const infraSub = (() => {
+        if (!stats) return '—';
+        const parts = [
+            stats.kinds.gateway ? `${stats.kinds.gateway} GW` : null,
+            stats.kinds.switch ? `${stats.kinds.switch} SW` : null,
+            stats.kinds.ap ? `${stats.kinds.ap} AP` : null,
+            stats.kinds.repeater ? `${stats.kinds.repeater} RPT` : null
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(' · ') : '—';
+    })();
+
     return (
-        <div className="space-y-6">
-            {/* Hero header */}
-            <div className="relative overflow-hidden rounded-2xl border-theme bg-gradient-to-br from-indigo-600/20 via-sky-500/10 to-emerald-500/10 p-6">
-                <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-sky-400/10 blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-12 -left-12 w-56 h-56 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-                <div className="relative flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex items-start gap-4">
+        <div className="space-y-3">
+            {/* Hero header — compact, with stat chips inline so the graph below
+                gets the maximum vertical real estate */}
+            <div className="relative overflow-hidden rounded-2xl border-theme bg-gradient-to-br from-indigo-600/20 via-sky-500/10 to-emerald-500/10 p-3 sm:p-4">
+                <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-sky-400/10 blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-12 -left-12 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+                <div className="relative flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
                         <button
                             onClick={onBack}
-                            className="mt-1 p-2 rounded-lg btn-theme hover:bg-accent-primary/20 text-theme-primary transition-colors"
+                            className="p-1.5 rounded-lg btn-theme hover:bg-accent-primary/20 text-theme-primary transition-colors"
                             aria-label={t('common.back')}
                         >
-                            <ArrowLeft size={18} />
+                            <ArrowLeft size={16} />
                         </button>
-                        <div>
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-lg bg-gradient-to-br from-sky-500/30 to-indigo-500/30 border border-sky-400/30">
-                                    <Network size={22} className="text-sky-300" />
-                                </div>
-                                <h1 className="text-2xl font-bold text-theme-primary">
+                        <div className="p-1.5 rounded-lg bg-gradient-to-br from-sky-500/30 to-indigo-500/30 border border-sky-400/30 flex-none">
+                            <Network size={18} className="text-sky-300" />
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-lg sm:text-xl font-bold text-theme-primary truncate">
                                     {t('topology.title')}
                                 </h1>
-                                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                    <Sparkles size={12} />
+                                <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                    <Sparkles size={10} />
                                     {t('topology.beta')}
                                 </span>
                             </div>
-                            <p className="mt-1 text-sm text-theme-secondary max-w-2xl">
-                                {t('topology.subtitle')}
-                            </p>
+                            {graph && stats && (
+                                <div className="mt-1 flex items-center gap-3 text-[11px] text-theme-secondary flex-wrap">
+                                    <HeroStat icon={<CircleDot size={12} className="text-emerald-300" />} label={t('topology.stats.online')} value={stats.online} sub={`${stats.offline} ${t('topology.stats.offline').toLowerCase()}`} />
+                                    <HeroStat icon={<RouterIcon size={12} className="text-amber-300" />} label={t('topology.stats.infrastructure')} value={stats.infra} sub={infraSub} />
+                                    <HeroStat icon={<Cable size={12} className="text-lime-300" />} label={t('topology.stats.wiredClients')} value={stats.wiredClients} />
+                                    <HeroStat icon={<Wifi size={12} className="text-sky-300" />} label={t('topology.stats.wirelessClients')} value={stats.wifiClients} />
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -253,69 +270,28 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
 
             {!loading && graph && (
                 <>
-                    {/* Stat tiles */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatTile
-                            icon={<CircleDot size={18} className="text-emerald-300" />}
-                            label={t('topology.stats.online')}
-                            value={stats?.online ?? 0}
-                            sub={`${stats?.offline ?? 0} ${t('topology.stats.offline').toLowerCase()}`}
-                            tint="from-emerald-500/15 to-emerald-500/5 border-emerald-500/20"
-                        />
-                        <StatTile
-                            icon={<RouterIcon size={18} className="text-amber-300" />}
-                            label={t('topology.stats.infrastructure')}
-                            value={stats?.infra ?? 0}
-                            sub={[
-                                stats?.kinds.gateway ? `${stats.kinds.gateway} GW` : null,
-                                stats?.kinds.switch ? `${stats.kinds.switch} SW` : null,
-                                stats?.kinds.ap ? `${stats.kinds.ap} AP` : null,
-                                stats?.kinds.repeater ? `${stats.kinds.repeater} RPT` : null
-                            ].filter(Boolean).join(' · ') || '—'}
-                            tint="from-amber-500/15 to-amber-500/5 border-amber-500/20"
-                        />
-                        <StatTile
-                            icon={<Cable size={18} className="text-lime-300" />}
-                            label={t('topology.stats.wiredClients')}
-                            value={stats?.wiredClients ?? 0}
-                            tint="from-lime-500/15 to-lime-500/5 border-lime-500/20"
-                        />
-                        <StatTile
-                            icon={<Wifi size={18} className="text-pink-300" />}
-                            label={t('topology.stats.wirelessClients')}
-                            value={stats?.wifiClients ?? 0}
-                            tint="from-pink-500/15 to-pink-500/5 border-pink-500/20"
-                        />
-                    </div>
-
-                    {/* Interactive graph */}
-                    <TopologyGraph graph={graph} />
-                    <div className="text-xs text-theme-secondary/70 text-center">
-                        {t('topology.nodesPreview', { count: graph.nodes.length, edges: graph.edges.length })}
-                    </div>
+                    {/* Interactive graph fills the rest of the viewport */}
+                    <TopologyGraph graph={graph} height="calc(100vh - 200px)" />
                 </>
             )}
         </div>
     );
 };
 
-interface StatTileProps {
+interface HeroStatProps {
     icon: React.ReactNode;
     label: string;
     value: number;
-    tint: string;
     sub?: string;
 }
 
-const StatTile: React.FC<StatTileProps> = ({ icon, label, value, tint, sub }) => (
-    <div className={`rounded-xl border bg-gradient-to-br ${tint} p-4`}>
-        <div className="flex items-center gap-2 text-xs text-theme-secondary uppercase tracking-wide">
-            {icon}
-            <span>{label}</span>
-        </div>
-        <div className="mt-2 text-2xl font-bold text-theme-primary">{value}</div>
-        {sub && <div className="mt-1 text-[11px] text-theme-secondary truncate">{sub}</div>}
-    </div>
+const HeroStat: React.FC<HeroStatProps> = ({ icon, label, value, sub }) => (
+    <span className="inline-flex items-baseline gap-1.5">
+        <span className="self-center">{icon}</span>
+        <span className="font-mono font-semibold text-theme-primary">{value}</span>
+        <span className="uppercase tracking-wide text-[10px] text-theme-secondary">{label}</span>
+        {sub && <span className="text-[10px] text-theme-secondary/70">({sub})</span>}
+    </span>
 );
 
 export default TopologyPage;

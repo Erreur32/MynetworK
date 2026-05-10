@@ -9,17 +9,18 @@ import {
     ReactFlow,
     Background,
     Controls,
-    MiniMap,
     type Edge,
     type Node,
     type EdgeMarkerType,
     type ReactFlowInstance,
-    type Viewport,
     MarkerType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
-import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lock, Unlock, Download, Image as ImageIcon, FileText, FileCode, Braces } from 'lucide-react';
+import { api } from '../../api/client';
+import { toPng, toSvg } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { TopologyNodeCard, SwitchPortGrid, type TopologyNodeData } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
 import { layoutGraph, type LayoutMode } from './topologyLayout';
@@ -43,7 +44,7 @@ interface TopologyNodeIn {
         signal?: number;
         model?: string;
         host_type?: string;
-        ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean }>;
+        ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean; media?: string; uplink?: boolean }>;
     };
 }
 
@@ -152,8 +153,11 @@ function formatSpeed(mbps?: number): string | undefined {
 function buildEdgeLabel(e: TopologyEdgeIn): string | undefined {
     const speed = formatSpeed(e.linkSpeedMbps);
     if (e.medium === 'wifi') {
-        if (e.band && speed) return `${e.band} · ${speed}`;
-        return e.band || speed;
+        const parts: string[] = [];
+        if (e.ssid) parts.push(e.ssid);
+        if (e.band) parts.push(e.band);
+        if (speed) parts.push(speed);
+        return parts.length > 0 ? parts.join(' · ') : undefined;
     }
     return speed;
 }
@@ -162,20 +166,165 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     const { t } = useTranslation();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [mode, setMode] = useState<LayoutMode>('grouped');
-    const [zoom, setZoom] = useState(1);
     const reactFlowRef = useRef<ReactFlowInstance | null>(null);
+    const [manualPositions, setManualPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+    const [dragMode, setDragMode] = useState(false);
+    const [moveStep, setMoveStep] = useState(5);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    // Manual placements only apply in Grouped mode (Tree/Horizontal are
+    // deterministic dagre layouts). Used by the lock toggle, the nudge
+    // toolbar, the layout override, and the auto-disable effect below.
+    const editableMode = mode === 'grouped';
 
     const handleInit = useCallback((instance: ReactFlowInstance) => {
         reactFlowRef.current = instance;
     }, []);
 
-    const handleMove = useCallback((_: unknown, viewport: Viewport) => {
-        setZoom(viewport.zoom);
-    }, []);
-
     const fitView = useCallback(() => {
         reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 });
     }, []);
+
+    // Image / PDF / SVG / JSON export of the current graph view.
+    // PNG and PDF use a single full-graph capture via html-to-image after a
+    // fitView so the user gets the entire topology, not just what scrolls
+    // into view.
+    const exportFile = useCallback(async (format: 'png' | 'svg' | 'pdf' | 'json') => {
+        setExportMenuOpen(false);
+        if (exporting) return;
+        const stamp = new Date().toISOString().slice(0, 10);
+        if (format === 'json') {
+            const blob = new Blob([JSON.stringify(graph, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `topology-${stamp}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            return;
+        }
+        const flowEl = document.querySelector('.react-flow') as HTMLElement | null;
+        if (!flowEl) return;
+        setExporting(true);
+        try {
+            reactFlowRef.current?.fitView({ padding: 0.1, duration: 0 });
+            await new Promise(r => requestAnimationFrame(() => r(undefined)));
+            const opts = { backgroundColor: '#020617', cacheBust: true, pixelRatio: 2 };
+            if (format === 'svg') {
+                const dataUrl = await toSvg(flowEl, opts);
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `topology-${stamp}.svg`;
+                a.click();
+                return;
+            }
+            const png = await toPng(flowEl, opts);
+            if (format === 'png') {
+                const a = document.createElement('a');
+                a.href = png;
+                a.download = `topology-${stamp}.png`;
+                a.click();
+                return;
+            }
+            // PDF via jsPDF (raster A4 landscape)
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const pageW = pdf.internal.pageSize.getWidth();
+            const pageH = pdf.internal.pageSize.getHeight();
+            pdf.addImage(png, 'PNG', 0, 0, pageW, pageH);
+            pdf.save(`topology-${stamp}.pdf`);
+        } catch (err) {
+            // best-effort — the user gets a console error but no crash
+            // eslint-disable-next-line no-console
+            console.error('Topology export failed', err);
+        } finally {
+            setExporting(false);
+        }
+    }, [graph, exporting]);
+
+    // Auto-disable edit mode if the user switches away from Grouped:
+    // Tree / Horizontal are deterministic dagre layouts where manual placement
+    // doesn't apply, so the lock toggle / nudge toolbar / drag handlers must
+    // not stay armed.
+    useEffect(() => {
+        if (!editableMode && dragMode) setDragMode(false);
+    }, [editableMode, dragMode]);
+
+    // Load any persisted manual placements once on mount
+    useEffect(() => {
+        let cancelled = false;
+        api.get<Record<string, { x: number; y: number }>>('/api/topology/positions')
+            .then(resp => {
+                if (cancelled) return;
+                const result = (resp as any).result;
+                if (resp.success && result && typeof result === 'object') {
+                    setManualPositions(new Map(Object.entries(result)));
+                }
+            })
+            .catch(() => { /* swallow — graph still renders with dagre layout */ });
+        return () => { cancelled = true; };
+    }, []);
+
+    const handleNodeDragStop = useCallback((_e: React.MouseEvent, node: Node) => {
+        const x = node.position?.x;
+        const y = node.position?.y;
+        if (typeof x !== 'number' || typeof y !== 'number') return;
+        api.post('/api/topology/positions', { nodeId: node.id, x, y }).catch(() => { /* best-effort */ });
+        setManualPositions(prev => {
+            const next = new Map(prev);
+            next.set(node.id, { x, y });
+            return next;
+        });
+    }, []);
+
+    const resetLayout = useCallback(async () => {
+        try {
+            await api.delete('/api/topology/positions');
+        } catch { /* ignore */ }
+        setManualPositions(new Map());
+        // Re-fit after a short delay so the dagre layout has rendered
+        window.setTimeout(() => reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 }), 50);
+    }, []);
+
+    // Nudge the currently-selected node by (dx, dy) pixels and persist.
+    // Used by the edit toolbar arrow buttons and the keyboard arrow keys.
+    const nudgeSelected = useCallback((dx: number, dy: number) => {
+        if (!selectedId) return;
+        setManualPositions(prev => {
+            const layoutedNode = reactFlowRef.current?.getNode(selectedId);
+            const fallback = layoutedNode?.position;
+            const current = prev.get(selectedId) ?? fallback;
+            if (!current) return prev;
+            const next = { x: current.x + dx, y: current.y + dy };
+            const map = new Map(prev);
+            map.set(selectedId, next);
+            api.post('/api/topology/positions', { nodeId: selectedId, x: next.x, y: next.y })
+                .catch(() => { /* best-effort */ });
+            return map;
+        });
+    }, [selectedId]);
+
+    // Arrow-key nudging when in edit mode and a node is selected.
+    useEffect(() => {
+        if (!dragMode || !selectedId) return;
+        const onKey = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            const step = e.shiftKey ? Math.max(20, moveStep * 4) : moveStep;
+            let dx = 0;
+            let dy = 0;
+            switch (e.key) {
+                case 'ArrowUp':    dy = -step; break;
+                case 'ArrowDown':  dy =  step; break;
+                case 'ArrowLeft':  dx = -step; break;
+                case 'ArrowRight': dx =  step; break;
+                default: return;
+            }
+            e.preventDefault();
+            nudgeSelected(dx, dy);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [dragMode, selectedId, moveStep, nudgeSelected]);
     const [sourceFilter, setSourceFilter] = useState<Set<SourcePlugin>>(new Set(ALL_SOURCES));
     const [kindFilter, setKindFilter] = useState<Set<NodeKind>>(new Set(ALL_KINDS));
     const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set(DEFAULT_STATUS));
@@ -230,6 +379,31 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     }, []);
 
     const layouted = useMemo(() => {
+        // Pre-compute the parent connection info per client (medium + speed +
+        // ssid + band + portIndex) so each client card can show "Port 5 · 1
+        // Gbps" or "MyWifi · 5G · 866 Mbps" inline. Lets us drop the cluttered
+        // labels on the wifi edges.
+        const parentConnByClient = new Map<string, {
+            medium: 'wifi' | 'ethernet';
+            speedMbps?: number;
+            ssid?: string;
+            band?: string;
+            signal?: number;
+            portIndex?: number;
+        }>();
+        for (const e of filteredGraph.edges) {
+            if (e.medium === 'uplink') continue;
+            // edges are parent → child, so the client is the target
+            parentConnByClient.set(e.target, {
+                medium: e.medium,
+                speedMbps: e.linkSpeedMbps,
+                ssid: e.ssid,
+                band: e.band,
+                signal: e.signal,
+                portIndex: e.portIndex
+            });
+        }
+
         const rfNodes: Node[] = filteredGraph.nodes.map(n => ({
             id: n.id,
             type: 'topology',
@@ -242,7 +416,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 vendor: n.vendor,
                 sources: n.sources,
                 active: n.metadata?.active,
-                ports: n.metadata?.ports
+                ports: n.metadata?.ports,
+                host_type: n.metadata?.host_type,
+                connection: parentConnByClient.get(n.id)
             } satisfies TopologyNodeData
         }));
 
@@ -250,7 +426,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             const color = EDGE_COLOR[e.medium];
             const isUplink = e.medium === 'uplink';
             const isWifi = e.medium === 'wifi';
-            const label = buildEdgeLabel(e);
+            // SSID / speed / port now live on the client card itself, so client
+            // edges (ethernet + wifi) are unlabelled. Uplinks stay labelless.
+            const label = isUplink ? buildEdgeLabel(e) : undefined;
             const marker: EdgeMarkerType = { type: MarkerType.ArrowClosed, color };
             // Wi-Fi: animated dashed line (marching-ants) so the wireless
             // relationship to the AP is unambiguous. Uplink: thicker dashed
@@ -261,6 +439,11 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 id: e.id,
                 source: e.source,
                 target: e.target,
+                sourceHandle: 's',
+                // Wi-Fi enters the client card from the LEFT — keeps the
+                // wifi branch on the side and the labels (SSID · band ·
+                // speed) parallel to the device cluster.
+                targetHandle: isWifi ? 'tl' : 't',
                 type: 'smoothstep',
                 animated: isWifi,
                 label,
@@ -268,7 +451,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 labelBgBorderRadius: 4,
                 labelBgStyle: { fill: 'rgba(15,23,42,0.85)', fillOpacity: 0.85 },
                 labelStyle: { fill: '#e2e8f0', fontSize: 10, fontWeight: 500 },
-                pathOptions: isUplink ? { offset: 60, borderRadius: 14 } : undefined,
+                pathOptions: isUplink ? { offset: 60, borderRadius: 14 }
+                            : isWifi ? { offset: 50, borderRadius: 12 }
+                            : undefined,
                 style: {
                     stroke: color,
                     strokeWidth: isUplink ? 2.5 : (isWifi ? 1.8 : 1.6),
@@ -282,13 +467,23 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         return layoutGraph(rfNodes, rfEdges, mode);
     }, [filteredGraph, mode]);
 
-    const [nodes, setNodes] = useState<Node[]>(layouted.nodes);
-    const [edges, setEdges] = useState<Edge[]>(layouted.edges);
-
-    useEffect(() => {
-        setNodes(layouted.nodes);
-        setEdges(layouted.edges);
-    }, [layouted]);
+    // Manual placements only apply in the Grouped layout — Tree and
+    // Horizontal are deterministic dagre layouts where mixing manual
+    // positions with auto-layout is confusing. The positions stay in SQLite
+    // and reappear when the user switches back to Grouped.
+    const nodes = useMemo<Node[]>(() => {
+        return layouted.nodes.map(n => {
+            const stored = editableMode ? manualPositions.get(n.id) : undefined;
+            const isSelected = n.id === selectedId;
+            return {
+                ...n,
+                position: stored ?? n.position,
+                selected: isSelected,
+                data: { ...(n.data ?? {}), editingMode: dragMode && editableMode }
+            };
+        });
+    }, [layouted, manualPositions, selectedId, dragMode, editableMode]);
+    const edges = layouted.edges;
 
     const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
         setSelectedId(prev => (prev === node.id ? null : node.id));
@@ -449,16 +644,84 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                     <Maximize2 size={13} />
                     <span className="hidden sm:inline">{t('topology.fitView')}</span>
                 </button>
+                {editableMode && (
+                    <button
+                        onClick={() => setDragMode(prev => !prev)}
+                        title={dragMode ? t('topology.editLayoutOn') : t('topology.editLayout')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border transition-colors ${
+                            dragMode
+                                ? 'bg-amber-500/30 text-amber-100 border-amber-400/50 shadow-sm shadow-amber-500/30'
+                                : 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30 hover:bg-emerald-500/25'
+                        }`}
+                    >
+                        {dragMode
+                            ? <Unlock size={13} className="text-amber-200" />
+                            : <Lock size={13} className="text-emerald-300" />
+                        }
+                        <span className="hidden sm:inline">{dragMode ? t('topology.editLayoutOn') : t('topology.editLayout')}</span>
+                    </button>
+                )}
+                {editableMode && (manualPositions.size > 0 || dragMode) && (
+                    <button
+                        onClick={resetLayout}
+                        title={t('topology.resetLayout')}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded text-slate-400 hover:text-rose-200 hover:bg-slate-800 border border-transparent transition-colors"
+                    >
+                        <RotateCcw size={13} />
+                        <span className="hidden sm:inline">{t('topology.resetLayout')}</span>
+                    </button>
+                )}
+                <div className="w-px h-5 bg-slate-700 mx-1" />
+                <div className="relative">
+                    <button
+                        onClick={() => setExportMenuOpen(prev => !prev)}
+                        disabled={exporting}
+                        title={t('topology.export.button')}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border transition-colors ${
+                            exportMenuOpen
+                                ? 'bg-sky-500/30 text-sky-100 border-sky-400/40'
+                                : 'text-slate-400 hover:text-sky-200 hover:bg-slate-800 border-transparent'
+                        } disabled:opacity-50`}
+                    >
+                        <Download size={13} className={exporting ? 'animate-pulse' : ''} />
+                        <span className="hidden sm:inline">{exporting ? t('topology.export.exporting') : t('topology.export.button')}</span>
+                    </button>
+                    {exportMenuOpen && (
+                        <div className="absolute top-full mt-1 right-0 z-20 min-w-[160px] rounded-lg bg-slate-900/95 border border-slate-700 shadow-lg overflow-hidden">
+                            <button onClick={() => exportFile('png')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors">
+                                <ImageIcon size={13} className="text-sky-300" />
+                                <span>PNG</span>
+                                <span className="ml-auto text-[10px] text-slate-500">{t('topology.export.pngHint')}</span>
+                            </button>
+                            <button onClick={() => exportFile('pdf')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors border-t border-slate-800">
+                                <FileText size={13} className="text-rose-300" />
+                                <span>PDF</span>
+                                <span className="ml-auto text-[10px] text-slate-500">A4</span>
+                            </button>
+                            <button onClick={() => exportFile('svg')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors border-t border-slate-800">
+                                <FileCode size={13} className="text-amber-300" />
+                                <span>SVG</span>
+                                <span className="ml-auto text-[10px] text-slate-500">{t('topology.export.svgHint')}</span>
+                            </button>
+                            <button onClick={() => exportFile('json')} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800 transition-colors border-t border-slate-800">
+                                <Braces size={13} className="text-emerald-300" />
+                                <span>JSON</span>
+                                <span className="ml-auto text-[10px] text-slate-500">{t('topology.export.jsonHint')}</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                nodesDraggable={dragMode}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onNodeDragStop={handleNodeDragStop}
                 onInit={handleInit}
-                onMove={handleMove}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 minZoom={0.05}
@@ -466,31 +729,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 proOptions={{ hideAttribution: true }}
             >
                 <Background color="#1e293b" gap={28} size={1} />
-                <Controls className="!bg-slate-900/80 !border-slate-700" />
-                {/* MiniMap only when zoomed-in (otherwise the global view is already visible) */}
-                {zoom > 0.6 && (
-                    <MiniMap
-                        position="top-right"
-                        pannable
-                        zoomable
-                        nodeStrokeWidth={2}
-                        nodeColor={(n) => {
-                            if (n.type === 'topologyGroup') return 'rgba(148, 163, 184, 0.15)';
-                            const k = (n.data as TopologyNodeData)?.kind;
-                            if (k === 'gateway') return '#f59e0b';
-                            if (k === 'switch') return '#10b981';
-                            if (k === 'ap') return '#0ea5e9';
-                            if (k === 'repeater') return '#a855f7';
-                            return '#94a3b8';
-                        }}
-                        nodeStrokeColor={(n) => {
-                            if (n.type === 'topologyGroup') return 'rgba(148, 163, 184, 0.4)';
-                            return '#0f172a';
-                        }}
-                        style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid #334155', borderRadius: 8 }}
-                        maskColor="rgba(15, 23, 42, 0.65)"
-                    />
-                )}
+                <Controls
+                    className="!bg-slate-900/80 !border-slate-700"
+                    showInteractive={false}
+                />
             </ReactFlow>
 
             {/* Side panel */}
@@ -533,7 +775,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                 <DetailRow icon={<Wifi size={14} />} label={t('topology.detail.ssid')} value={ssidValue} />
                             );
                         })()}
-                        {selectedNode.kind === 'switch' && selectedNode.metadata?.ports && selectedNode.metadata.ports.length > 0 && (() => {
+                        {(selectedNode.kind === 'switch' || selectedNode.kind === 'gateway') && selectedNode.metadata?.ports && selectedNode.metadata.ports.length > 0 && (() => {
                             const ports = selectedNode.metadata.ports;
                             const upCount = ports.filter(p => p.up).length;
                             const poeCount = ports.filter(p => p.poe).length;
@@ -589,6 +831,68 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 </div>
                 );
             })()}
+
+            {/* Edit toolbar (only when drag mode is on) */}
+            {dragMode && (
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-lg bg-slate-900/95 border border-amber-400/40 shadow-lg shadow-amber-500/10">
+                    <span className="px-2 text-[10px] uppercase tracking-wide text-amber-200 font-semibold">
+                        {selectedNode ? `${t('topology.editToolbar.move')}: ${selectedNode.label}` : t('topology.editToolbar.selectNode')}
+                    </span>
+                    <div className="grid grid-cols-3 gap-px ml-1">
+                        <div />
+                        <button
+                            disabled={!selectedNode}
+                            onClick={() => nudgeSelected(0, -moveStep)}
+                            title="↑"
+                            className="w-7 h-7 flex items-center justify-center rounded text-slate-200 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ArrowUp size={14} />
+                        </button>
+                        <div />
+                        <button
+                            disabled={!selectedNode}
+                            onClick={() => nudgeSelected(-moveStep, 0)}
+                            title="←"
+                            className="w-7 h-7 flex items-center justify-center rounded text-slate-200 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ArrowLeft size={14} />
+                        </button>
+                        <button
+                            disabled={!selectedNode}
+                            onClick={() => nudgeSelected(0, moveStep)}
+                            title="↓"
+                            className="w-7 h-7 flex items-center justify-center rounded text-slate-200 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ArrowDown size={14} />
+                        </button>
+                        <button
+                            disabled={!selectedNode}
+                            onClick={() => nudgeSelected(moveStep, 0)}
+                            title="→"
+                            className="w-7 h-7 flex items-center justify-center rounded text-slate-200 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            <ArrowRight size={14} />
+                        </button>
+                    </div>
+                    <div className="w-px h-6 bg-slate-700 mx-1" />
+                    <label className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-slate-400">
+                        <span>{t('topology.editToolbar.step')}</span>
+                        <select
+                            value={moveStep}
+                            onChange={e => setMoveStep(Number(e.target.value))}
+                            className="bg-slate-800 text-slate-200 rounded px-1 py-0.5 text-[11px] border border-slate-700 focus:outline-none focus:border-amber-400/40"
+                        >
+                            <option value={1}>1 px</option>
+                            <option value={5}>5 px</option>
+                            <option value={20}>20 px</option>
+                            <option value={50}>50 px</option>
+                        </select>
+                    </label>
+                    <span className="px-2 text-[10px] text-slate-500 hidden md:inline">
+                        {t('topology.editToolbar.hint')}
+                    </span>
+                </div>
+            )}
 
             {/* Legend (collapsible) — bottom-right to avoid the React Flow controls (bottom-left) */}
             <div className="absolute bottom-3 right-3 z-10 rounded-lg bg-slate-900/85 border border-slate-700 shadow-lg">

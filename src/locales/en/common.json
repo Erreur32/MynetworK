@@ -136,7 +136,23 @@
       "stale": "Stale",
       "staleHint": "Devices only seen by Freebox while inactive — likely cached after migration to UniFi DHCP"
     },
-    "fitView": "Fit"
+    "fitView": "Fit",
+    "editLayout": "Edit",
+    "editLayoutOn": "Editing",
+    "resetLayout": "Reset",
+    "editToolbar": {
+      "selectNode": "Select a node",
+      "move": "Move",
+      "step": "Step",
+      "hint": "Arrow keys (↑↓←→) — Shift = ×4"
+    },
+    "export": {
+      "button": "Export",
+      "exporting": "Exporting…",
+      "pngHint": "image",
+      "svgHint": "vector",
+      "jsonHint": "raw graph"
+    }
   },
   "header": {
     "search": "Search",
