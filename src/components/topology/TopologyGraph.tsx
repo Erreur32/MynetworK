@@ -452,6 +452,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 {/* MiniMap only when zoomed-in (otherwise the global view is already visible) */}
                 {zoom > 0.6 && (
                     <MiniMap
+                        position="top-right"
                         pannable
                         zoomable
                         nodeStrokeWidth={2}
@@ -539,8 +540,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 );
             })()}
 
-            {/* Legend (collapsible) */}
-            <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-slate-900/85 border border-slate-700 shadow-lg">
+            {/* Legend (collapsible) — bottom-right to avoid the React Flow controls (bottom-left) */}
+            <div className="absolute bottom-3 right-3 z-10 rounded-lg bg-slate-900/85 border border-slate-700 shadow-lg">
                 <button
                     onClick={() => setLegendOpen(prev => !prev)}
                     className="flex items-center gap-2 px-3 py-1.5 text-[11px] uppercase tracking-wide text-slate-300 hover:text-slate-100 transition-colors w-full"
