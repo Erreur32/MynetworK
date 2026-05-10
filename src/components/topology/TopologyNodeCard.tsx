@@ -257,12 +257,14 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                 const x = uplinkChipsStartX + i * (UPLINK_CHIP_W + UPLINK_CHIP_GAP);
                 const handleX = x + UPLINK_CHIP_W / 2;
                 const label = uplinkPorts.length > 1 ? `Uplink ${i + 1}` : 'Uplink';
+                const speedSeg = p.speed ? ` · ${p.speed} Mbps` : '';
+                const tooltip = `${label} — port ${p.idx}${speedSeg}`;
                 return (
                     <React.Fragment key={`uplink-${p.idx}`}>
                         <div
                             className="absolute z-20 flex items-center justify-center rounded-sm border bg-purple-500 text-white border-purple-300 text-[9px] font-bold uppercase tracking-wide leading-none shadow whitespace-nowrap pointer-events-none"
                             style={{ left: `${x}px`, top: '-10px', width: `${UPLINK_CHIP_W}px`, height: '16px' }}
-                            title={`${label} — port ${p.idx}${p.speed ? ` · ${p.speed} Mbps` : ''}`}
+                            title={tooltip}
                         >
                             {label}
                         </div>

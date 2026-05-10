@@ -59,6 +59,44 @@ interface SwitchPort {
     localUplink?: boolean;
 }
 
+// poe_power can be a string ("5.234") or number depending on firmware.
+function parsePoePower(raw: unknown): number {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') return Number.parseFloat(raw);
+    return Number.NaN;
+}
+
+function isPoeActive(p: Record<string, any>): boolean {
+    const poeMode = typeof p.poe_mode === 'string' ? p.poe_mode.toLowerCase() : '';
+    const enabled = p.poe_enable === true
+        || p.poe_enable === 'true'
+        || (poeMode !== '' && poeMode !== 'off');
+    if (!enabled) return false;
+    const power = parsePoePower(p.poe_power);
+    return Number.isFinite(power) && power > 0;
+}
+
+function buildSwitchPort(
+    p: Record<string, any>,
+    idx: number,
+    uplinkPortIdx?: Set<number>,
+    localUplinkPortIdx?: Set<number>
+): SwitchPort {
+    const speedRaw = p.speed;
+    const speed = typeof speedRaw === 'number' && speedRaw > 0 ? speedRaw : undefined;
+    const mediaRaw = p.media ?? p.if_type;
+    return {
+        idx,
+        name: typeof p.name === 'string' ? p.name : undefined,
+        up: Boolean(p.up),
+        speed,
+        poe: isPoeActive(p),
+        media: typeof mediaRaw === 'string' ? mediaRaw : undefined,
+        uplink: uplinkPortIdx?.has(idx) === true,
+        localUplink: localUplinkPortIdx?.has(idx) === true
+    };
+}
+
 function extractSwitchPorts(
     dev: Record<string, any>,
     uplinkPortIdx?: Set<number>,
@@ -70,30 +108,7 @@ function extractSwitchPorts(
     for (const p of table) {
         const idx = typeof p?.port_idx === 'number' ? p.port_idx : null;
         if (idx === null || idx <= 0) continue;
-        const speedRaw = p.speed;
-        const speed = typeof speedRaw === 'number' && speedRaw > 0 ? speedRaw : undefined;
-        // poe_power can be a string ("5.234") or number depending on firmware
-        const poePowerNum = typeof p.poe_power === 'number'
-            ? p.poe_power
-            : typeof p.poe_power === 'string'
-                ? parseFloat(p.poe_power)
-                : NaN;
-        const poeMode = typeof p.poe_mode === 'string' ? p.poe_mode.toLowerCase() : '';
-        const poeEnabled = p.poe_enable === true
-            || p.poe_enable === 'true'
-            || (poeMode !== '' && poeMode !== 'off');
-        const poeActive = poeEnabled && Number.isFinite(poePowerNum) && poePowerNum > 0;
-        const mediaRaw = p.media ?? p.if_type;
-        ports.push({
-            idx,
-            name: typeof p.name === 'string' ? p.name : undefined,
-            up: Boolean(p.up),
-            speed,
-            poe: poeActive,
-            media: typeof mediaRaw === 'string' ? mediaRaw : undefined,
-            uplink: uplinkPortIdx?.has(idx) === true,
-            localUplink: localUplinkPortIdx?.has(idx) === true
-        });
+        ports.push(buildSwitchPort(p, idx, uplinkPortIdx, localUplinkPortIdx));
     }
     if (ports.length === 0) return undefined;
     ports.sort((a, b) => a.idx - b.idx);
