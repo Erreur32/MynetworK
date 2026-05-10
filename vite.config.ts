@@ -176,8 +176,17 @@ export default defineConfig({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            // Recharts + d3 dependencies
-            if (id.includes('recharts') || id.includes('/d3-')) {
+            // Topology / flow / dagre / image-export stack. Comes BEFORE
+            // the recharts catch so @xyflow's d3 deps (d3-zoom / d3-drag /
+            // d3-selection / d3-interpolate) don't get pulled in with
+            // recharts and crash both bundles at init ("_ is not a
+            // function" on prod for v0.7.93).
+            if (id.includes('@xyflow/') || id.includes('/dagre/') || id.includes('html-to-image') || id.includes('jspdf')) {
+              return 'vendor-topology';
+            }
+            // Recharts only — its d3 deps fall through to the default
+            // 'vendor' chunk so they're shared cleanly with @xyflow.
+            if (id.includes('recharts')) {
               return 'vendor-charts';
             }
             // Lucide icons

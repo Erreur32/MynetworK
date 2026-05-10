@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.94] - 2026-05-10
+
+### Changes
+
+- refactor(topology): split pruneRedundantFreeboxEdges to bring cognitive complexity under 15
+- fix(topology): port-aware uplink edges + per-mode handles + sonar refactors
+- feat(topology): grouped-only edit mode, side-routed Wi-Fi, port grids, page compaction, image export
+- feat(topology): persistent manual positions + uplink port detection + Freebox/UniFi edge dedup
+- feat(topology): replace duplicate side-panel port grid with stat tiles + DMZ cascade + uplink fixes
+- feat(topology): wifi cluster border animation + broader uplink MAC detection
+- feat(topology): mauve uplink edges with wider side routing
+- feat(topology): UniFi switch port grid (front-panel view)
+- feat(topology): animated dashed Wi-Fi edges + offline visible by default
+- feat(topology): retry on missing plugin + online-only default + clearer stats
+- fix(topology): schema versioning + connection badges + sonar refactors
+- fix(topology): move legend to bottom-right and minimap to top-right to avoid overlap with React Flow controls
+- fix(topology): correct edge direction (parent->child) + sonar refactors + UX
+- docs(changelog): rewrite 0.7.93 entry with the actual topology feature scope
+
+---
+
 ## [0.7.93] - 2026-05-10
 
 ### Added

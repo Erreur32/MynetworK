@@ -5,19 +5,22 @@
  * Uses express-rate-limit with in-memory store (suitable for single-instance deployment).
  */
 
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
 /**
  * Key generator that uses CF-Connecting-IP (Cloudflare) or X-Real-IP
- * before falling back to req.ip. This prevents all users behind a
- * reverse proxy from sharing the same rate limit bucket.
+ * before falling back to req.ip. Wrapped through ipKeyGenerator() so
+ * IPv6 addresses are normalised to a /64 prefix — without it, every
+ * IPv6 address would have its own bucket, allowing IPv6 users to
+ * easily bypass the limit (ERR_ERL_KEY_GEN_IPV6).
  */
 const keyGenerator = (req: Request): string => {
-    return (req.headers['cf-connecting-ip'] as string)
+    const raw = (req.headers['cf-connecting-ip'] as string)
         || (req.headers['x-real-ip'] as string)
         || req.ip
         || 'unknown';
+    return ipKeyGenerator(raw);
 };
 
 /** General API rate limiter — 300 requests per minute per IP */
