@@ -93,7 +93,7 @@ const ALL_KINDS: NodeKind[] = ['gateway', 'switch', 'ap', 'repeater', 'client', 
 
 type Status = 'online' | 'offline' | 'stale';
 const ALL_STATUS: Status[] = ['online', 'offline', 'stale'];
-const DEFAULT_STATUS: Status[] = ['online', 'offline']; // hide Freebox stale cache by default
+const DEFAULT_STATUS: Status[] = ['online']; // online only by default (offline + stale opt-in)
 
 const STATUS_CHIP: Record<Status, { icon: React.ElementType; activeBg: string }> = {
     online:  { icon: CircleDot, activeBg: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-100' },

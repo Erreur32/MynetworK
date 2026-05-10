@@ -15,8 +15,8 @@ import {
     Wifi,
     Cable,
     Router as RouterIcon,
-    Layers,
-    Clock
+    Clock,
+    CircleDot
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../components/widgets/Card';
@@ -34,6 +34,7 @@ interface TopologyNode {
     mac?: string;
     vendor?: string;
     sources: SourcePlugin[];
+    metadata?: { active?: boolean; [key: string]: unknown };
 }
 
 interface TopologyEdge {
@@ -128,10 +129,28 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
             acc[n.kind] = (acc[n.kind] ?? 0) + 1;
             return acc;
         }, {});
-        const wired = graph.edges.filter(e => e.medium === 'ethernet').length;
-        const wifi = graph.edges.filter(e => e.medium === 'wifi').length;
-        const uplinks = graph.edges.filter(e => e.medium === 'uplink').length;
-        return { kinds, wired, wifi, uplinks };
+        let online = 0;
+        let offline = 0;
+        let wifiClients = 0;
+        let wiredClients = 0;
+        const parentMediumByClient = new Map<string, 'ethernet' | 'wifi' | 'uplink'>();
+        for (const e of graph.edges) {
+            // Edges go parent → child in the model. Each non-uplink edge tells
+            // us how the target client is attached to the network.
+            if (e.medium === 'uplink') continue;
+            parentMediumByClient.set(e.target, e.medium);
+        }
+        for (const n of graph.nodes) {
+            if (n.metadata?.active === false) offline++;
+            else online++;
+            if (n.kind === 'client' || n.kind === 'unknown') {
+                const m = parentMediumByClient.get(n.id);
+                if (m === 'wifi') wifiClients++;
+                else if (m === 'ethernet') wiredClients++;
+            }
+        }
+        const infra = (kinds.gateway ?? 0) + (kinds.switch ?? 0) + (kinds.ap ?? 0) + (kinds.repeater ?? 0);
+        return { kinds, online, offline, wifiClients, wiredClients, infra };
     }, [graph]);
 
     return (
@@ -237,28 +256,35 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
                     {/* Stat tiles */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatTile
-                            icon={<Layers size={18} className="text-indigo-300" />}
-                            label={t('topology.stats.nodes')}
-                            value={graph.nodes.length}
-                            tint="from-indigo-500/15 to-indigo-500/5 border-indigo-500/20"
+                            icon={<CircleDot size={18} className="text-emerald-300" />}
+                            label={t('topology.stats.online')}
+                            value={stats?.online ?? 0}
+                            sub={`${stats?.offline ?? 0} ${t('topology.stats.offline').toLowerCase()}`}
+                            tint="from-emerald-500/15 to-emerald-500/5 border-emerald-500/20"
                         />
                         <StatTile
                             icon={<RouterIcon size={18} className="text-amber-300" />}
                             label={t('topology.stats.infrastructure')}
-                            value={(stats?.kinds.gateway ?? 0) + (stats?.kinds.switch ?? 0) + (stats?.kinds.ap ?? 0) + (stats?.kinds.repeater ?? 0)}
+                            value={stats?.infra ?? 0}
+                            sub={[
+                                stats?.kinds.gateway ? `${stats.kinds.gateway} GW` : null,
+                                stats?.kinds.switch ? `${stats.kinds.switch} SW` : null,
+                                stats?.kinds.ap ? `${stats.kinds.ap} AP` : null,
+                                stats?.kinds.repeater ? `${stats.kinds.repeater} RPT` : null
+                            ].filter(Boolean).join(' · ') || '—'}
                             tint="from-amber-500/15 to-amber-500/5 border-amber-500/20"
                         />
                         <StatTile
-                            icon={<Cable size={18} className="text-emerald-300" />}
-                            label={t('topology.stats.wired')}
-                            value={stats?.wired ?? 0}
-                            tint="from-emerald-500/15 to-emerald-500/5 border-emerald-500/20"
+                            icon={<Cable size={18} className="text-lime-300" />}
+                            label={t('topology.stats.wiredClients')}
+                            value={stats?.wiredClients ?? 0}
+                            tint="from-lime-500/15 to-lime-500/5 border-lime-500/20"
                         />
                         <StatTile
-                            icon={<Wifi size={18} className="text-sky-300" />}
-                            label={t('topology.stats.wireless')}
-                            value={stats?.wifi ?? 0}
-                            tint="from-sky-500/15 to-sky-500/5 border-sky-500/20"
+                            icon={<Wifi size={18} className="text-pink-300" />}
+                            label={t('topology.stats.wirelessClients')}
+                            value={stats?.wifiClients ?? 0}
+                            tint="from-pink-500/15 to-pink-500/5 border-pink-500/20"
                         />
                     </div>
 
@@ -278,15 +304,17 @@ interface StatTileProps {
     label: string;
     value: number;
     tint: string;
+    sub?: string;
 }
 
-const StatTile: React.FC<StatTileProps> = ({ icon, label, value, tint }) => (
+const StatTile: React.FC<StatTileProps> = ({ icon, label, value, tint, sub }) => (
     <div className={`rounded-xl border bg-gradient-to-br ${tint} p-4`}>
         <div className="flex items-center gap-2 text-xs text-theme-secondary uppercase tracking-wide">
             {icon}
             <span>{label}</span>
         </div>
         <div className="mt-2 text-2xl font-bold text-theme-primary">{value}</div>
+        {sub && <div className="mt-1 text-[11px] text-theme-secondary truncate">{sub}</div>}
     </div>
 );
 

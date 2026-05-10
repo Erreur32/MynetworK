@@ -75,9 +75,13 @@
     "nodesPreview": "{{count}} nodes · {{edges}} links",
     "stats": {
       "nodes": "Nodes",
+      "online": "Online",
+      "offline": "Offline",
       "infrastructure": "Infrastructure",
       "wired": "Wired links",
-      "wireless": "Wireless links"
+      "wireless": "Wireless links",
+      "wiredClients": "Wired clients",
+      "wirelessClients": "Wi-Fi clients"
     },
     "empty": {
       "title": "No snapshot yet",

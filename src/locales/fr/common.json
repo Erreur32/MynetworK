@@ -75,9 +75,13 @@
     "nodesPreview": "{{count}} nœuds · {{edges}} liens",
     "stats": {
       "nodes": "Nœuds",
+      "online": "En ligne",
+      "offline": "Hors ligne",
       "infrastructure": "Infrastructure",
       "wired": "Liens filaires",
-      "wireless": "Liens Wi-Fi"
+      "wireless": "Liens Wi-Fi",
+      "wiredClients": "Clients filaires",
+      "wirelessClients": "Clients Wi-Fi"
     },
     "empty": {
       "title": "Aucun snapshot",
