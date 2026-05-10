@@ -645,7 +645,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="flex flex-col leading-tight">
               <span className="font-semibold text-theme-primary">{t('header.search')}</span>
-              <span className="text-[10px] text-gray-400 font-normal">{t('header.search')}</span>
+              <span className="text-[10px] text-gray-400 font-normal">{t('header.globalSearch')}</span>
             </div>
           </div>
         )}
