@@ -31,11 +31,55 @@ import type {
 
 const FREEBOX_BOX_ID = 'freebox:box';
 
+interface FreeboxL3Connectivity {
+    addr?: string;
+    af?: string;
+    active?: boolean;
+}
+
+interface FreeboxAccessPoint {
+    mac?: string;
+    type?: string;
+    connectivity_type?: string;
+    ethernet_information?: { speed?: number | string };
+    wifi_information?: { ssid?: string; band?: string; signal?: number };
+}
+
+interface FreeboxHost {
+    l2ident?: { id?: string };
+    l3connectivities?: FreeboxL3Connectivity[];
+    primary_name?: string;
+    vendor_name?: string;
+    host_type?: string;
+    active?: boolean;
+    last_activity?: number;
+    access_point?: FreeboxAccessPoint;
+}
+
+interface UniFiClient {
+    mac?: string;
+    name?: string;
+    hostname?: string;
+    ip?: string;
+    oui?: string;
+    is_wired?: boolean;
+    sw_mac?: string;
+    ap_mac?: string;
+    sw_port?: number;
+    sw_port_speed?: number;
+    tx_rate?: number;
+    essid?: string;
+    radio?: string;
+    signal?: number;
+    last_seen?: number;
+}
+
 function normalizeMac(mac: unknown): string | null {
     if (typeof mac !== 'string') return null;
     const cleaned = mac.toLowerCase().replace(/[^0-9a-f]/g, '');
     if (cleaned.length !== 12) return null;
-    return cleaned.match(/.{2}/g)!.join(':');
+    const parts = cleaned.match(/.{2}/g);
+    return parts ? parts.join(':') : null;
 }
 
 function macNodeId(mac: string): string {
@@ -46,13 +90,282 @@ function addSource(node: TopologyNode, src: SourcePlugin): void {
     if (!node.sources.includes(src)) node.sources.push(src);
 }
 
+function safeLowerString(value: unknown): string {
+    return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function parseLinkSpeed(raw: unknown): number | undefined {
+    if (typeof raw === 'number' && raw > 0) return raw;
+    if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw);
+    return undefined;
+}
+
 function mapUniFiDeviceKind(type: unknown, model: unknown): NodeKind {
-    const t = String(type ?? '').toLowerCase();
-    const m = String(model ?? '').toLowerCase();
-    if (t === 'uap' || m.startsWith('u') && m.includes('ap')) return 'ap';
+    const t = safeLowerString(type);
+    const m = safeLowerString(model);
+    if (t === 'uap' || (m.startsWith('u') && m.includes('ap'))) return 'ap';
     if (t === 'usw' || m.startsWith('us')) return 'switch';
     if (t === 'ugw' || t === 'udm' || m.includes('udm') || m.includes('gateway')) return 'gateway';
     return 'unknown';
+}
+
+function ensureFreeboxBox(nodes: Map<string, TopologyNode>): void {
+    const existing = nodes.get(FREEBOX_BOX_ID);
+    if (existing) {
+        addSource(existing, 'freebox');
+        return;
+    }
+    nodes.set(FREEBOX_BOX_ID, {
+        id: FREEBOX_BOX_ID,
+        kind: 'gateway',
+        label: 'Freebox',
+        sources: ['freebox'],
+        metadata: {}
+    });
+}
+
+function pickFreeboxIPv4(host: FreeboxHost): string | undefined {
+    return (host.l3connectivities ?? []).find(l => l?.af === 'ipv4' && l?.active)?.addr;
+}
+
+function buildFreeboxClientNode(
+    host: FreeboxHost,
+    id: string,
+    mac: string,
+    ipv4: string | undefined,
+    ap: FreeboxAccessPoint | undefined,
+    existing: TopologyNode | undefined
+): TopologyNode {
+    const wifi = ap?.wifi_information;
+    const node: TopologyNode = {
+        id,
+        kind: existing?.kind ?? 'client',
+        label: host.primary_name || host.vendor_name || mac,
+        ip: existing?.ip ?? ipv4,
+        mac,
+        vendor: existing?.vendor ?? host.vendor_name,
+        sources: existing ? [...existing.sources] : [],
+        metadata: {
+            ...existing?.metadata,
+            host_type: host.host_type,
+            active: host.active === true,
+            last_seen: host.last_activity
+        }
+    };
+    if (wifi) {
+        node.metadata = {
+            ...node.metadata,
+            ssid: wifi.ssid,
+            band: wifi.band,
+            signal: wifi.signal
+        };
+    }
+    addSource(node, 'freebox');
+    return node;
+}
+
+function ensureFreeboxAp(
+    apMac: string,
+    ap: FreeboxAccessPoint,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): string {
+    const apId = macNodeId(apMac);
+    if (!nodes.has(apId)) {
+        const isRepeater = ap.type === 'repeater';
+        nodes.set(apId, {
+            id: apId,
+            kind: isRepeater ? 'repeater' : 'gateway',
+            label: isRepeater ? 'Freebox repeater' : 'Freebox',
+            mac: apMac,
+            sources: ['freebox'],
+            metadata: { active: true }
+        });
+    }
+    if (apId !== FREEBOX_BOX_ID) {
+        const upId = `freebox:uplink:${apMac}`;
+        if (!edges.has(upId)) {
+            edges.set(upId, {
+                id: upId,
+                source: FREEBOX_BOX_ID,
+                target: apId,
+                medium: 'uplink',
+                source_plugin: 'freebox'
+            });
+        }
+    }
+    return apId;
+}
+
+function processFreeboxHost(
+    host: FreeboxHost,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const mac = normalizeMac(host?.l2ident?.id);
+    if (!mac) return;
+    const id = macNodeId(mac);
+    const ipv4 = pickFreeboxIPv4(host);
+    const ap = host.access_point;
+    const existing = nodes.get(id);
+
+    nodes.set(id, buildFreeboxClientNode(host, id, mac, ipv4, ap, existing));
+
+    let parentId = FREEBOX_BOX_ID;
+    const apMac = normalizeMac(ap?.mac);
+    if (apMac && apMac !== mac && ap) {
+        parentId = ensureFreeboxAp(apMac, ap, nodes, edges);
+    }
+
+    const medium: EdgeMedium = ap?.connectivity_type === 'wifi' ? 'wifi' : 'ethernet';
+    const wifi = ap?.wifi_information;
+    const edgeId = `freebox:${parentId}->${mac}`;
+    edges.set(edgeId, {
+        id: edgeId,
+        source: parentId,
+        target: id,
+        medium,
+        linkSpeedMbps: parseLinkSpeed(ap?.ethernet_information?.speed),
+        ssid: wifi?.ssid,
+        band: wifi?.band,
+        signal: wifi?.signal,
+        source_plugin: 'freebox'
+    });
+}
+
+function pickUniFiDeviceKind(
+    existing: TopologyNode | undefined,
+    type: unknown,
+    model: unknown
+): NodeKind {
+    if (existing && existing.kind !== 'client' && existing.kind !== 'unknown') {
+        return existing.kind;
+    }
+    return mapUniFiDeviceKind(type, model);
+}
+
+function buildUniFiDeviceNode(
+    dev: Record<string, any>,
+    id: string,
+    mac: string,
+    existing: TopologyNode | undefined
+): TopologyNode {
+    const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
+    const node: TopologyNode = {
+        id,
+        kind: pickUniFiDeviceKind(existing, dev.type, dev.model),
+        label: dev.name || modelStr || existing?.label || mac,
+        ip: existing?.ip ?? dev.ip,
+        mac,
+        vendor: existing?.vendor,
+        sources: existing ? [...existing.sources] : [],
+        metadata: {
+            ...existing?.metadata,
+            model: modelStr,
+            firmware: dev.firmware_version || dev.version,
+            active: dev.state === 1,
+            last_seen: dev.last_seen
+        }
+    };
+    addSource(node, 'unifi');
+    return node;
+}
+
+function processUniFiDevice(
+    dev: Record<string, any>,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const mac = normalizeMac(dev.mac);
+    if (!mac) return;
+    const id = macNodeId(mac);
+    nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id)));
+
+    const uplinkMac = normalizeMac(dev.uplink?.uplink_mac);
+    if (uplinkMac && uplinkMac !== mac) {
+        const upId = `unifi:uplink:${uplinkMac}->${mac}`;
+        edges.set(upId, {
+            id: upId,
+            source: macNodeId(uplinkMac),
+            target: id,
+            medium: 'uplink',
+            source_plugin: 'unifi'
+        });
+    }
+}
+
+function buildUniFiClientNode(
+    cli: UniFiClient,
+    id: string,
+    mac: string,
+    isWired: boolean,
+    existing: TopologyNode | undefined
+): TopologyNode {
+    const node: TopologyNode = {
+        id,
+        kind: existing?.kind ?? 'client',
+        label: existing?.label ?? (cli.name || cli.hostname || mac),
+        ip: existing?.ip ?? cli.ip,
+        mac,
+        vendor: existing?.vendor ?? cli.oui,
+        sources: existing ? [...existing.sources] : [],
+        metadata: {
+            ...existing?.metadata,
+            last_seen: cli.last_seen ?? existing?.metadata?.last_seen
+        }
+    };
+    if (!isWired) {
+        node.metadata = {
+            ...node.metadata,
+            ssid: cli.essid ?? existing?.metadata?.ssid,
+            band: cli.radio ?? existing?.metadata?.band,
+            signal: cli.signal ?? existing?.metadata?.signal
+        };
+    }
+    addSource(node, 'unifi');
+    return node;
+}
+
+function buildUniFiClientEdge(
+    cli: UniFiClient,
+    mac: string,
+    parentMac: string,
+    isWired: boolean
+): TopologyEdge {
+    const linkSpeedRaw = isWired ? cli.sw_port_speed : cli.tx_rate;
+    const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0
+        ? Math.round(linkSpeedRaw)
+        : undefined;
+    const portIdx = isWired && typeof cli.sw_port === 'number' ? cli.sw_port : undefined;
+    return {
+        id: `unifi:client:${parentMac}->${mac}`,
+        source: macNodeId(parentMac),
+        target: macNodeId(mac),
+        medium: isWired ? 'ethernet' : 'wifi',
+        linkSpeedMbps,
+        portIndex: portIdx,
+        ssid: isWired ? undefined : cli.essid,
+        band: isWired ? undefined : cli.radio,
+        signal: isWired ? undefined : cli.signal,
+        source_plugin: 'unifi'
+    };
+}
+
+function processUniFiClient(
+    cli: UniFiClient,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const mac = normalizeMac(cli.mac);
+    if (!mac) return;
+    const id = macNodeId(mac);
+    const isWired = cli.is_wired === true;
+    nodes.set(id, buildUniFiClientNode(cli, id, mac, isWired, nodes.get(id)));
+
+    const parentMac = normalizeMac(isWired ? cli.sw_mac : cli.ap_mac);
+    if (!parentMac || parentMac === mac) return;
+    const edge = buildUniFiClientEdge(cli, mac, parentMac, isWired);
+    edges.set(edge.id, edge);
 }
 
 class TopologyService {
@@ -71,56 +384,19 @@ class TopologyService {
         const edges = new Map<string, TopologyEdge>();
         const sources: SourcePlugin[] = [];
 
-        const freeboxPlugin = pluginManager.getPlugin('freebox');
-        if (freeboxPlugin?.isEnabled()) {
-            try {
-                await this.collectFreebox(nodes, edges);
-                sources.push('freebox');
-            } catch (error) {
-                logger.error('Topology', 'Freebox collection failed:', error);
-            }
-        }
+        await this.tryCollect('freebox', sources, () => this.collectFreebox(nodes, edges));
+        await this.tryCollect('unifi', sources, async () => {
+            const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
+            if (plugin) await this.collectUniFi(plugin, nodes, edges);
+        });
+        await this.tryCollect('scan-reseau', sources, async () => {
+            this.collectScanReseauOverlay(nodes);
+        });
 
-        const unifiPlugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
-        if (unifiPlugin?.isEnabled()) {
-            try {
-                await this.collectUniFi(unifiPlugin, nodes, edges);
-                sources.push('unifi');
-            } catch (error) {
-                logger.error('Topology', 'UniFi collection failed:', error);
-            }
-        }
-
-        const scanPlugin = pluginManager.getPlugin('scan-reseau');
-        if (scanPlugin?.isEnabled()) {
-            try {
-                this.collectScanReseauOverlay(nodes);
-                sources.push('scan-reseau');
-            } catch (error) {
-                logger.error('Topology', 'Scan-reseau collection failed:', error);
-            }
-        }
-
-        // WAN uplink: link UniFi gateway(s) to the Freebox box (child→parent
-        // direction matches the rest of the model — dagre then puts Freebox at
-        // the top, with UCG below it and the rest of the UniFi tree underneath).
-        if (nodes.has(FREEBOX_BOX_ID)) {
-            for (const node of nodes.values()) {
-                if (node.kind !== 'gateway') continue;
-                if (node.id === FREEBOX_BOX_ID) continue;
-                if (!node.sources.includes('unifi')) continue;
-                const wanId = `wan:${node.id}->freebox`;
-                if (!edges.has(wanId)) {
-                    edges.set(wanId, {
-                        id: wanId,
-                        source: node.id,
-                        target: FREEBOX_BOX_ID,
-                        medium: 'uplink',
-                        source_plugin: 'unifi'
-                    });
-                }
-            }
-        }
+        // No synthetic WAN edge between Freebox and UniFi gateway: even though
+        // the UCG physically uplinks to a Freebox LAN port, they manage two
+        // independent networks (different DHCP, different topology). Keeping
+        // them as separate roots in the layout makes that distinction visible.
 
         return {
             nodes: Array.from(nodes.values()),
@@ -130,22 +406,26 @@ class TopologyService {
         };
     }
 
+    private async tryCollect(
+        pluginId: SourcePlugin,
+        sources: SourcePlugin[],
+        fn: () => Promise<void>
+    ): Promise<void> {
+        const plugin = pluginManager.getPlugin(pluginId);
+        if (!plugin?.isEnabled()) return;
+        try {
+            await fn();
+            sources.push(pluginId);
+        } catch (error) {
+            logger.error('Topology', `${pluginId} collection failed:`, error);
+        }
+    }
+
     private async collectFreebox(
         nodes: Map<string, TopologyNode>,
         edges: Map<string, TopologyEdge>
     ): Promise<void> {
-        // Always emit a Freebox node as the LAN root
-        if (!nodes.has(FREEBOX_BOX_ID)) {
-            nodes.set(FREEBOX_BOX_ID, {
-                id: FREEBOX_BOX_ID,
-                kind: 'gateway',
-                label: 'Freebox',
-                sources: ['freebox'],
-                metadata: {}
-            });
-        } else {
-            addSource(nodes.get(FREEBOX_BOX_ID)!, 'freebox');
-        }
+        ensureFreeboxBox(nodes);
 
         const ifaceResp = await freeboxApi.getLanBrowserInterfaces();
         if (!ifaceResp.success || !Array.isArray(ifaceResp.result)) return;
@@ -153,96 +433,8 @@ class TopologyService {
         for (const iface of ifaceResp.result as Array<{ name: string }>) {
             const hostsResp = await freeboxApi.getLanHosts(iface.name);
             if (!hostsResp.success || !Array.isArray(hostsResp.result)) continue;
-
-            for (const host of hostsResp.result as Array<Record<string, any>>) {
-                const mac = normalizeMac(host?.l2ident?.id);
-                if (!mac) continue;
-                const id = macNodeId(mac);
-
-                const ipv4 = (host.l3connectivities ?? []).find(
-                    (l: any) => l?.af === 'ipv4' && l?.active
-                )?.addr as string | undefined;
-                const ap = host.access_point as Record<string, any> | undefined;
-
-                const existing = nodes.get(id);
-                const node: TopologyNode = {
-                    id,
-                    kind: existing?.kind ?? 'client',
-                    label: host.primary_name || host.vendor_name || mac,
-                    ip: existing?.ip ?? ipv4,
-                    mac,
-                    vendor: existing?.vendor ?? host.vendor_name,
-                    sources: existing ? [...existing.sources] : [],
-                    metadata: {
-                        ...(existing?.metadata ?? {}),
-                        host_type: host.host_type,
-                        active: !!host.active,
-                        last_seen: host.last_activity,
-                        ...(ap?.wifi_information && {
-                            ssid: ap.wifi_information.ssid,
-                            band: ap.wifi_information.band,
-                            signal: ap.wifi_information.signal
-                        })
-                    }
-                };
-                addSource(node, 'freebox');
-                nodes.set(id, node);
-
-                // Determine parent node (AP/repeater MAC, or fall back to box)
-                let parentId = FREEBOX_BOX_ID;
-                const apMac = normalizeMac(ap?.mac);
-                if (apMac && apMac !== mac) {
-                    const apId = macNodeId(apMac);
-                    if (!nodes.has(apId)) {
-                        const isRepeater = ap?.type === 'repeater';
-                        nodes.set(apId, {
-                            id: apId,
-                            kind: isRepeater ? 'repeater' : 'gateway',
-                            label: isRepeater ? `Freebox repeater` : 'Freebox',
-                            mac: apMac,
-                            sources: ['freebox'],
-                            metadata: { active: true }
-                        });
-                    }
-                    parentId = apId;
-
-                    // Repeater → box uplink edge. Edge convention: source = child,
-                    // target = parent (dagre places source below target, so this puts
-                    // the Freebox at the top in TB / on the right in LR).
-                    if (apId !== FREEBOX_BOX_ID) {
-                        const upId = `freebox:uplink:${apMac}`;
-                        if (!edges.has(upId)) {
-                            edges.set(upId, {
-                                id: upId,
-                                source: apId,
-                                target: FREEBOX_BOX_ID,
-                                medium: 'uplink',
-                                source_plugin: 'freebox'
-                            });
-                        }
-                    }
-                }
-
-                const medium: EdgeMedium = ap?.connectivity_type === 'wifi' ? 'wifi' : 'ethernet';
-                const speedRaw = ap?.ethernet_information?.speed;
-                const linkSpeedMbps = typeof speedRaw === 'number'
-                    ? speedRaw
-                    : (typeof speedRaw === 'string' && /^\d+$/.test(speedRaw))
-                        ? Number(speedRaw)
-                        : undefined;
-
-                const edgeId = `freebox:${mac}->${parentId}`;
-                edges.set(edgeId, {
-                    id: edgeId,
-                    source: id,
-                    target: parentId,
-                    medium,
-                    linkSpeedMbps,
-                    ssid: ap?.wifi_information?.ssid,
-                    band: ap?.wifi_information?.band,
-                    signal: ap?.wifi_information?.signal,
-                    source_plugin: 'freebox'
-                });
+            for (const host of hostsResp.result as FreeboxHost[]) {
+                processFreeboxHost(host, nodes, edges);
             }
         }
     }
@@ -253,100 +445,11 @@ class TopologyService {
         edges: Map<string, TopologyEdge>
     ): Promise<void> {
         const { devices, clients } = await plugin.getTopologyData();
-
-        for (const dev of devices) {
-            const mac = normalizeMac(dev.mac);
-            if (!mac) continue;
-            const id = macNodeId(mac);
-
-            const existing = nodes.get(id);
-            const kind = existing && existing.kind !== 'client' && existing.kind !== 'unknown'
-                ? existing.kind
-                : mapUniFiDeviceKind(dev.type, dev.model);
-
-            const node: TopologyNode = {
-                id,
-                kind,
-                label: dev.name || (typeof dev.model === 'string' ? dev.model : undefined) || existing?.label || mac,
-                ip: existing?.ip ?? dev.ip,
-                mac,
-                vendor: existing?.vendor,
-                sources: existing ? [...existing.sources] : [],
-                metadata: {
-                    ...(existing?.metadata ?? {}),
-                    model: typeof dev.model === 'string' ? dev.model : undefined,
-                    firmware: (dev as any).firmware_version || (dev as any).version,
-                    active: dev.state === 1,
-                    last_seen: dev.last_seen
-                }
-            };
-            addSource(node, 'unifi');
-            nodes.set(id, node);
-
-            // Uplink edge: this device → its uplink (parent). Source=child, target=parent.
-            const uplinkMac = normalizeMac((dev as any).uplink?.uplink_mac);
-            if (uplinkMac && uplinkMac !== mac) {
-                const upId = `unifi:uplink:${mac}->${uplinkMac}`;
-                edges.set(upId, {
-                    id: upId,
-                    source: id,
-                    target: macNodeId(uplinkMac),
-                    medium: 'uplink',
-                    source_plugin: 'unifi'
-                });
-            }
+        for (const dev of devices as Array<Record<string, any>>) {
+            processUniFiDevice(dev, nodes, edges);
         }
-
-        for (const cli of clients as Array<Record<string, any>>) {
-            const mac = normalizeMac(cli.mac);
-            if (!mac) continue;
-            const id = macNodeId(mac);
-            const isWired = !!cli.is_wired;
-
-            const existing = nodes.get(id);
-            const node: TopologyNode = {
-                id,
-                kind: existing?.kind ?? 'client',
-                label: existing?.label ?? (cli.name || cli.hostname || mac),
-                ip: existing?.ip ?? cli.ip,
-                mac,
-                vendor: existing?.vendor ?? cli.oui,
-                sources: existing ? [...existing.sources] : [],
-                metadata: {
-                    ...(existing?.metadata ?? {}),
-                    last_seen: cli.last_seen ?? existing?.metadata?.last_seen,
-                    ...(!isWired && {
-                        ssid: cli.essid ?? existing?.metadata?.ssid,
-                        band: cli.radio ?? existing?.metadata?.band,
-                        signal: cli.signal ?? existing?.metadata?.signal
-                    })
-                }
-            };
-            addSource(node, 'unifi');
-            nodes.set(id, node);
-
-            const parentMac = normalizeMac(isWired ? cli.sw_mac : cli.ap_mac);
-            if (!parentMac || parentMac === mac) continue;
-
-            const linkSpeedRaw = isWired ? cli.sw_port_speed : cli.tx_rate;
-            const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0
-                ? Math.round(linkSpeedRaw)
-                : undefined;
-            const portIdx = isWired && typeof cli.sw_port === 'number' ? cli.sw_port : undefined;
-
-            const edgeId = `unifi:client:${mac}->${parentMac}`;
-            edges.set(edgeId, {
-                id: edgeId,
-                source: id,
-                target: macNodeId(parentMac),
-                medium: isWired ? 'ethernet' : 'wifi',
-                linkSpeedMbps,
-                portIndex: portIdx,
-                ssid: !isWired ? cli.essid : undefined,
-                band: !isWired ? cli.radio : undefined,
-                signal: !isWired ? cli.signal : undefined,
-                source_plugin: 'unifi'
-            });
+        for (const cli of clients as UniFiClient[]) {
+            processUniFiClient(cli, nodes, edges);
         }
     }
 
@@ -363,8 +466,8 @@ class TopologyService {
             const existing = nodes.get(id);
             if (existing) {
                 addSource(existing, 'scan-reseau');
-                if (!existing.ip && rec.ip) existing.ip = rec.ip;
-                if (!existing.vendor && rec.vendor) existing.vendor = rec.vendor;
+                if (existing.ip === undefined && rec.ip) existing.ip = rec.ip;
+                if (existing.vendor === undefined && rec.vendor) existing.vendor = rec.vendor;
                 continue;
             }
             const lastSeen = rec.lastSeen instanceof Date

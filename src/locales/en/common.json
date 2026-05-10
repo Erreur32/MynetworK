@@ -102,6 +102,9 @@
       "links": "Links"
     },
     "legend": {
+      "title": "Legend",
+      "links": "Links",
+      "nodes": "Nodes",
       "ethernet": "Ethernet",
       "wifi": "Wi-Fi",
       "uplink": "Uplink"

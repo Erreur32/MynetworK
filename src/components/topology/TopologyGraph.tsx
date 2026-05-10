@@ -19,7 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
-import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { TopologyNodeCard, type TopologyNodeData } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
 import { layoutGraph, type LayoutMode } from './topologyLayout';
@@ -74,6 +74,15 @@ const LAYOUT_MODES: Array<{ id: LayoutMode; icon: React.ElementType; key: string
     { id: 'grouped',    icon: Boxes,           key: 'grouped' },
     { id: 'tree',       icon: GitBranch,       key: 'tree' },
     { id: 'horizontal', icon: MoveHorizontal,  key: 'horizontal' }
+];
+
+const NODE_KIND_LEGEND: Array<{ id: NodeKind; bar: string }> = [
+    { id: 'gateway',  bar: 'bg-amber-400' },
+    { id: 'switch',   bar: 'bg-emerald-400' },
+    { id: 'ap',       bar: 'bg-sky-400' },
+    { id: 'repeater', bar: 'bg-purple-400' },
+    { id: 'client',   bar: 'bg-slate-400' },
+    { id: 'unknown',  bar: 'bg-slate-500' }
 ];
 
 const ALL_SOURCES: SourcePlugin[] = ['freebox', 'unifi', 'scan-reseau'];
@@ -155,6 +164,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     const [kindFilter, setKindFilter] = useState<Set<NodeKind>>(new Set(ALL_KINDS));
     const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set(DEFAULT_STATUS));
     const [filtersOpen, setFiltersOpen] = useState(false);
+    const [legendOpen, setLegendOpen] = useState(false);
 
     // Filter the graph before layout: keep nodes matching source/kind/status filters,
     // and only edges whose both endpoints survive the filter.
@@ -465,8 +475,12 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             </ReactFlow>
 
             {/* Side panel */}
-            {selectedNode && (
-                <div className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900/95 backdrop-blur-md shadow-2xl">
+            {selectedNode && (() => {
+                const kindAccent = NODE_KIND_LEGEND.find(k => k.id === selectedNode.kind);
+                const accentBar = kindAccent?.bar ?? 'bg-slate-500';
+                return (
+                <div className="absolute top-3 right-3 w-80 max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border-2 border-slate-600 bg-slate-800 shadow-2xl">
+                    <div className={`h-1 ${accentBar}`} />
                     <div className="flex items-start justify-between gap-2 p-4 border-b border-slate-700">
                         <div className="min-w-0">
                             <div className="text-xs uppercase tracking-wide text-slate-400">{t(`topology.kind.${selectedNode.kind}`)}</div>
@@ -522,19 +536,49 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                         )}
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
-            {/* Legend */}
-            <div className="absolute bottom-3 left-3 px-3 py-2 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 text-[11px] text-slate-300 flex items-center gap-3">
-                <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-emerald-400 inline-block" /> {t('topology.legend.ethernet')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-sky-400 inline-block" /> {t('topology.legend.wifi')}
-                </span>
-                <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-0.5 bg-amber-400 inline-block" style={{ borderTop: '1px dashed #f59e0b' }} /> {t('topology.legend.uplink')}
-                </span>
+            {/* Legend (collapsible) */}
+            <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-slate-900/85 border border-slate-700 shadow-lg">
+                <button
+                    onClick={() => setLegendOpen(prev => !prev)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-[11px] uppercase tracking-wide text-slate-300 hover:text-slate-100 transition-colors w-full"
+                >
+                    <Info size={12} />
+                    <span>{t('topology.legend.title')}</span>
+                    <span className="ml-auto pl-2">
+                        {legendOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                    </span>
+                </button>
+                {legendOpen && (
+                    <div className="px-3 pb-2 pt-1 border-t border-slate-800 space-y-2 text-[11px] text-slate-300">
+                        <div>
+                            <div className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">{t('topology.legend.links')}</div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 h-0.5 bg-emerald-400 inline-block" /> {t('topology.legend.ethernet')}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 h-0.5 bg-sky-400 inline-block" /> {t('topology.legend.wifi')}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 inline-block" style={{ borderTop: '2px dashed #f59e0b' }} /> {t('topology.legend.uplink')}
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">{t('topology.legend.nodes')}</div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                {NODE_KIND_LEGEND.map(k => (
+                                    <span key={k.id} className="flex items-center gap-1.5">
+                                        <span className={`w-2 h-2 rounded-sm ${k.bar}`} /> {t(`topology.kind.${k.id}`)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
