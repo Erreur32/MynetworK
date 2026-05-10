@@ -780,51 +780,62 @@ class TopologyService {
             sortBy: 'last_seen',
             sortOrder: 'desc'
         });
-
         for (const rec of records) {
             const mac = normalizeMac(rec.mac);
             const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
-            const existing = nodes.get(id);
-            const lastSeen = rec.lastSeen instanceof Date
-                ? Math.floor(rec.lastSeen.getTime() / 1000)
-                : undefined;
+            const lastSeen = toUnixSeconds(rec.lastSeen);
             const isOnline = rec.status === 'online';
+            const existing = nodes.get(id);
             if (existing) {
-                addSource(existing, 'scan-reseau');
-                if (existing.ip === undefined && rec.ip) existing.ip = rec.ip;
-                if (existing.vendor === undefined && rec.vendor) existing.vendor = rec.vendor;
-                // A fresh ICMP success is a stronger liveness signal than
-                // Freebox's stale ARP cache or UniFi's last_seen window —
-                // OR it in, but never flip true→false from the scanner
-                // (a UniFi AP with state===1 stays online even if its mgmt
-                // IP didn't answer the last sweep).
-                if (isOnline) {
-                    if (!existing.metadata) existing.metadata = {};
-                    existing.metadata.active = true;
-                    const prevSeen = typeof existing.metadata.last_seen === 'number'
-                        ? existing.metadata.last_seen
-                        : 0;
-                    if (lastSeen && lastSeen > prevSeen) {
-                        existing.metadata.last_seen = lastSeen;
-                    }
-                }
-                continue;
+                mergeScanReseauIntoExisting(existing, rec, isOnline, lastSeen);
+            } else {
+                nodes.set(id, buildScanReseauNode(id, mac, rec, isOnline, lastSeen));
             }
-            nodes.set(id, {
-                id,
-                kind: 'client',
-                label: rec.hostname || rec.ip,
-                ip: rec.ip,
-                mac: mac ?? undefined,
-                vendor: rec.vendor,
-                sources: ['scan-reseau'],
-                metadata: {
-                    active: isOnline,
-                    last_seen: lastSeen
-                }
-            });
         }
     }
+}
+
+function toUnixSeconds(d: unknown): number | undefined {
+    return d instanceof Date ? Math.floor(d.getTime() / 1000) : undefined;
+}
+
+// A fresh ICMP success is a stronger liveness signal than Freebox's stale
+// ARP cache or UniFi's last_seen window — OR it in, but never flip
+// true→false from the scanner (a UniFi AP with state===1 stays online even
+// if its mgmt IP didn't answer the last sweep).
+function mergeScanReseauIntoExisting(
+    existing: TopologyNode,
+    rec: { ip?: string; vendor?: string },
+    isOnline: boolean,
+    lastSeen: number | undefined
+): void {
+    addSource(existing, 'scan-reseau');
+    if (existing.ip === undefined && rec.ip) existing.ip = rec.ip;
+    if (existing.vendor === undefined && rec.vendor) existing.vendor = rec.vendor;
+    if (!isOnline) return;
+    if (!existing.metadata) existing.metadata = {};
+    existing.metadata.active = true;
+    const prevSeen = typeof existing.metadata.last_seen === 'number' ? existing.metadata.last_seen : 0;
+    if (lastSeen && lastSeen > prevSeen) existing.metadata.last_seen = lastSeen;
+}
+
+function buildScanReseauNode(
+    id: string,
+    mac: string | null,
+    rec: { ip: string; hostname?: string; vendor?: string },
+    isOnline: boolean,
+    lastSeen: number | undefined
+): TopologyNode {
+    return {
+        id,
+        kind: 'client',
+        label: rec.hostname || rec.ip,
+        ip: rec.ip,
+        mac: mac ?? undefined,
+        vendor: rec.vendor,
+        sources: ['scan-reseau'],
+        metadata: { active: isOnline, last_seen: lastSeen }
+    };
 }
 
 export const topologyService = new TopologyService();

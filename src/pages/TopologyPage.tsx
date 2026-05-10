@@ -61,6 +61,77 @@ interface TopologyPageProps {
     onBack: () => void;
 }
 
+// Dedupe nodes by canonical MAC. The backend already merges by MAC when
+// building the snapshot, but scan-reseau records without a MAC fall back
+// to id=`scan:${ip}` and may double a device that another plugin reported
+// with its real MAC. Scanner-only nodes (no MAC) are kept under their own id.
+function dedupeNodesByMac(nodes: TopologyNode[]): TopologyNode[] {
+    const seen = new Set<string>();
+    return nodes.filter(n => {
+        const key = n.mac ? n.mac.toLowerCase() : `id:${n.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function buildEdgeMediumSets(edges: TopologyEdge[]): { wifi: Set<string>; ethernet: Set<string> } {
+    const wifi = new Set<string>();
+    const ethernet = new Set<string>();
+    for (const e of edges) {
+        if (e.medium === 'wifi') wifi.add(e.target);
+        else if (e.medium === 'ethernet') ethernet.add(e.target);
+    }
+    return { wifi, ethernet };
+}
+
+// Skip clients that ONLY Freebox knows about and that are offline — those
+// are stale DHCP cache entries the Freebox hangs onto for days. They inflate
+// the wired count without representing real devices.
+function shouldSkipFreeboxStaleClient(n: TopologyNode): boolean {
+    return n.sources.length === 1
+        && n.sources[0] === 'freebox'
+        && n.metadata?.active === false;
+}
+
+// A client may have several parent edges (e.g. UniFi sees it on Wi-Fi AND
+// Freebox sees it via its LAN port). Prefer wifi when both are present —
+// UniFi's wifi attribution is authoritative; Freebox often defaults to
+// ethernet for any host without explicit `ap.connectivity_type === 'wifi'`.
+function classifyClientMedium(
+    nodeId: string,
+    wifi: Set<string>,
+    ethernet: Set<string>
+): 'wifi' | 'ethernet' | null {
+    if (wifi.has(nodeId)) return 'wifi';
+    if (ethernet.has(nodeId)) return 'ethernet';
+    return null;
+}
+
+function computeTopologyStats(graph: TopologyGraph) {
+    const uniqueNodes = dedupeNodesByMac(graph.nodes);
+    const kinds = uniqueNodes.reduce<Record<string, number>>((acc, n) => {
+        acc[n.kind] = (acc[n.kind] ?? 0) + 1;
+        return acc;
+    }, {});
+    const { wifi, ethernet } = buildEdgeMediumSets(graph.edges);
+    let online = 0;
+    let offline = 0;
+    let wifiClients = 0;
+    let wiredClients = 0;
+    for (const n of uniqueNodes) {
+        if (n.metadata?.active === false) offline++;
+        else online++;
+        const isClient = n.kind === 'client' || n.kind === 'unknown';
+        if (!isClient || shouldSkipFreeboxStaleClient(n)) continue;
+        const medium = classifyClientMedium(n.id, wifi, ethernet);
+        if (medium === 'wifi') wifiClients++;
+        else if (medium === 'ethernet') wiredClients++;
+    }
+    const infra = (kinds.gateway ?? 0) + (kinds.switch ?? 0) + (kinds.ap ?? 0) + (kinds.repeater ?? 0);
+    return { kinds, online, offline, wifiClients, wiredClients, infra };
+}
+
 function formatRelative(iso: string, t: (k: string, opts?: any) => string): string {
     const then = new Date(iso).getTime();
     if (Number.isNaN(then)) return iso;
@@ -123,57 +194,7 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
         fetchSnapshot();
     }, [fetchSnapshot]);
 
-    const stats = useMemo(() => {
-        if (!graph) return null;
-        // Dedupe nodes by canonical MAC before counting. The backend already
-        // merges by MAC when building the snapshot, but scan-reseau records
-        // without a MAC fall back to id=`scan:${ip}` and may double a device
-        // that another plugin reported with its real MAC. Scanner-only nodes
-        // (no MAC) are kept under their own id (can't be deduped).
-        const seen = new Set<string>();
-        const uniqueNodes = graph.nodes.filter(n => {
-            const key = n.mac ? n.mac.toLowerCase() : `id:${n.id}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-        const kinds = uniqueNodes.reduce<Record<string, number>>((acc, n) => {
-            acc[n.kind] = (acc[n.kind] ?? 0) + 1;
-            return acc;
-        }, {});
-        let online = 0;
-        let offline = 0;
-        let wifiClients = 0;
-        let wiredClients = 0;
-        // A client may have several parent edges (e.g. UniFi sees it on Wi-Fi
-        // AND Freebox sees it via its LAN port). Track BOTH bits per client
-        // and prefer wifi when both are present — UniFi's wifi attribution is
-        // authoritative; Freebox often defaults to ethernet for any host
-        // without explicit `ap.connectivity_type === 'wifi'`.
-        const hasWifiEdge = new Set<string>();
-        const hasEthernetEdge = new Set<string>();
-        for (const e of graph.edges) {
-            if (e.medium === 'uplink') continue;
-            if (e.medium === 'wifi') hasWifiEdge.add(e.target);
-            else if (e.medium === 'ethernet') hasEthernetEdge.add(e.target);
-        }
-        for (const n of uniqueNodes) {
-            if (n.metadata?.active === false) offline++;
-            else online++;
-            if (n.kind === 'client' || n.kind === 'unknown') {
-                // Skip clients that ONLY Freebox knows about and that are
-                // offline — those are stale DHCP cache entries the Freebox
-                // hangs onto for days. They inflate the wired count without
-                // representing real devices.
-                const freeboxOnly = n.sources.length === 1 && n.sources[0] === 'freebox';
-                if (freeboxOnly && n.metadata?.active === false) continue;
-                if (hasWifiEdge.has(n.id)) wifiClients++;
-                else if (hasEthernetEdge.has(n.id)) wiredClients++;
-            }
-        }
-        const infra = (kinds.gateway ?? 0) + (kinds.switch ?? 0) + (kinds.ap ?? 0) + (kinds.repeater ?? 0);
-        return { kinds, online, offline, wifiClients, wiredClients, infra };
-    }, [graph]);
+    const stats = useMemo(() => graph ? computeTopologyStats(graph) : null, [graph]);
 
     const infraSub = (() => {
         if (!stats) return '—';

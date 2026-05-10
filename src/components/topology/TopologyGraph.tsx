@@ -950,7 +950,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                                 <div key={ssid} className="flex items-center justify-between gap-2 text-[11px] bg-slate-700/30 rounded px-2 py-1">
                                                     <span className="truncate text-slate-200" title={ssid}>{ssid}</span>
                                                     <span className="flex-none text-slate-400 font-mono">
-                                                        {info.count} · {Array.from(info.bands).sort().join('/') || '—'}
+                                                        {info.count} · {Array.from(info.bands).sort((a, b) => a.localeCompare(b)).join('/') || '—'}
                                                     </span>
                                                 </div>
                                             ))}
@@ -963,45 +963,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                             <div className="pt-2 border-t border-slate-700">
                                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">{t('topology.detail.links')}</div>
                                 <div className="space-y-1.5">
-                                    {selectedEdges.map(e => {
-                                        const isOutgoing = e.source === selectedNode.id;
-                                        const otherId = isOutgoing ? e.target : e.source;
-                                        const otherLabel = nodeLabelById.get(otherId) ?? otherId.replace(/^mac:/, '');
-                                        const port = isOutgoing ? e.portIndex : e.localPortIndex;
-                                        const isWifi = e.medium === 'wifi';
-                                        const hasPort = typeof port === 'number' && port > 0;
-                                        const portBadge = hasPort ? `P${port}` : (isOutgoing ? '→' : '←');
-                                        const speedTxt = formatSpeed(e.linkSpeedMbps) ?? null;
-                                        return (
-                                            <div key={e.id} className={`flex items-start gap-2 text-xs px-1.5 py-1 rounded ${isWifi ? 'bg-sky-500/5' : ''}`}>
-                                                {isWifi ? (
-                                                    <Wifi size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR.wifi}`} />
-                                                ) : (
-                                                    <Cable size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR[e.medium]}`} />
-                                                )}
-                                                <span className={`flex-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border ${PORT_BADGE_CLASS[e.medium]} ${hasPort ? '' : 'opacity-50'}`}>
-                                                    {portBadge}
-                                                </span>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-slate-200 truncate" title={otherLabel}>{otherLabel}</div>
-                                                    {isWifi && (e.ssid || e.band || speedTxt || typeof e.signal === 'number') && (
-                                                        <div className="grid grid-cols-[1fr_auto] gap-x-2 mt-0.5 text-[10px] text-slate-400 leading-tight">
-                                                            <span className="truncate" title={e.ssid ?? ''}>
-                                                                {e.ssid ?? '—'}{e.band ? ` · ${e.band}` : ''}
-                                                            </span>
-                                                            <span className="font-mono whitespace-nowrap">
-                                                                {typeof e.signal === 'number' ? `${e.signal} dBm` : ''}
-                                                                {speedTxt ? `${typeof e.signal === 'number' ? ' · ' : ''}${speedTxt}` : ''}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {!isWifi && speedTxt && (
-                                                    <span className="ml-auto text-slate-400 font-mono whitespace-nowrap">{speedTxt}</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                    {selectedEdges.map(e => (
+                                        <EdgeRow key={e.id} edge={e} selectedNodeId={selectedNode.id} nodeLabelById={nodeLabelById} />
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -1113,6 +1077,60 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                     </div>
                 )}
             </div>
+        </div>
+    );
+};
+
+interface EdgeRowProps {
+    edge: TopologyEdgeIn;
+    selectedNodeId: string;
+    nodeLabelById: Map<string, string>;
+}
+
+function buildWifiMetaLine(edge: TopologyEdgeIn, speedTxt: string | null): string {
+    const segments: string[] = [];
+    if (typeof edge.signal === 'number') segments.push(`${edge.signal} dBm`);
+    if (speedTxt) segments.push(speedTxt);
+    return segments.join(' · ');
+}
+
+function buildPortBadgeText(hasPort: boolean, port: number | undefined, isOutgoing: boolean): string {
+    if (hasPort) return `P${port}`;
+    return isOutgoing ? '→' : '←';
+}
+
+const EdgeRow: React.FC<EdgeRowProps> = ({ edge, selectedNodeId, nodeLabelById }) => {
+    const isOutgoing = edge.source === selectedNodeId;
+    const otherId = isOutgoing ? edge.target : edge.source;
+    const otherLabel = nodeLabelById.get(otherId) ?? otherId.replace(/^mac:/, '');
+    const port = isOutgoing ? edge.portIndex : edge.localPortIndex;
+    const isWifi = edge.medium === 'wifi';
+    const hasPort = typeof port === 'number' && port > 0;
+    const portBadge = buildPortBadgeText(hasPort, port, isOutgoing);
+    const speedTxt = formatSpeed(edge.linkSpeedMbps) ?? null;
+    const wifiSsidLine = `${edge.ssid ?? '—'}${edge.band ? ` · ${edge.band}` : ''}`;
+    const wifiMetaLine = buildWifiMetaLine(edge, speedTxt);
+    const showWifiMeta = isWifi && (edge.ssid || edge.band || speedTxt || typeof edge.signal === 'number');
+    return (
+        <div className={`flex items-start gap-2 text-xs px-1.5 py-1 rounded ${isWifi ? 'bg-sky-500/5' : ''}`}>
+            {isWifi
+                ? <Wifi size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR.wifi}`} />
+                : <Cable size={12} className={`flex-none mt-0.5 ${EDGE_ICON_COLOR[edge.medium]}`} />}
+            <span className={`flex-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border ${PORT_BADGE_CLASS[edge.medium]} ${hasPort ? '' : 'opacity-50'}`}>
+                {portBadge}
+            </span>
+            <div className="min-w-0 flex-1">
+                <div className="text-slate-200 truncate" title={otherLabel}>{otherLabel}</div>
+                {showWifiMeta && (
+                    <div className="grid grid-cols-[1fr_auto] gap-x-2 mt-0.5 text-[10px] text-slate-400 leading-tight">
+                        <span className="truncate" title={edge.ssid ?? ''}>{wifiSsidLine}</span>
+                        <span className="font-mono whitespace-nowrap">{wifiMetaLine}</span>
+                    </div>
+                )}
+            </div>
+            {!isWifi && speedTxt && (
+                <span className="ml-auto text-slate-400 font-mono whitespace-nowrap">{speedTxt}</span>
+            )}
         </div>
     );
 };
