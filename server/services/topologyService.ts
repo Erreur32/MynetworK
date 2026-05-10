@@ -511,27 +511,45 @@ function addFreeboxToUniFiWanCascade(
 //      The WAN cascade above keeps the only valid Freebox → UCG link.
 //  (b) Freebox → wired client when UniFi already knows the switch port —
 //      UniFi's edge is more accurate, drop the Freebox duplicate.
-function pruneRedundantFreeboxEdges(
+function collectClientsWithUniFiParent(
     nodes: Map<string, TopologyNode>,
     edges: Map<string, TopologyEdge>
-): void {
-    const clientsWithUniFiParent = new Set<string>();
+): Set<string> {
+    const out = new Set<string>();
     for (const edge of edges.values()) {
         if (edge.source_plugin !== 'unifi') continue;
         if (edge.medium === 'uplink') continue;
         const target = nodes.get(edge.target);
-        if (target && (target.kind === 'client' || target.kind === 'unknown')) {
-            clientsWithUniFiParent.add(target.id);
+        if (!target) continue;
+        if (target.kind === 'client' || target.kind === 'unknown') {
+            out.add(target.id);
         }
     }
+    return out;
+}
+
+function isFreeboxRedundantEdge(
+    edge: TopologyEdge,
+    target: TopologyNode | undefined,
+    clientsWithUniFiParent: Set<string>
+): boolean {
+    if (edge.source_plugin !== 'freebox') return false;
+    if (edge.source !== FREEBOX_BOX_ID) return false;
+    if (!target) return false;
+    if (clientsWithUniFiParent.has(target.id)) return true;
+    return INFRA_KINDS.has(target.kind) && target.sources.includes('unifi');
+}
+
+function pruneRedundantFreeboxEdges(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const clientsWithUniFiParent = collectClientsWithUniFiParent(nodes, edges);
     for (const [edgeId, edge] of edges) {
-        if (edge.source_plugin !== 'freebox') continue;
-        if (edge.source !== FREEBOX_BOX_ID) continue;
         const target = nodes.get(edge.target);
-        if (!target) continue;
-        const isUnifiInfra = INFRA_KINDS.has(target.kind) && target.sources.includes('unifi');
-        const dupClient = clientsWithUniFiParent.has(target.id);
-        if (isUnifiInfra || dupClient) edges.delete(edgeId);
+        if (isFreeboxRedundantEdge(edge, target, clientsWithUniFiParent)) {
+            edges.delete(edgeId);
+        }
     }
 }
 
