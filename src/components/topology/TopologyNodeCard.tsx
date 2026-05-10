@@ -185,12 +185,18 @@ function pickClientIcon(d: TopologyNodeData, fallback: React.ElementType): React
     return fallback;
 }
 
+function pickConnectionChipClass(inactive: boolean, medium: 'wifi' | 'ethernet'): string {
+    if (inactive) return 'bg-slate-700/50 text-slate-400 border-slate-600/40';
+    if (medium === 'wifi') return 'bg-pink-500/15 text-pink-200 border-pink-400/40';
+    return 'bg-lime-500/15 text-lime-200 border-lime-400/40';
+}
+
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
     const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
-    const ClientIcon = !isInfra ? pickClientIcon(d, style.icon) : null;
+    const ClientIcon = isInfra ? null : pickClientIcon(d, style.icon);
     const Icon = BrandIcon ?? ClientIcon ?? style.icon;
     const inactive = d.active === false;
     const borderClass = inactive ? 'border-slate-600/40' : style.border;
@@ -220,6 +226,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             />
             <Handle id="t" type="target" position={Position.Top} className="!bg-white/50 !border-white/50 !w-2 !h-2" />
             <Handle id="tl" type="target" position={Position.Left} className="!bg-pink-400/70 !border-pink-300/70 !w-2 !h-2" />
+            <Handle id="sr" type="source" position={Position.Right} className="!bg-white/40 !border-white/40 !w-2 !h-2" />
             <div className="relative flex items-center gap-2 p-2.5">
                 <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor}`}>
                     <Icon size={18} />
@@ -238,11 +245,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                         const labelText = buildConnectionLabel(conn);
                         if (!labelText) return null;
                         const ConnIcon = conn.medium === 'wifi' ? Wifi : Cable;
-                        const chip = inactive
-                            ? 'bg-slate-700/50 text-slate-400 border-slate-600/40'
-                            : conn.medium === 'wifi'
-                                ? 'bg-pink-500/15 text-pink-200 border-pink-400/40'
-                                : 'bg-lime-500/15 text-lime-200 border-lime-400/40';
+                        const chip = pickConnectionChipClass(inactive, conn.medium);
                         return (
                             <div className={`mt-1 inline-flex items-center gap-1 px-1.5 py-px rounded border text-[10px] max-w-full ${chip}`}>
                                 <ConnIcon size={10} className="flex-none" />
@@ -259,6 +262,21 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                         cellSize="xs"
                         wrap={d.ports.length > SWITCH_INLINE_PORTS_MAX}
                     />
+                    {/* Per-port source handles aligned with each port cell —
+                        edges that carry portIndex use sourceHandle="p${idx}"
+                        so the line visually exits from the right port. Only
+                        emitted for inline (single-row) port grids; wrapped
+                        24-port switches stay on the default bottom handle. */}
+                    {d.ports.length <= SWITCH_INLINE_PORTS_MAX && d.ports.map((p, gridIdx) => (
+                        <Handle
+                            key={`p${p.idx}`}
+                            id={`p${p.idx}`}
+                            type="source"
+                            position={Position.Bottom}
+                            // 8px container padding + 9px (half cell) + idx * (18px cell + 2px gap)
+                            style={{ left: `${17 + gridIdx * 20}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
+                        />
+                    ))}
                 </div>
             )}
             {(() => {

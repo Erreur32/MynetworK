@@ -383,12 +383,22 @@ function processUniFiDevice(
 
     const uplinkMac = readUniFiUplinkMac(dev);
     if (uplinkMac && uplinkMac !== mac) {
+        // Capture the parent's port index so the rendered uplink edge can
+        // exit the right port on the switch (matches the client-edge port
+        // alignment behaviour). Falls back to undefined when UniFi doesn't
+        // expose it for this firmware.
+        const remotePortRaw = dev.uplink?.uplink_remote_port ?? dev.uplink?.remote_port;
+        const portIndex = typeof remotePortRaw === 'number' && remotePortRaw > 0 ? remotePortRaw : undefined;
+        const linkSpeedRaw = dev.uplink?.speed ?? dev.uplink?.full_duplex_speed;
+        const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0 ? linkSpeedRaw : undefined;
         const upId = `unifi:uplink:${uplinkMac}->${mac}`;
         edges.set(upId, {
             id: upId,
             source: macNodeId(uplinkMac),
             target: id,
             medium: 'uplink',
+            linkSpeedMbps,
+            portIndex,
             source_plugin: 'unifi'
         });
     } else {
@@ -469,6 +479,79 @@ function readUniFiClientParentMac(cli: Record<string, any>, isWired: boolean): s
     return null;
 }
 
+const INFRA_KINDS: ReadonlySet<NodeKind> = new Set<NodeKind>(['gateway', 'switch', 'ap', 'repeater']);
+
+// WAN cascade: when both Freebox and a UniFi gateway are present, link the
+// gateway under the Freebox so DMZ / bridged setups read top-down. Edge
+// medium is 'uplink' so it inherits the mauve dashed style.
+function addFreeboxToUniFiWanCascade(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    if (!nodes.has(FREEBOX_BOX_ID)) return;
+    for (const node of nodes.values()) {
+        if (node.kind !== 'gateway') continue;
+        if (node.id === FREEBOX_BOX_ID) continue;
+        if (!node.sources.includes('unifi')) continue;
+        const wanId = `wan:freebox->${node.id}`;
+        if (edges.has(wanId)) continue;
+        edges.set(wanId, {
+            id: wanId,
+            source: FREEBOX_BOX_ID,
+            target: node.id,
+            medium: 'uplink',
+            source_plugin: 'unifi'
+        });
+    }
+}
+
+// Drop Freebox-sourced edges that duplicate UniFi data:
+//  (a) Freebox → UniFi infrastructure (UCG / USW / UAP). Freebox sees them
+//      as wired LAN clients but the real uplink path goes through UniFi.
+//      The WAN cascade above keeps the only valid Freebox → UCG link.
+//  (b) Freebox → wired client when UniFi already knows the switch port —
+//      UniFi's edge is more accurate, drop the Freebox duplicate.
+function pruneRedundantFreeboxEdges(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const clientsWithUniFiParent = new Set<string>();
+    for (const edge of edges.values()) {
+        if (edge.source_plugin !== 'unifi') continue;
+        if (edge.medium === 'uplink') continue;
+        const target = nodes.get(edge.target);
+        if (target && (target.kind === 'client' || target.kind === 'unknown')) {
+            clientsWithUniFiParent.add(target.id);
+        }
+    }
+    for (const [edgeId, edge] of edges) {
+        if (edge.source_plugin !== 'freebox') continue;
+        if (edge.source !== FREEBOX_BOX_ID) continue;
+        const target = nodes.get(edge.target);
+        if (!target) continue;
+        const isUnifiInfra = INFRA_KINDS.has(target.kind) && target.sources.includes('unifi');
+        const dupClient = clientsWithUniFiParent.has(target.id);
+        if (isUnifiInfra || dupClient) edges.delete(edgeId);
+    }
+}
+
+// Belt-and-braces: any non-uplink edge connecting two infra nodes is
+// dropped. Infrastructure should only be wired together via uplinks.
+function pruneNonUplinkInfraEdges(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    for (const [edgeId, edge] of edges) {
+        if (edge.medium === 'uplink') continue;
+        const s = nodes.get(edge.source);
+        const t = nodes.get(edge.target);
+        if (!s || !t) continue;
+        if (INFRA_KINDS.has(s.kind) && INFRA_KINDS.has(t.kind)) {
+            edges.delete(edgeId);
+        }
+    }
+}
+
 function processUniFiClient(
     cli: UniFiClient,
     nodes: Map<string, TopologyNode>,
@@ -513,82 +596,10 @@ class TopologyService {
         const edges = new Map<string, TopologyEdge>();
         const sources: SourcePlugin[] = [];
 
-        await this.tryCollect('freebox', sources, () => this.collectFreebox(nodes, edges));
-        await this.tryCollect('unifi', sources, async () => {
-            const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
-            if (plugin) await this.collectUniFi(plugin, nodes, edges);
-        });
-        await this.tryCollect('scan-reseau', sources, async () => {
-            this.collectScanReseauOverlay(nodes);
-        });
-
-        // WAN cascade: when both Freebox and a UniFi gateway are present,
-        // link the gateway under the Freebox so DMZ / bridged setups read
-        // top-down (Freebox = WAN modem, UCG = router behind it). Edge medium
-        // is 'uplink' so it inherits the mauve dashed style.
-        if (nodes.has(FREEBOX_BOX_ID)) {
-            for (const node of nodes.values()) {
-                if (node.kind !== 'gateway') continue;
-                if (node.id === FREEBOX_BOX_ID) continue;
-                if (!node.sources.includes('unifi')) continue;
-                const wanId = `wan:freebox->${node.id}`;
-                if (edges.has(wanId)) continue;
-                edges.set(wanId, {
-                    id: wanId,
-                    source: FREEBOX_BOX_ID,
-                    target: node.id,
-                    medium: 'uplink',
-                    source_plugin: 'unifi'
-                });
-            }
-        }
-
-        // Drop Freebox-sourced edges that are redundant with UniFi-sourced
-        // ones. Two scenarios:
-        //   (a) Freebox → UniFi infrastructure (UCG / USW / UAP). Freebox
-        //       sees them as wired LAN clients, but the real uplink path
-        //       goes through UniFi (UCG → switch → AP). The synthetic WAN
-        //       cascade keeps the Freebox → UCG edge, which is the only
-        //       semantically correct Freebox → UniFi edge.
-        //   (b) Freebox → wired client when UniFi already knows which
-        //       switch port the client sits on. The UniFi edge is more
-        //       accurate, so drop the Freebox one to avoid drawing the
-        //       same client connected to both Freebox and a switch.
-        const UNIFI_INFRA_KINDS = new Set(['gateway', 'switch', 'ap', 'repeater']);
-        const clientsWithUniFiParent = new Set<string>();
-        for (const edge of edges.values()) {
-            if (edge.source_plugin !== 'unifi') continue;
-            if (edge.medium === 'uplink') continue;
-            const target = nodes.get(edge.target);
-            if (target && (target.kind === 'client' || target.kind === 'unknown')) {
-                clientsWithUniFiParent.add(target.id);
-            }
-        }
-        for (const [edgeId, edge] of edges) {
-            if (edge.source_plugin !== 'freebox') continue;
-            if (edge.source !== FREEBOX_BOX_ID) continue;
-            const target = nodes.get(edge.target);
-            if (!target) continue;
-            const isUnifiInfra = UNIFI_INFRA_KINDS.has(target.kind) && target.sources.includes('unifi');
-            const dupClient = clientsWithUniFiParent.has(target.id);
-            if (isUnifiInfra || dupClient) edges.delete(edgeId);
-        }
-
-        // Belt-and-braces: any non-uplink edge connecting two infra nodes is
-        // dropped. Two switches / a switch and a gateway / a Freebox and an
-        // AP — they should only be linked via uplink edges (the topology
-        // backbone). Anything else is a Freebox/UniFi double-counting that
-        // would draw redundant lines.
-        const ALL_INFRA = new Set(['gateway', 'switch', 'ap', 'repeater']);
-        for (const [edgeId, edge] of edges) {
-            if (edge.medium === 'uplink') continue;
-            const s = nodes.get(edge.source);
-            const t = nodes.get(edge.target);
-            if (!s || !t) continue;
-            if (ALL_INFRA.has(s.kind) && ALL_INFRA.has(t.kind)) {
-                edges.delete(edgeId);
-            }
-        }
+        await this.collectAllSources(nodes, edges, sources);
+        addFreeboxToUniFiWanCascade(nodes, edges);
+        pruneRedundantFreeboxEdges(nodes, edges);
+        pruneNonUplinkInfraEdges(nodes, edges);
 
         return {
             nodes: Array.from(nodes.values()),
@@ -597,6 +608,21 @@ class TopologyService {
             computed_at: new Date().toISOString(),
             schema_version: SCHEMA_VERSION
         };
+    }
+
+    private async collectAllSources(
+        nodes: Map<string, TopologyNode>,
+        edges: Map<string, TopologyEdge>,
+        sources: SourcePlugin[]
+    ): Promise<void> {
+        await this.tryCollect('freebox', sources, () => this.collectFreebox(nodes, edges));
+        await this.tryCollect('unifi', sources, async () => {
+            const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
+            if (plugin) await this.collectUniFi(plugin, nodes, edges);
+        });
+        await this.tryCollect('scan-reseau', sources, async () => {
+            this.collectScanReseauOverlay(nodes);
+        });
     }
 
     private async tryCollect(

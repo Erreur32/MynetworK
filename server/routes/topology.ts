@@ -34,20 +34,38 @@ router.get('/positions', requireAuth, asyncHandler(async (_req: AuthenticatedReq
     res.json({ success: true, result: out });
 }));
 
+// Sanity-check a single position payload. Bound the node id length and
+// charset (only formats the topology service produces are allowed) and
+// reject NaN / Infinity which silently corrupt the SQLite REAL columns.
+const NODE_ID_PATTERN = /^[a-zA-Z0-9:_.-]{1,200}$/;
+function isValidPosition(p: { nodeId?: unknown; x?: unknown; y?: unknown }): p is NodePosition {
+    return typeof p.nodeId === 'string'
+        && NODE_ID_PATTERN.test(p.nodeId)
+        && typeof p.x === 'number'
+        && Number.isFinite(p.x)
+        && typeof p.y === 'number'
+        && Number.isFinite(p.y);
+}
+
+const POSITIONS_BATCH_LIMIT = 500;
+
 // POST /api/topology/positions - Persist one or many node positions
-router.post('/positions', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+// Admin-only: matches DELETE /positions and prevents a viewer / user role
+// from corrupting the shared layout for everyone else.
+router.post('/positions', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const body = req.body as { nodeId?: string; x?: number; y?: number; positions?: NodePosition[] };
     if (Array.isArray(body.positions) && body.positions.length > 0) {
-        const valid = body.positions.filter(p =>
-            typeof p?.nodeId === 'string' && typeof p?.x === 'number' && typeof p?.y === 'number'
-        );
+        if (body.positions.length > POSITIONS_BATCH_LIMIT) {
+            throw createError(`Too many positions (max ${POSITIONS_BATCH_LIMIT})`, 400, 'PAYLOAD_TOO_LARGE');
+        }
+        const valid = body.positions.filter(isValidPosition);
         if (valid.length === 0) throw createError('No valid positions provided', 400, 'INVALID_PAYLOAD');
         TopologyNodePositionRepository.setMany(valid);
         res.json({ success: true, result: { saved: valid.length } });
         return;
     }
-    if (typeof body.nodeId !== 'string' || typeof body.x !== 'number' || typeof body.y !== 'number') {
-        throw createError('nodeId / x / y required', 400, 'INVALID_PAYLOAD');
+    if (!isValidPosition(body)) {
+        throw createError('nodeId / x / y required and must be valid', 400, 'INVALID_PAYLOAD');
     }
     TopologyNodePositionRepository.set(body.nodeId, body.x, body.y);
     res.json({ success: true });

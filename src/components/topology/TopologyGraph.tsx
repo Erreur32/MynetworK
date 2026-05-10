@@ -21,7 +21,7 @@ import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal,
 import { api } from '../../api/client';
 import { toPng, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { TopologyNodeCard, SwitchPortGrid, type TopologyNodeData } from './TopologyNodeCard';
+import { TopologyNodeCard, type TopologyNodeData } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
 import { layoutGraph, type LayoutMode } from './topologyLayout';
 
@@ -136,6 +136,49 @@ function toggleSet<T>(set: Set<T>, value: T): Set<T> {
     if (next.has(value)) next.delete(value);
     else next.add(value);
     return next;
+}
+
+// Edge styling helpers — flatten the per-edge nested ternaries.
+function pickEdgeDashArray(isWifi: boolean, _isUplink: boolean): string | undefined {
+    // Only Wi-Fi gets the dashed (animated) look. Uplinks and ethernet are
+    // solid — uplinks just stand out via colour (mauve) and stroke width.
+    if (isWifi) return '5 4';
+    return undefined;
+}
+
+function pickEdgeStrokeWidth(isUplink: boolean, isWifi: boolean): number {
+    if (isUplink) return 2.5;
+    if (isWifi) return 1.8;
+    return 1.6;
+}
+
+function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: number; borderRadius: number } | undefined {
+    if (isUplink) return { offset: 60, borderRadius: 14 };
+    if (isWifi) return { offset: 50, borderRadius: 12 };
+    return undefined;
+}
+
+// Handle selection per layout mode + edge:
+//  - Tree (LR): source on the right, target on the left
+//  - Horizontal (TB wrapped): source bottom, target top
+//  - Grouped (TB): source bottom, target top — except Wi-Fi which routes
+//    via the left-side target handle so labels sit cleanly along the
+//    AP-to-client branch
+//  - Port-aware: when an ethernet edge carries a portIndex AND the source
+//    switch fits its port grid on a single row, we land the line at the
+//    matching port handle (`p${idx}`) so the cable visually exits from the
+//    right port. Only honored in TB layouts; LR (tree) keeps the right-side
+//    handle since per-port handles sit on the bottom.
+function pickEdgeHandles(
+    mode: LayoutMode,
+    isWifi: boolean,
+    portIndex: number | undefined
+): { source: string; target: string } {
+    if (mode === 'tree') return { source: 'sr', target: 'tl' };
+    const portAware = !isWifi && typeof portIndex === 'number';
+    const source = portAware ? `p${portIndex}` : 's';
+    const target = mode === 'grouped' && isWifi ? 'tl' : 't';
+    return { source, target };
 }
 
 function pickChipClass(disabled: boolean, active: boolean, activeBg: string): string {
@@ -282,7 +325,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         } catch { /* ignore */ }
         setManualPositions(new Map());
         // Re-fit after a short delay so the dagre layout has rendered
-        window.setTimeout(() => reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 }), 50);
+        globalThis.setTimeout(() => reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 }), 50);
     }, []);
 
     // Nudge the currently-selected node by (dx, dy) pixels and persist.
@@ -322,8 +365,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             e.preventDefault();
             nudgeSelected(dx, dy);
         };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        globalThis.addEventListener('keydown', onKey);
+        return () => globalThis.removeEventListener('keydown', onKey);
     }, [dragMode, selectedId, moveStep, nudgeSelected]);
     const [sourceFilter, setSourceFilter] = useState<Set<SourcePlugin>>(new Set(ALL_SOURCES));
     const [kindFilter, setKindFilter] = useState<Set<NodeKind>>(new Set(ALL_KINDS));
@@ -434,16 +477,16 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             // relationship to the AP is unambiguous. Uplink: thicker dashed
             // mauve with right-angle routing pushed wide on the sides so it
             // doesn't overlap the parent→client edges. Ethernet: solid.
-            const dasharray = isWifi ? '5 4' : (isUplink ? '6 3' : undefined);
+            const dasharray = pickEdgeDashArray(isWifi, isUplink);
+            const handles = pickEdgeHandles(mode, isWifi, e.portIndex);
+            const pathOptions = pickEdgePathOptions(isUplink, isWifi);
+            const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi);
             return {
                 id: e.id,
                 source: e.source,
                 target: e.target,
-                sourceHandle: 's',
-                // Wi-Fi enters the client card from the LEFT — keeps the
-                // wifi branch on the side and the labels (SSID · band ·
-                // speed) parallel to the device cluster.
-                targetHandle: isWifi ? 'tl' : 't',
+                sourceHandle: handles.source,
+                targetHandle: handles.target,
                 type: 'smoothstep',
                 animated: isWifi,
                 label,
@@ -451,12 +494,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 labelBgBorderRadius: 4,
                 labelBgStyle: { fill: 'rgba(15,23,42,0.85)', fillOpacity: 0.85 },
                 labelStyle: { fill: '#e2e8f0', fontSize: 10, fontWeight: 500 },
-                pathOptions: isUplink ? { offset: 60, borderRadius: 14 }
-                            : isWifi ? { offset: 50, borderRadius: 12 }
-                            : undefined,
+                pathOptions,
                 style: {
                     stroke: color,
-                    strokeWidth: isUplink ? 2.5 : (isWifi ? 1.8 : 1.6),
+                    strokeWidth,
                     strokeDasharray: dasharray
                 },
                 markerEnd: marker,
@@ -479,7 +520,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 ...n,
                 position: stored ?? n.position,
                 selected: isSelected,
-                data: { ...(n.data ?? {}), editingMode: dragMode && editableMode }
+                data: { ...n.data, editingMode: dragMode && editableMode }
             };
         });
     }, [layouted, manualPositions, selectedId, dragMode, editableMode]);
@@ -918,7 +959,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                     <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.wifi}` }} /> {t('topology.legend.wifi')}
                                 </span>
                                 <span className="flex items-center gap-1.5">
-                                    <span className="w-3 inline-block" style={{ borderTop: `2.5px dashed ${EDGE_COLOR.uplink}` }} /> {t('topology.legend.uplink')}
+                                    <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.uplink }} /> {t('topology.legend.uplink')}
                                 </span>
                             </div>
                         </div>
