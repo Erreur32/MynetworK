@@ -13,9 +13,10 @@ export type NodeKind =
     | 'ap'
     | 'repeater'
     | 'client'
+    | 'vm-host'
     | 'unknown';
 
-export type EdgeMedium = 'ethernet' | 'wifi' | 'uplink';
+export type EdgeMedium = 'ethernet' | 'wifi' | 'uplink' | 'virtual';
 
 export type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 

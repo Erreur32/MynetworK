@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
-import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lock, Unlock, Download, Image as ImageIcon, FileText, FileCode, Braces } from 'lucide-react';
+import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lock, Unlock, Download, Image as ImageIcon, FileText, FileCode, Braces, Layers } from 'lucide-react';
 import { api } from '../../api/client';
 import { toPng, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
@@ -26,8 +26,8 @@ import { TopologyGroupNode } from './TopologyGroupNode';
 import { layoutGraph, type LayoutMode } from './topologyLayout';
 
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
-type EdgeMedium = 'ethernet' | 'wifi' | 'uplink';
-type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'unknown';
+type EdgeMedium = 'ethernet' | 'wifi' | 'uplink' | 'virtual';
+type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
 
 interface TopologyNodeIn {
     id: string;
@@ -46,6 +46,14 @@ interface TopologyNodeIn {
         host_type?: string;
         ports?: Array<{ idx: number; name?: string; up: boolean; speed?: number; poe?: boolean; media?: string; uplink?: boolean; localUplink?: boolean }>;
         localUplinkPortIdxs?: number[];
+        vmCount?: number;
+        vmActiveCount?: number;
+        vmInactiveCount?: number;
+        hypervisor?: string;
+        hostHostname?: string;
+        hostIp?: string;
+        hostMac?: string;
+        hostVendor?: string;
     };
 }
 
@@ -78,19 +86,22 @@ interface TopologyGraphProps {
 const EDGE_COLOR: Record<EdgeMedium, string> = {
     ethernet: '#a3e635', // lime — distinct from emerald switches
     wifi: '#f472b6',     // pink — distinct from sky APs and purple repeaters
-    uplink: '#a78bfa'    // violet/mauve — distinct from amber gateways
+    uplink: '#a78bfa',   // violet/mauve — distinct from amber gateways
+    virtual: '#e879f9'   // fuchsia — matches the vm-host card tint
 };
 
 const PORT_BADGE_CLASS: Record<EdgeMedium, string> = {
     uplink:   'bg-purple-500/20 text-purple-200 border-purple-400/40',
     wifi:     'bg-sky-500/20 text-sky-200 border-sky-400/40',
-    ethernet: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+    ethernet: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
+    virtual:  'bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/40'
 };
 
 const EDGE_ICON_COLOR: Record<EdgeMedium, string> = {
     uplink:   'text-purple-400',
     wifi:     'text-sky-400',
-    ethernet: 'text-emerald-400'
+    ethernet: 'text-emerald-400',
+    virtual:  'text-fuchsia-400'
 };
 
 const nodeTypes = { topology: TopologyNodeCard, topologyGroup: TopologyGroupNode };
@@ -106,6 +117,7 @@ const NODE_KIND_LEGEND: Array<{ id: NodeKind; bar: string }> = [
     { id: 'switch',   bar: 'bg-emerald-400' },
     { id: 'ap',       bar: 'bg-sky-400' },
     { id: 'repeater', bar: 'bg-purple-400' },
+    { id: 'vm-host',  bar: 'bg-fuchsia-400' },
     { id: 'client',   bar: 'bg-slate-400' },
     { id: 'unknown',  bar: 'bg-slate-500' }
 ];
@@ -118,7 +130,7 @@ const PORT_LEGEND: Array<{ key: 'portUp' | 'portFibre' | 'portUplink' | 'portDow
 ];
 
 const ALL_SOURCES: SourcePlugin[] = ['freebox', 'unifi', 'scan-reseau'];
-const ALL_KINDS: NodeKind[] = ['gateway', 'switch', 'ap', 'repeater', 'client', 'unknown'];
+const ALL_KINDS: NodeKind[] = ['gateway', 'switch', 'ap', 'repeater', 'vm-host', 'client', 'unknown'];
 
 type Status = 'online' | 'offline' | 'stale';
 const ALL_STATUS: Status[] = ['online', 'offline', 'stale'];
@@ -133,16 +145,33 @@ interface PersistedFilters {
     statuses: Status[];
 }
 
+// For multi-toggle filters (sources/kinds), backfill any new union members
+// the saved state doesn't know about. Otherwise adding a new NodeKind /
+// SourcePlugin silently hides it from users with older localStorage state.
+function mergeWithDefaults<T>(persisted: T[] | null, all: readonly T[]): T[] {
+    if (!persisted) return [...all];
+    const missing = all.filter(v => !persisted.includes(v));
+    return [...persisted, ...missing];
+}
+
 function loadPersistedFilters(): PersistedFilters | null {
     try {
         const raw = globalThis.localStorage?.getItem(FILTERS_STORAGE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw) as Partial<PersistedFilters>;
         if (!parsed || typeof parsed !== 'object') return null;
+        const persistedSources = Array.isArray(parsed.sources)
+            ? parsed.sources.filter(s => ALL_SOURCES.includes(s)) : null;
+        const persistedKinds = Array.isArray(parsed.kinds)
+            ? parsed.kinds.filter(k => ALL_KINDS.includes(k)) : null;
+        const persistedStatuses = Array.isArray(parsed.statuses)
+            ? parsed.statuses.filter(s => ALL_STATUS.includes(s)) : null;
         return {
-            sources: Array.isArray(parsed.sources) ? parsed.sources.filter(s => ALL_SOURCES.includes(s)) : [...ALL_SOURCES],
-            kinds: Array.isArray(parsed.kinds) ? parsed.kinds.filter(k => ALL_KINDS.includes(k)) : [...ALL_KINDS],
-            statuses: Array.isArray(parsed.statuses) ? parsed.statuses.filter(s => ALL_STATUS.includes(s)) : [...DEFAULT_STATUS]
+            sources: mergeWithDefaults(persistedSources, ALL_SOURCES),
+            kinds: mergeWithDefaults(persistedKinds, ALL_KINDS),
+            // Statuses use a SUBSET default (online only), so we preserve the
+            // user's exact choice rather than backfilling.
+            statuses: persistedStatuses ?? [...DEFAULT_STATUS]
         };
     } catch {
         return null;
@@ -175,12 +204,13 @@ const SOURCE_CHIP: Record<SourcePlugin, { label: string; activeBg: string; dot: 
 };
 
 const KIND_CHIP: Record<NodeKind, { icon: React.ElementType; activeBg: string }> = {
-    gateway:  { icon: RouterIcon, activeBg: 'bg-amber-500/25 border-amber-400/50 text-amber-100' },
-    switch:   { icon: Server,     activeBg: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-100' },
-    ap:       { icon: Wifi,       activeBg: 'bg-sky-500/25 border-sky-400/50 text-sky-100' },
-    repeater: { icon: Repeat,     activeBg: 'bg-purple-500/25 border-purple-400/50 text-purple-100' },
-    client:   { icon: Smartphone, activeBg: 'bg-slate-500/25 border-slate-400/50 text-slate-100' },
-    unknown:  { icon: HelpCircle, activeBg: 'bg-slate-600/25 border-slate-500/50 text-slate-200' }
+    gateway:   { icon: RouterIcon, activeBg: 'bg-amber-500/25 border-amber-400/50 text-amber-100' },
+    switch:    { icon: Server,     activeBg: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-100' },
+    ap:        { icon: Wifi,       activeBg: 'bg-sky-500/25 border-sky-400/50 text-sky-100' },
+    repeater:  { icon: Repeat,     activeBg: 'bg-purple-500/25 border-purple-400/50 text-purple-100' },
+    'vm-host': { icon: Layers,     activeBg: 'bg-fuchsia-500/25 border-fuchsia-400/50 text-fuchsia-100' },
+    client:    { icon: Smartphone, activeBg: 'bg-slate-500/25 border-slate-400/50 text-slate-100' },
+    unknown:   { icon: HelpCircle, activeBg: 'bg-slate-600/25 border-slate-500/50 text-slate-200' }
 };
 
 function toggleSet<T>(set: Set<T>, value: T): Set<T> {
@@ -191,16 +221,18 @@ function toggleSet<T>(set: Set<T>, value: T): Set<T> {
 }
 
 // Edge styling helpers — flatten the per-edge nested ternaries.
-function pickEdgeDashArray(isWifi: boolean, _isUplink: boolean): string | undefined {
-    // Only Wi-Fi gets the dashed (animated) look. Uplinks and ethernet are
-    // solid — uplinks just stand out via colour (mauve) and stroke width.
+function pickEdgeDashArray(isWifi: boolean, _isUplink: boolean, isVirtual: boolean): string | undefined {
+    // Wi-Fi and virtual links are dashed (animated for Wi-Fi). Uplinks and
+    // ethernet stay solid — uplinks stand out via colour (mauve) and width.
     if (isWifi) return '5 4';
+    if (isVirtual) return '3 3';
     return undefined;
 }
 
-function pickEdgeStrokeWidth(isUplink: boolean, isWifi: boolean): number {
+function pickEdgeStrokeWidth(isUplink: boolean, isWifi: boolean, isVirtual: boolean): number {
     if (isUplink) return 2.5;
     if (isWifi) return 1.8;
+    if (isVirtual) return 1.4;
     return 1.6;
 }
 
@@ -480,7 +512,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         return counts;
     }, [graph]);
     const kindCounts = useMemo(() => {
-        const counts: Record<NodeKind, number> = { gateway: 0, switch: 0, ap: 0, repeater: 0, client: 0, unknown: 0 };
+        const counts: Record<NodeKind, number> = { gateway: 0, switch: 0, ap: 0, repeater: 0, 'vm-host': 0, client: 0, unknown: 0 };
         for (const n of graph.nodes) counts[n.kind] = (counts[n.kind] ?? 0) + 1;
         return counts;
     }, [graph]);
@@ -516,7 +548,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             portIndex?: number;
         }>();
         for (const e of filteredGraph.edges) {
-            if (e.medium === 'uplink') continue;
+            if (e.medium !== 'ethernet' && e.medium !== 'wifi') continue;
             // edges are parent → child, so the client is the target
             parentConnByClient.set(e.target, {
                 medium: e.medium,
@@ -545,7 +577,11 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 ports: n.metadata?.ports,
                 host_type: n.metadata?.host_type,
                 connection: parentConnByClient.get(n.id),
-                localUplinkPortIdxs: n.metadata?.localUplinkPortIdxs
+                localUplinkPortIdxs: n.metadata?.localUplinkPortIdxs,
+                vmCount: typeof n.metadata?.vmCount === 'number' ? n.metadata.vmCount : undefined,
+                vmActiveCount: typeof n.metadata?.vmActiveCount === 'number' ? n.metadata.vmActiveCount : undefined,
+                vmInactiveCount: typeof n.metadata?.vmInactiveCount === 'number' ? n.metadata.vmInactiveCount : undefined,
+                hypervisor: typeof n.metadata?.hypervisor === 'string' ? n.metadata.hypervisor : undefined
             } satisfies TopologyNodeData
         }));
 
@@ -553,6 +589,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             const color = EDGE_COLOR[e.medium];
             const isUplink = e.medium === 'uplink';
             const isWifi = e.medium === 'wifi';
+            const isVirtual = e.medium === 'virtual';
             // SSID / speed / port now live on the client card itself, so client
             // edges (ethernet + wifi) are unlabelled. Uplinks stay labelless.
             const label = isUplink ? buildEdgeLabel(e) : undefined;
@@ -560,8 +597,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             // Wi-Fi: animated dashed line (marching-ants) so the wireless
             // relationship to the AP is unambiguous. Uplink: thicker dashed
             // mauve with right-angle routing pushed wide on the sides so it
-            // doesn't overlap the parent→client edges. Ethernet: solid.
-            const dasharray = pickEdgeDashArray(isWifi, isUplink);
+            // doesn't overlap the parent→client edges. Virtual (VM→host):
+            // thin dashed fuchsia. Ethernet: solid.
+            const dasharray = pickEdgeDashArray(isWifi, isUplink, isVirtual);
             // `pt${idx}` only exists when the target renders an Uplink chip for that port
             // (inline grid, ≤12 ports, port in localUplinkPortIdxs). Falling back avoids
             // React Flow silently dropping the edge when the chip isn't there.
@@ -574,7 +612,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 && targetPortsCount <= 12;
             const handles = pickEdgeHandles(mode, isWifi, e.portIndex, e.localPortIndex, targetHasUplinkChip);
             const pathOptions = pickEdgePathOptions(isUplink, isWifi);
-            const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi);
+            const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi, isVirtual);
             return {
                 id: e.id,
                 source: e.source,
@@ -1080,6 +1118,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <span className="w-3 h-0.5 inline-block" style={{ backgroundColor: EDGE_COLOR.uplink }} /> {t('topology.legend.uplink')}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-3 inline-block" style={{ borderTop: `2px dashed ${EDGE_COLOR.virtual}` }} /> {t('topology.legend.virtual')}
                                 </span>
                             </div>
                         </div>

@@ -171,6 +171,11 @@ export class WiresharkVendorService {
             '00:1c:14': 'VMware, Inc.',
             '08:00:27': 'PCS Systemtechnik GmbH (VirtualBox)',
             '0a:00:27': 'PCS Systemtechnik GmbH (VirtualBox)',
+            '52:54:00': 'QEMU / KVM',
+            'bc:24:11': 'Proxmox Server Solutions',
+            '00:16:3e': 'Xensource, Inc.',
+            '00:15:5d': 'Microsoft Corporation (Hyper-V)',
+            '02:42:ac': 'Docker bridge',
             // Networking equipment
             '00:00:0c': 'Cisco Systems, Inc',
             '00:00:29': 'Cisco Systems, Inc',

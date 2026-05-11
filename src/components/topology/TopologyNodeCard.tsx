@@ -5,9 +5,9 @@
 
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv } from 'lucide-react';
+import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers } from 'lucide-react';
 
-type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'unknown';
+type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 
 export interface SwitchPort {
@@ -43,6 +43,13 @@ export interface TopologyNodeData extends Record<string, unknown> {
     connection?: ClientConnection;
     editingMode?: boolean;
     localUplinkPortIdxs?: number[];
+    /** vm-host specific — count of VM children */
+    vmCount?: number;
+    /** vm-host specific — VM child count split by active flag */
+    vmActiveCount?: number;
+    vmInactiveCount?: number;
+    /** vm-host specific — hypervisor label (proxmox/kvm/vmware/...) */
+    hypervisor?: string;
 }
 
 function formatConnSpeed(mbps?: number): string | undefined {
@@ -75,12 +82,13 @@ function isFreeboxPlayer(d: TopologyNodeData): boolean {
 }
 
 const KIND_STYLE: Record<NodeKind, { icon: React.ElementType; ring: string; tint: string; iconColor: string; border: string }> = {
-    gateway:  { icon: Router,     ring: 'ring-amber-400/70',   tint: 'from-amber-600/40 to-amber-800/20',     iconColor: 'text-amber-200',   border: 'border-amber-400/40' },
-    switch:   { icon: Server,     ring: 'ring-emerald-400/70', tint: 'from-emerald-600/40 to-emerald-800/20', iconColor: 'text-emerald-200', border: 'border-emerald-400/40' },
-    ap:       { icon: Wifi,       ring: 'ring-sky-400/70',     tint: 'from-sky-600/40 to-sky-800/20',         iconColor: 'text-sky-200',     border: 'border-sky-400/40' },
-    repeater: { icon: Repeat,     ring: 'ring-purple-400/70',  tint: 'from-purple-600/40 to-purple-800/20',   iconColor: 'text-purple-200',  border: 'border-purple-400/40' },
-    client:   { icon: Smartphone, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-200',   border: 'border-slate-500/50' },
-    unknown:  { icon: HelpCircle, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-300',   border: 'border-slate-500/50' }
+    gateway:   { icon: Router,     ring: 'ring-amber-400/70',   tint: 'from-amber-600/40 to-amber-800/20',     iconColor: 'text-amber-200',   border: 'border-amber-400/40' },
+    switch:    { icon: Server,     ring: 'ring-emerald-400/70', tint: 'from-emerald-600/40 to-emerald-800/20', iconColor: 'text-emerald-200', border: 'border-emerald-400/40' },
+    ap:        { icon: Wifi,       ring: 'ring-sky-400/70',     tint: 'from-sky-600/40 to-sky-800/20',         iconColor: 'text-sky-200',     border: 'border-sky-400/40' },
+    repeater:  { icon: Repeat,     ring: 'ring-purple-400/70',  tint: 'from-purple-600/40 to-purple-800/20',   iconColor: 'text-purple-200',  border: 'border-purple-400/40' },
+    'vm-host': { icon: Layers,     ring: 'ring-fuchsia-400/70', tint: 'from-fuchsia-600/40 to-indigo-800/20',  iconColor: 'text-fuchsia-200', border: 'border-fuchsia-400/40' },
+    client:    { icon: Smartphone, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-200',   border: 'border-slate-500/50' },
+    unknown:   { icon: HelpCircle, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-300',   border: 'border-slate-500/50' }
 };
 
 const FreeboxLogo: React.FC<{ size?: number }> = ({ size = 18 }) => (
@@ -131,14 +139,18 @@ const PORT_CELL_WIDTH = 28;
 // client cards so they read clearly even in a busy graph. Keep in sync with
 // NODE_WIDTH in topologyLayout.ts — dagre needs the same value.
 const INFRA_CARD_WIDTH = 300;
+// vm-host cards carry an extra info row (vmCount + hypervisor), so they get
+// a touch more width than regular infra to keep things uncramped.
+const VM_HOST_CARD_WIDTH = 340;
 const CLIENT_CARD_WIDTH = 170;
 const UPLINK_CHIP_W = 64;
 const UPLINK_CHIP_GAP = 6;
 const HIDDEN_HANDLE_CLASS = '!opacity-0 !w-1 !h-1 !border-0';
 
 function pickCardWidth(d: TopologyNodeData): number {
-    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
+    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater' || d.kind === 'vm-host';
     if (!isInfra) return CLIENT_CARD_WIDTH;
+    if (d.kind === 'vm-host') return VM_HOST_CARD_WIDTH;
     const ports = (d.kind === 'switch' || d.kind === 'gateway') ? d.ports : undefined;
     if (ports && ports.length > 0 && ports.length <= SWITCH_INLINE_PORTS_MAX) {
         return Math.max(INFRA_CARD_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
@@ -220,7 +232,7 @@ function pickConnectionChipClass(inactive: boolean, medium: 'wifi' | 'ethernet')
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
-    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater';
+    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater' || d.kind === 'vm-host';
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
     const ClientIcon = isInfra ? null : pickClientIcon(d, style.icon);
     const Icon = BrandIcon ?? ClientIcon ?? style.icon;
@@ -318,8 +330,44 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                             </div>
                         );
                     })()}
+                    {d.vendor && d.kind === 'vm-host' && (
+                        <div className="mt-0.5 text-[10px] text-slate-400 truncate" title={d.vendor}>
+                            {d.vendor}
+                        </div>
+                    )}
                 </div>
             </div>
+            {d.kind === 'vm-host' && (
+                <div className="relative px-3 pb-2.5 pt-1 border-t border-white/10 flex items-center gap-1.5 flex-wrap text-[11px]">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/40 font-mono font-bold">
+                        <Layers size={10} className="flex-none" />
+                        {d.vmCount ?? '?'} VM{(d.vmCount ?? 0) > 1 ? 's' : ''}
+                    </span>
+                    {typeof d.vmActiveCount === 'number' && d.vmActiveCount > 0 && (
+                        <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-emerald-500/15 text-emerald-200 border-emerald-400/40 font-mono"
+                            title="Active VMs"
+                        >
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {d.vmActiveCount}
+                        </span>
+                    )}
+                    {typeof d.vmInactiveCount === 'number' && d.vmInactiveCount > 0 && (
+                        <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-rose-500/10 text-rose-200 border-rose-400/30 font-mono"
+                            title="Inactive / offline VMs"
+                        >
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" />
+                            {d.vmInactiveCount}
+                        </span>
+                    )}
+                    {d.hypervisor && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded border bg-slate-800/60 text-slate-200 border-slate-600/50 uppercase tracking-wide text-[10px]">
+                            {d.hypervisor}
+                        </span>
+                    )}
+                </div>
+            )}
             {bottomPorts && bottomPorts.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
                     <SwitchPortGrid
@@ -357,6 +405,16 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     </div>
                 );
             })()}
+            {/* Status dot for clients/unknown — green=active, rose=inactive.
+                Infra kinds use KIND_BADGE (above) instead, so we skip them. */}
+            {!isInfra && (
+                <div
+                    title={inactive ? 'Inactive / offline' : 'Active'}
+                    className={`absolute top-1 right-1 z-10 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
+                        inactive ? 'bg-rose-500' : 'bg-emerald-500'
+                    }`}
+                />
+            )}
             <Handle id="s" type="source" position={Position.Bottom} className={HIDDEN_HANDLE_CLASS} />
         </div>
     );

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.01] - 2026-05-11
+
+### Changes
+
+- feat(topology): detect virtual machines by MAC OUI and group them into a synthetic `vm-host` node. Known prefixes: Proxmox / KVM (`bc:24:11`, `52:54:00`), VMware, VirtualBox, Xen, Hyper-V, Docker bridge. Matching OUIs are also added to the wireshark vendor defaults so other parts of the app benefit.
+- feat(topology): hypervisor anchoring — when UniFi sees ANY VM of a hypervisor on a switch port, ALL VMs of that hypervisor are reparented to that same UniFi port. The Freebox shadow edges to those VMs are dropped. Result: one stack card appears on the real UniFi port, not on `freebox:box`. Anchor is skipped when UniFi sees the hypervisor on multiple ports (ambiguous multi-host cluster).
+- feat(topology): physical host fold-in — when a vm-host is synthesized and exactly one non-VM client sits on the same port, fold its label / IP / MAC / vendor into the vm-host card so the user doesn't see a phantom duplicate next to the stack.
+- feat(topology): vm-host card is larger (340 × 120) and carries an info row with active / inactive VM counts, hypervisor label, and the physical host MAC. Vendor of the physical NIC is shown under the IP.
+- feat(topology): clear status dot in the top-right of every client card — emerald = active, rose = offline / inactive. Makes the deactivated-in-Freebox state visually unambiguous.
+- feat(topology): bucket VMs by `(parent, port)` when port info is available, otherwise fallback to `(parent, hypervisor)` so Freebox-only views (no port reporting) still group correctly.
+- chore(i18n): add `vm-host` kind + `virtual` edge legend keys to the en + fr locale bundles.
+- chore(topology): filter-state migration — `loadPersistedFilters` now backfills missing entries from `ALL_KINDS` / `ALL_SOURCES`, so adding a new kind (like `vm-host`) doesn't silently hide it for users with older localStorage state.
+- `SCHEMA_VERSION` 13 → 18 (covers all intermediate steps and forces a fresh rebuild on existing deployments).
+
+---
+
 ## [0.8.00] - 2026-05-11
 
 ### Changes

@@ -52,7 +52,28 @@ const FREEBOX_BOX_ID = 'freebox:box';
 //      (b) their vendor contains "Ubiquiti" while at least one UniFi infra
 //      node exists. Handles DMZ setups where the Freebox sees the UCG as a
 //      LAN client with a different MAC than the UniFi-side one.
-const SCHEMA_VERSION = 13;
+// 14 — VM-aware grouping: tag client/unknown nodes whose MAC OUI matches a
+//      known hypervisor (KVM/Proxmox/VMware/Xen/Hyper-V/VirtualBox/Docker),
+//      and when 2+ VMs share the same switch port, synthesize a vm-host
+//      node + virtual edges so the graph shows one cable to the hypervisor
+//      and the VMs branch off it.
+// 15 — Same as 14 but bucket also fires when portIndex is unknown: fallback
+//      key (parentId, hypervisor) handles Freebox-only views that don't
+//      report ports (one hypervisor on the same parent ≈ one host).
+// 16 — VM hypervisor anchoring: if UniFi sees ANY VM of a hypervisor on a
+//      switch port, reparent ALL VMs of that hypervisor to that same UniFi
+//      port (drop their Freebox shadow edges). Then bucket+synth produces a
+//      single vm-host card on the real UniFi port instead of a stale stack
+//      on freebox:box. Anchor is skipped if UniFi sees the hypervisor on
+//      multiple ports (ambiguous multi-host cluster).
+// 17 — Fold the physical hypervisor host into the vm-host card: when a
+//      vm-host is synthesized on a port and exactly one non-VM client also
+//      sits on that port, take its label/IP/MAC/vendor onto the vm-host
+//      and drop the standalone client so the user doesn't see a phantom
+//      duplicate next to the stack.
+// 18 — vm-host metadata now carries vmActiveCount / vmInactiveCount so the
+//      stack card can show "21 active · 1 offline" at a glance.
+const SCHEMA_VERSION = 18;
 
 interface SwitchPort {
     idx: number;
@@ -698,6 +719,392 @@ function pruneFreeboxNodesDuplicatingUniFiInfra(
     dropEdgesTouching(edges, dropped);
 }
 
+// Group VM clients sharing the same switch port into a synthetic "vm-host"
+// node. We detect VMs by the well-known MAC OUI prefixes used by hypervisors
+// (KVM/Proxmox, VMware, Xen, Hyper-V, VirtualBox, Docker). When 2+ VMs land
+// on the same switch port, we insert a vm-host between them so the graph
+// shows one cable to the hypervisor and the VMs branch off virtually.
+
+type Hypervisor = 'kvm' | 'proxmox' | 'vmware' | 'virtualbox' | 'xen' | 'hyperv' | 'docker';
+
+const VM_OUI_PREFIXES: ReadonlyArray<readonly [string, Hypervisor]> = [
+    ['52:54:00', 'kvm'],
+    ['bc:24:11', 'proxmox'],
+    ['00:50:56', 'vmware'],
+    ['00:0c:29', 'vmware'],
+    ['00:05:69', 'vmware'],
+    ['00:1c:14', 'vmware'],
+    ['08:00:27', 'virtualbox'],
+    ['0a:00:27', 'virtualbox'],
+    ['00:16:3e', 'xen'],
+    ['00:15:5d', 'hyperv'],
+    ['02:42:ac', 'docker']
+];
+
+function detectHypervisorFromMac(mac: string | undefined): Hypervisor | null {
+    if (!mac) return null;
+    const norm = mac.toLowerCase();
+    for (const [prefix, hv] of VM_OUI_PREFIXES) {
+        if (norm.startsWith(prefix)) return hv;
+    }
+    return null;
+}
+
+function tagVMClients(nodes: Map<string, TopologyNode>): void {
+    for (const node of nodes.values()) {
+        if (node.kind !== 'client' && node.kind !== 'unknown') continue;
+        const hv = detectHypervisorFromMac(node.mac);
+        if (!hv) continue;
+        node.metadata = { ...(node.metadata ?? {}), isVM: true, hypervisor: hv };
+    }
+}
+
+interface VmBucket {
+    parentId: string;
+    portIndex: number | undefined;
+    sourcePlugin: SourcePlugin;
+    vmIds: string[];
+    edgeIds: string[];
+    hypervisors: Set<Hypervisor>;
+}
+
+// Bucket key: port-based when the source plugin gives us a port (UniFi
+// switch), hypervisor-based otherwise (Freebox sees VMs as plain LAN
+// clients without port info — one hypervisor on the same parent ≈ one host).
+function pickBucketPartition(portIndex: number | undefined, hv: Hypervisor | null): string {
+    if (typeof portIndex === 'number') return `p${portIndex}`;
+    return `h${hv ?? 'mixed'}`;
+}
+
+function bucketVMsByParent(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): Map<string, VmBucket> {
+    const buckets = new Map<string, VmBucket>();
+    for (const [edgeId, edge] of edges) {
+        if (edge.medium !== 'ethernet') continue;
+        const target = nodes.get(edge.target);
+        const parent = nodes.get(edge.source);
+        if (!target || !parent) continue;
+        if (target.metadata?.isVM !== true) continue;
+        if (parent.kind !== 'switch' && parent.kind !== 'gateway') continue;
+        const hv = (target.metadata.hypervisor ?? null) as Hypervisor | null;
+        const partition = pickBucketPartition(edge.portIndex, hv);
+        const key = `${parent.id}|${partition}`;
+        let bucket = buckets.get(key);
+        if (!bucket) {
+            bucket = {
+                parentId: parent.id,
+                portIndex: edge.portIndex,
+                sourcePlugin: edge.source_plugin,
+                vmIds: [],
+                edgeIds: [],
+                hypervisors: new Set()
+            };
+            buckets.set(key, bucket);
+        }
+        bucket.vmIds.push(target.id);
+        bucket.edgeIds.push(edgeId);
+        if (hv) bucket.hypervisors.add(hv);
+    }
+    return buckets;
+}
+
+function buildVmHostLabel(hypervisors: Set<Hypervisor>): string {
+    if (hypervisors.size !== 1) return 'VM host';
+    const hv = hypervisors.values().next().value;
+    switch (hv) {
+        case 'kvm':
+        case 'proxmox':   return 'Proxmox / KVM';
+        case 'vmware':    return 'VMware host';
+        case 'virtualbox':return 'VirtualBox host';
+        case 'xen':       return 'Xen host';
+        case 'hyperv':    return 'Hyper-V host';
+        case 'docker':    return 'Docker host';
+        default:          return 'VM host';
+    }
+}
+
+function pickVmHostIdSuffix(bucket: VmBucket): string {
+    if (typeof bucket.portIndex === 'number') return `p${bucket.portIndex}`;
+    const hv = bucket.hypervisors.size === 1
+        ? bucket.hypervisors.values().next().value
+        : 'mixed';
+    return `h${hv}`;
+}
+
+function synthesizeOneVmHost(
+    bucket: VmBucket,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const suffix = pickVmHostIdSuffix(bucket);
+    const hostId = `vmhost:${bucket.parentId}:${suffix}`;
+    let activeCount = 0;
+    for (const vmId of bucket.vmIds) {
+        const vm = nodes.get(vmId);
+        if (vm?.metadata?.active !== false) activeCount++;
+    }
+    const inactiveCount = bucket.vmIds.length - activeCount;
+    nodes.set(hostId, {
+        id: hostId,
+        kind: 'vm-host',
+        label: buildVmHostLabel(bucket.hypervisors),
+        sources: [],
+        metadata: {
+            // vm-host counts as active if any of its VMs is active — that way
+            // the card itself doesn't get faded just because most VMs are off.
+            active: activeCount > 0,
+            vmCount: bucket.vmIds.length,
+            vmActiveCount: activeCount,
+            vmInactiveCount: inactiveCount,
+            hypervisor: bucket.hypervisors.size === 1
+                ? bucket.hypervisors.values().next().value
+                : 'mixed'
+        }
+    });
+    for (const edgeId of bucket.edgeIds) edges.delete(edgeId);
+    const switchEdgeId = `vmhost-link:${bucket.parentId}:${suffix}`;
+    const switchEdge: TopologyEdge = {
+        id: switchEdgeId,
+        source: bucket.parentId,
+        target: hostId,
+        medium: 'ethernet',
+        source_plugin: bucket.sourcePlugin
+    };
+    if (typeof bucket.portIndex === 'number') switchEdge.portIndex = bucket.portIndex;
+    edges.set(switchEdgeId, switchEdge);
+    for (const vmId of bucket.vmIds) {
+        const virtId = `virt:${hostId}->${vmId}`;
+        edges.set(virtId, {
+            id: virtId,
+            source: hostId,
+            target: vmId,
+            medium: 'virtual',
+            source_plugin: bucket.sourcePlugin
+        });
+    }
+}
+
+interface HypervisorAnchor {
+    parentId: string;
+    portIndex: number | undefined;
+    sourcePlugin: SourcePlugin;
+}
+
+// Find the canonical UniFi switch port for each hypervisor. Premise: same
+// hypervisor seen on a UniFi switch port ⇒ that's the physical host's uplink
+// to the LAN. If UniFi reports >1 distinct port for the same hypervisor we
+// can't disambiguate (multi-host cluster), so we skip — better leave the
+// graph as-is than guess wrong.
+function buildHypervisorAnchorMap(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): Map<Hypervisor, HypervisorAnchor> {
+    const seenPortsByHv = new Map<Hypervisor, Map<string, HypervisorAnchor>>();
+    for (const edge of edges.values()) {
+        if (edge.source_plugin !== 'unifi') continue;
+        if (edge.medium !== 'ethernet') continue;
+        const target = nodes.get(edge.target);
+        if (!target || target.metadata?.isVM !== true) continue;
+        const hv = target.metadata.hypervisor as Hypervisor | undefined;
+        if (!hv) continue;
+        const parent = nodes.get(edge.source);
+        if (!parent || (parent.kind !== 'switch' && parent.kind !== 'gateway')) continue;
+        const key = `${parent.id}|${edge.portIndex ?? 'noport'}`;
+        let ports = seenPortsByHv.get(hv);
+        if (!ports) {
+            ports = new Map();
+            seenPortsByHv.set(hv, ports);
+        }
+        if (!ports.has(key)) {
+            ports.set(key, {
+                parentId: parent.id,
+                portIndex: edge.portIndex,
+                sourcePlugin: 'unifi'
+            });
+        }
+    }
+    const anchors = new Map<Hypervisor, HypervisorAnchor>();
+    for (const [hv, ports] of seenPortsByHv) {
+        if (ports.size === 1) {
+            const [first] = ports.values();
+            anchors.set(hv, first);
+        }
+    }
+    return anchors;
+}
+
+function pickAnchorForVMNode(
+    node: TopologyNode,
+    anchors: Map<Hypervisor, HypervisorAnchor>
+): HypervisorAnchor | null {
+    if (node.metadata?.isVM !== true) return null;
+    const hv = node.metadata.hypervisor as Hypervisor | undefined;
+    if (!hv) return null;
+    return anchors.get(hv) ?? null;
+}
+
+function applyAnchorToVMEdges(
+    node: TopologyNode,
+    anchor: HypervisorAnchor,
+    edges: Map<string, TopologyEdge>
+): void {
+    let alreadyOnAnchor = false;
+    const edgesToDrop: string[] = [];
+    for (const [edgeId, edge] of edges) {
+        if (edge.target !== node.id) continue;
+        if (edge.medium !== 'ethernet' && edge.medium !== 'wifi') continue;
+        if (edge.source === anchor.parentId && edge.portIndex === anchor.portIndex) {
+            alreadyOnAnchor = true;
+            continue;
+        }
+        edgesToDrop.push(edgeId);
+    }
+    for (const id of edgesToDrop) edges.delete(id);
+    if (alreadyOnAnchor) return;
+    const newId = `vm-anchor:${anchor.parentId}:${anchor.portIndex ?? 'n'}:${node.id}`;
+    const newEdge: TopologyEdge = {
+        id: newId,
+        source: anchor.parentId,
+        target: node.id,
+        medium: 'ethernet',
+        source_plugin: anchor.sourcePlugin
+    };
+    if (typeof anchor.portIndex === 'number') newEdge.portIndex = anchor.portIndex;
+    edges.set(newId, newEdge);
+}
+
+// Reparent every VM of a hypervisor onto its UniFi anchor (when one exists),
+// dropping any pre-existing parent edges to that VM. Result: all VMs sharing
+// a hypervisor end up on the same UniFi switch port, ready to bucket+synth
+// into a single vm-host card on the right physical port.
+function reparentVMsToHypervisorAnchor(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const anchors = buildHypervisorAnchorMap(nodes, edges);
+    if (anchors.size === 0) return;
+    for (const node of nodes.values()) {
+        const anchor = pickAnchorForVMNode(node, anchors);
+        if (!anchor) continue;
+        applyAnchorToVMEdges(node, anchor, edges);
+    }
+}
+
+// After a vm-host is synthesized on (parent, port), look for the physical
+// hypervisor host on the same port (its NIC's real MAC OUI doesn't match a
+// VM OUI, so it's just a non-VM client there). If there is EXACTLY ONE such
+// non-VM client on the port, it's the host — fold its identity (label, IP,
+// MAC, vendor) into the vm-host card and drop it from the graph so the user
+// doesn't see a phantom duplicate next to the stack.
+function findPhysicalHostOnPort(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>,
+    parentId: string,
+    portIndex: number | undefined
+): TopologyNode | null {
+    const candidates: TopologyNode[] = [];
+    for (const edge of edges.values()) {
+        if (edge.source !== parentId) continue;
+        if (edge.medium !== 'ethernet') continue;
+        if (edge.portIndex !== portIndex) continue;
+        const target = nodes.get(edge.target);
+        if (!target) continue;
+        if (target.kind !== 'client' && target.kind !== 'unknown') continue;
+        if (target.metadata?.isVM === true) continue;
+        candidates.push(target);
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+}
+
+function mergePhysicalHostIntoVmHost(
+    vmHost: TopologyNode,
+    physicalHost: TopologyNode,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    if (physicalHost.label) vmHost.label = physicalHost.label;
+    if (physicalHost.ip) vmHost.ip = physicalHost.ip;
+    if (physicalHost.mac) vmHost.mac = physicalHost.mac;
+    if (physicalHost.vendor) vmHost.vendor = physicalHost.vendor;
+    vmHost.metadata = {
+        ...vmHost.metadata,
+        hostHostname: physicalHost.label,
+        hostIp: physicalHost.ip,
+        hostMac: physicalHost.mac,
+        hostVendor: physicalHost.vendor,
+        hostType: physicalHost.metadata?.host_type
+    };
+    nodes.delete(physicalHost.id);
+    const edgesToDrop: string[] = [];
+    for (const [edgeId, edge] of edges) {
+        if (edge.source === physicalHost.id || edge.target === physicalHost.id) {
+            edgesToDrop.push(edgeId);
+        }
+    }
+    for (const id of edgesToDrop) edges.delete(id);
+}
+
+function summarizeVmTagging(nodes: Map<string, TopologyNode>): { taggedCount: number; hvBreakdown: Record<string, number> } {
+    let taggedCount = 0;
+    const hvBreakdown: Record<string, number> = {};
+    for (const n of nodes.values()) {
+        if (n.metadata?.isVM !== true) continue;
+        taggedCount++;
+        const hv = String(n.metadata.hypervisor ?? '?');
+        hvBreakdown[hv] = (hvBreakdown[hv] ?? 0) + 1;
+    }
+    return { taggedCount, hvBreakdown };
+}
+
+function processBucket(
+    bucket: VmBucket,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const hvList = Array.from(bucket.hypervisors).join('+') || 'unknown';
+    if (bucket.vmIds.length < 2) {
+        logger.debug(
+            'Topology',
+            `VM bucket skipped (only ${bucket.vmIds.length}): parent=${bucket.parentId} port=${bucket.portIndex} hv=${hvList}`
+        );
+        return;
+    }
+    logger.info(
+        'Topology',
+        `VM stack synth: parent=${bucket.parentId} port=${bucket.portIndex} count=${bucket.vmIds.length} hv=${hvList}`
+    );
+    synthesizeOneVmHost(bucket, nodes, edges);
+    const hostId = `vmhost:${bucket.parentId}:${pickVmHostIdSuffix(bucket)}`;
+    const vmHost = nodes.get(hostId);
+    if (!vmHost) return;
+    const physical = findPhysicalHostOnPort(nodes, edges, bucket.parentId, bucket.portIndex);
+    if (!physical) return;
+    logger.info(
+        'Topology',
+        `VM stack merge host: vmhost=${hostId} physical=${physical.id} label=${physical.label} ip=${physical.ip ?? '-'}`
+    );
+    mergePhysicalHostIntoVmHost(vmHost, physical, nodes, edges);
+}
+
+function detectAndGroupVMs(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    tagVMClients(nodes);
+    reparentVMsToHypervisorAnchor(nodes, edges);
+    const { taggedCount, hvBreakdown } = summarizeVmTagging(nodes);
+    const buckets = bucketVMsByParent(nodes, edges);
+    logger.info(
+        'Topology',
+        `VM detection — tagged ${taggedCount} client(s) [${
+            Object.entries(hvBreakdown).map(([k, v]) => `${k}=${v}`).join(', ') || 'none'
+        }], ${buckets.size} parent-port bucket(s)`
+    );
+    for (const bucket of buckets.values()) processBucket(bucket, nodes, edges);
+}
+
 // Belt-and-braces: any non-uplink edge connecting two infra nodes is
 // dropped. Infrastructure should only be wired together via uplinks.
 function pruneNonUplinkInfraEdges(
@@ -764,6 +1171,7 @@ class TopologyService {
         pruneRedundantFreeboxEdges(nodes, edges);
         pruneFreeboxNodesDuplicatingUniFiInfra(nodes, edges);
         pruneNonUplinkInfraEdges(nodes, edges);
+        detectAndGroupVMs(nodes, edges);
 
         return {
             nodes: Array.from(nodes.values()),

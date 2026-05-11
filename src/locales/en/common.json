@@ -94,6 +94,7 @@
       "switch": "Switch",
       "ap": "Access point",
       "repeater": "Repeater",
+      "vm-host": "VM host",
       "client": "Client",
       "unknown": "Unknown"
     },
@@ -120,6 +121,7 @@
       "ethernet": "Ethernet",
       "wifi": "Wi-Fi",
       "uplink": "Uplink",
+      "virtual": "Virtual (VM)",
       "portUp": "Wired client",
       "portFibre": "Fibre / SFP+",
       "portUplink": "Uplink",

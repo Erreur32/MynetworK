@@ -30,6 +30,9 @@ export type LayoutMode = 'tree' | 'horizontal' | 'grouped';
 // edges land off-port.
 const NODE_WIDTH = 300;
 const NODE_HEIGHT = 92;
+// vm-host: same height as regular infra + an extra info row (~28 px).
+const VM_HOST_NODE_WIDTH = 340;
+const VM_HOST_NODE_HEIGHT = 120;
 const CLIENT_NODE_WIDTH = 170;
 
 const SWITCH_INLINE_PORTS_MAX = 12;
@@ -45,12 +48,13 @@ function portsFor(node: Node): TopologyNodeData['ports'] {
 
 function isInfraData(data: TopologyNodeData | undefined): boolean {
     if (!data) return false;
-    return data.kind === 'gateway' || data.kind === 'switch' || data.kind === 'ap' || data.kind === 'repeater';
+    return INFRA_KINDS.has(data.kind);
 }
 
 export function getNodeWidth(node: Node): number {
     const data = node.data as TopologyNodeData | undefined;
     if (!isInfraData(data)) return CLIENT_NODE_WIDTH;
+    if (data?.kind === 'vm-host') return VM_HOST_NODE_WIDTH;
     const ports = portsFor(node);
     if (ports && ports.length > 0 && ports.length <= SWITCH_INLINE_PORTS_MAX) {
         return Math.max(NODE_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
@@ -61,6 +65,7 @@ export function getNodeWidth(node: Node): number {
 function nodeHeightFor(node: Node): number {
     const data = node.data as TopologyNodeData | undefined;
     if (!isInfraData(data)) return CLIENT_H;
+    if (data?.kind === 'vm-host') return VM_HOST_NODE_HEIGHT;
     const ports = portsFor(node);
     if (!ports || ports.length === 0) return NODE_HEIGHT;
     const fitsInline = ports.length <= SWITCH_INLINE_PORTS_MAX;
@@ -75,7 +80,9 @@ const CLIENT_GAP_Y = 8;
 const GROUP_PAD = 12;
 const GROUP_PAD_TOP = 36;
 
-const INFRA_KINDS = new Set(['gateway', 'switch', 'ap', 'repeater']);
+// Treat vm-host as infra so it gets the bigger card, sits in the dagre
+// hierarchy (under its switch), and its child VMs cluster below it.
+const INFRA_KINDS = new Set(['gateway', 'switch', 'ap', 'repeater', 'vm-host']);
 
 function getNodeKind(node: Node): string {
     const data = node.data as TopologyNodeData | undefined;
