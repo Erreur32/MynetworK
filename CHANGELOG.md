@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.3] - 2026-05-11
+
+### Changes
+
+- chore(release): version-bump only. Same code as v0.8.02 — the docker-publish workflow uses `docker/metadata-action` with `type=semver,pattern={{version}}`, which strictly rejects leading zeros (`0.8.02` is not valid SemVer). The tag-triggered build produced no image tag and failed with `tag is needed when pushing to registry`. Renaming to `0.8.3` fixes the CI pipeline.
+- docs: future patch versions will follow plain SemVer (`0.8.4`, `0.8.5`, … `0.8.10`) — no zero padding.
+
+---
+
 ## [0.8.02] - 2026-05-11
 
 ### Changes
