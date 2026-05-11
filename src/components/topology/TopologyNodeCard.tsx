@@ -124,10 +124,15 @@ function pickLabelClass(inactive: boolean, isInfra: boolean): string {
 }
 
 const SWITCH_INLINE_PORTS_MAX = 12;
-const PORT_CELL_WIDTH = 22;
-const INFRA_CARD_WIDTH = 240;
+// Bottom-row port cell footprint (cell width + gap). Must stay in sync with
+// the xs cell size in SwitchPortGrid and with the handle math below.
+const PORT_CELL_WIDTH = 28;
+// Infra cards (gateway/switch/AP/repeater) are intentionally larger than
+// client cards so they read clearly even in a busy graph. Keep in sync with
+// NODE_WIDTH in topologyLayout.ts — dagre needs the same value.
+const INFRA_CARD_WIDTH = 300;
 const CLIENT_CARD_WIDTH = 170;
-const UPLINK_CHIP_W = 58;
+const UPLINK_CHIP_W = 64;
 const UPLINK_CHIP_GAP = 6;
 const HIDDEN_HANDLE_CLASS = '!opacity-0 !w-1 !h-1 !border-0';
 
@@ -175,7 +180,10 @@ function portTooltip(port: SwitchPort): string {
 }
 
 export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm'; wrap?: boolean }> = ({ ports, cellSize = 'sm', wrap = true }) => {
-    const cls = cellSize === 'sm' ? 'w-[22px] h-[18px] text-[9px]' : 'w-[18px] h-[14px] text-[8px]';
+    // xs is used by the infra card's bottom port row. Width MUST match the
+    // handle math (`xPx = 20 + gridIdx * 26`) so the edge endpoints land on
+    // the centre of each port cell.
+    const cls = cellSize === 'sm' ? 'w-[26px] h-[22px] text-[10px]' : 'w-[24px] h-[20px] text-[10px]';
     const wrapClass = wrap ? 'flex-wrap' : 'flex-nowrap';
     return (
         <div className={`flex ${wrapClass} gap-0.5`}>
@@ -188,7 +196,7 @@ export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | '
                     {p.idx}
                     {p.poe && p.up && (
                         <span
-                            className="absolute -top-1 -right-1 block w-2 h-2 rounded-full bg-amber-400 ring-1 ring-amber-200 shadow-md pointer-events-none"
+                            className="absolute -top-1 -right-1 block w-2.5 h-2.5 rounded-full bg-amber-400 ring-1 ring-amber-200 shadow-md pointer-events-none"
                             aria-label="PoE active"
                         />
                     )}
@@ -284,16 +292,16 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             <Handle id="t" type="target" position={Position.Top} className={HIDDEN_HANDLE_CLASS} />
             <Handle id="tl" type="target" position={Position.Left} className={HIDDEN_HANDLE_CLASS} />
             <Handle id="sr" type="source" position={Position.Right} className={HIDDEN_HANDLE_CLASS} />
-            <div className="relative flex items-center gap-2 p-2.5">
-                <div className={`flex-none w-9 h-9 rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor}`}>
-                    <Icon size={18} />
+            <div className={`relative flex items-center ${isInfra ? 'gap-2.5 p-3' : 'gap-2 p-2.5'}`}>
+                <div className={`flex-none rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor} ${isInfra ? 'w-11 h-11' : 'w-9 h-9'}`}>
+                    <Icon size={isInfra ? 22 : 18} />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-semibold truncate ${labelClass}`}>
+                    <div className={`font-semibold truncate ${isInfra ? 'text-base' : 'text-sm'} ${labelClass}`}>
                         {d.label || '—'}
                     </div>
                     {d.ip && (
-                        <div className={`text-[11px] font-mono truncate ${
+                        <div className={`font-mono truncate ${isInfra ? 'text-xs' : 'text-[11px]'} ${
                             inactive ? 'text-slate-500' : 'text-slate-300'
                         }`}>{d.ip}</div>
                     )}
@@ -321,8 +329,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     />
                     {/* Source-only per-port handles. Uplink targets live on the top chips. */}
                     {bottomPorts.length <= SWITCH_INLINE_PORTS_MAX && bottomPorts.map((p, gridIdx) => {
-                        // x = grid pad (8) + half cell (9) + gridIdx * (cell 18 + gap 2)
-                        const xPx = 17 + gridIdx * 20;
+                        // x = grid pad (8) + half cell (12) + gridIdx * (cell 24 + gap 2)
+                        // Keep in sync with the xs cell size in SwitchPortGrid.
+                        const xPx = 20 + gridIdx * 26;
                         return (
                             <Handle
                                 key={`p${p.idx}`}
@@ -342,9 +351,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                 return (
                     <div
                         title={badge.title}
-                        className={`absolute top-1 right-1 z-10 flex items-center justify-center w-4 h-4 rounded-full ${badge.bg} ring-1 ${badge.ring} shadow`}
+                        className={`absolute top-1 right-1 z-10 flex items-center justify-center rounded-full ${badge.bg} ring-1 ${badge.ring} shadow ${isInfra ? 'w-5 h-5' : 'w-4 h-4'}`}
                     >
-                        <BadgeIcon size={9} className="text-white" strokeWidth={3} />
+                        <BadgeIcon size={isInfra ? 11 : 9} className="text-white" strokeWidth={3} />
                     </div>
                 );
             })()}

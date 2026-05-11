@@ -25,12 +25,16 @@ export type LayoutMode = 'tree' | 'horizontal' | 'grouped';
 
 // Network infrastructure cards (gateway, switch, AP, repeater) — bigger
 // than the client cards so they read clearly even in a sea of small clients.
-const NODE_WIDTH = 240;
-const NODE_HEIGHT = 76;
+// MUST stay in sync with INFRA_CARD_WIDTH / PORT_CELL_WIDTH in
+// TopologyNodeCard.tsx — dagre uses these for hit boxes, so a mismatch makes
+// edges land off-port.
+const NODE_WIDTH = 300;
+const NODE_HEIGHT = 92;
 const CLIENT_NODE_WIDTH = 170;
 
 const SWITCH_INLINE_PORTS_MAX = 12;
-const PORT_CELL_WIDTH = 22;
+const PORT_CELL_WIDTH = 28;
+const PORT_ROW_HEIGHT = 22;
 
 function portsFor(node: Node): TopologyNodeData['ports'] {
     const data = node.data as TopologyNodeData | undefined;
@@ -61,7 +65,7 @@ function nodeHeightFor(node: Node): number {
     if (!ports || ports.length === 0) return NODE_HEIGHT;
     const fitsInline = ports.length <= SWITCH_INLINE_PORTS_MAX;
     const rows = fitsInline ? 1 : Math.ceil(ports.length / 8);
-    return NODE_HEIGHT + rows * 18 + 6;
+    return NODE_HEIGHT + rows * PORT_ROW_HEIGHT + 6;
 }
 
 const CLIENT_W = CLIENT_NODE_WIDTH;

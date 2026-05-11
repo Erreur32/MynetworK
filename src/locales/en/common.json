@@ -116,9 +116,15 @@
       "title": "Legend",
       "links": "Links",
       "nodes": "Nodes",
+      "ports": "Ports",
       "ethernet": "Ethernet",
       "wifi": "Wi-Fi",
-      "uplink": "Uplink"
+      "uplink": "Uplink",
+      "portUp": "Wired client",
+      "portFibre": "Fibre / SFP+",
+      "portUplink": "Uplink",
+      "portDown": "Down",
+      "poe": "PoE active"
     },
     "layout": {
       "grouped": "Grouped",

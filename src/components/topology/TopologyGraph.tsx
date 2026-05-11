@@ -110,12 +110,50 @@ const NODE_KIND_LEGEND: Array<{ id: NodeKind; bar: string }> = [
     { id: 'unknown',  bar: 'bg-slate-500' }
 ];
 
+const PORT_LEGEND: Array<{ key: 'portUp' | 'portFibre' | 'portUplink' | 'portDown'; swatch: string }> = [
+    { key: 'portUp',     swatch: 'bg-emerald-500 border-emerald-300' },
+    { key: 'portFibre',  swatch: 'bg-cyan-500 border-cyan-300' },
+    { key: 'portUplink', swatch: 'bg-purple-500 border-purple-300' },
+    { key: 'portDown',   swatch: 'bg-slate-700/70 border-slate-600/40' }
+];
+
 const ALL_SOURCES: SourcePlugin[] = ['freebox', 'unifi', 'scan-reseau'];
 const ALL_KINDS: NodeKind[] = ['gateway', 'switch', 'ap', 'repeater', 'client', 'unknown'];
 
 type Status = 'online' | 'offline' | 'stale';
 const ALL_STATUS: Status[] = ['online', 'offline', 'stale'];
-const DEFAULT_STATUS: Status[] = ['online', 'offline']; // hide stale Freebox cache by default; online + offline both visible
+const DEFAULT_STATUS: Status[] = ['online'];
+
+// Bump the storage-key version when the filter shape changes so older saved
+// state is ignored instead of crashing the UI.
+const FILTERS_STORAGE_KEY = 'topology.filters.v1';
+interface PersistedFilters {
+    sources: SourcePlugin[];
+    kinds: NodeKind[];
+    statuses: Status[];
+}
+
+function loadPersistedFilters(): PersistedFilters | null {
+    try {
+        const raw = globalThis.localStorage?.getItem(FILTERS_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<PersistedFilters>;
+        if (!parsed || typeof parsed !== 'object') return null;
+        return {
+            sources: Array.isArray(parsed.sources) ? parsed.sources.filter(s => ALL_SOURCES.includes(s)) : [...ALL_SOURCES],
+            kinds: Array.isArray(parsed.kinds) ? parsed.kinds.filter(k => ALL_KINDS.includes(k)) : [...ALL_KINDS],
+            statuses: Array.isArray(parsed.statuses) ? parsed.statuses.filter(s => ALL_STATUS.includes(s)) : [...DEFAULT_STATUS]
+        };
+    } catch {
+        return null;
+    }
+}
+
+function savePersistedFilters(f: PersistedFilters): void {
+    try {
+        globalThis.localStorage?.setItem(FILTERS_STORAGE_KEY, JSON.stringify(f));
+    } catch { /* quota / disabled storage — best-effort */ }
+}
 
 const STATUS_CHIP: Record<Status, { icon: React.ElementType; activeBg: string }> = {
     online:  { icon: CircleDot, activeBg: 'bg-emerald-500/25 border-emerald-400/50 text-emerald-100' },
@@ -390,11 +428,32 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         globalThis.addEventListener('keydown', onKey);
         return () => globalThis.removeEventListener('keydown', onKey);
     }, [dragMode, selectedId, moveStep, nudgeSelected]);
-    const [sourceFilter, setSourceFilter] = useState<Set<SourcePlugin>>(new Set(ALL_SOURCES));
-    const [kindFilter, setKindFilter] = useState<Set<NodeKind>>(new Set(ALL_KINDS));
-    const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set(DEFAULT_STATUS));
+    const persistedFilters = useRef(loadPersistedFilters()).current;
+    const [sourceFilter, setSourceFilter] = useState<Set<SourcePlugin>>(
+        () => new Set(persistedFilters?.sources ?? ALL_SOURCES)
+    );
+    const [kindFilter, setKindFilter] = useState<Set<NodeKind>>(
+        () => new Set(persistedFilters?.kinds ?? ALL_KINDS)
+    );
+    const [statusFilter, setStatusFilter] = useState<Set<Status>>(
+        () => new Set(persistedFilters?.statuses ?? DEFAULT_STATUS)
+    );
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [legendOpen, setLegendOpen] = useState(false);
+
+    // Skip the initial mount: we'd just write back what we just read.
+    const didMountFilters = useRef(false);
+    useEffect(() => {
+        if (!didMountFilters.current) {
+            didMountFilters.current = true;
+            return;
+        }
+        savePersistedFilters({
+            sources: Array.from(sourceFilter),
+            kinds: Array.from(kindFilter),
+            statuses: Array.from(statusFilter)
+        });
+    }, [sourceFilter, kindFilter, statusFilter]);
 
     // Filter the graph before layout: keep nodes matching source/kind/status filters,
     // and only edges whose both endpoints survive the filter.
@@ -1032,6 +1091,23 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                                         <span className={`w-2 h-2 rounded-sm ${k.bar}`} /> {t(`topology.kind.${k.id}`)}
                                     </span>
                                 ))}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">{t('topology.legend.ports')}</div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                {PORT_LEGEND.map(p => (
+                                    <span key={p.key} className="flex items-center gap-1.5">
+                                        <span className={`w-3.5 h-3 rounded-sm border ${p.swatch}`} />
+                                        {t(`topology.legend.${p.key}`)}
+                                    </span>
+                                ))}
+                                <span className="flex items-center gap-1.5">
+                                    <span className="relative inline-flex w-3.5 h-3 rounded-sm border bg-emerald-500 border-emerald-300">
+                                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-amber-200" />
+                                    </span>
+                                    {t('topology.legend.poe')}
+                                </span>
                             </div>
                         </div>
                     </div>

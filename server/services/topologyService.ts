@@ -47,7 +47,12 @@ const FREEBOX_BOX_ID = 'freebox:box';
 // 11 — Scan-reseau ICMP success now ORs metadata.active=true onto existing
 //      Freebox/UniFi nodes (per-MAC), so a host the scanner just pinged is
 //      online even when the Freebox ARP cache claims otherwise.
-const SCHEMA_VERSION = 11;
+// 13 — Drop client/unknown nodes that Freebox sees but UniFi doesn't, when
+//      either (a) their IP matches a UniFi-sourced infra node's IP, or
+//      (b) their vendor contains "Ubiquiti" while at least one UniFi infra
+//      node exists. Handles DMZ setups where the Freebox sees the UCG as a
+//      LAN client with a different MAC than the UniFi-side one.
+const SCHEMA_VERSION = 13;
 
 interface SwitchPort {
     idx: number;
@@ -635,6 +640,50 @@ function pruneRedundantFreeboxEdges(
     }
 }
 
+// When the Freebox is in DMZ towards a UniFi gateway, the Freebox reports
+// the UCG as a LAN client (vendor=Ubiquiti) with its WAN-side MAC, while
+// UniFi reports the same physical device as a gateway with its LAN-side
+// MAC. MAC-based dedup can't merge them, so we end up with a duplicate
+// "Client Ubiquiti" node. Drop those duplicates by matching on either:
+//   (a) an IP shared with a UniFi-sourced infra node, OR
+//   (b) vendor contains "Ubiquiti" when at least one UniFi infra is present
+// Filter is "UniFi doesn't already know this node" rather than "Freebox-only"
+// so a scan-reseau overlay doesn't shield the orphan.
+function pruneFreeboxNodesDuplicatingUniFiInfra(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const unifiInfraIps = new Set<string>();
+    let hasUnifiInfra = false;
+    for (const node of nodes.values()) {
+        if (!INFRA_KINDS.has(node.kind)) continue;
+        if (!node.sources.includes('unifi')) continue;
+        hasUnifiInfra = true;
+        if (node.ip) unifiInfraIps.add(node.ip);
+    }
+    if (!hasUnifiInfra) return;
+    const dropped = new Set<string>();
+    for (const [id, node] of nodes) {
+        if (node.sources.includes('unifi')) continue;
+        if (!node.sources.includes('freebox')) continue;
+        const isClientLike = node.kind === 'client' || node.kind === 'unknown';
+        if (!isClientLike) continue;
+        const ipMatchesInfra = !!node.ip && unifiInfraIps.has(node.ip);
+        const vendorLooksUbiquiti = typeof node.vendor === 'string'
+            && /ubiquiti/i.test(node.vendor);
+        if (ipMatchesInfra || vendorLooksUbiquiti) {
+            dropped.add(id);
+            nodes.delete(id);
+        }
+    }
+    if (dropped.size === 0) return;
+    for (const [edgeId, edge] of edges) {
+        if (dropped.has(edge.source) || dropped.has(edge.target)) {
+            edges.delete(edgeId);
+        }
+    }
+}
+
 // Belt-and-braces: any non-uplink edge connecting two infra nodes is
 // dropped. Infrastructure should only be wired together via uplinks.
 function pruneNonUplinkInfraEdges(
@@ -699,6 +748,7 @@ class TopologyService {
         await this.collectAllSources(nodes, edges, sources);
         addFreeboxToUniFiWanCascade(nodes, edges);
         pruneRedundantFreeboxEdges(nodes, edges);
+        pruneFreeboxNodesDuplicatingUniFiInfra(nodes, edges);
         pruneNonUplinkInfraEdges(nodes, edges);
 
         return {

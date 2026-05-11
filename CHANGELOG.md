@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.99] - 2026-05-11
+
+### Changes
+
+- feat(topology): hide offline devices by default — only the `online` status chip is selected on first load; offline + stale remain one click away.
+- feat(topology): persist source / kind / status filter chips in `localStorage` (key `topology.filters.v1`) so the user's selection survives page navigation and reloads. Stored values are whitelisted on load to ignore corrupted state.
+- fix(topology): drop duplicate UCG node visible via Freebox DMZ. The Freebox sees the UniFi gateway as a LAN client with its WAN-side MAC while UniFi reports the LAN-side MAC, so MAC-based dedup misses it. Backend now prunes client / unknown nodes that Freebox sees but UniFi doesn't, when either (a) IP matches a UniFi-sourced infra node's IP or (b) vendor contains "Ubiquiti" while UniFi infra is present. `SCHEMA_VERSION` bumped 11 → 13 to invalidate stale snapshots.
+- feat(topology): enlarge gateway / switch / AP / repeater cards (240 → 300 px, taller header, bigger icon and label, larger inline port cells). Port handle math recalibrated so ethernet edges still land on the centre of each port. `dagre` layout constants synced (NODE_WIDTH, PORT_CELL_WIDTH, row height) so nodes don't overlap.
+- feat(topology): legend now includes a "Ports" section explaining the port-cell colours (wired client = emerald, fibre / SFP+ = cyan, uplink = mauve, down = slate) and the PoE active dot.
+- chore(i18n): add port-legend keys to the `en` and `fr` locale bundles.
+
+---
+
 ## [0.7.98] - 2026-05-10
 
 ### Changes
