@@ -229,10 +229,65 @@ function pickConnectionChipClass(inactive: boolean, medium: 'wifi' | 'ethernet')
     return 'bg-lime-500/15 text-lime-200 border-lime-400/40';
 }
 
+const INFRA_KINDS_SET: ReadonlySet<NodeKind> = new Set<NodeKind>(['gateway', 'switch', 'ap', 'repeater', 'vm-host']);
+
+function pickRingClass(editingActive: boolean, selected: boolean, styleRing: string): string {
+    if (editingActive) return 'ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 animate-pulse';
+    if (selected) return `ring-2 ${styleRing}`;
+    return '';
+}
+
+const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
+    if (d.kind !== 'vm-host') return null;
+    const vmCount = d.vmCount ?? 0;
+    const activeCount = d.vmActiveCount;
+    const inactiveCount = d.vmInactiveCount;
+    return (
+        <div className="relative px-3 pb-2.5 pt-1 border-t border-white/10 flex items-center gap-1.5 flex-wrap text-[11px]">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/40 font-mono font-bold">
+                <Layers size={10} className="flex-none" />
+                {d.vmCount ?? '?'} VM{vmCount > 1 ? 's' : ''}
+            </span>
+            {typeof activeCount === 'number' && activeCount > 0 && (
+                <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-emerald-500/15 text-emerald-200 border-emerald-400/40 font-mono"
+                    title="Active VMs"
+                >
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {activeCount}
+                </span>
+            )}
+            {typeof inactiveCount === 'number' && inactiveCount > 0 && (
+                <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-rose-500/10 text-rose-200 border-rose-400/30 font-mono"
+                    title="Inactive / offline VMs"
+                >
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" />
+                    {inactiveCount}
+                </span>
+            )}
+            {d.hypervisor && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded border bg-slate-800/60 text-slate-200 border-slate-600/50 uppercase tracking-wide text-[10px]">
+                    {d.hypervisor}
+                </span>
+            )}
+        </div>
+    );
+};
+
+const StatusDot: React.FC<{ inactive: boolean }> = ({ inactive }) => (
+    <div
+        title={inactive ? 'Inactive / offline' : 'Active'}
+        className={`absolute top-1 right-1 z-10 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
+            inactive ? 'bg-rose-500' : 'bg-emerald-500'
+        }`}
+    />
+);
+
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
-    const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater' || d.kind === 'vm-host';
+    const isInfra = INFRA_KINDS_SET.has(d.kind);
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
     const ClientIcon = isInfra ? null : pickClientIcon(d, style.icon);
     const Icon = BrandIcon ?? ClientIcon ?? style.icon;
@@ -241,13 +296,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     // When in edit mode and selected: bright amber pulsing halo so the user
     // can see at a glance which card the keyboard arrows / nudge buttons
     // will move. Outside edit mode, fall back to the kind-tinted ring.
-    const editingActive = d.editingMode === true && selected;
-    let ringClass = '';
-    if (editingActive) {
-        ringClass = 'ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 animate-pulse';
-    } else if (selected) {
-        ringClass = `ring-2 ${style.ring}`;
-    }
+    const isSelected = selected ?? false;
+    const editingActive = d.editingMode === true && isSelected;
+    const ringClass = pickRingClass(editingActive, isSelected, style.ring);
     const tintClass = inactive ? 'from-slate-700/30 to-slate-800/15' : style.tint;
     const iconWrapperColor = inactive ? 'text-slate-500' : style.iconColor;
     const labelClass = pickLabelClass(inactive, isInfra);
@@ -337,37 +388,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     )}
                 </div>
             </div>
-            {d.kind === 'vm-host' && (
-                <div className="relative px-3 pb-2.5 pt-1 border-t border-white/10 flex items-center gap-1.5 flex-wrap text-[11px]">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-400/40 font-mono font-bold">
-                        <Layers size={10} className="flex-none" />
-                        {d.vmCount ?? '?'} VM{(d.vmCount ?? 0) > 1 ? 's' : ''}
-                    </span>
-                    {typeof d.vmActiveCount === 'number' && d.vmActiveCount > 0 && (
-                        <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-emerald-500/15 text-emerald-200 border-emerald-400/40 font-mono"
-                            title="Active VMs"
-                        >
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            {d.vmActiveCount}
-                        </span>
-                    )}
-                    {typeof d.vmInactiveCount === 'number' && d.vmInactiveCount > 0 && (
-                        <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-rose-500/10 text-rose-200 border-rose-400/30 font-mono"
-                            title="Inactive / offline VMs"
-                        >
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" />
-                            {d.vmInactiveCount}
-                        </span>
-                    )}
-                    {d.hypervisor && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded border bg-slate-800/60 text-slate-200 border-slate-600/50 uppercase tracking-wide text-[10px]">
-                            {d.hypervisor}
-                        </span>
-                    )}
-                </div>
-            )}
+            <VmHostInfoRow d={d} />
             {bottomPorts && bottomPorts.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
                     <SwitchPortGrid
@@ -407,14 +428,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             })()}
             {/* Status dot for clients/unknown — green=active, rose=inactive.
                 Infra kinds use KIND_BADGE (above) instead, so we skip them. */}
-            {!isInfra && (
-                <div
-                    title={inactive ? 'Inactive / offline' : 'Active'}
-                    className={`absolute top-1 right-1 z-10 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
-                        inactive ? 'bg-rose-500' : 'bg-emerald-500'
-                    }`}
-                />
-            )}
+            {!isInfra && <StatusDot inactive={inactive} />}
             <Handle id="s" type="source" position={Position.Bottom} className={HIDDEN_HANDLE_CLASS} />
         </div>
     );

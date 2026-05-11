@@ -1,7 +1,7 @@
 {
   "name": "mynetwork",
   "private": true,
-  "version": "0.8.01",
+  "version": "0.8.02",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

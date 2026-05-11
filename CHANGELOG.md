@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.02] - 2026-05-11
+
+### Changes
+
+- refactor(topology): `tagVMClients` no longer spreads an empty object — falls back to a fresh `{}` when metadata is absent, then mutates in place.
+- refactor(topology): `buildHypervisorAnchorMap` cognitive complexity 19 → ~6 by extracting `pickAnchorCandidateFromEdge` (flat guard chain) for the per-edge filtering.
+- fix(topology): replace `String(metadata.hypervisor ?? '?')` with a `typeof === 'string'` guard so an accidental object value can't render as `'[object Object]'` in the VM detection log line.
+- refactor(topology): `TopologyNodeCard` cognitive complexity 17 → under 15 by extracting `VmHostInfoRow`, `StatusDot`, `pickRingClass` and the `INFRA_KINDS_SET` constant. Pure refactor — no behaviour change.
+
+---
+
 ## [0.8.01] - 2026-05-11
 
 ### Changes

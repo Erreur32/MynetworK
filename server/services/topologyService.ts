@@ -755,7 +755,10 @@ function tagVMClients(nodes: Map<string, TopologyNode>): void {
         if (node.kind !== 'client' && node.kind !== 'unknown') continue;
         const hv = detectHypervisorFromMac(node.mac);
         if (!hv) continue;
-        node.metadata = { ...(node.metadata ?? {}), isVM: true, hypervisor: hv };
+        const meta = node.metadata ?? {};
+        meta.isVM = true;
+        meta.hypervisor = hv;
+        node.metadata = meta;
     }
 }
 
@@ -897,40 +900,52 @@ interface HypervisorAnchor {
 // to the LAN. If UniFi reports >1 distinct port for the same hypervisor we
 // can't disambiguate (multi-host cluster), so we skip — better leave the
 // graph as-is than guess wrong.
+interface AnchorCandidate {
+    hv: Hypervisor;
+    anchor: HypervisorAnchor;
+    key: string;
+}
+
+function pickAnchorCandidateFromEdge(
+    edge: TopologyEdge,
+    nodes: Map<string, TopologyNode>
+): AnchorCandidate | null {
+    if (edge.source_plugin !== 'unifi') return null;
+    if (edge.medium !== 'ethernet') return null;
+    const target = nodes.get(edge.target);
+    if (!target || target.metadata?.isVM !== true) return null;
+    const hv = target.metadata.hypervisor as Hypervisor | undefined;
+    if (!hv) return null;
+    const parent = nodes.get(edge.source);
+    if (!parent) return null;
+    if (parent.kind !== 'switch' && parent.kind !== 'gateway') return null;
+    return {
+        hv,
+        anchor: { parentId: parent.id, portIndex: edge.portIndex, sourcePlugin: 'unifi' },
+        key: `${parent.id}|${edge.portIndex ?? 'noport'}`
+    };
+}
+
 function buildHypervisorAnchorMap(
     nodes: Map<string, TopologyNode>,
     edges: Map<string, TopologyEdge>
 ): Map<Hypervisor, HypervisorAnchor> {
     const seenPortsByHv = new Map<Hypervisor, Map<string, HypervisorAnchor>>();
     for (const edge of edges.values()) {
-        if (edge.source_plugin !== 'unifi') continue;
-        if (edge.medium !== 'ethernet') continue;
-        const target = nodes.get(edge.target);
-        if (!target || target.metadata?.isVM !== true) continue;
-        const hv = target.metadata.hypervisor as Hypervisor | undefined;
-        if (!hv) continue;
-        const parent = nodes.get(edge.source);
-        if (!parent || (parent.kind !== 'switch' && parent.kind !== 'gateway')) continue;
-        const key = `${parent.id}|${edge.portIndex ?? 'noport'}`;
-        let ports = seenPortsByHv.get(hv);
+        const candidate = pickAnchorCandidateFromEdge(edge, nodes);
+        if (!candidate) continue;
+        let ports = seenPortsByHv.get(candidate.hv);
         if (!ports) {
             ports = new Map();
-            seenPortsByHv.set(hv, ports);
+            seenPortsByHv.set(candidate.hv, ports);
         }
-        if (!ports.has(key)) {
-            ports.set(key, {
-                parentId: parent.id,
-                portIndex: edge.portIndex,
-                sourcePlugin: 'unifi'
-            });
-        }
+        if (!ports.has(candidate.key)) ports.set(candidate.key, candidate.anchor);
     }
     const anchors = new Map<Hypervisor, HypervisorAnchor>();
     for (const [hv, ports] of seenPortsByHv) {
-        if (ports.size === 1) {
-            const [first] = ports.values();
-            anchors.set(hv, first);
-        }
+        if (ports.size !== 1) continue;
+        const [first] = ports.values();
+        anchors.set(hv, first);
     }
     return anchors;
 }
@@ -1052,7 +1067,8 @@ function summarizeVmTagging(nodes: Map<string, TopologyNode>): { taggedCount: nu
     for (const n of nodes.values()) {
         if (n.metadata?.isVM !== true) continue;
         taggedCount++;
-        const hv = String(n.metadata.hypervisor ?? '?');
+        const raw = n.metadata.hypervisor;
+        const hv = typeof raw === 'string' && raw ? raw : '?';
         hvBreakdown[hv] = (hvBreakdown[hv] ?? 0) + 1;
     }
     return { taggedCount, hvBreakdown };
