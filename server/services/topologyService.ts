@@ -640,6 +640,39 @@ function pruneRedundantFreeboxEdges(
     }
 }
 
+// `null` means there is no UniFi infrastructure at all — caller can bail.
+function collectUnifiInfraIps(nodes: Map<string, TopologyNode>): Set<string> | null {
+    const ips = new Set<string>();
+    let hasUnifiInfra = false;
+    for (const node of nodes.values()) {
+        if (!INFRA_KINDS.has(node.kind)) continue;
+        if (!node.sources.includes('unifi')) continue;
+        hasUnifiInfra = true;
+        if (node.ip) ips.add(node.ip);
+    }
+    return hasUnifiInfra ? ips : null;
+}
+
+function isFreeboxOrphanClient(node: TopologyNode): boolean {
+    if (node.sources.includes('unifi')) return false;
+    if (!node.sources.includes('freebox')) return false;
+    return node.kind === 'client' || node.kind === 'unknown';
+}
+
+function looksLikeUnifiInfraClone(node: TopologyNode, unifiInfraIps: Set<string>): boolean {
+    if (node.ip && unifiInfraIps.has(node.ip)) return true;
+    return typeof node.vendor === 'string' && /ubiquiti/i.test(node.vendor);
+}
+
+function dropEdgesTouching(edges: Map<string, TopologyEdge>, droppedIds: Set<string>): void {
+    if (droppedIds.size === 0) return;
+    for (const [edgeId, edge] of edges) {
+        if (droppedIds.has(edge.source) || droppedIds.has(edge.target)) {
+            edges.delete(edgeId);
+        }
+    }
+}
+
 // When the Freebox is in DMZ towards a UniFi gateway, the Freebox reports
 // the UCG as a LAN client (vendor=Ubiquiti) with its WAN-side MAC, while
 // UniFi reports the same physical device as a gateway with its LAN-side
@@ -653,35 +686,16 @@ function pruneFreeboxNodesDuplicatingUniFiInfra(
     nodes: Map<string, TopologyNode>,
     edges: Map<string, TopologyEdge>
 ): void {
-    const unifiInfraIps = new Set<string>();
-    let hasUnifiInfra = false;
-    for (const node of nodes.values()) {
-        if (!INFRA_KINDS.has(node.kind)) continue;
-        if (!node.sources.includes('unifi')) continue;
-        hasUnifiInfra = true;
-        if (node.ip) unifiInfraIps.add(node.ip);
-    }
-    if (!hasUnifiInfra) return;
+    const unifiInfraIps = collectUnifiInfraIps(nodes);
+    if (!unifiInfraIps) return;
     const dropped = new Set<string>();
     for (const [id, node] of nodes) {
-        if (node.sources.includes('unifi')) continue;
-        if (!node.sources.includes('freebox')) continue;
-        const isClientLike = node.kind === 'client' || node.kind === 'unknown';
-        if (!isClientLike) continue;
-        const ipMatchesInfra = !!node.ip && unifiInfraIps.has(node.ip);
-        const vendorLooksUbiquiti = typeof node.vendor === 'string'
-            && /ubiquiti/i.test(node.vendor);
-        if (ipMatchesInfra || vendorLooksUbiquiti) {
-            dropped.add(id);
-            nodes.delete(id);
-        }
+        if (!isFreeboxOrphanClient(node)) continue;
+        if (!looksLikeUnifiInfraClone(node, unifiInfraIps)) continue;
+        dropped.add(id);
+        nodes.delete(id);
     }
-    if (dropped.size === 0) return;
-    for (const [edgeId, edge] of edges) {
-        if (dropped.has(edge.source) || dropped.has(edge.target)) {
-            edges.delete(edgeId);
-        }
-    }
+    dropEdgesTouching(edges, dropped);
 }
 
 // Belt-and-braces: any non-uplink edge connecting two infra nodes is

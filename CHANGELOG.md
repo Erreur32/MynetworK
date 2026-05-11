@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.00] - 2026-05-11
+
+### Changes
+
+- refactor(topology): split `pruneFreeboxNodesDuplicatingUniFiInfra` to drop SonarCloud cognitive complexity from 23 to under 15. Extracted four file-local helpers: `collectUnifiInfraIps` (returns `Set | null` so the caller can bail on "no UniFi infra"), `isFreeboxOrphanClient`, `looksLikeUnifiInfraClone`, and `dropEdgesTouching`. Pure refactor — same two-pass algorithm, no behaviour change.
+
+---
+
 ## [0.7.99] - 2026-05-11
 
 ### Changes
