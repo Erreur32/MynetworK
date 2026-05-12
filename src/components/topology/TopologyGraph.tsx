@@ -473,6 +473,25 @@ function buildEdgeLabel(e: TopologyEdgeIn): string | undefined {
     return speed;
 }
 
+// Map an arrow key to a (dx, dy) step delta. Returns null for any other key
+// so the caller can early-return without consuming the keystroke.
+function arrowDeltaForKey(key: string, step: number): { dx: number; dy: number } | null {
+    switch (key) {
+        case 'ArrowUp':    return { dx: 0,    dy: -step };
+        case 'ArrowDown':  return { dx: 0,    dy:  step };
+        case 'ArrowLeft':  return { dx: -step, dy: 0 };
+        case 'ArrowRight': return { dx:  step, dy: 0 };
+        default:           return null;
+    }
+}
+
+// True when the keystroke is bubbling up from a text-input control, in which
+// case the topology must NOT hijack the arrow keys (the user is typing).
+function isTextInputTarget(target: EventTarget | null): boolean {
+    if (!target || !(target instanceof HTMLElement)) return false;
+    return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+}
+
 // Trigger a browser download for an in-memory blob — used by the JSON export.
 function downloadJsonBlob(payload: unknown, filename: string): void {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -641,20 +660,12 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     useEffect(() => {
         if (!dragMode || !selectedId) return;
         const onKey = (e: KeyboardEvent) => {
-            const target = e.target as HTMLElement | null;
-            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+            if (isTextInputTarget(e.target)) return;
             const step = e.shiftKey ? Math.max(20, moveStep * 4) : moveStep;
-            let dx = 0;
-            let dy = 0;
-            switch (e.key) {
-                case 'ArrowUp':    dy = -step; break;
-                case 'ArrowDown':  dy =  step; break;
-                case 'ArrowLeft':  dx = -step; break;
-                case 'ArrowRight': dx =  step; break;
-                default: return;
-            }
+            const delta = arrowDeltaForKey(e.key, step);
+            if (!delta) return;
             e.preventDefault();
-            nudgeSelected(dx, dy);
+            nudgeSelected(delta.dx, delta.dy);
         };
         globalThis.addEventListener('keydown', onKey);
         return () => globalThis.removeEventListener('keydown', onKey);
