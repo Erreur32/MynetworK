@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.5] - 2026-05-12
+
+### Added
+
+- Topology side panel now shows ping latency and open ports for the selected device. Data is fetched lazily from the scan-reseau plugin (`GET /api/network-scan/:ip`); the section is hidden when the device is unknown to the scanner.
+
+### Changed
+
+- Renamed topology layout mode `grouped` to `editable`. It is the only mode where manual drag/lock positions persist; the new name reflects that capability directly. UI label: "Editable" / "Éditable".
+- Increased vertical gap between wired client cards under a switch from 24 to 36 px to match the Wi-Fi stack spacing.
+
+### Fixed
+
+- Freebox Player POP no longer appears twice in the topology graph. Its wired and Wi-Fi interfaces are listed as separate hosts in `/lan/browser` with consecutive MACs sharing a 5-octet prefix; the collector now groups them and keeps the entry with `access_point` info.
+
+---
+
 ## [0.8.4] - 2026-05-12
 
 ### Added

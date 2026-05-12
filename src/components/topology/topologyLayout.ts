@@ -8,9 +8,10 @@
  *  - `horizontal` : wrapped TB layout — top-down hierarchy where each
  *                   parent's clients are stacked in a small grid below it,
  *                   so the diagram grows in height instead of width
- *  - `grouped`    : graphviz-cluster style — clients are visually grouped
- *                   inside their parent AP/switch/gateway. Best for dense
- *                   networks
+ *  - `editable`   : same algorithm as `horizontal` but with tighter spacing
+ *                   AND user-editable node positions (drag/lock persisted).
+ *                   The only mode that accepts manual placements — Tree and
+ *                   Horizontal are deterministic layouts.
  *
  * Edge convention: edges go parent → child (source = parent, target = child).
  * dagre TB places the source above the target, so this puts the gateway at
@@ -21,7 +22,7 @@ import dagre from 'dagre';
 import { Position, type Edge, type Node } from '@xyflow/react';
 import type { TopologyNodeData } from './TopologyNodeCard';
 
-export type LayoutMode = 'tree' | 'horizontal' | 'grouped';
+export type LayoutMode = 'tree' | 'horizontal' | 'editable';
 
 // Network infrastructure cards (gateway, switch, AP, repeater) — bigger
 // than the client cards so they read clearly even in a sea of small clients.
@@ -197,7 +198,7 @@ const WRAPPED_SUBTREE_PAD = 60;     // breathing room added around centered sub-
 const WIFI_SPINE_GAP_MIN = 56;      // floor: never tighter than this even for narrow APs
 const WIFI_SPINE_BREATH = 24;       // breathing room on each side of the AP card inside the channel
 const WIFI_CLIENT_VGAP = 36;        // vertical gap between two cards on the same wifi side column
-const WIRED_COL_VGAP = 24;          // vertical gap between two wired cards in a column
+const WIRED_COL_VGAP = 36;          // vertical gap between two wired cards in a column — matches WIFI_CLIENT_VGAP for visual consistency
 const WIRED_COL_HGAP = 48;          // horizontal gap between a switch and its wired column
 const WIRED_COL_MAX = 6;            // max wired clients per single column before splitting / falling back
 
@@ -462,11 +463,11 @@ function placeWrappedChildren(
 
 interface HierarchicalOpts { nodesep: number; ranksep: number }
 
-// Shared implementation behind both `horizontal` and `grouped` modes — they
+// Shared implementation behind both `horizontal` and `editable` modes — they
 // use the same placement system (wifi-accordion / wired-column / split / grid)
 // and the same sibling Y equalisation. Only the dagre rank/node spacing
 // differs: `horizontal` gets generous spacing for readability on big trees,
-// `grouped` packs tighter to read as a denser dashboard.
+// `editable` packs tighter to read as a denser dashboard.
 function buildHierarchicalLayout(
     nodes: Node[],
     edges: Edge[],
@@ -536,7 +537,7 @@ function wrappedTreeLayout(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges
     return buildHierarchicalLayout(nodes, edges, { nodesep: 100, ranksep: 130 });
 }
 
-function groupedLayout(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
+function editableLayout(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
     // Tighter spacing than horizontal so the layout reads as a denser
     // dashboard — same placement modes, just packed closer.
     return buildHierarchicalLayout(nodes, edges, { nodesep: 60, ranksep: 90 });
@@ -545,9 +546,9 @@ function groupedLayout(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Ed
 export function layoutGraph(
     nodes: Node[],
     edges: Edge[],
-    mode: LayoutMode = 'grouped'
+    mode: LayoutMode = 'editable'
 ): { nodes: Node[]; edges: Edge[] } {
     if (mode === 'tree') return dagreLayout(nodes, edges, 'LR');
     if (mode === 'horizontal') return wrappedTreeLayout(nodes, edges);
-    return groupedLayout(nodes, edges);
+    return editableLayout(nodes, edges);
 }

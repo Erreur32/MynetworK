@@ -111,7 +111,9 @@
       "portsTotal": "Aggregate",
       "wifiSummary": "Wi-Fi summary",
       "wifiClients": "Clients",
-      "wifiTotal": "Aggregate"
+      "wifiTotal": "Aggregate",
+      "latency": "Latency",
+      "openPorts": "Open ports"
     },
     "medium": {
       "ethernet": "Ethernet",
@@ -146,7 +148,7 @@
       "poe": "PoE active"
     },
     "layout": {
-      "grouped": "Grouped",
+      "editable": "Editable",
       "tree": "Tree",
       "horizontal": "Horizontal"
     },

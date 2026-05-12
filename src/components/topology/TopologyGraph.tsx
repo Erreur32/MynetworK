@@ -115,7 +115,7 @@ const EDGE_ICON_COLOR: Record<EdgeMedium, string> = {
 const nodeTypes = { topology: TopologyNodeCard, topologyGroup: TopologyGroupNode };
 
 const LAYOUT_MODES: Array<{ id: LayoutMode; icon: React.ElementType; key: string }> = [
-    { id: 'grouped',    icon: Boxes,           key: 'grouped' },
+    { id: 'editable',    icon: Boxes,           key: 'editable' },
     { id: 'tree',       icon: GitBranch,       key: 'tree' },
     { id: 'horizontal', icon: MoveHorizontal,  key: 'horizontal' }
 ];
@@ -261,7 +261,7 @@ function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: numb
 
 // Handle selection per layout mode + edge:
 //  - Tree (LR): static — source on the right, target on the left
-//  - Horizontal / Grouped (TB): dynamic — pick handles based on the FINAL
+//  - Horizontal / Editable (TB): dynamic — pick handles based on the FINAL
 //    relative position of source and target so the path is always a clean
 //    line (when aligned) or a single L (when diagonal).
 //
@@ -274,7 +274,7 @@ function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: numb
 //  - Port-aware override (switches): the source is locked to `p${portIndex}`
 //    (bottom port). We still derive the target side from the relative position
 //    so the cable doesn't dive into the top of a sideways-placed device.
-//  - Legacy Wi-Fi-in-grouped fallback: only when positions aren't known yet.
+//  - Legacy Wi-Fi-in-editable fallback: only when positions aren't known yet.
 type HandleSide = 'top' | 'bottom' | 'left' | 'right';
 const OPPOSITE_SIDE: Record<HandleSide, HandleSide> = {
     top: 'bottom', bottom: 'top', left: 'right', right: 'left'
@@ -362,7 +362,7 @@ function resolveEdgeSides(q: EdgeHandleQuery): SidePair {
 function pickTargetHandle(q: EdgeHandleQuery, side: HandleSide): { handle: string; side: HandleSide } {
     const uplinkAware = !q.isWifi && typeof q.localPortIndex === 'number' && q.targetHasUplinkChip;
     if (uplinkAware) return { handle: `pt${q.localPortIndex}`, side: 'top' };
-    if (!q.sourcePos && q.mode === 'grouped' && q.isWifi) return { handle: 'tl', side: 'left' };
+    if (!q.sourcePos && q.mode === 'editable' && q.isWifi) return { handle: 'tl', side: 'left' };
     return { handle: TARGET_HANDLE_BY_SIDE[side], side };
 }
 
@@ -534,7 +534,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     const { t } = useTranslation();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-    const [mode, setMode] = useState<LayoutMode>('grouped');
+    const [mode, setMode] = useState<LayoutMode>('editable');
     const reactFlowRef = useRef<ReactFlowInstance | null>(null);
     const [manualPositions, setManualPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
     const [dragMode, setDragMode] = useState(false);
@@ -553,10 +553,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     }, [snapEnabled]);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
-    // Manual placements only apply in Grouped mode (Tree/Horizontal are
+    // Manual placements only apply in Editable mode (Tree/Horizontal are
     // deterministic dagre layouts). Used by the lock toggle, the nudge
     // toolbar, the layout override, and the auto-disable effect below.
-    const editableMode = mode === 'grouped';
+    const editableMode = mode === 'editable';
 
     const handleInit = useCallback((instance: ReactFlowInstance) => {
         reactFlowRef.current = instance;
@@ -594,7 +594,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         }
     }, [graph, exporting]);
 
-    // Auto-disable edit mode if the user switches away from Grouped:
+    // Auto-disable edit mode if the user switches away from Editable:
     // Tree / Horizontal are deterministic dagre layouts where manual placement
     // doesn't apply, so the lock toggle / nudge toolbar / drag handlers must
     // not stay armed.
@@ -877,10 +877,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         return layoutGraph(rfNodes, rfEdges, mode);
     }, [filteredGraph, mode]);
 
-    // Manual placements only apply in the Grouped layout — Tree and
+    // Manual placements only apply in the Editable layout — Tree and
     // Horizontal are deterministic dagre layouts where mixing manual
     // positions with auto-layout is confusing. The positions stay in SQLite
-    // and reappear when the user switches back to Grouped.
+    // and reappear when the user switches back to Editable.
     //
     // We expose finalPositions as its own memo so `edgesWithHandles` below
     // can re-pick edge handles whenever a manual drag changes a position,
@@ -994,7 +994,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
 
     // Auto-fit the view in two cases:
     //  1. First time nodes appear (page load / tab switch back / filter reset)
-    //  2. Layout mode change (Grouped / Tree / Horizontal)
+    //  2. Layout mode change (Editable / Tree / Horizontal)
     // We don't refit on every periodic poll — that would steal pan/zoom from
     // the user.
     //
@@ -1361,6 +1361,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                         {(selectedNode.kind === 'ap' || selectedNode.kind === 'repeater') && (
                             <WifiSummaryBlock selectedNodeId={selectedNode.id} edges={selectedEdges} t={t} />
                         )}
+                        {selectedNode.ip && (
+                            <ScanDetailsBlock ip={selectedNode.ip} t={t} />
+                        )}
                         {selectedEdges.length > 0 && (
                             <div className="pt-2 border-t border-slate-700">
                                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">{t('topology.detail.links')}</div>
@@ -1580,6 +1583,63 @@ const WifiSummaryBlock: React.FC<WifiSummaryBlockProps> = ({ selectedNodeId, edg
                     {Array.from(bySsid.entries()).map(([ssid, info]) => (
                         <SsidRow key={ssid} ssid={ssid} count={info.count} bandsText={formatSsidBands(info.bands)} />
                     ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+interface ScanDetailsBlockProps {
+    ip: string;
+    t: (k: string) => string;
+}
+
+interface OpenPort { port: number; protocol: string }
+interface NetworkScanLookup {
+    pingLatency?: number;
+    additionalInfo?: { openPorts?: OpenPort[] };
+}
+
+const ScanDetailsBlock: React.FC<ScanDetailsBlockProps> = ({ ip, t }) => {
+    const [latency, setLatency] = useState<number | undefined>(undefined);
+    const [ports, setPorts] = useState<OpenPort[] | undefined>(undefined);
+
+    useEffect(() => {
+        let cancelled = false;
+        setLatency(undefined);
+        setPorts(undefined);
+        api.get<NetworkScanLookup>(`/api/network-scan/${encodeURIComponent(ip)}`)
+            .then(resp => {
+                if (cancelled || !resp.success || !resp.result) return;
+                setLatency(resp.result.pingLatency);
+                setPorts(resp.result.additionalInfo?.openPorts);
+            })
+            .catch(() => { /* device not in scan-reseau, ignore */ });
+        return () => { cancelled = true; };
+    }, [ip]);
+
+    const hasLatency = typeof latency === 'number';
+    const hasPorts = ports !== undefined && ports.length > 0;
+    if (!hasLatency && !hasPorts) return null;
+
+    return (
+        <div className="pt-2 border-t border-slate-700 space-y-2">
+            {hasLatency && (
+                <DetailRow icon={<Gauge size={14} />} label={t('topology.detail.latency')} value={`${latency} ms`} mono />
+            )}
+            {ports && ports.length > 0 && (
+                <div>
+                    <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">{t('topology.detail.openPorts')}</div>
+                    <div className="flex flex-wrap gap-1">
+                        {ports.map(p => (
+                            <span
+                                key={`${p.port}/${p.protocol}`}
+                                className="text-[11px] font-mono bg-slate-700/40 rounded px-1.5 py-0.5 text-amber-200"
+                            >
+                                {p.port}/{p.protocol}
+                            </span>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
