@@ -247,6 +247,52 @@ function mapUniFiDeviceKind(type: unknown, model: unknown): NodeKind {
     return 'unknown';
 }
 
+// A Freebox Player exposes its wired and Wi-Fi interfaces as two distinct
+// hosts in /lan/browser, with consecutive MACs (e.g. ...:42:b0 + ...:42:b1)
+// sharing the first 5 octets. Without this pass we'd draw two nodes for one
+// physical device. Pick the representative with access_point info (yields a
+// useful edge medium); drop the others.
+//
+// host_type is NOT used as a signal — the Freebox API stamps "freebox_hd" on
+// unrelated devices (Philips bulbs, Ubiquiti switches), making it unreliable.
+function dedupeFreeboxMultiInterfaceDevices(hosts: FreeboxHost[]): FreeboxHost[] {
+    type Entry = { host: FreeboxHost; mac: string };
+    const groups = new Map<string, Entry[]>();
+    const ungrouped: FreeboxHost[] = [];
+    for (const host of hosts) {
+        const mac = normalizeMac(host?.l2ident?.id);
+        const name = host?.primary_name;
+        if (!mac || !name) {
+            ungrouped.push(host);
+            continue;
+        }
+        const key = `${name}|${mac.slice(0, 14)}`;
+        const bucket = groups.get(key);
+        if (bucket) bucket.push({ host, mac });
+        else groups.set(key, [{ host, mac }]);
+    }
+    const result = [...ungrouped];
+    for (const bucket of groups.values()) {
+        if (bucket.length === 1) {
+            result.push(bucket[0].host);
+            continue;
+        }
+        bucket.sort(compareFreeboxHostEntryForDedupe);
+        result.push(bucket[0].host);
+    }
+    return result;
+}
+
+function compareFreeboxHostEntryForDedupe(
+    a: { host: FreeboxHost; mac: string },
+    b: { host: FreeboxHost; mac: string }
+): number {
+    const aHasAp = a.host?.access_point ? 0 : 1;
+    const bHasAp = b.host?.access_point ? 0 : 1;
+    if (aHasAp !== bHasAp) return aHasAp - bHasAp;
+    return a.mac.localeCompare(b.mac);
+}
+
 function ensureFreeboxBox(nodes: Map<string, TopologyNode>): void {
     const existing = nodes.get(FREEBOX_BOX_ID);
     if (existing) {
@@ -1331,12 +1377,15 @@ class TopologyService {
         const ifaceResp = await freeboxApi.getLanBrowserInterfaces();
         if (!ifaceResp.success || !Array.isArray(ifaceResp.result)) return;
 
+        const allHosts: FreeboxHost[] = [];
         for (const iface of ifaceResp.result as Array<{ name: string }>) {
             const hostsResp = await freeboxApi.getLanHosts(iface.name);
             if (!hostsResp.success || !Array.isArray(hostsResp.result)) continue;
-            for (const host of hostsResp.result as FreeboxHost[]) {
-                processFreeboxHost(host, nodes, edges);
-            }
+            allHosts.push(...(hostsResp.result as FreeboxHost[]));
+        }
+
+        for (const host of dedupeFreeboxMultiInterfaceDevices(allHosts)) {
+            processFreeboxHost(host, nodes, edges);
         }
     }
 
