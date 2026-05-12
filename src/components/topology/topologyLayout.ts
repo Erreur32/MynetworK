@@ -285,10 +285,39 @@ function infraReservedHeight(node: Node, dim: WrappedDim | undefined): number {
     return baseH + WRAPPED_CLIENT_VGAP + dim.h;
 }
 
+// Width allocated to an infra in dagre. anchor='left' flush-left (no centring
+// pad), others stay centred with subtree pad for breathing room.
+function reservedWidth(dim: WrappedDim | undefined, baseW: number): number {
+    if (!dim) return baseW;
+    const pad = dim.anchor === 'left' ? 0 : WRAPPED_SUBTREE_PAD;
+    return Math.max(baseW, dim.w) + pad;
+}
+
 // Force every infra-sibling group (same parent) to share the largest reserved
 // height. Combined with dagre TB (which centres same-rank nodes on the same
 // Y), this puts every AP / sub-switch / VM-host hanging off the main switch
 // on a single horizontal line — what the user asked for.
+function buildInfraSiblingMap(edges: Edge[], nodeById: Map<string, Node>): Map<string, string[]> {
+    const siblingsByParent = new Map<string, string[]>();
+    for (const e of edges) {
+        if (!isInfraInfraEdge(e, nodeById)) continue;
+        const bucket = siblingsByParent.get(e.source);
+        if (bucket) bucket.push(e.target);
+        else siblingsByParent.set(e.source, [e.target]);
+    }
+    return siblingsByParent;
+}
+
+function equalizeSiblingHeights(siblings: string[], heights: Map<string, number>): void {
+    if (siblings.length < 2) return;
+    let max = 0;
+    for (const id of siblings) max = Math.max(max, heights.get(id) ?? 0);
+    for (const id of siblings) {
+        const cur = heights.get(id) ?? 0;
+        if (cur < max) heights.set(id, max);
+    }
+}
+
 function equalizeSiblings(
     infraNodes: Node[],
     edges: Edge[],
@@ -297,21 +326,8 @@ function equalizeSiblings(
 ): Map<string, number> {
     const heights = new Map<string, number>();
     for (const n of infraNodes) heights.set(n.id, infraReservedHeight(n, dims.get(n.id)));
-    const siblingsByParent = new Map<string, string[]>();
-    for (const e of edges) {
-        if (!isInfraInfraEdge(e, nodeById)) continue;
-        const bucket = siblingsByParent.get(e.source);
-        if (bucket) bucket.push(e.target);
-        else siblingsByParent.set(e.source, [e.target]);
-    }
-    for (const siblings of siblingsByParent.values()) {
-        if (siblings.length < 2) continue;
-        let max = 0;
-        for (const id of siblings) max = Math.max(max, heights.get(id) ?? 0);
-        for (const id of siblings) {
-            const cur = heights.get(id) ?? 0;
-            if (cur < max) heights.set(id, max);
-        }
+    for (const siblings of buildInfraSiblingMap(edges, nodeById).values()) {
+        equalizeSiblingHeights(siblings, heights);
     }
     return heights;
 }
@@ -470,13 +486,7 @@ function buildHierarchicalLayout(
     g.setGraph({ rankdir: 'TB', nodesep: opts.nodesep, ranksep: opts.ranksep, marginx: 40, marginy: 40 });
 
     for (const n of infraNodes) {
-        const dim = dims.get(n.id);
-        const baseW = getNodeWidth(n);
-        // anchor='left' lays out parent flush-left in its box (no centring pad);
-        // others stay centred with subtree pad for breathing room.
-        const w = dim
-            ? Math.max(baseW, dim.w) + (dim.anchor === 'left' ? 0 : WRAPPED_SUBTREE_PAD)
-            : baseW;
+        const w = reservedWidth(dims.get(n.id), getNodeWidth(n));
         const h = reservedH.get(n.id) ?? nodeHeightFor(n);
         g.setNode(n.id, { width: w, height: h });
     }

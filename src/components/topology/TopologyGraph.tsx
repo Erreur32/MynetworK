@@ -301,96 +301,78 @@ interface SidePair { source: HandleSide; target: HandleSide }
 // wants from a "stack ... même logique de câblage" standpoint.
 const PARALLEL_RATIO = 1.5;
 
+function parallelPair(source: HandleSide): SidePair {
+    return { source, target: OPPOSITE_SIDE[source] };
+}
+
+// True diagonal (offset ~45°) — perpendicular pair gives a single-corner L.
+function diagonalPair(dx: number, dy: number): SidePair {
+    if (Math.abs(dy) >= Math.abs(dx)) {
+        return { source: dy >= 0 ? 'bottom' : 'top', target: dx >= 0 ? 'left' : 'right' };
+    }
+    return { source: dx >= 0 ? 'right' : 'left', target: dy >= 0 ? 'top' : 'bottom' };
+}
+
 // Decide which handle SIDES to use given the offset between source and target.
 // Parallel handles when one axis dominates (so a stack of clients all enter
-// from the top), perpendicular L when the offset is close to 45° (genuine
-// diagonal — fan-out can't make those straight, only an L will avoid an S).
+// from the top), perpendicular L when the offset is close to 45°.
 function pickSidePair(dx: number, dy: number): SidePair {
-    const dxAligned = Math.abs(dx) < ALIGN_TOL;
-    const dyAligned = Math.abs(dy) < ALIGN_TOL;
-    if (dxAligned) {
-        const s: HandleSide = dy >= 0 ? 'bottom' : 'top';
-        return { source: s, target: OPPOSITE_SIDE[s] };
-    }
-    if (dyAligned) {
-        const s: HandleSide = dx >= 0 ? 'right' : 'left';
-        return { source: s, target: OPPOSITE_SIDE[s] };
-    }
+    if (Math.abs(dx) < ALIGN_TOL) return parallelPair(dy >= 0 ? 'bottom' : 'top');
+    if (Math.abs(dy) < ALIGN_TOL) return parallelPair(dx >= 0 ? 'right' : 'left');
     const ratio = Math.abs(dy) / Math.max(1, Math.abs(dx));
-    if (ratio > PARALLEL_RATIO) {
-        const s: HandleSide = dy >= 0 ? 'bottom' : 'top';
-        return { source: s, target: OPPOSITE_SIDE[s] };
-    }
-    if (ratio < 1 / PARALLEL_RATIO) {
-        const s: HandleSide = dx >= 0 ? 'right' : 'left';
-        return { source: s, target: OPPOSITE_SIDE[s] };
-    }
-    // True diagonal — perpendicular pair to get a single-corner L.
-    if (Math.abs(dy) >= Math.abs(dx)) {
-        return {
-            source: dy >= 0 ? 'bottom' : 'top',
-            target: dx >= 0 ? 'left' : 'right'
-        };
-    }
-    return {
-        source: dx >= 0 ? 'right' : 'left',
-        target: dy >= 0 ? 'top' : 'bottom'
-    };
+    if (ratio > PARALLEL_RATIO) return parallelPair(dy >= 0 ? 'bottom' : 'top');
+    if (ratio < 1 / PARALLEL_RATIO) return parallelPair(dx >= 0 ? 'right' : 'left');
+    return diagonalPair(dx, dy);
 }
 
 interface PickResult { source: string; target: string; sourceSide: HandleSide; targetSide: HandleSide }
 
-function pickEdgeHandles(
-    mode: LayoutMode,
-    isWifi: boolean,
-    isUplink: boolean,
-    portIndex: number | undefined,
-    localPortIndex: number | undefined,
-    targetHasUplinkChip: boolean,
-    sourcePos: { x: number; y: number } | undefined,
-    targetPos: { x: number; y: number } | undefined
-): PickResult {
-    if (mode === 'tree') return { source: 'sr', target: 'tl', sourceSide: 'right', targetSide: 'left' };
-    const portAware = !isWifi && typeof portIndex === 'number';
-    const uplinkAware = !isWifi
-        && typeof localPortIndex === 'number'
-        && targetHasUplinkChip;
-    let sourceSide: HandleSide = 'bottom';
-    let targetSide: HandleSide = 'top';
-    if (sourcePos && targetPos) {
-        const dx = targetPos.x - sourcePos.x;
-        const dy = targetPos.y - sourcePos.y;
-        const pair = pickSidePair(dx, dy);
-        sourceSide = pair.source;
-        targetSide = pair.target;
-        if (portAware) {
-            if (Math.abs(dx) < ALIGN_TOL) targetSide = 'top';
-            else targetSide = dx >= 0 ? 'left' : 'right';
-        }
-    }
-    if (isWifi) sourceSide = 'bottom';
-    if (isUplink) targetSide = 'top';
-    // Wi-Fi accordion routing: the AP is the spine; left-column clients enter
-    // from their RIGHT side, right-column clients enter from their LEFT side.
-    // We force the target side from dx (target X relative to source X) so the
-    // cable always faces the spine regardless of the dy/dx ratio that
-    // pickSidePair already evaluated.
-    if (isWifi && sourcePos && targetPos) {
-        const dx = targetPos.x - sourcePos.x;
-        if (Math.abs(dx) < ALIGN_TOL) targetSide = 'top';
-        else targetSide = dx >= 0 ? 'left' : 'right';
-    }
-    const source = portAware ? `p${portIndex}` : SOURCE_HANDLE_BY_SIDE[sourceSide];
-    let target: string;
-    if (uplinkAware) target = `pt${localPortIndex}`;
-    else if (!sourcePos && mode === 'grouped' && isWifi) target = 'tl';
-    else target = TARGET_HANDLE_BY_SIDE[targetSide];
-    // If we fell back to 'tl' the effective target side is left, not top —
-    // keep the returned side in sync so the caller's parallel/perpendicular
-    // classification matches the actual handle that React Flow will use.
-    if (target === 'tl') targetSide = 'left';
-    if (target.startsWith('pt')) targetSide = 'top';
-    return { source, target, sourceSide, targetSide };
+interface EdgeHandleQuery {
+    mode: LayoutMode;
+    isWifi: boolean;
+    isUplink: boolean;
+    portIndex: number | undefined;
+    localPortIndex: number | undefined;
+    targetHasUplinkChip: boolean;
+    sourcePos: { x: number; y: number } | undefined;
+    targetPos: { x: number; y: number } | undefined;
+}
+
+// Side facing the target along the X axis — used for both wifi accordion
+// (clients face the AP spine) and port-aware switch edges.
+function targetSideFromDx(dx: number): HandleSide {
+    if (Math.abs(dx) < ALIGN_TOL) return 'top';
+    return dx >= 0 ? 'left' : 'right';
+}
+
+function resolveEdgeSides(q: EdgeHandleQuery): SidePair {
+    if (!q.sourcePos || !q.targetPos) return { source: 'bottom', target: 'top' };
+    const dx = q.targetPos.x - q.sourcePos.x;
+    const dy = q.targetPos.y - q.sourcePos.y;
+    const pair = pickSidePair(dx, dy);
+    const portAware = !q.isWifi && typeof q.portIndex === 'number';
+    let target = pair.target;
+    if (portAware) target = targetSideFromDx(dx);
+    if (q.isWifi) target = targetSideFromDx(dx);
+    let source = q.isWifi ? 'bottom' as HandleSide : pair.source;
+    if (q.isUplink) target = 'top';
+    return { source, target };
+}
+
+function pickTargetHandle(q: EdgeHandleQuery, side: HandleSide): { handle: string; side: HandleSide } {
+    const uplinkAware = !q.isWifi && typeof q.localPortIndex === 'number' && q.targetHasUplinkChip;
+    if (uplinkAware) return { handle: `pt${q.localPortIndex}`, side: 'top' };
+    if (!q.sourcePos && q.mode === 'grouped' && q.isWifi) return { handle: 'tl', side: 'left' };
+    return { handle: TARGET_HANDLE_BY_SIDE[side], side };
+}
+
+function pickEdgeHandles(q: EdgeHandleQuery): PickResult {
+    if (q.mode === 'tree') return { source: 'sr', target: 'tl', sourceSide: 'right', targetSide: 'left' };
+    const sides = resolveEdgeSides(q);
+    const portAware = !q.isWifi && typeof q.portIndex === 'number';
+    const source = portAware ? `p${q.portIndex}` : SOURCE_HANDLE_BY_SIDE[sides.source];
+    const tgt = pickTargetHandle(q, sides.target);
+    return { source, target: tgt.handle, sourceSide: sides.source, targetSide: tgt.side };
 }
 
 
@@ -491,6 +473,44 @@ function buildEdgeLabel(e: TopologyEdgeIn): string | undefined {
     return speed;
 }
 
+// Trigger a browser download for an in-memory blob — used by the JSON export.
+function downloadJsonBlob(payload: unknown, filename: string): void {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function downloadDataUrl(dataUrl: string, filename: string): void {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    a.click();
+}
+
+const EXPORT_RENDER_OPTS = { backgroundColor: '#020617', cacheBust: true, pixelRatio: 2 } as const;
+
+// Raster/vector export of the React Flow canvas (PNG/SVG direct, PDF wraps
+// the PNG in an A4 landscape page via jsPDF).
+async function exportFlowElement(flowEl: HTMLElement, format: 'png' | 'svg' | 'pdf', stamp: string): Promise<void> {
+    if (format === 'svg') {
+        const dataUrl = await toSvg(flowEl, EXPORT_RENDER_OPTS);
+        downloadDataUrl(dataUrl, `topology-${stamp}.svg`);
+        return;
+    }
+    const png = await toPng(flowEl, EXPORT_RENDER_OPTS);
+    if (format === 'png') {
+        downloadDataUrl(png, `topology-${stamp}.png`);
+        return;
+    }
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    pdf.addImage(png, 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
+    pdf.save(`topology-${stamp}.pdf`);
+}
+
 export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '75vh' }) => {
     const { t } = useTranslation();
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -536,13 +556,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         if (exporting) return;
         const stamp = new Date().toISOString().slice(0, 10);
         if (format === 'json') {
-            const blob = new Blob([JSON.stringify(graph, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `topology-${stamp}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadJsonBlob(graph, `topology-${stamp}.json`);
             return;
         }
         const flowEl = document.querySelector('.react-flow') as HTMLElement | null;
@@ -551,29 +565,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         try {
             reactFlowRef.current?.fitView({ padding: 0.1, duration: 0 });
             await new Promise(r => requestAnimationFrame(() => r(undefined)));
-            const opts = { backgroundColor: '#020617', cacheBust: true, pixelRatio: 2 };
-            if (format === 'svg') {
-                const dataUrl = await toSvg(flowEl, opts);
-                const a = document.createElement('a');
-                a.href = dataUrl;
-                a.download = `topology-${stamp}.svg`;
-                a.click();
-                return;
-            }
-            const png = await toPng(flowEl, opts);
-            if (format === 'png') {
-                const a = document.createElement('a');
-                a.href = png;
-                a.download = `topology-${stamp}.png`;
-                a.click();
-                return;
-            }
-            // PDF via jsPDF (raster A4 landscape)
-            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            const pageW = pdf.internal.pageSize.getWidth();
-            const pageH = pdf.internal.pageSize.getHeight();
-            pdf.addImage(png, 'PNG', 0, 0, pageW, pageH);
-            pdf.save(`topology-${stamp}.pdf`);
+            await exportFlowElement(flowEl, format, stamp);
         } catch (err) {
             // best-effort — the user gets a console error but no crash
             // eslint-disable-next-line no-console
@@ -932,16 +924,16 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             };
             const isWifi = d.medium === 'wifi';
             const isUplink = d.medium === 'uplink';
-            const handles = pickEdgeHandles(
+            const handles = pickEdgeHandles({
                 mode,
                 isWifi,
                 isUplink,
-                d.portIndex,
-                d.localPortIndex,
-                d.targetHasUplinkChip === true,
-                finalPositions.get(e.source),
-                finalPositions.get(e.target)
-            );
+                portIndex: d.portIndex,
+                localPortIndex: d.localPortIndex,
+                targetHasUplinkChip: d.targetHasUplinkChip === true,
+                sourcePos: finalPositions.get(e.source),
+                targetPos: finalPositions.get(e.target)
+            });
             const isSelected = e.id === selectedEdgeId;
             const baseStyle = (e.style ?? {}) as React.CSSProperties;
             const baseStrokeWidth = typeof baseStyle.strokeWidth === 'number' ? baseStyle.strokeWidth : 1.6;

@@ -1366,32 +1366,12 @@ class TopologyService {
             sortBy: 'last_seen',
             sortOrder: 'desc'
         });
-        // Index existing nodes by their MAC so a scan-reseau record matching
-        // an already-discovered MAC merges in even when the existing node's id
-        // isn't `mac:XX:…` — typically the Freebox (id=`freebox:box`, MAC set
-        // via ensureFreeboxAp) which previously produced a duplicate node.
-        const nodeByMac = new Map<string, TopologyNode>();
-        for (const n of nodes.values()) {
-            if (n.mac) nodeByMac.set(n.mac, n);
-        }
+        // MAC index so records matching an already-discovered MAC merge in
+        // even when the existing node's id isn't `mac:XX:…` — typically the
+        // Freebox (`freebox:box`) whose MAC is set via ensureFreeboxAp.
+        const nodeByMac = buildNodeMacIndex(nodes);
         for (const rec of records) {
-            const mac = normalizeMac(rec.mac);
-            const lastSeen = toUnixSeconds(rec.lastSeen);
-            const isOnline = rec.status === 'online';
-            const macMatch = mac ? nodeByMac.get(mac) : undefined;
-            if (macMatch) {
-                mergeScanReseauIntoExisting(macMatch, rec, isOnline, lastSeen);
-                continue;
-            }
-            const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
-            const existing = nodes.get(id);
-            if (existing) {
-                mergeScanReseauIntoExisting(existing, rec, isOnline, lastSeen);
-            } else {
-                const newNode = buildScanReseauNode(id, mac, rec, isOnline, lastSeen);
-                nodes.set(id, newNode);
-                if (mac) nodeByMac.set(mac, newNode);
-            }
+            mergeScanRecord(rec, nodes, nodeByMac);
         }
     }
 }
@@ -1437,6 +1417,47 @@ function buildScanReseauNode(
         sources: ['scan-reseau'],
         metadata: { active: isOnline, last_seen: lastSeen }
     };
+}
+
+function buildNodeMacIndex(nodes: Map<string, TopologyNode>): Map<string, TopologyNode> {
+    const out = new Map<string, TopologyNode>();
+    for (const n of nodes.values()) {
+        if (n.mac) out.set(n.mac, n);
+    }
+    return out;
+}
+
+interface ScanRecord {
+    ip: string;
+    mac?: string;
+    hostname?: string;
+    vendor?: string;
+    status: 'online' | 'offline' | 'unknown';
+    lastSeen: Date;
+}
+
+function mergeScanRecord(
+    rec: ScanRecord,
+    nodes: Map<string, TopologyNode>,
+    nodeByMac: Map<string, TopologyNode>
+): void {
+    const mac = normalizeMac(rec.mac);
+    const lastSeen = toUnixSeconds(rec.lastSeen);
+    const isOnline = rec.status === 'online';
+    const macMatch = mac ? nodeByMac.get(mac) : undefined;
+    if (macMatch) {
+        mergeScanReseauIntoExisting(macMatch, rec, isOnline, lastSeen);
+        return;
+    }
+    const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
+    const existing = nodes.get(id);
+    if (existing) {
+        mergeScanReseauIntoExisting(existing, rec, isOnline, lastSeen);
+        return;
+    }
+    const newNode = buildScanReseauNode(id, mac, rec, isOnline, lastSeen);
+    nodes.set(id, newNode);
+    if (mac) nodeByMac.set(mac, newNode);
 }
 
 export const topologyService = new TopologyService();
