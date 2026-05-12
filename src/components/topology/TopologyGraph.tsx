@@ -17,13 +17,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
-import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lock, Unlock, Download, Image as ImageIcon, FileText, FileCode, Braces, Layers } from 'lucide-react';
+import { X, Cable, Wifi, Link2, Tag, Hash, Building2, GitBranch, MoveHorizontal, Boxes, Filter as FilterIcon, Router as RouterIcon, Server, Repeat, Smartphone, HelpCircle, Maximize2, CircleDot, CircleOff, ChevronDown, ChevronUp, Info, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lock, Unlock, Download, Image as ImageIcon, FileText, FileCode, Braces, Layers, Magnet, Zap, Gauge, ArrowRightLeft } from 'lucide-react';
 import { api } from '../../api/client';
 import { toPng, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { TopologyNodeCard, type TopologyNodeData } from './TopologyNodeCard';
+import { TopologyNodeCard, type TopologyNodeData, shouldRenderUplinkChip } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
-import { layoutGraph, type LayoutMode } from './topologyLayout';
+import { layoutGraph, getNodeWidth, type LayoutMode } from './topologyLayout';
 
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 type EdgeMedium = 'ethernet' | 'wifi' | 'uplink' | 'virtual';
@@ -54,6 +54,9 @@ interface TopologyNodeIn {
         hostIp?: string;
         hostMac?: string;
         hostVendor?: string;
+        modelDisplay?: string;
+        portsFromSnapshot?: boolean;
+        hasDedicatedUplink?: boolean;
     };
 }
 
@@ -85,7 +88,12 @@ interface TopologyGraphProps {
 // (gateway=amber, switch=emerald, AP=sky, repeater=purple).
 const EDGE_COLOR: Record<EdgeMedium, string> = {
     ethernet: '#a3e635', // lime — distinct from emerald switches
-    wifi: '#f472b6',     // pink — distinct from sky APs and purple repeaters
+    wifi: '#7dd3fc',     // sky-300 light blue — visually softer than the
+                         // previous pink so 10+ overlapping animated dashes
+                         // on a busy AP don't shimmer/strobe against the dark
+                         // background. Still distinct from the sky-500 AP
+                         // card tint thanks to the lighter shade + dashed
+                         // pattern.
     uplink: '#a78bfa',   // violet/mauve — distinct from amber gateways
     virtual: '#e879f9'   // fuchsia — matches the vm-host card tint
 };
@@ -139,6 +147,9 @@ const DEFAULT_STATUS: Status[] = ['online'];
 // Bump the storage-key version when the filter shape changes so older saved
 // state is ignored instead of crashing the UI.
 const FILTERS_STORAGE_KEY = 'topology.filters.v1';
+// Snap-to-grid preference for the drag-edit toolbar. Stored as '1' / '0'.
+const SNAP_STORAGE_KEY = 'topology.snap.v1';
+const SNAP_GRID: [number, number] = [10, 10];
 interface PersistedFilters {
     sources: SourcePlugin[];
     kinds: NodeKind[];
@@ -236,41 +247,224 @@ function pickEdgeStrokeWidth(isUplink: boolean, isWifi: boolean, isVirtual: bool
     return 1.6;
 }
 
-function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: number; borderRadius: number } | undefined {
-    if (isUplink) return { offset: 60, borderRadius: 14 };
-    if (isWifi) return { offset: 50, borderRadius: 12 };
-    return undefined;
+// smoothstep path knobs: `offset` is the length of the perpendicular stub
+// the line travels OUT of a handle before bending. Smaller offset = the bend
+// happens closer to each card, so any residual horizontal jog due to fan-
+// handle quantization is squeezed into a few pixels and reads as "almost
+// straight" instead of a visible Z. Combined with FAN_OUT_COUNT=24 the
+// quantization is already small, so the offset doesn't need to absorb it.
+function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: number; borderRadius: number } {
+    if (isUplink) return { offset: 18, borderRadius: 6 };
+    if (isWifi) return { offset: 14, borderRadius: 6 };
+    return { offset: 12, borderRadius: 5 };
 }
 
 // Handle selection per layout mode + edge:
-//  - Tree (LR): source on the right, target on the left
-//  - Horizontal (TB wrapped): source bottom, target top
-//  - Grouped (TB): source bottom, target top — except Wi-Fi which routes
-//    via the left-side target handle so labels sit cleanly along the
-//    AP-to-client branch
-//  - Port-aware (TB only): when an ethernet/uplink edge carries port info
-//    AND we can confirm the matching handle exists on the destination
-//    card (i.e. the target's localUplinkPortIdxs contains the port), land
-//    the line on `pt${idx}`. Otherwise fall back to the default 't' handle
-//    so React Flow doesn't drop the edge entirely.
+//  - Tree (LR): static — source on the right, target on the left
+//  - Horizontal / Grouped (TB): dynamic — pick handles based on the FINAL
+//    relative position of source and target so the path is always a clean
+//    line (when aligned) or a single L (when diagonal).
+//
+//    Crucial rule: when the target is offset BOTH horizontally and vertically,
+//    we use PERPENDICULAR handles (e.g. source bottom + target left) so that
+//    smoothstep draws an L-shape with a single corner. Using parallel handles
+//    (bottom→top) with a horizontal offset is what produced the "S" / zigzag
+//    the user kept seeing — smoothstep had to weave around the gap.
+//
+//  - Port-aware override (switches): the source is locked to `p${portIndex}`
+//    (bottom port). We still derive the target side from the relative position
+//    so the cable doesn't dive into the top of a sideways-placed device.
+//  - Legacy Wi-Fi-in-grouped fallback: only when positions aren't known yet.
+type HandleSide = 'top' | 'bottom' | 'left' | 'right';
+const OPPOSITE_SIDE: Record<HandleSide, HandleSide> = {
+    top: 'bottom', bottom: 'top', left: 'right', right: 'left'
+};
+const SOURCE_HANDLE_BY_SIDE: Record<HandleSide, string> = {
+    top: 'st', bottom: 's', left: 'sl', right: 'sr'
+};
+const TARGET_HANDLE_BY_SIDE: Record<HandleSide, string> = {
+    top: 't', bottom: 'tb', left: 'tl', right: 'tr'
+};
+// Within this many pixels of perfect alignment we consider the target to be
+// directly below/above (or left/right of) the source — small enough that the
+// human eye doesn't see misalignment, so we use parallel handles for a clean
+// straight line. Beyond this, we switch to perpendicular handles (L-shape).
+const ALIGN_TOL = 16;
+
+interface SidePair { source: HandleSide; target: HandleSide }
+// Ratio above which we treat the offset as "mostly along one axis" and pick
+// parallel handles (source bottom + target top, or source right + target
+// left). Below this we fall back to perpendicular L. The fan-out alignment
+// in spreadCentralHandles compensates for the horizontal offset, so parallel
+// handles still produce a near-straight cable — and crucially, every client
+// in a stack lands on the SAME side of its card, which is what the user
+// wants from a "stack ... même logique de câblage" standpoint.
+const PARALLEL_RATIO = 1.5;
+
+// Decide which handle SIDES to use given the offset between source and target.
+// Parallel handles when one axis dominates (so a stack of clients all enter
+// from the top), perpendicular L when the offset is close to 45° (genuine
+// diagonal — fan-out can't make those straight, only an L will avoid an S).
+function pickSidePair(dx: number, dy: number): SidePair {
+    const dxAligned = Math.abs(dx) < ALIGN_TOL;
+    const dyAligned = Math.abs(dy) < ALIGN_TOL;
+    if (dxAligned) {
+        const s: HandleSide = dy >= 0 ? 'bottom' : 'top';
+        return { source: s, target: OPPOSITE_SIDE[s] };
+    }
+    if (dyAligned) {
+        const s: HandleSide = dx >= 0 ? 'right' : 'left';
+        return { source: s, target: OPPOSITE_SIDE[s] };
+    }
+    const ratio = Math.abs(dy) / Math.max(1, Math.abs(dx));
+    if (ratio > PARALLEL_RATIO) {
+        const s: HandleSide = dy >= 0 ? 'bottom' : 'top';
+        return { source: s, target: OPPOSITE_SIDE[s] };
+    }
+    if (ratio < 1 / PARALLEL_RATIO) {
+        const s: HandleSide = dx >= 0 ? 'right' : 'left';
+        return { source: s, target: OPPOSITE_SIDE[s] };
+    }
+    // True diagonal — perpendicular pair to get a single-corner L.
+    if (Math.abs(dy) >= Math.abs(dx)) {
+        return {
+            source: dy >= 0 ? 'bottom' : 'top',
+            target: dx >= 0 ? 'left' : 'right'
+        };
+    }
+    return {
+        source: dx >= 0 ? 'right' : 'left',
+        target: dy >= 0 ? 'top' : 'bottom'
+    };
+}
+
+interface PickResult { source: string; target: string; sourceSide: HandleSide; targetSide: HandleSide }
+
 function pickEdgeHandles(
     mode: LayoutMode,
     isWifi: boolean,
+    isUplink: boolean,
     portIndex: number | undefined,
     localPortIndex: number | undefined,
-    targetHasUplinkChip: boolean
-): { source: string; target: string } {
-    if (mode === 'tree') return { source: 'sr', target: 'tl' };
+    targetHasUplinkChip: boolean,
+    sourcePos: { x: number; y: number } | undefined,
+    targetPos: { x: number; y: number } | undefined
+): PickResult {
+    if (mode === 'tree') return { source: 'sr', target: 'tl', sourceSide: 'right', targetSide: 'left' };
     const portAware = !isWifi && typeof portIndex === 'number';
-    const source = portAware ? `p${portIndex}` : 's';
-    const localPortAware = !isWifi
+    const uplinkAware = !isWifi
         && typeof localPortIndex === 'number'
         && targetHasUplinkChip;
+    let sourceSide: HandleSide = 'bottom';
+    let targetSide: HandleSide = 'top';
+    if (sourcePos && targetPos) {
+        const dx = targetPos.x - sourcePos.x;
+        const dy = targetPos.y - sourcePos.y;
+        const pair = pickSidePair(dx, dy);
+        sourceSide = pair.source;
+        targetSide = pair.target;
+        if (portAware) {
+            if (Math.abs(dx) < ALIGN_TOL) targetSide = 'top';
+            else targetSide = dx >= 0 ? 'left' : 'right';
+        }
+    }
+    if (isWifi) sourceSide = 'bottom';
+    if (isUplink) targetSide = 'top';
+    // Wi-Fi accordion routing: the AP is the spine; left-column clients enter
+    // from their RIGHT side, right-column clients enter from their LEFT side.
+    // We force the target side from dx (target X relative to source X) so the
+    // cable always faces the spine regardless of the dy/dx ratio that
+    // pickSidePair already evaluated.
+    if (isWifi && sourcePos && targetPos) {
+        const dx = targetPos.x - sourcePos.x;
+        if (Math.abs(dx) < ALIGN_TOL) targetSide = 'top';
+        else targetSide = dx >= 0 ? 'left' : 'right';
+    }
+    const source = portAware ? `p${portIndex}` : SOURCE_HANDLE_BY_SIDE[sourceSide];
     let target: string;
-    if (localPortAware) target = `pt${localPortIndex}`;
-    else if (mode === 'grouped' && isWifi) target = 'tl';
-    else target = 't';
-    return { source, target };
+    if (uplinkAware) target = `pt${localPortIndex}`;
+    else if (!sourcePos && mode === 'grouped' && isWifi) target = 'tl';
+    else target = TARGET_HANDLE_BY_SIDE[targetSide];
+    // If we fell back to 'tl' the effective target side is left, not top —
+    // keep the returned side in sync so the caller's parallel/perpendicular
+    // classification matches the actual handle that React Flow will use.
+    if (target === 'tl') targetSide = 'left';
+    if (target.startsWith('pt')) targetSide = 'top';
+    return { source, target, sourceSide, targetSide };
+}
+
+
+// Must match FAN_OUT_COUNT in TopologyNodeCard.tsx — the card renders that
+// many evenly-spaced source handles on its bottom edge (s0..sN-1) and matching
+// target handles on its top edge (t0..tN-1). 24 keeps the source/target X
+// quantization tight enough (~12-14 px on a 300 px infra card, ~7 px on a
+// 170 px client card) that any residual handle-misalignment bend is sub-
+// pixel-perceptible — no visible "tear" or zigzag.
+const FAN_OUT_COUNT = 24;
+
+// Pick the fan-handle index whose X position (relative to the card's left
+// edge) best matches the supplied target X. The card stores its handles at
+// xPx = ((i+0.5) / FAN_OUT_COUNT) * cardWidth — solve for i.
+function fanIdxForOffset(targetXFromCardLeft: number, cardWidth: number): number {
+    if (cardWidth <= 0) return Math.floor(FAN_OUT_COUNT / 2);
+    const t = targetXFromCardLeft / cardWidth;
+    const idx = Math.round(t * FAN_OUT_COUNT - 0.5);
+    return Math.max(0, Math.min(FAN_OUT_COUNT - 1, idx));
+}
+
+function handleAbsX(cardLeftX: number, cardWidth: number, handleIdx: number): number {
+    return cardLeftX + ((handleIdx + 0.5) / FAN_OUT_COUNT) * cardWidth;
+}
+
+// Mutates `edges` in place. For every edge using the CENTRAL `s` source
+// handle, pick the s${i} fan handle whose X position best matches the
+// target's centre X — so the cable leaves the source card directly above
+// the target. Then align the target's `t` handle (if used) to that same X
+// so the cable is straight from end to end.
+//
+// Result: each child cable lands on its own swim lane on the parent; in a
+// stack of clients every cable still enters the client from the top side
+// (consistent layout), and there are no S curves because both endpoints
+// share the same X. Port-aware (p${idx}) / uplink-chip (pt${idx}) handles
+// are left alone — those are tied to physical ports and must not move.
+function spreadCentralHandles(
+    edges: Edge[],
+    finalPositions: Map<string, { x: number; y: number }>,
+    widthById: Map<string, number>
+): void {
+    for (let i = 0; i < edges.length; i++) {
+        const e = edges[i];
+        // Wi-Fi edges stay on the central `s` handle so all cables from the
+        // same AP visually overlap on a single vertical spine going down
+        // through the accordion. Spreading them would break the spine effect.
+        const d = (e.data ?? {}) as { medium?: EdgeMedium };
+        if (d.medium === 'wifi') continue;
+        if (e.sourceHandle !== 's' && e.targetHandle !== 't') continue;
+        const sourcePos = finalPositions.get(e.source);
+        const targetPos = finalPositions.get(e.target);
+        if (!sourcePos || !targetPos) continue;
+        const sourceW = widthById.get(e.source) ?? 0;
+        const targetW = widthById.get(e.target) ?? 0;
+
+        let sourceHandle = e.sourceHandle;
+        let alignX: number | null = null;
+        if (sourceHandle === 's' && sourceW > 0) {
+            const targetCenterX = targetPos.x + targetW / 2;
+            const fanIdx = fanIdxForOffset(targetCenterX - sourcePos.x, sourceW);
+            sourceHandle = `s${fanIdx}`;
+            alignX = handleAbsX(sourcePos.x, sourceW, fanIdx);
+        }
+        let targetHandle = e.targetHandle;
+        if (targetHandle === 't' && targetW > 0) {
+            // Prefer aligning to the source's chosen fan-handle X. If the
+            // source isn't a central `s` handle (port-aware switch port,
+            // side handle, etc.), fall back to the source's centre X.
+            const refX = alignX ?? (sourcePos.x + sourceW / 2);
+            const fanIdx = fanIdxForOffset(refX - targetPos.x, targetW);
+            targetHandle = `t${fanIdx}`;
+        }
+        edges[i] = { ...e, sourceHandle, targetHandle };
+    }
 }
 
 function pickChipClass(disabled: boolean, active: boolean, activeBg: string): string {
@@ -300,11 +494,24 @@ function buildEdgeLabel(e: TopologyEdgeIn): string | undefined {
 export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '75vh' }) => {
     const { t } = useTranslation();
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
     const [mode, setMode] = useState<LayoutMode>('grouped');
     const reactFlowRef = useRef<ReactFlowInstance | null>(null);
     const [manualPositions, setManualPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
     const [dragMode, setDragMode] = useState(false);
     const [moveStep, setMoveStep] = useState(5);
+    // Snap-to-grid toggle for the drag-edit experience. 10px grid is fine
+    // enough to feel like free placement but still helps the user line two
+    // cards on the same vertical/horizontal axis without arrow-key nudging.
+    // OFF by default — the user explicitly asked for "free placement first".
+    const [snapEnabled, setSnapEnabled] = useState<boolean>(() => {
+        try { return globalThis.localStorage?.getItem(SNAP_STORAGE_KEY) === '1'; }
+        catch { return false; }
+    });
+    useEffect(() => {
+        try { globalThis.localStorage?.setItem(SNAP_STORAGE_KEY, snapEnabled ? '1' : '0'); }
+        catch { /* quota / disabled — best-effort */ }
+    }, [snapEnabled]);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     // Manual placements only apply in Grouped mode (Tree/Horizontal are
@@ -581,7 +788,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 vmCount: typeof n.metadata?.vmCount === 'number' ? n.metadata.vmCount : undefined,
                 vmActiveCount: typeof n.metadata?.vmActiveCount === 'number' ? n.metadata.vmActiveCount : undefined,
                 vmInactiveCount: typeof n.metadata?.vmInactiveCount === 'number' ? n.metadata.vmInactiveCount : undefined,
-                hypervisor: typeof n.metadata?.hypervisor === 'string' ? n.metadata.hypervisor : undefined
+                hypervisor: typeof n.metadata?.hypervisor === 'string' ? n.metadata.hypervisor : undefined,
+                modelDisplay: typeof n.metadata?.modelDisplay === 'string' ? n.metadata.modelDisplay : undefined,
+                portsFromSnapshot: n.metadata?.portsFromSnapshot === true ? true : undefined,
+                hasDedicatedUplink: typeof n.metadata?.hasDedicatedUplink === 'boolean' ? n.metadata.hasDedicatedUplink : undefined
             } satisfies TopologyNodeData
         }));
 
@@ -606,19 +816,34 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
             const targetNode = nodeById.get(e.target);
             const targetUplinks = targetNode?.metadata?.localUplinkPortIdxs;
             const targetPortsCount = targetNode?.metadata?.ports?.length ?? 0;
-            const targetHasUplinkChip = typeof e.localPortIndex === 'number'
+            // Use the SAME rule TopologyNodeCard uses to render the chip — a
+            // drift here makes edges target a non-existent `pt${idx}` handle
+            // and React Flow silently drops them.
+            const chipRendered = targetNode
+                ? shouldRenderUplinkChip(targetNode.kind, targetNode.metadata?.hasDedicatedUplink)
+                : false;
+            const targetHasUplinkChip = chipRendered
+                && typeof e.localPortIndex === 'number'
                 && targetUplinks?.includes(e.localPortIndex) === true
                 && targetPortsCount > 0
                 && targetPortsCount <= 12;
-            const handles = pickEdgeHandles(mode, isWifi, e.portIndex, e.localPortIndex, targetHasUplinkChip);
+            // Handles are intentionally left unset here. They are computed in
+            // the `edges` memo below using the FINAL node positions (dagre +
+            // manual overrides) so an edge always exits the side of the card
+            // facing the other endpoint after a drag.
+            //
+            // type='smoothstep' gives clean right-angle paths with rounded
+            // corners — the user wants right angles when needed, NOT a soft S
+            // curve. Combined with the dynamic handle picker (which puts the
+            // exit/entry on the natural side) and the increased dagre nodesep
+            // /ranksep, the only bend you should see is the L-shape needed to
+            // route between adjacent sides — no zigzags.
             const pathOptions = pickEdgePathOptions(isUplink, isWifi);
             const strokeWidth = pickEdgeStrokeWidth(isUplink, isWifi, isVirtual);
             return {
                 id: e.id,
                 source: e.source,
                 target: e.target,
-                sourceHandle: handles.source,
-                targetHandle: handles.target,
                 type: 'smoothstep',
                 animated: isWifi,
                 label,
@@ -633,7 +858,16 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                     strokeDasharray: dasharray
                 },
                 markerEnd: marker,
-                data: { medium: e.medium, linkSpeedMbps: e.linkSpeedMbps, portIndex: e.portIndex, ssid: e.ssid, band: e.band, signal: e.signal }
+                data: {
+                    medium: e.medium,
+                    linkSpeedMbps: e.linkSpeedMbps,
+                    portIndex: e.portIndex,
+                    localPortIndex: e.localPortIndex,
+                    targetHasUplinkChip,
+                    ssid: e.ssid,
+                    band: e.band,
+                    signal: e.signal
+                }
             };
         });
 
@@ -644,25 +878,116 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     // Horizontal are deterministic dagre layouts where mixing manual
     // positions with auto-layout is confusing. The positions stay in SQLite
     // and reappear when the user switches back to Grouped.
+    //
+    // We expose finalPositions as its own memo so `edgesWithHandles` below
+    // can re-pick edge handles whenever a manual drag changes a position,
+    // without re-running dagre (which lives in `layouted`).
+    const finalPositions = useMemo(() => {
+        const map = new Map<string, { x: number; y: number }>();
+        for (const n of layouted.nodes) {
+            const stored = editableMode ? manualPositions.get(n.id) : undefined;
+            map.set(n.id, stored ?? n.position);
+        }
+        return map;
+    }, [layouted.nodes, manualPositions, editableMode]);
+
     const nodes = useMemo<Node[]>(() => {
         return layouted.nodes.map(n => {
-            const stored = editableMode ? manualPositions.get(n.id) : undefined;
             const isSelected = n.id === selectedId;
+            const pos = finalPositions.get(n.id) ?? n.position;
             return {
                 ...n,
-                position: stored ?? n.position,
+                position: pos,
                 selected: isSelected,
                 data: { ...n.data, editingMode: dragMode && editableMode }
             };
         });
-    }, [layouted, manualPositions, selectedId, dragMode, editableMode]);
-    const edges = layouted.edges;
+    }, [layouted.nodes, finalPositions, selectedId, dragMode, editableMode]);
 
+    // Re-pick handles using the FINAL positions: when a card is dragged to
+    // the left of its parent, the edge should exit from the parent's left
+    // side and enter the child's right side, instead of sticking to the
+    // dagre-era top/bottom defaults. Also applies the "selected" highlight
+    // (thicker stroke + drop-shadow glow) so the user gets feedback when they
+    // click on a cable.
+    //
+    // Fan-out post-processing: when multiple edges leave the same source
+    // through the central `s` (bottom) handle — typical of an AP serving many
+    // Wi-Fi clients — they would all stack on one pixel. We spread them
+    // across the s0..sN-1 fan handles ordered by target X. Same logic on the
+    // target side for `t` (top) → t0..tN-1.
+    const widthById = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const n of layouted.nodes) map.set(n.id, getNodeWidth(n));
+        return map;
+    }, [layouted.nodes]);
+
+    const edges = useMemo<Edge[]>(() => {
+        const initial = layouted.edges.map(e => {
+            const d = (e.data ?? {}) as {
+                medium?: EdgeMedium;
+                portIndex?: number;
+                localPortIndex?: number;
+                targetHasUplinkChip?: boolean;
+            };
+            const isWifi = d.medium === 'wifi';
+            const isUplink = d.medium === 'uplink';
+            const handles = pickEdgeHandles(
+                mode,
+                isWifi,
+                isUplink,
+                d.portIndex,
+                d.localPortIndex,
+                d.targetHasUplinkChip === true,
+                finalPositions.get(e.source),
+                finalPositions.get(e.target)
+            );
+            const isSelected = e.id === selectedEdgeId;
+            const baseStyle = (e.style ?? {}) as React.CSSProperties;
+            const baseStrokeWidth = typeof baseStyle.strokeWidth === 'number' ? baseStyle.strokeWidth : 1.6;
+            const stroke = typeof baseStyle.stroke === 'string' ? baseStyle.stroke : '#94a3b8';
+            const style: React.CSSProperties = isSelected
+                ? {
+                    ...baseStyle,
+                    strokeWidth: baseStrokeWidth + 2,
+                    filter: `drop-shadow(0 0 6px ${stroke})`
+                }
+                : baseStyle;
+            // Always smoothstep — the user explicitly rejected diagonals
+            // ("jamais oblique"). Decrochement / Z artefacts on parallel pairs
+            // are mitigated by the FAN_OUT_COUNT bump (tighter handle grid)
+            // and the smaller pathOptions offsets so any remaining bend is
+            // a few pixels wide instead of a visible zigzag.
+            return {
+                ...e,
+                type: 'smoothstep',
+                sourceHandle: handles.source,
+                targetHandle: handles.target,
+                selected: isSelected,
+                zIndex: isSelected ? 10 : undefined,
+                style
+            };
+        });
+        spreadCentralHandles(initial, finalPositions, widthById);
+        return initial;
+    }, [layouted.edges, finalPositions, widthById, mode, selectedEdgeId]);
+
+    // Node selection and edge selection are mutually exclusive — clicking a
+    // node clears the edge panel and vice versa. The pane click clears both.
     const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+        setSelectedEdgeId(null);
         setSelectedId(prev => (prev === node.id ? null : node.id));
     }, []);
 
-    const handlePaneClick = useCallback(() => setSelectedId(null), []);
+    const handleEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+        setSelectedId(null);
+        setSelectedEdgeId(prev => (prev === edge.id ? null : edge.id));
+    }, []);
+
+    const handlePaneClick = useCallback(() => {
+        setSelectedId(null);
+        setSelectedEdgeId(null);
+    }, []);
 
     // Auto-fit the view in two cases:
     //  1. First time nodes appear (page load / tab switch back / filter reset)
@@ -709,6 +1034,20 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         };
         return list.slice().sort((a, b) => portOf(a) - portOf(b));
     }, [filteredGraph.edges, selectedId]);
+
+    // Edge selection: resolves the input edge and looks up the source switch's
+    // matching port (so we can show PoE state on the panel — PoE is a property
+    // of the port, not the edge).
+    const selectedEdge = useMemo(
+        () => (selectedEdgeId ? filteredGraph.edges.find(e => e.id === selectedEdgeId) ?? null : null),
+        [filteredGraph.edges, selectedEdgeId]
+    );
+    const selectedEdgePoe = useMemo<boolean | null>(() => {
+        if (!selectedEdge || typeof selectedEdge.portIndex !== 'number') return null;
+        const src = filteredGraph.nodes.find(n => n.id === selectedEdge.source);
+        const port = src?.metadata?.ports?.find(p => p.idx === selectedEdge.portIndex);
+        return typeof port?.poe === 'boolean' ? port.poe : null;
+    }, [selectedEdge, filteredGraph.nodes]);
 
     return (
         <div className="relative rounded-xl border border-slate-700 overflow-hidden bg-slate-950" style={{ height }}>
@@ -928,7 +1267,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 edges={edges}
                 nodeTypes={nodeTypes}
                 nodesDraggable={dragMode}
+                snapToGrid={dragMode && snapEnabled}
+                snapGrid={SNAP_GRID}
                 onNodeClick={handleNodeClick}
+                onEdgeClick={handleEdgeClick}
                 onPaneClick={handlePaneClick}
                 onNodeDragStop={handleNodeDragStop}
                 onInit={handleInit}
@@ -1031,6 +1373,20 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 );
             })()}
 
+            {/* Edge info panel — mutually exclusive with the node panel.
+                Click on a cable in the graph → this side panel slides in with
+                medium, speed, port, SSID/band/signal and PoE state. */}
+            {!selectedNode && selectedEdge && (
+                <EdgeInfoPanel
+                    edge={selectedEdge}
+                    sourceLabel={nodeLabelById.get(selectedEdge.source) ?? selectedEdge.source.replace(/^mac:/, '')}
+                    targetLabel={nodeLabelById.get(selectedEdge.target) ?? selectedEdge.target.replace(/^mac:/, '')}
+                    poeActive={selectedEdgePoe}
+                    onClose={() => setSelectedEdgeId(null)}
+                    t={t}
+                />
+            )}
+
             {/* Edit toolbar (only when drag mode is on) */}
             {dragMode && (
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 p-1.5 rounded-lg bg-slate-900/95 border border-amber-400/40 shadow-lg shadow-amber-500/10">
@@ -1087,6 +1443,21 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                             <option value={50}>50 px</option>
                         </select>
                     </label>
+                    <button
+                        onClick={() => setSnapEnabled(prev => !prev)}
+                        title={snapEnabled ? t('topology.editToolbar.snapOn') : t('topology.editToolbar.snapOff')}
+                        className={`flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wide rounded border transition-colors ${
+                            snapEnabled
+                                ? 'bg-sky-500/30 text-sky-100 border-sky-400/50'
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                        }`}
+                    >
+                        <Magnet size={11} />
+                        <span>{t('topology.editToolbar.snap')}</span>
+                        <span className={`font-mono text-[9px] ${snapEnabled ? 'text-sky-200' : 'text-slate-500'}`}>
+                            {snapEnabled ? `${SNAP_GRID[0]}px` : t('topology.editToolbar.snapOff')}
+                        </span>
+                    </button>
                     <span className="px-2 text-[10px] text-slate-500 hidden md:inline">
                         {t('topology.editToolbar.hint')}
                     </span>
@@ -1284,5 +1655,89 @@ const DetailRow: React.FC<DetailRowProps> = ({ icon, label, value, mono }) => (
         </div>
     </div>
 );
+
+interface EdgeInfoPanelProps {
+    edge: TopologyEdgeIn;
+    sourceLabel: string;
+    targetLabel: string;
+    poeActive: boolean | null;
+    onClose: () => void;
+    t: (k: string) => string;
+}
+
+const EdgeInfoPanel: React.FC<EdgeInfoPanelProps> = ({ edge, sourceLabel, targetLabel, poeActive, onClose, t }) => {
+    const speed = formatSpeed(edge.linkSpeedMbps);
+    const accent = EDGE_COLOR[edge.medium];
+    const MediumIcon = edge.medium === 'wifi' ? Wifi : Cable;
+    return (
+        <div className="absolute top-3 right-3 w-96 lg:w-[28rem] max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-xl border-2 border-slate-600 bg-slate-800 shadow-2xl">
+            <div className="h-1" style={{ background: accent }} />
+            <div className="flex items-start justify-between gap-2 p-4 border-b border-slate-700">
+                <div className="min-w-0 flex-1">
+                    <div className="text-xs uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
+                        <MediumIcon size={11} className={EDGE_ICON_COLOR[edge.medium]} />
+                        <span>{t(`topology.medium.${edge.medium}`)}</span>
+                    </div>
+                    <div className="text-base font-semibold text-slate-100 truncate flex items-center gap-1.5 mt-0.5">
+                        <span className="truncate" title={sourceLabel}>{sourceLabel}</span>
+                        <ArrowRightLeft size={13} className="flex-none text-slate-400" />
+                        <span className="truncate" title={targetLabel}>{targetLabel}</span>
+                    </div>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition-colors"
+                    aria-label={t('common.close')}
+                >
+                    <X size={16} />
+                </button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+                {speed && (
+                    <DetailRow icon={<Gauge size={14} />} label={t('topology.edgeInfo.speed')} value={speed} mono />
+                )}
+                {typeof edge.portIndex === 'number' && (
+                    <DetailRow
+                        icon={<Hash size={14} />}
+                        label={t('topology.edgeInfo.sourcePort')}
+                        value={`Port ${edge.portIndex}`}
+                        mono
+                    />
+                )}
+                {typeof edge.localPortIndex === 'number' && (
+                    <DetailRow
+                        icon={<Hash size={14} />}
+                        label={t('topology.edgeInfo.targetPort')}
+                        value={`Port ${edge.localPortIndex}`}
+                        mono
+                    />
+                )}
+                {edge.ssid && (
+                    <DetailRow
+                        icon={<Wifi size={14} />}
+                        label={t('topology.edgeInfo.ssid')}
+                        value={`${edge.ssid}${edge.band ? ' · ' + edge.band : ''}`}
+                    />
+                )}
+                {typeof edge.signal === 'number' && (
+                    <DetailRow
+                        icon={<Wifi size={14} />}
+                        label={t('topology.edgeInfo.signal')}
+                        value={`${edge.signal} dBm`}
+                        mono
+                    />
+                )}
+                {poeActive !== null && (
+                    <DetailRow
+                        icon={<Zap size={14} className={poeActive ? 'text-amber-300' : 'text-slate-500'} />}
+                        label={t('topology.edgeInfo.poe')}
+                        value={poeActive ? t('topology.edgeInfo.poeActive') : t('topology.edgeInfo.poeInactive')}
+                    />
+                )}
+                <DetailRow icon={<Tag size={14} />} label={t('topology.edgeInfo.source_plugin')} value={edge.source_plugin} />
+            </div>
+        </div>
+    );
+};
 
 export default TopologyGraph;

@@ -113,6 +113,23 @@
       "wifiClients": "Clients",
       "wifiTotal": "Débit total"
     },
+    "medium": {
+      "ethernet": "Ethernet",
+      "wifi": "Wi-Fi",
+      "uplink": "Uplink",
+      "virtual": "Virtuel (VM)"
+    },
+    "edgeInfo": {
+      "speed": "Vitesse",
+      "sourcePort": "Port source",
+      "targetPort": "Port cible",
+      "ssid": "Wi-Fi",
+      "signal": "Signal",
+      "poe": "PoE",
+      "poeActive": "Actif",
+      "poeInactive": "Inactif",
+      "source_plugin": "Rapporté par"
+    },
     "legend": {
       "title": "Légende",
       "links": "Liens",
@@ -155,6 +172,9 @@
       "selectNode": "Sélectionner un nœud",
       "move": "Déplacer",
       "step": "Pas",
+      "snap": "Aimant",
+      "snapOn": "Magnétisme (activé)",
+      "snapOff": "off",
       "hint": "Flèches (↑↓←→) — Maj = ×4"
     },
     "export": {

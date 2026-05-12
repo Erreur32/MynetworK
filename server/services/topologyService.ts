@@ -18,6 +18,8 @@ import { logger } from '../utils/logger.js';
 import { pluginManager } from './pluginManager.js';
 import { TopologySnapshotRepository } from '../database/models/TopologySnapshot.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
+import { UniFiDeviceSnapshotRepository, type UniFiDeviceSnapshot } from '../database/models/UniFiDeviceSnapshot.js';
+import { lookupUniFiModel, deriveDisplayName, totalPortsFor, type UniFiModelSpec } from './unifiModelCatalog.js';
 import { freeboxApi } from './freeboxApi.js';
 import type { UniFiPlugin } from '../plugins/unifi/UniFiPlugin.js';
 import type {
@@ -306,29 +308,37 @@ function ensureFreeboxAp(
     nodes: Map<string, TopologyNode>,
     edges: Map<string, TopologyEdge>
 ): string {
+    const isRepeater = ap.type === 'repeater';
+    // The Freebox API reports the box itself as an access_point for wired
+    // clients (ap.mac = the box's Wi-Fi MAC) — without this guard we'd create
+    // a second "Freebox" gateway node next to freebox:box (one with the MAC,
+    // one without). Merge the AP MAC onto freebox:box and reuse the same id.
+    if (!isRepeater) {
+        const fbx = nodes.get(FREEBOX_BOX_ID);
+        if (fbx && !fbx.mac) fbx.mac = apMac;
+        return FREEBOX_BOX_ID;
+    }
+    // Repeater branch — distinct device, separate node + uplink edge.
     const apId = macNodeId(apMac);
     if (!nodes.has(apId)) {
-        const isRepeater = ap.type === 'repeater';
         nodes.set(apId, {
             id: apId,
-            kind: isRepeater ? 'repeater' : 'gateway',
-            label: isRepeater ? 'Freebox repeater' : 'Freebox',
+            kind: 'repeater',
+            label: 'Freebox repeater',
             mac: apMac,
             sources: ['freebox'],
             metadata: { active: true }
         });
     }
-    if (apId !== FREEBOX_BOX_ID) {
-        const upId = `freebox:uplink:${apMac}`;
-        if (!edges.has(upId)) {
-            edges.set(upId, {
-                id: upId,
-                source: FREEBOX_BOX_ID,
-                target: apId,
-                medium: 'uplink',
-                source_plugin: 'freebox'
-            });
-        }
+    const upId = `freebox:uplink:${apMac}`;
+    if (!edges.has(upId)) {
+        edges.set(upId, {
+            id: upId,
+            source: FREEBOX_BOX_ID,
+            target: apId,
+            medium: 'uplink',
+            source_plugin: 'freebox'
+        });
     }
     return apId;
 }
@@ -420,24 +430,104 @@ function logMissingLocalUplinkPort(
     logger.debug('Topology', `UniFi ${t} "${dev.name ?? mac}" has uplink object but no port_idx / local_port — uplink keys: ${keys}`);
 }
 
+// Maps UniFi kind → catalogue family for fallback display-name derivation.
+function familyForKind(kind: NodeKind): 'gateway' | 'switch' | 'ap' | 'unknown' {
+    if (kind === 'gateway' || kind === 'switch' || kind === 'ap') return kind;
+    return 'unknown';
+}
+
+// Build a friendly display name: catalogue match wins, otherwise derive from
+// family + port count, with the scan-reseau hostname as a stronger fallback
+// than the raw model code (often more readable than e.g. "US24P250").
+function resolveModelDisplay(
+    rawCode: string | undefined,
+    spec: UniFiModelSpec | undefined,
+    kind: NodeKind,
+    portCount: number | undefined,
+    existing: TopologyNode | undefined
+): string | undefined {
+    if (spec) return spec.displayName;
+    if (kind !== 'switch' && kind !== 'gateway' && kind !== 'ap') return undefined;
+    // Use the scan-reseau-sourced hostname if it looks like a real device name.
+    const hostnameCandidate = typeof existing?.metadata?.host_type === 'string'
+        ? undefined
+        : existing?.label;
+    return deriveDisplayName(rawCode, familyForKind(kind), portCount, hostnameCandidate);
+}
+
+// Replay a cached port_table when UniFi is offline / hasn't returned the live
+// table. Forces every port to up=false so the UI grids them grey, and clears
+// PoE / speed (those reflect a past state that's no longer valid).
+function replayCachedPorts(
+    snap: UniFiDeviceSnapshot | undefined,
+    uplinkPorts: Set<number> | undefined,
+    localUplinkPortIdxs: number[]
+): { ports: ReturnType<typeof extractSwitchPorts>; fromSnapshot: boolean } {
+    if (!snap || snap.portTable.length === 0) return { ports: undefined, fromSnapshot: false };
+    const uplinkSet = new Set(localUplinkPortIdxs.length > 0 ? localUplinkPortIdxs : snap.localUplinkPortIdxs);
+    const ports = extractSwitchPorts({ port_table: snap.portTable }, uplinkPorts, uplinkSet);
+    if (!ports) return { ports: undefined, fromSnapshot: false };
+    for (const p of ports) {
+        p.up = false;
+        p.speed = undefined;
+        p.poe = false;
+    }
+    return { ports, fromSnapshot: true };
+}
+
 function buildUniFiDeviceNode(
     dev: Record<string, any>,
     id: string,
     mac: string,
     existing: TopologyNode | undefined,
-    uplinkPorts?: Set<number>
+    uplinkPorts: Set<number> | undefined,
+    snapshotByMac: Map<string, UniFiDeviceSnapshot>
 ): TopologyNode {
     const modelStr = typeof dev.model === 'string' ? dev.model : undefined;
     const kind = pickUniFiDeviceKind(existing, dev.type, dev.model);
     const localUplinkPortIdxs = collectLocalUplinkPortIdxs(dev);
     logMissingLocalUplinkPort(dev, kind, mac, localUplinkPortIdxs);
-    const ports = (kind === 'switch' || kind === 'gateway')
+    const isSwitchOrGateway = kind === 'switch' || kind === 'gateway';
+    const livePorts = isSwitchOrGateway
         ? extractSwitchPorts(dev, uplinkPorts, new Set(localUplinkPortIdxs))
         : undefined;
+
+    // Cache the live port_table for future offline replays; if we don't have
+    // a live one, fall back to the cached snapshot (greyed-out).
+    let ports = livePorts;
+    let portsFromSnapshot = false;
+    if (isSwitchOrGateway) {
+        if (livePorts && livePorts.length > 0 && Array.isArray(dev.port_table)) {
+            UniFiDeviceSnapshotRepository.upsert({
+                mac,
+                model: modelStr,
+                portTable: dev.port_table,
+                localUplinkPortIdxs
+            });
+        } else {
+            const replayed = replayCachedPorts(snapshotByMac.get(mac), uplinkPorts, localUplinkPortIdxs);
+            if (replayed.ports) {
+                ports = replayed.ports;
+                portsFromSnapshot = replayed.fromSnapshot;
+            }
+        }
+    }
+
+    const spec = lookupUniFiModel(modelStr);
+    const portCount = spec ? totalPortsFor(spec) : ports?.length;
+    const modelDisplay = resolveModelDisplay(modelStr, spec, kind, portCount, existing);
+    // Catalogue tells us whether the device has a dedicated WAN slot. For
+    // unknown models we fall back on kind — gateways usually have one (keeps
+    // current behaviour for unrecognised gateways), switches never do.
+    const hasDedicatedUplink =
+        typeof spec?.hasDedicatedUplink === 'boolean'
+            ? spec.hasDedicatedUplink
+            : kind === 'gateway';
+
     const node: TopologyNode = {
         id,
         kind,
-        label: dev.name || modelStr || existing?.label || mac,
+        label: dev.name || modelDisplay || modelStr || existing?.label || mac,
         ip: existing?.ip ?? dev.ip,
         mac,
         vendor: existing?.vendor,
@@ -445,10 +535,13 @@ function buildUniFiDeviceNode(
         metadata: {
             ...existing?.metadata,
             model: modelStr,
+            modelDisplay,
             firmware: dev.firmware_version || dev.version,
             active: dev.state === 1,
             last_seen: dev.last_seen,
             ports,
+            portsFromSnapshot: portsFromSnapshot ? true : undefined,
+            hasDedicatedUplink,
             localUplinkPortIdxs: localUplinkPortIdxs.length > 0 ? localUplinkPortIdxs : undefined
         }
     };
@@ -479,13 +572,14 @@ function processUniFiDevice(
     dev: Record<string, any>,
     nodes: Map<string, TopologyNode>,
     edges: Map<string, TopologyEdge>,
-    uplinkPortsByMac?: Map<string, Set<number>>
+    uplinkPortsByMac: Map<string, Set<number>> | undefined,
+    snapshotByMac: Map<string, UniFiDeviceSnapshot>
 ): void {
     const mac = normalizeMac(dev.mac);
     if (!mac) return;
     const id = macNodeId(mac);
     const uplinkPorts = uplinkPortsByMac?.get(mac);
-    nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id), uplinkPorts));
+    nodes.set(id, buildUniFiDeviceNode(dev, id, mac, nodes.get(id), uplinkPorts, snapshotByMac));
 
     const uplinkMac = readUniFiUplinkMac(dev);
     if (uplinkMac && uplinkMac !== mac) {
@@ -1254,8 +1348,12 @@ class TopologyService {
         const { devices, clients } = await plugin.getTopologyData();
         const rawDevices = devices as Array<Record<string, any>>;
         const uplinkPortsByMac = buildUplinkPortMap(rawDevices);
+        // Pre-fetch every cached snapshot once (table is one row per UniFi
+        // device, small) so the offline-replay branch in buildUniFiDeviceNode
+        // is an O(1) Map lookup instead of an N+1 SELECT-per-device hit.
+        const snapshotByMac = UniFiDeviceSnapshotRepository.findAll();
         for (const dev of rawDevices) {
-            processUniFiDevice(dev, nodes, edges, uplinkPortsByMac);
+            processUniFiDevice(dev, nodes, edges, uplinkPortsByMac, snapshotByMac);
         }
         for (const cli of clients as UniFiClient[]) {
             processUniFiClient(cli, nodes, edges);
@@ -1268,16 +1366,31 @@ class TopologyService {
             sortBy: 'last_seen',
             sortOrder: 'desc'
         });
+        // Index existing nodes by their MAC so a scan-reseau record matching
+        // an already-discovered MAC merges in even when the existing node's id
+        // isn't `mac:XX:…` — typically the Freebox (id=`freebox:box`, MAC set
+        // via ensureFreeboxAp) which previously produced a duplicate node.
+        const nodeByMac = new Map<string, TopologyNode>();
+        for (const n of nodes.values()) {
+            if (n.mac) nodeByMac.set(n.mac, n);
+        }
         for (const rec of records) {
             const mac = normalizeMac(rec.mac);
-            const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
             const lastSeen = toUnixSeconds(rec.lastSeen);
             const isOnline = rec.status === 'online';
+            const macMatch = mac ? nodeByMac.get(mac) : undefined;
+            if (macMatch) {
+                mergeScanReseauIntoExisting(macMatch, rec, isOnline, lastSeen);
+                continue;
+            }
+            const id = mac ? macNodeId(mac) : `scan:${rec.ip}`;
             const existing = nodes.get(id);
             if (existing) {
                 mergeScanReseauIntoExisting(existing, rec, isOnline, lastSeen);
             } else {
-                nodes.set(id, buildScanReseauNode(id, mac, rec, isOnline, lastSeen));
+                const newNode = buildScanReseauNode(id, mac, rec, isOnline, lastSeen);
+                nodes.set(id, newNode);
+                if (mac) nodeByMac.set(mac, newNode);
             }
         }
     }

@@ -113,6 +113,23 @@
       "wifiClients": "Clients",
       "wifiTotal": "Aggregate"
     },
+    "medium": {
+      "ethernet": "Ethernet",
+      "wifi": "Wi-Fi",
+      "uplink": "Uplink",
+      "virtual": "Virtual (VM)"
+    },
+    "edgeInfo": {
+      "speed": "Speed",
+      "sourcePort": "Source port",
+      "targetPort": "Target port",
+      "ssid": "Wi-Fi",
+      "signal": "Signal",
+      "poe": "PoE",
+      "poeActive": "Active",
+      "poeInactive": "Inactive",
+      "source_plugin": "Reported by"
+    },
     "legend": {
       "title": "Legend",
       "links": "Links",
@@ -155,6 +172,9 @@
       "selectNode": "Select a node",
       "move": "Move",
       "step": "Step",
+      "snap": "Snap",
+      "snapOn": "Snap to grid (on)",
+      "snapOff": "off",
       "hint": "Arrow keys (↑↓←→) — Shift = ×4"
     },
     "export": {

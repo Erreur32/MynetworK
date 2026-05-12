@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.4] - 2026-05-12
+
+### Added
+
+- UniFi model catalogue mapping ~50 controller model codes (US24P250, UDMPRO, USPL24P, …) to display name, port spec (rj45/sfp/sfpPlus), PoE budget, and a `hasDedicatedUplink` flag. Generic across all UniFi setups since codes are globally consistent.
+- Port-table snapshot cache (`unifi_device_snapshots` SQLite table) keyed by device MAC. When a UniFi switch/gateway is offline at scan time, topology replays the cached port grid greyed-out so the infra card retains its physical port layout. New "cached" badge + dimmed/grayscale styling on the affected grid.
+- Wi-Fi accordion placement: AP clients flank the AP in two staggered columns. Spine gap is dynamic (`wifiSpineGap`) so the AP card sits centred inside the channel between columns.
+- Wired-column placement: ≤6 wired clients in a single column right of the switch; 7-12 split across right + left columns.
+- Sibling Y equalisation (`equalizeSiblings`): every AP / sub-switch / VM-host hanging off the same parent now lands on a single horizontal line, regardless of how many children each has.
+
+### Changed
+
+- `wrappedTreeLayout` and `groupedLayout` now share a single `buildHierarchicalLayout` helper (parameterised by dagre `nodesep`/`ranksep`). The grouped view keeps tighter spacing for a denser dashboard look.
+- Uplink chip rule split by device kind via shared `shouldRenderUplinkChip` helper (single source of truth for the card renderer and the edge picker): switches always get a chip on any uplink port; gateways with a dedicated WAN slot (UDM-Pro, USG, USG-Pro-4, UDM-SE, UDM-Pro-Max, UXG-Pro) get a chip; gateways with no dedicated WAN (UDR, UDM basic, UCG-Ultra, UXG-Lite) keep the uplink port inside the regular grid coloured mauve.
+- Wi-Fi connection chip on client cards now uses the sky palette (sky-500/200/400) to match the dashed Wi-Fi edge colour (`#7dd3fc`), replacing the previous pink.
+- Backend resolves `modelDisplay` from the catalogue with hostname / family + port count fallback for unknown models, included in topology metadata for the frontend.
+
+### Fixed
+
+- Freebox node de-duplication: the box reported itself as an `access_point`, producing both `freebox:box` (no MAC) and a duplicate `mac:XX:…` "Freebox" gateway. `ensureFreeboxAp` now merges non-repeater APs into `freebox:box` (sets its MAC); `collectScanReseauOverlay` indexes existing nodes by MAC field so scan-reseau records also merge into `freebox:box` instead of creating a stray duplicate.
+- `CLIENT_NODE_WIDTH` mismatch between `topologyLayout.ts` (170) and `TopologyNodeCard.tsx` (220) — client cards were overflowing their reserved layout slot. Aligned to 220.
+- Pre-fetch all UniFi snapshots once in `collectUniFi` (`findAll()`) instead of one SELECT per device in `replayCachedPorts`.
+- Replaced O(N²) `clientNodes.find()` / `positionedInfra.find()` inside the four placement helpers with O(1) `Map` lookups built once per layout pass.
+
+### Removed
+
+- ~200 lines of dead code in `topologyLayout.ts`: `buildGroupNode`, `placeChildrenInGroup`, `buildGroupedDagre`, `positionGroupedInfra`, `positionGroupedGroups`, `GroupedDim`, `computeGroupedDims`, and the unused constants `CLIENT_W`, `CLIENT_GAP_X`, `CLIENT_GAP_Y`, `GROUP_PAD`, `GROUP_PAD_TOP`, `CLUSTER_VGAP`, `WIFI_CLUSTER_VGAP`, `WIFI_CLUSTER_COLS`, `WIRED_FLAT_MAX_COLS`, `ORPHAN_PARENT`. Also dropped `GroupNodeData` interface and `getGroupParentId` helper.
+
+---
+
 ## [0.8.3] - 2026-05-11
 
 ### Changes

@@ -10,6 +10,26 @@ import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 
+/**
+ * Single source of truth for whether the uplink chip should render above an
+ * infra card. Used by both TopologyNodeCard (decides chip rendering) and
+ * TopologyGraph (decides whether an edge can target `pt${idx}` — landing on a
+ * missing handle silently drops the edge in React Flow). Keep this exported
+ * so the two sites stay in lock-step — drift = invisible edges.
+ *
+ * Rule:
+ *  - Switch (always): chip on every detected uplink port (RJ45 or SFP).
+ *  - Gateway with dedicated WAN (catalogue says so or kind unknown): chip.
+ *  - Gateway without dedicated WAN (UDR/UDM basic/UCG-Ultra/UXG-Lite): no
+ *    chip — the port serving as WAN is physically identical to LAN, it stays
+ *    in the regular grid coloured mauve via pickPortClass.
+ */
+export function shouldRenderUplinkChip(kind: NodeKind, hasDedicatedUplink: boolean | undefined): boolean {
+    if (kind === 'switch') return true;
+    if (kind === 'gateway') return typeof hasDedicatedUplink === 'boolean' ? hasDedicatedUplink : true;
+    return false;
+}
+
 export interface SwitchPort {
     idx: number;
     name?: string;
@@ -43,6 +63,20 @@ export interface TopologyNodeData extends Record<string, unknown> {
     connection?: ClientConnection;
     editingMode?: boolean;
     localUplinkPortIdxs?: number[];
+    /** Friendly product name resolved by the backend from UniFi's opaque
+     *  model code (e.g. "US24P250" → "US-24-250W"). Shown under the device
+     *  label on infra cards when present. */
+    modelDisplay?: string;
+    /** True when the port grid was replayed from a snapshot (device was
+     *  offline at scan time). Rendering grids ports greyed out. */
+    portsFromSnapshot?: boolean;
+    /** True when the device has a port physically designed as WAN/uplink
+     *  (UDM-Pro, USG…). When true, the uplink port is lifted out of the
+     *  grid and rendered as a separate "Uplink" chip on top. When false,
+     *  the uplink port stays inside the grid coloured mauve — accurate for
+     *  switches (USW-*) and gateways where any port can be WAN (UDR,
+     *  UCG-Ultra, UDM, UXG-Lite). Undefined → caller falls back on kind. */
+    hasDedicatedUplink?: boolean;
     /** vm-host specific — count of VM children */
     vmCount?: number;
     /** vm-host specific — VM child count split by active flag */
@@ -142,10 +176,19 @@ const INFRA_CARD_WIDTH = 300;
 // vm-host cards carry an extra info row (vmCount + hypervisor), so they get
 // a touch more width than regular infra to keep things uncramped.
 const VM_HOST_CARD_WIDTH = 340;
-const CLIENT_CARD_WIDTH = 170;
+// Must match CLIENT_NODE_WIDTH in topologyLayout.ts. Wide enough that the
+// Wi-Fi connection pill ("MyWifi · 5G · 866 Mbps") fits inside the chip
+// without truncation.
+const CLIENT_CARD_WIDTH = 220;
 const UPLINK_CHIP_W = 64;
 const UPLINK_CHIP_GAP = 6;
 const HIDDEN_HANDLE_CLASS = '!opacity-0 !w-1 !h-1 !border-0';
+// Fan-out handle count: handles are evenly spaced along the bottom (source)
+// and top (target) of the card. 24 keeps the quantization step well under
+// the smoothstep offset, so a residual misalignment between source X and
+// target X never produces a visible zigzag — the bend is too small to read
+// as a "tear". MUST match FAN_OUT_COUNT in TopologyGraph.tsx.
+const FAN_OUT_COUNT = 24;
 
 function pickCardWidth(d: TopologyNodeData): number {
     const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater' || d.kind === 'vm-host';
@@ -191,18 +234,27 @@ function portTooltip(port: SwitchPort): string {
     return `Port ${port.idx}${name}\n• ${category}${speedSeg}${mediaSeg}${poeSeg}`;
 }
 
-export const SwitchPortGrid: React.FC<{ ports: SwitchPort[]; cellSize?: 'xs' | 'sm'; wrap?: boolean }> = ({ ports, cellSize = 'sm', wrap = true }) => {
+export const SwitchPortGrid: React.FC<{
+    ports: SwitchPort[];
+    cellSize?: 'xs' | 'sm';
+    wrap?: boolean;
+    /** When true, ports were replayed from a cached snapshot (device offline
+     *  at scan time). Grid renders dimmed and the tooltip flags it. */
+    fromSnapshot?: boolean;
+}> = ({ ports, cellSize = 'sm', wrap = true, fromSnapshot = false }) => {
     // xs is used by the infra card's bottom port row. Width MUST match the
     // handle math (`xPx = 20 + gridIdx * 26`) so the edge endpoints land on
     // the centre of each port cell.
     const cls = cellSize === 'sm' ? 'w-[26px] h-[22px] text-[10px]' : 'w-[24px] h-[20px] text-[10px]';
     const wrapClass = wrap ? 'flex-wrap' : 'flex-nowrap';
+    const dimClass = fromSnapshot ? 'opacity-50 grayscale' : '';
+    const snapshotNote = fromSnapshot ? '\n• Layout cached (device offline)' : '';
     return (
-        <div className={`flex ${wrapClass} gap-0.5`}>
+        <div className={`flex ${wrapClass} gap-0.5 ${dimClass}`}>
             {ports.map(p => (
                 <div
                     key={p.idx}
-                    title={portTooltip(p)}
+                    title={portTooltip(p) + snapshotNote}
                     className={`relative flex items-center justify-center rounded-sm border font-mono font-bold leading-none ${cls} ${pickPortClass(p)}`}
                 >
                     {p.idx}
@@ -225,7 +277,10 @@ function pickClientIcon(d: TopologyNodeData, fallback: React.ElementType): React
 
 function pickConnectionChipClass(inactive: boolean, medium: 'wifi' | 'ethernet'): string {
     if (inactive) return 'bg-slate-700/50 text-slate-400 border-slate-600/40';
-    if (medium === 'wifi') return 'bg-pink-500/15 text-pink-200 border-pink-400/40';
+    // Wi-Fi chip uses the same sky palette as the dashed Wi-Fi edge
+    // (EDGE_COLOR.wifi = #7dd3fc, sky-300) so the chip on the client card
+    // visually matches the cable that connects it to the AP.
+    if (medium === 'wifi') return 'bg-sky-500/15 text-sky-200 border-sky-400/40';
     return 'bg-lime-500/15 text-lime-200 border-lime-400/40';
 }
 
@@ -305,16 +360,27 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
 
     const cardWidth = pickCardWidth(d);
     // Mauve "Uplink" chip on TOP of the card, with its own target Handle.
-    // Bottom grid hides uplink ports so the chip doesn't visually duplicate them.
+    // Rule:
+    //   - Switch (always, RJ45 or SFP): chip on every detected uplink port.
+    //     Switches have real uplink ports by design — they go upstream and
+    //     deserve the visual emphasis, regardless of media.
+    //   - Gateway with a dedicated WAN slot (UDM-Pro, USG, USG-Pro-4,
+    //     UDM-SE…): chip on every detected uplink port.
+    //   - Gateway without a dedicated WAN (UDR, UDM basic, UCG-Ultra,
+    //     UXG-Lite…): NO chip — the port serving as WAN is physically
+    //     identical to LAN ports, so it stays in the grid coloured mauve.
     const { uplinkPorts, bottomPorts, showUplinkChips } = React.useMemo(() => {
         const sp = d.ports ? [...d.ports].sort((a, b) => a.idx - b.idx) : null;
         const set = new Set(d.localUplinkPortIdxs ?? []);
         const inline = sp !== null && sp.length <= SWITCH_INLINE_PORTS_MAX;
-        const up = sp ? sp.filter(p => set.has(p.idx)) : [];
-        const show = up.length > 0 && inline;
-        const bp = sp && show ? sp.filter(p => !set.has(p.idx)) : sp;
-        return { uplinkPorts: up, bottomPorts: bp, showUplinkChips: show };
-    }, [d.ports, d.localUplinkPortIdxs]);
+        const allUplinks = sp ? sp.filter(p => set.has(p.idx)) : [];
+        const show = shouldRenderUplinkChip(d.kind, d.hasDedicatedUplink)
+            && allUplinks.length > 0
+            && inline;
+        const chipIdxSet = show ? new Set(allUplinks.map(p => p.idx)) : new Set<number>();
+        const bp = sp && show ? sp.filter(p => !chipIdxSet.has(p.idx)) : sp;
+        return { uplinkPorts: show ? allUplinks : [], bottomPorts: bp, showUplinkChips: show };
+    }, [d.ports, d.localUplinkPortIdxs, d.hasDedicatedUplink, d.kind]);
     const uplinkChipsTotalW = uplinkPorts.length * UPLINK_CHIP_W
         + Math.max(0, uplinkPorts.length - 1) * UPLINK_CHIP_GAP;
     const uplinkChipsStartX = Math.max(8, (cardWidth - uplinkChipsTotalW) / 2);
@@ -351,10 +417,45 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             <div
                 className={`absolute inset-0 bg-gradient-to-br pointer-events-none ${tintClass}`}
             />
-            {/* Invisible anchors — React Flow needs these to exist so edges can attach. */}
-            <Handle id="t" type="target" position={Position.Top} className={HIDDEN_HANDLE_CLASS} />
-            <Handle id="tl" type="target" position={Position.Left} className={HIDDEN_HANDLE_CLASS} />
-            <Handle id="sr" type="source" position={Position.Right} className={HIDDEN_HANDLE_CLASS} />
+            {/* Invisible anchors — React Flow needs these to exist so edges can attach.
+                Each card carries source AND target handles on all 4 sides so the dynamic
+                handle picker (TopologyGraph.pickEdgeHandles) can route an edge from
+                whichever side faces the other endpoint after a manual drag.
+                The switch port-aware handles (`p${idx}` source / `pt${idx}` target) are
+                rendered separately above and STAY anchored to the numbered port — they
+                are not affected by the dynamic picker. */}
+            <Handle id="t"  type="target" position={Position.Top}    className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="tb" type="target" position={Position.Bottom} className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="tl" type="target" position={Position.Left}   className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="tr" type="target" position={Position.Right}  className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="st" type="source" position={Position.Top}    className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="sl" type="source" position={Position.Left}   className={HIDDEN_HANDLE_CLASS} />
+            <Handle id="sr" type="source" position={Position.Right}  className={HIDDEN_HANDLE_CLASS} />
+            {/* Fan-out handles: 8 evenly-spaced exit/entry points along the
+                bottom (source) and the top (target). When multiple edges share
+                the central `s` / `t` handle, TopologyGraph's edges memo spreads
+                them across these so the cables don't stack on one pixel.
+                Switch-specific per-port handles `p${idx}` still live below in
+                the port grid — those override these for cabled connections. */}
+            {Array.from({ length: FAN_OUT_COUNT }, (_, i) => {
+                const xPx = ((i + 0.5) / FAN_OUT_COUNT) * cardWidth;
+                return (
+                    <React.Fragment key={`fan-${i}`}>
+                        <Handle
+                            id={`s${i}`}
+                            type="source"
+                            position={Position.Bottom}
+                            style={{ left: `${xPx}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
+                        />
+                        <Handle
+                            id={`t${i}`}
+                            type="target"
+                            position={Position.Top}
+                            style={{ left: `${xPx}px`, background: 'transparent', border: 'none', width: 4, height: 4 }}
+                        />
+                    </React.Fragment>
+                );
+            })}
             <div className={`relative flex items-center ${isInfra ? 'gap-2.5 p-3' : 'gap-2 p-2.5'}`}>
                 <div className={`flex-none rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor} ${isInfra ? 'w-11 h-11' : 'w-9 h-9'}`}>
                     <Icon size={isInfra ? 22 : 18} />
@@ -363,6 +464,14 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     <div className={`font-semibold truncate ${isInfra ? 'text-base' : 'text-sm'} ${labelClass}`}>
                         {d.label || '—'}
                     </div>
+                    {isInfra && d.modelDisplay && d.modelDisplay !== d.label && (
+                        <div
+                            className={`truncate text-[11px] ${inactive ? 'text-slate-500' : 'text-slate-300'}`}
+                            title={d.modelDisplay}
+                        >
+                            {d.modelDisplay}
+                        </div>
+                    )}
                     {d.ip && (
                         <div className={`font-mono truncate ${isInfra ? 'text-xs' : 'text-[11px]'} ${
                             inactive ? 'text-slate-500' : 'text-slate-300'
@@ -391,10 +500,19 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             <VmHostInfoRow d={d} />
             {bottomPorts && bottomPorts.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
+                    {d.portsFromSnapshot && (
+                        <div
+                            className="absolute top-0 right-1 -translate-y-1/2 px-1 py-px rounded text-[8px] font-semibold uppercase tracking-wide bg-slate-700 text-slate-300 border border-slate-600 z-10"
+                            title="Port layout replayed from a cached snapshot — device was offline at scan time"
+                        >
+                            cached
+                        </div>
+                    )}
                     <SwitchPortGrid
                         ports={bottomPorts}
                         cellSize="xs"
                         wrap={bottomPorts.length > SWITCH_INLINE_PORTS_MAX}
+                        fromSnapshot={d.portsFromSnapshot === true}
                     />
                     {/* Source-only per-port handles. Uplink targets live on the top chips. */}
                     {bottomPorts.length <= SWITCH_INLINE_PORTS_MAX && bottomPorts.map((p, gridIdx) => {

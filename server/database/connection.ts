@@ -279,6 +279,21 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // UniFi device port-table cache. Stores the most recent live `port_table`
+    // we've seen for each UniFi switch / gateway (by MAC). When the device
+    // later goes offline UniFi stops returning a port_table — we replay the
+    // cached one (with all ports forced down) so the topology card still shows
+    // the device's physical port grid instead of disappearing.
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS unifi_device_snapshots (
+            mac TEXT PRIMARY KEY,
+            model TEXT,
+            port_table_json TEXT NOT NULL,
+            local_uplink_port_idxs_json TEXT,
+            captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // Token blacklist table (persists revoked JWT tokens across restarts)
     database.exec(`
         CREATE TABLE IF NOT EXISTS token_blacklist (

@@ -31,6 +31,20 @@ export interface TopologyNode {
     metadata?: {
         host_type?: string;
         model?: string;
+        /** Friendly product name resolved from `model` via the UniFi catalogue,
+         *  or derived from family + port count / hostname when the code is
+         *  unknown. Always populated for UniFi-sourced infra devices. */
+        modelDisplay?: string;
+        /** True when the ports below were replayed from a cached snapshot
+         *  because the device was offline at scan time. Used by the front-end
+         *  to render the port grid greyed out without losing the layout. */
+        portsFromSnapshot?: boolean;
+        /** True when the device has at least one port physically designed as
+         *  WAN/uplink (UDM-Pro, USG, etc.) and the front-end should render it
+         *  as a separate "Uplink" chip above the card. False when the device
+         *  has no dedicated uplink slot (USW switches, UDR, UCG-Ultra…) — the
+         *  port serving as uplink stays in the regular grid coloured mauve. */
+        hasDedicatedUplink?: boolean;
         firmware?: string;
         active?: boolean;
         last_seen?: number; // unix seconds
