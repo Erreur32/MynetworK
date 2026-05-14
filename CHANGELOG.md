@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.8.6] - 2026-05-14
+## [0.9.0] - 2026-05-14
 
 ### Added
 
@@ -24,6 +24,10 @@ All notable changes to this project will be documented in this file.
 - Topology: port-aware edges (`p${portIndex}` source on a switch) now always route to the target's TOP handle so the cable shape stays V-H-V and the obstacle-avoidance machinery can deflect it. Source port handle is preserved — the physical port mapping is intact.
 - Topology: horizontal-mode spacing bumped from `nodesep=100 / ranksep=130` to `nodesep=160 / ranksep=180` for more breathing room between sibling infras and rank levels. Editable mode unchanged (`nodesep=60 / ranksep=90`, denser).
 - Extracted the click-outside `useEffect` pattern (3 inline copies in `UserMenu.tsx`, `ThemeSection.tsx`, and the new firmware notification) into a shared `useClickOutside(ref, handler, enabled)` hook in `src/hooks/`. Pure refactor — same behaviour, single source of truth. The mousedown-over-click rationale (so a toggle button's own `onClick` can still fire after the handler closes the popup) is documented in the hook.
+
+### Fixed
+
+- SonarCloud quality gate fixes: hooks ordering in `PluginSummaryCard` (4 hooks were called after the `if (!plugin) return null` early return — violates Rules of Hooks); cognitive complexity of `buildUniFiClientEdge` (19 → 7, via `resolveUniFiLinkSpeed` extraction) and `buildHierarchicalLayout` (21 → 12, via `reorderInfraSiblingsByPort` extraction); merged back-to-back `candidates.push()` calls in `findClearMidY`; replaced redundant `event.target as Node` cast in `useClickOutside` with an `instanceof Node` type guard.
 
 ---
 
