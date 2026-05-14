@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-05-14
+
+### Fixed
+
+- Restored `dagre@0.8.5` in `package-lock.json`. The `v0.9.0` Docker image never built because `update-version.sh`'s non-anchored `sed` replaced `dagre`'s `"version": "0.8.5"` field along with the project's own version, leaving the lockfile with `dagre@0.9.0` while the resolved URL still pointed at `dagre-0.8.5.tgz` — `npm ci` then rejected the inconsistent lockfile. `v0.9.1` is functionally identical to the intended `v0.9.0`; use this tag instead. Follow-up: anchor the `sed` in `update-version.sh` to the top-level workspace version fields only, or switch to `jq` for the structured edit.
+
+---
+
 ## [0.9.0] - 2026-05-14
 
 ### Added
