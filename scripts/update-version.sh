@@ -107,9 +107,12 @@ echo -e "${CYAN}${BOLD}🔄 Mise à jour de la version de ${YELLOW}$OLD_VERSION$
 echo -e "${BLUE}  📝 Mise à jour de package.json...${NC}"
 sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package.json
 
-# 1b. package-lock.json (version mynetwork à la racine et dans packages."")
+# 1b. package-lock.json — only the top-level project version (lines 1-15)
+# is bumped. Without the line range, the sed would also rewrite any
+# dependency that happens to share OLD_VERSION (it bit us on dagre@0.8.5
+# during the 0.8.5 -> 0.9.0 bump and broke `npm ci` in the Docker build).
 echo -e "${BLUE}  📝 Mise à jour de package-lock.json...${NC}"
-sed -i "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package-lock.json
+sed -i "1,15 s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" package-lock.json
 
 # 2. src/constants/version.ts (fichier de constantes centralisé)
 # Use perl so APP_VERSION is updated even when it was out of sync with package.json (sed with OLD_VERSION would skip)
