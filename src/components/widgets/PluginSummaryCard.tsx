@@ -4,7 +4,8 @@
  * Displays a summary card for a specific plugin with key statistics
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useClickOutside } from '../../hooks';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
 import { BarChart } from './BarChart';
@@ -100,6 +101,11 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     // UniFi real-time bandwidth from WebSocket store
     const { history: unifiHistory, isConnected: unifiWsConnected, pushPoint: pushUnifiPoint } = useUnifiRealtimeStore();
     const unifiHistoryLoaded = unifiWsConnected || unifiHistory.length > 0;
+
+    const [firmwareTooltipPinned, setFirmwareTooltipPinned] = useState(false);
+    const firmwareNotifRef = useRef<HTMLDivElement | null>(null);
+    const unpinFirmware = useCallback(() => setFirmwareTooltipPinned(false), []);
+    useClickOutside(firmwareNotifRef, unpinFirmware, firmwareTooltipPinned);
 
     // Pre-fetch UniFi bandwidth via HTTP so mini graph shows data immediately (don't wait for WebSocket)
     const [unifiHttpFetched, setUnifiHttpFetched] = useState(false);
@@ -1174,8 +1180,19 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-2 text-xs">
                                 {/* Firmware update notification - full-width single line */}
                                 {(freeboxUpdateAvailable || freeboxPlayerUpdateAvailable) && (
-                                    <div className="group relative w-full">
-                                        <div className="w-full flex items-center justify-end px-2 py-1 rounded bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px] cursor-help whitespace-nowrap">
+                                    <div
+                                        ref={firmwareNotifRef}
+                                        className="group relative w-full"
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setFirmwareTooltipPinned((p) => !p);
+                                            }}
+                                            aria-expanded={firmwareTooltipPinned}
+                                            className={`w-full flex items-center justify-end px-2 py-1 rounded bg-amber-900/40 border text-amber-300 text-[10px] cursor-pointer whitespace-nowrap transition-colors ${firmwareTooltipPinned ? 'border-amber-400 ring-1 ring-amber-400/40' : 'border-amber-600 hover:border-amber-500'}`}
+                                        >
                                             {freeboxUpdateAvailable && freeboxPlayerUpdateAvailable ? (
                                                 <>{t('freebox.firmwareUpdate.updateAvailable')} v{freeboxLatestFirmware || '?'} • {t('freebox.firmwareUpdate.playerUpdate')} v{freeboxLatestPlayerFirmware || '?'}</>
                                             ) : freeboxUpdateAvailable ? (
@@ -1183,23 +1200,42 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             ) : (
                                                 <>{t('freebox.firmwareUpdate.playerUpdate')} v{freeboxLatestPlayerFirmware || '?'}</>
                                             )}
-                                        </div>
+                                        </button>
                                         {(freeboxFirmwareChangelog || freeboxPlayerFirmwareChangelog) && (
-                                            <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block w-64 max-h-48 overflow-y-auto p-2 text-[10px] text-gray-200 bg-gray-900 border border-amber-600/50 rounded-lg shadow-xl">
+                                            <div className={`absolute right-0 top-full mt-1 z-50 w-64 max-h-48 overflow-y-auto p-2 text-[10px] text-gray-200 bg-gray-900 border border-amber-600/50 rounded-lg shadow-xl ${firmwareTooltipPinned ? 'block' : 'hidden group-hover:block'}`}>
+                                                {firmwareTooltipPinned && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFirmwareTooltipPinned(false);
+                                                        }}
+                                                        aria-label={t('freebox.firmwareUpdate.close')}
+                                                        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-amber-300 hover:bg-gray-800 leading-none"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                )}
                                                 {freeboxFirmwareChangelog && (
-                                                    <div className="mb-2">
+                                                    <div className="mb-2 pr-4">
                                                         <div className="font-semibold text-amber-400 mb-1">{t('freebox.firmwareUpdate.serverUpdate')} - {t('freebox.firmwareUpdate.changelog')}</div>
                                                         <pre className="whitespace-pre-wrap break-words font-sans text-gray-300">{decodeHtmlEntities(freeboxFirmwareChangelog)}</pre>
                                                     </div>
                                                 )}
                                                 {freeboxPlayerFirmwareChangelog && (
-                                                    <div>
+                                                    <div className="pr-4">
                                                         <div className="font-semibold text-blue-400 mb-1">{t('freebox.firmwareUpdate.playerUpdate')} - {t('freebox.firmwareUpdate.changelog')}</div>
                                                         <pre className="whitespace-pre-wrap break-words font-sans text-gray-300">{decodeHtmlEntities(freeboxPlayerFirmwareChangelog)}</pre>
                                                     </div>
                                                 )}
                                                 {freeboxFirmwareBlogUrl && (
-                                                    <a href={freeboxFirmwareBlogUrl} target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline mt-1 inline-block">
+                                                    <a
+                                                        href={freeboxFirmwareBlogUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="text-amber-400 hover:underline mt-1 inline-block"
+                                                    >
                                                         {t('freebox.firmwareUpdate.viewBlog')}
                                                     </a>
                                                 )}

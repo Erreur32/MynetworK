@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useCapabilitiesStore } from '../../stores/capabilitiesStore';
 import { usePluginStore } from '../../stores/pluginStore';
+import { useFreeboxFirmwareStore } from '../../stores/freeboxFirmwareStore';
 
 export type PageType = 'dashboard' | 'freebox' | 'unifi' | 'tv' | 'phone' | 'files' | 'vms' | 'analytics' | 'settings' | 'plugins' | 'users' | 'logs' | 'search' | 'network-scan' | 'topology';
 
@@ -58,6 +59,9 @@ export const Footer: React.FC<FooterProps> = ({
   const { t } = useTranslation();
   const { capabilities } = useCapabilitiesStore();
   const { plugins, pluginStats } = usePluginStore();
+  const freeboxUpdatePending = useFreeboxFirmwareStore(
+    (s) => !!(s.firmwareInfo?.server?.updateAvailable || s.firmwareInfo?.player?.updateAvailable)
+  );
 
   // Filter tabs based on capabilities, user role, active plugins, and current page
   const visibleTabs = useMemo(() => {
@@ -314,10 +318,17 @@ export const Footer: React.FC<FooterProps> = ({
                 <>
                   <button
                     onClick={onReboot}
-                    className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-200 hover:bg-red-900/30 rounded-lg transition-colors"
+                    title={freeboxUpdatePending ? t('freebox.firmwareUpdate.rebootToApply') : undefined}
+                    className="relative flex items-center gap-2 px-4 py-2 border border-red-500 text-red-200 hover:bg-red-900/30 rounded-lg transition-colors"
                   >
                     <Power size={18} />
                     <span className="hidden sm:inline text-sm font-medium">Reboot</span>
+                    {freeboxUpdatePending && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-gray-900 animate-pulse"
+                      />
+                    )}
                   </button>
                   <button
                     onClick={onLogout}

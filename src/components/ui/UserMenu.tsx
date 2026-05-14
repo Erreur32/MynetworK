@@ -8,10 +8,11 @@
  * - Logout option
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Settings, LogOut, Shield, ChevronDown, User, Users } from 'lucide-react';
+import { useClickOutside } from '../../hooks';
 
 interface User {
     username: string;
@@ -65,22 +66,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({
         }
     }, [isOpen]);
 
-    // Close menu when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isOpen]);
+    const closeMenu = useCallback(() => setIsOpen(false), []);
+    useClickOutside(menuRef, closeMenu, isOpen);
 
     if (!user || !user.username) {
         return null;

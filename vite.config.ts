@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 // Intercept console.error to suppress proxy errors in development
 // These errors are normal when the backend is restarting or connections are closed
@@ -164,7 +165,50 @@ export default defineConfig({
       process.env.SERVER_PORT || process.env.PORT || '3003'
     ),
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Progressive Web App — adds a manifest + service worker so Chrome/Edge
+    // shows an "Install app" button in the URL bar. Online-first by design
+    // (the app monitors a live network — stale cache would mislead the user)
+    // but cached app-shell speeds up the next visit.
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['svg/favicon-racine.svg'],
+      manifest: {
+        name: 'MyNetwork',
+        short_name: 'MyNetwork',
+        description: 'Multi-Source Network Dashboard (Freebox, UniFi, network scans)',
+        theme_color: '#0f172a',
+        background_color: '#050505',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          { src: '/pwa-icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ]
+      },
+      workbox: {
+        // Precache the built app shell only. Anything matching /api or /ws is
+        // intentionally NOT cached — they must always hit the live backend.
+        navigateFallbackDenylist: [/^\/api/, /^\/ws/],
+        runtimeCaching: [
+          {
+            // Static assets (already content-hashed by Vite) can be served
+            // straight from cache after first load.
+            urlPattern: ({ request }) =>
+              request.destination === 'style' ||
+              request.destination === 'script' ||
+              request.destination === 'image' ||
+              request.destination === 'font',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'mynetwork-assets' }
+          }
+        ]
+      }
+    })
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

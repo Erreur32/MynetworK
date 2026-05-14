@@ -275,13 +275,41 @@ function pickClientIcon(d: TopologyNodeData, fallback: React.ElementType): React
     return fallback;
 }
 
-function pickConnectionChipClass(inactive: boolean, medium: 'wifi' | 'ethernet'): string {
-    if (inactive) return 'bg-slate-700/50 text-slate-400 border-slate-600/40';
-    // Wi-Fi chip uses the same sky palette as the dashed Wi-Fi edge
-    // (EDGE_COLOR.wifi = #7dd3fc, sky-300) so the chip on the client card
-    // visually matches the cable that connects it to the AP.
-    if (medium === 'wifi') return 'bg-sky-500/15 text-sky-200 border-sky-400/40';
-    return 'bg-lime-500/15 text-lime-200 border-lime-400/40';
+// Tier classes — same scale used on /unifi/traffic for RSSI badges. We reuse
+// them for both the wifi (signal) and wired (speed) chips so a glance at the
+// card tells you whether the link is healthy.
+const CHIP_BLUE   = 'bg-sky-500/15 text-sky-200 border-sky-400/40';
+const CHIP_AMBER  = 'bg-amber-500/20 text-amber-200 border-amber-400/40';
+const CHIP_ORANGE = 'bg-orange-500/20 text-orange-200 border-orange-400/40';
+const CHIP_RED    = 'bg-rose-500/20 text-rose-200 border-rose-400/40';
+const CHIP_DIM    = 'bg-slate-700/50 text-slate-400 border-slate-600/40';
+
+// Wi-Fi tier from RSSI in dBm. Matches wifiColorFromSignal() in TopologyGraph
+// (sky → amber → orange → red as the signal drops).
+function chipClassForWifi(signal: number | undefined): string {
+    if (typeof signal !== 'number') return CHIP_BLUE;
+    if (signal >= -60) return CHIP_BLUE;
+    if (signal >= -70) return CHIP_AMBER;
+    if (signal >= -80) return CHIP_ORANGE;
+    return CHIP_RED;
+}
+
+// Wired tier from negotiated port speed. Gigabit+ is the "healthy" tier
+// (blue), then 100 Mbps as legacy/usable (amber), and anything slower or
+// unreported drops to orange/red.
+function chipClassForWired(speedMbps: number | undefined): string {
+    if (typeof speedMbps !== 'number' || speedMbps <= 0) return CHIP_BLUE;
+    if (speedMbps >= 1000) return CHIP_BLUE;
+    if (speedMbps >= 100) return CHIP_AMBER;
+    if (speedMbps >= 10) return CHIP_ORANGE;
+    return CHIP_RED;
+}
+
+function pickConnectionChipClass(inactive: boolean, conn: ClientConnection): string {
+    if (inactive) return CHIP_DIM;
+    return conn.medium === 'wifi'
+        ? chipClassForWifi(conn.signal)
+        : chipClassForWired(conn.speedMbps);
 }
 
 const INFRA_KINDS_SET: ReadonlySet<NodeKind> = new Set<NodeKind>(['gateway', 'switch', 'ap', 'repeater', 'vm-host']);
@@ -338,6 +366,32 @@ const StatusDot: React.FC<{ inactive: boolean }> = ({ inactive }) => (
         }`}
     />
 );
+
+// Compact speed badge for wired-client cards — sits in the top-right corner,
+// just left of the StatusDot. Shows the negotiated port speed at a glance
+// ("1G", "2.5G", "100M") without taking the inline-chip real estate below
+// the IP. Hidden when the plugin didn't expose a speed for this link.
+function formatSpeedBadge(mbps?: number): string | null {
+    if (!mbps || mbps <= 0) return null;
+    if (mbps >= 1000) {
+        const g = mbps / 1000;
+        return g === Math.floor(g) ? `${g}G` : `${g.toFixed(1)}G`;
+    }
+    return `${mbps}M`;
+}
+
+const SpeedBadge: React.FC<{ mbps?: number }> = ({ mbps }) => {
+    const text = formatSpeedBadge(mbps);
+    if (!text) return null;
+    return (
+        <div
+            title={`Port speed ${mbps} Mbps`}
+            className={`absolute top-1 right-5 z-10 px-1 py-px text-[9px] font-semibold leading-none rounded border ${chipClassForWired(mbps)}`}
+        >
+            {text}
+        </div>
+    );
+};
 
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const d = data as TopologyNodeData;
@@ -482,7 +536,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                         const labelText = buildConnectionLabel(conn);
                         if (!labelText) return null;
                         const ConnIcon = conn.medium === 'wifi' ? Wifi : Cable;
-                        const chip = pickConnectionChipClass(inactive, conn.medium);
+                        const chip = pickConnectionChipClass(inactive, conn);
                         return (
                             <div className={`mt-1 inline-flex items-center gap-1 px-1.5 py-px rounded border text-[10px] max-w-full ${chip}`}>
                                 <ConnIcon size={10} className="flex-none" />
@@ -547,6 +601,8 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             {/* Status dot for clients/unknown — green=active, rose=inactive.
                 Infra kinds use KIND_BADGE (above) instead, so we skip them. */}
             {!isInfra && <StatusDot inactive={inactive} />}
+            {/* Port speed badge for wired clients, top-right next to status dot. */}
+            {!isInfra && d.connection?.medium === 'ethernet' && <SpeedBadge mbps={d.connection.speedMbps} />}
             <Handle id="s" type="source" position={Position.Bottom} className={HIDDEN_HANDLE_CLASS} />
         </div>
     );

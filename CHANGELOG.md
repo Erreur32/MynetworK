@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.6] - 2026-05-14
+
+### Added
+
+- Topology: custom React Flow edge (`AvoidingEdge`) draws orthogonal V-H-V (or H-V-H) paths whose horizontal segment is positioned to avoid crossing any infra card (gateway / switch / AP / repeater / VM-host). The path geometry is computed in the edge component itself; obstacle bboxes are passed via `data.obstacles` from the edges memo. Replaces `smoothstep` as the default edge type for the topology graph.
+- Topology: L-bend deconfliction. When multiple cables share the same natural mid-Y (typical case: gateway → multiple siblings at the same rank), their bends are fanned vertically with `BEND_STEP = 16 px` per cable. The cable reaching the furthest-right target gets the topmost slot so its long H segment runs above the shorter cables.
+- Topology: wired-client speed is shown as a top-right badge on the client card and the inline connection chip below the IP is tier-coloured (sky for gigabit / good RSSI, amber for fair, orange for slow, red for very slow). Same gradient as the `/unifi/traffic` "Clients by throughput" badges.
+- Topology: Wi-Fi cables now draw as a bezier curve (vs orthogonal smoothstep for wired) so the wireless link is unambiguous at a glance. Wi-Fi cable colour follows the RSSI tier gradient (sky → amber → orange → red).
+- Topology: ethernet cables to UniFi wired clients now show the negotiated port speed. When `cli.sw_port_speed` is missing (some UniFi controller versions don't expose it), we fall back to the parent switch's `port_table[sw_port].speed` — the authoritative source on the switch itself.
+- PWA install support via `vite-plugin-pwa`. Chrome / Edge now show the "Install app" button in the URL bar. Manifest + service worker are generated at build time. Online-first design: `/api` and `/ws` are explicitly excluded from the cache so the app always hits the live backend; only the static app shell is precached. 3 PNG icons (192 / 512 / maskable-512) generated from `favicon-racine.svg` with a slate background. `index.html` gets `theme-color`, `apple-touch-icon`, and an SVG favicon link.
+- Reboot button in the Freebox page footer now shows an amber pulsing dot when a firmware update is available, with a `title` tooltip clarifying that a reboot is required to apply the update. Driven by `useFreeboxFirmwareStore` via a boolean selector — re-renders only when the update flag actually flips, not on every periodic firmware-check refresh.
+- Dashboard Freebox card firmware notification is now click-to-pin: clicking the amber alert pins its changelog/blog tooltip open so the blog link inside stays reachable. Pinned state shows a brighter amber border + ring and adds an `×` close button. Dismissed by clicking the `×` or anywhere outside the bubble. Plain hover behaviour is preserved when not pinned.
+- i18n: new `freebox.firmwareUpdate.rebootToApply` and `freebox.firmwareUpdate.close` keys (EN + FR).
+
+### Changed
+
+- Topology: wired clients on a switch are now laid out as a HORIZONTAL row to the right of the switch, sorted left-to-right by physical port number (port 1 closest to the switch). Replaces the previous vertical `wired-column` / `wired-split-columns` placements. The row height (`CLIENT_H`) is small enough that dagre can stack additional infra ranks below it; an extra 90 px reserved height (`WIRED_ROW_BOTTOM_PAD`) is added under the row so the next rank's cables don't graze the client cards.
+- Topology: infra siblings (sub-switches / APs hanging off the same parent) are now reordered to match the parent's physical port order — the AP wired on port 1 sits leftmost, the sub-switch on port 5 to its right, etc. Dagre still picks the X coordinates; we only permute the assignment among siblings using `portByChild` (from edge `portIndex`).
+- Topology: cables to an infra target (sub-switch / AP / VM-host) use an asymmetric V-H-V (`INFRA_TARGET_BIAS = 0.78`) so V_1 (above the L) is longer than V_2 (below) — keeps the H segment well clear of the wired-client row above and close to the target's top.
+- Topology: port-aware edges (`p${portIndex}` source on a switch) now always route to the target's TOP handle so the cable shape stays V-H-V and the obstacle-avoidance machinery can deflect it. Source port handle is preserved — the physical port mapping is intact.
+- Topology: horizontal-mode spacing bumped from `nodesep=100 / ranksep=130` to `nodesep=160 / ranksep=180` for more breathing room between sibling infras and rank levels. Editable mode unchanged (`nodesep=60 / ranksep=90`, denser).
+- Extracted the click-outside `useEffect` pattern (3 inline copies in `UserMenu.tsx`, `ThemeSection.tsx`, and the new firmware notification) into a shared `useClickOutside(ref, handler, enabled)` hook in `src/hooks/`. Pure refactor — same behaviour, single source of truth. The mousedown-over-click rationale (so a toggle button's own `onClick` can still fire after the handler closes the popup) is documented in the hook.
+
+---
+
 ## [0.8.5] - 2026-05-12
 
 ### Added

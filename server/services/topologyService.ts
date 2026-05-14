@@ -693,12 +693,29 @@ function buildUniFiClientEdge(
     cli: UniFiClient,
     mac: string,
     parentMac: string,
-    isWired: boolean
+    isWired: boolean,
+    nodes: Map<string, TopologyNode>
 ): TopologyEdge {
-    const linkSpeedRaw = isWired ? cli.sw_port_speed : cli.tx_rate;
-    const linkSpeedMbps = typeof linkSpeedRaw === 'number' && linkSpeedRaw > 0
-        ? Math.round(linkSpeedRaw)
-        : undefined;
+    // Negotiated link rate. Wired clients: `sw_port_speed` is unreliable
+    // across UniFi controller versions (often missing), so we fall back to
+    // the parent SWITCH's port_table[sw_port].speed which is authoritative.
+    // Wireless clients: `tx_rate` is the negotiated PHY rate to the AP.
+    let linkSpeedMbps: number | undefined;
+    if (isWired) {
+        const rawCliSpeed = cli.sw_port_speed;
+        if (typeof rawCliSpeed === 'number' && rawCliSpeed > 0) {
+            linkSpeedMbps = Math.round(rawCliSpeed);
+        } else if (typeof cli.sw_port === 'number') {
+            const parentNode = nodes.get(macNodeId(parentMac));
+            const port = parentNode?.metadata?.ports?.find(p => p.idx === cli.sw_port);
+            if (port?.speed && port.speed > 0) {
+                linkSpeedMbps = Math.round(port.speed);
+            }
+        }
+    } else {
+        const rawTx = cli.tx_rate;
+        if (typeof rawTx === 'number' && rawTx > 0) linkSpeedMbps = Math.round(rawTx);
+    }
     const portIdx = isWired && typeof cli.sw_port === 'number' ? cli.sw_port : undefined;
     return {
         id: `unifi:client:${parentMac}->${mac}`,
@@ -1296,7 +1313,7 @@ function processUniFiClient(
         }
         return;
     }
-    const edge = buildUniFiClientEdge(cli, mac, parentMac, isWired);
+    const edge = buildUniFiClientEdge(cli, mac, parentMac, isWired, nodes);
     edges.set(edge.id, edge);
 }
 

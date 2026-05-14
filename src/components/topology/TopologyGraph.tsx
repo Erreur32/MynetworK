@@ -9,11 +9,16 @@ import {
     ReactFlow,
     Background,
     Controls,
+    BaseEdge,
+    getSmoothStepPath,
+    getBezierPath,
     type Edge,
+    type EdgeProps,
     type Node,
     type EdgeMarkerType,
     type ReactFlowInstance,
-    MarkerType
+    MarkerType,
+    Position
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +28,7 @@ import { toPng, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { TopologyNodeCard, type TopologyNodeData, shouldRenderUplinkChip } from './TopologyNodeCard';
 import { TopologyGroupNode } from './TopologyGroupNode';
-import { layoutGraph, getNodeWidth, type LayoutMode } from './topologyLayout';
+import { layoutGraph, getNodeWidth, getNodeHeight, type LayoutMode } from './topologyLayout';
 
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 type EdgeMedium = 'ethernet' | 'wifi' | 'uplink' | 'virtual';
@@ -88,15 +93,23 @@ interface TopologyGraphProps {
 // (gateway=amber, switch=emerald, AP=sky, repeater=purple).
 const EDGE_COLOR: Record<EdgeMedium, string> = {
     ethernet: '#a3e635', // lime — distinct from emerald switches
-    wifi: '#7dd3fc',     // sky-300 light blue — visually softer than the
-                         // previous pink so 10+ overlapping animated dashes
-                         // on a busy AP don't shimmer/strobe against the dark
-                         // background. Still distinct from the sky-500 AP
-                         // card tint thanks to the lighter shade + dashed
-                         // pattern.
+    wifi: '#7dd3fc',     // sky-300 — default when no RSSI is reported (the
+                         // wifiColorFromSignal() gradient overrides this when
+                         // the link's signal is known)
     uplink: '#a78bfa',   // violet/mauve — distinct from amber gateways
     virtual: '#e879f9'   // fuchsia — matches the vm-host card tint
 };
+
+// RSSI gradient for wifi cables: blue (good) → amber → orange → red, matching
+// the /unifi/traffic "Clients by throughput" badge scale. Blue (not green) at
+// the top so the wifi colour stays distinct from the ethernet emerald hue.
+function wifiColorFromSignal(signal: number | undefined): string {
+    if (typeof signal !== 'number') return EDGE_COLOR.wifi;
+    if (signal >= -60) return '#7dd3fc';  // sky-300 — good link
+    if (signal >= -70) return '#fbbf24';  // amber-400 — fair
+    if (signal >= -80) return '#f97316';  // orange-500 — weak
+    return '#ef4444';                     // red-500 — very weak
+}
 
 const PORT_BADGE_CLASS: Record<EdgeMedium, string> = {
     uplink:   'bg-purple-500/20 text-purple-200 border-purple-400/40',
@@ -266,10 +279,9 @@ function pickEdgePathOptions(isUplink: boolean, isWifi: boolean): { offset: numb
 //    line (when aligned) or a single L (when diagonal).
 //
 //    Crucial rule: when the target is offset BOTH horizontally and vertically,
-//    we use PERPENDICULAR handles (e.g. source bottom + target left) so that
-//    smoothstep draws an L-shape with a single corner. Using parallel handles
-//    (bottom→top) with a horizontal offset is what produced the "S" / zigzag
-//    the user kept seeing — smoothstep had to weave around the gap.
+//    we use PERPENDICULAR handles (e.g. source bottom + target left) so the
+//    cable draws an L-shape with a single corner instead of a parallel-handle
+//    zigzag that has to weave around the offset.
 //
 //  - Port-aware override (switches): the source is locked to `p${portIndex}`
 //    (bottom port). We still derive the target side from the relative position
@@ -293,12 +305,10 @@ const ALIGN_TOL = 16;
 
 interface SidePair { source: HandleSide; target: HandleSide }
 // Ratio above which we treat the offset as "mostly along one axis" and pick
-// parallel handles (source bottom + target top, or source right + target
-// left). Below this we fall back to perpendicular L. The fan-out alignment
-// in spreadCentralHandles compensates for the horizontal offset, so parallel
-// handles still produce a near-straight cable — and crucially, every client
-// in a stack lands on the SAME side of its card, which is what the user
-// wants from a "stack ... même logique de câblage" standpoint.
+// parallel handles (e.g. source bottom + target top). Below this we fall
+// back to perpendicular L. spreadCentralHandles compensates for the
+// horizontal offset, so parallel handles produce a near-straight cable AND
+// every client in a stack lands on the same side of its card.
 const PARALLEL_RATIO = 1.5;
 
 function parallelPair(source: HandleSide): SidePair {
@@ -352,10 +362,18 @@ function resolveEdgeSides(q: EdgeHandleQuery): SidePair {
     const pair = pickSidePair(dx, dy);
     const portAware = !q.isWifi && typeof q.portIndex === 'number';
     let target = pair.target;
-    if (portAware) target = targetSideFromDx(dx);
+    // Port-aware: the source is locked to `p${idx}` on the switch's BOTTOM,
+    // so force the target onto the TOP edge so the cable shape is V-H-V
+    // (vertical down, horizontal, vertical into target's top). This is the
+    // shape AvoidingEdge knows how to deflect around infra obstacles.
+    if (portAware) target = 'top';
     if (q.isWifi) target = targetSideFromDx(dx);
     let source = q.isWifi ? 'bottom' as HandleSide : pair.source;
-    if (q.isUplink) target = 'top';
+    // Uplink override only when the target physically has an uplink chip on
+    // top — that handle is locked to the card's top edge, so the cable MUST
+    // enter from there. Without a chip, let pickSidePair decide so a child
+    // dragged left/right of its parent doesn't get a 90° detour.
+    if (q.isUplink && q.targetHasUplinkChip) target = 'top';
     return { source, target };
 }
 
@@ -449,6 +467,209 @@ function spreadCentralHandles(
     }
 }
 
+// Infra kinds the custom edge must AVOID crossing.
+const INFRA_OBSTACLE_KINDS = new Set(['gateway', 'switch', 'ap', 'repeater', 'vm-host']);
+
+// ─── Custom edge with obstacle avoidance ────────────────────────────────
+// Orthogonal V-H-V path between the picked handles. The H-segment Y is
+// chosen so the cable goes AROUND infra cards (gateway / switch / AP /
+// repeater / VM-host) instead of crossing them. Handles themselves are
+// picked upstream by pickEdgeHandles + spreadCentralHandles, so port-aware
+// (`p${idx}`) and uplink-chip (`pt${idx}`) attachment stays intact.
+interface ObstacleRect { id: string; x: number; y: number; w: number; h: number }
+interface AvoidingEdgeData {
+    obstacles?: ObstacleRect[];
+    medium?: EdgeMedium;
+    // Pre-computed Y for the H connector — used to break ties when many
+    // cables share the same natural midY (e.g., gateway → multiple siblings
+    // at the same rank). Centralised in the edges memo so all cables in a
+    // conflict group get a coherent vertical fan-out.
+    suggestedMidY?: number;
+}
+
+const AVOID_MARGIN = 12;      // breathing room around each obstacle bbox
+const AVOID_CORNER_RADIUS = 6;
+const AVOID_CLEARANCE_PAD = 16; // extra gap when routing above/below an obstacle
+
+// Find a Y for the horizontal mid-segment that doesn't intersect any blocking
+// obstacle's bbox. Tries midpoint first (the natural smoothstep route); if
+// blocked, hops ABOVE all blockers, then tries BELOW.
+function findClearMidY(sx: number, sy: number, tx: number, ty: number, obstacles: ObstacleRect[], baseMidY?: number): number {
+    const xMin = Math.min(sx, tx);
+    const xMax = Math.max(sx, tx);
+    const blocking = obstacles.filter(o =>
+        o.x - AVOID_MARGIN < xMax && o.x + o.w + AVOID_MARGIN > xMin
+    );
+    const naturalMidY = baseMidY ?? (sy + ty) / 2;
+    if (blocking.length === 0) return naturalMidY;
+    const isClear = (y: number): boolean => blocking.every(o =>
+        y < o.y - AVOID_MARGIN || y > o.y + o.h + AVOID_MARGIN
+    );
+    if (isClear(naturalMidY)) return naturalMidY;
+    // Build candidate Ys at the boundary of every blocking obstacle (just
+    // above its top OR just below its bottom, with clearance pad). Filter
+    // to those that (a) are clear of ALL blockers and (b) fall within the
+    // valid corridor between source and target so the cable doesn't reverse
+    // direction relative to the handle orientation.
+    const validMin = Math.min(sy, ty);
+    const validMax = Math.max(sy, ty);
+    const candidates: number[] = [];
+    for (const o of blocking) {
+        candidates.push(o.y - AVOID_MARGIN - AVOID_CLEARANCE_PAD);
+        candidates.push(o.y + o.h + AVOID_MARGIN + AVOID_CLEARANCE_PAD);
+    }
+    const valid = candidates.filter(y => y >= validMin && y <= validMax && isClear(y));
+    if (valid.length === 0) {
+        // No clear midY fits inside the corridor. Try OUT of corridor (cable
+        // will go above source or below target briefly) — better than
+        // crossing through an infra card.
+        const outOfCorridor = candidates.filter(isClear);
+        if (outOfCorridor.length === 0) return naturalMidY;
+        outOfCorridor.sort((a, b) => Math.abs(a - naturalMidY) - Math.abs(b - naturalMidY));
+        return outOfCorridor[0];
+    }
+    valid.sort((a, b) => Math.abs(a - naturalMidY) - Math.abs(b - naturalMidY));
+    return valid[0];
+}
+
+function findClearMidX(sx: number, sy: number, tx: number, ty: number, obstacles: ObstacleRect[]): number {
+    const yMin = Math.min(sy, ty);
+    const yMax = Math.max(sy, ty);
+    const blocking = obstacles.filter(o =>
+        o.y - AVOID_MARGIN < yMax && o.y + o.h + AVOID_MARGIN > yMin
+    );
+    const naturalMidX = (sx + tx) / 2;
+    if (blocking.length === 0) return naturalMidX;
+    const isClear = (x: number): boolean => blocking.every(o =>
+        x < o.x - AVOID_MARGIN || x > o.x + o.w + AVOID_MARGIN
+    );
+    if (isClear(naturalMidX)) return naturalMidX;
+    const leftX = Math.min(...blocking.map(o => o.x)) - AVOID_MARGIN - AVOID_CLEARANCE_PAD;
+    if (isClear(leftX)) return leftX;
+    const rightX = Math.max(...blocking.map(o => o.x + o.w)) + AVOID_MARGIN + AVOID_CLEARANCE_PAD;
+    if (isClear(rightX)) return rightX;
+    return naturalMidX;
+}
+
+// Build a V-H-V SVG path with rounded corners at the two bends. Each corner
+// is replaced by a quadratic arc of radius `r` so the cable visually
+// matches the smoothstep look without diagonal segments.
+function buildVHVPath(sx: number, sy: number, tx: number, ty: number, midY: number, r: number): string {
+    const dx = tx - sx;
+    const dy1 = midY - sy;
+    const dy2 = ty - midY;
+    if (Math.abs(dx) < 1) {
+        // Same column — a single straight V.
+        return `M ${sx},${sy} L ${tx},${ty}`;
+    }
+    const signX = Math.sign(dx);
+    const signY1 = Math.sign(dy1) || 1;
+    const signY2 = Math.sign(dy2) || 1;
+    const rEff = Math.min(r, Math.abs(dy1) / 2, Math.abs(dy2) / 2, Math.abs(dx) / 2);
+    if (rEff < 1) {
+        return `M ${sx},${sy} L ${sx},${midY} L ${tx},${midY} L ${tx},${ty}`;
+    }
+    return [
+        `M ${sx},${sy}`,
+        `L ${sx},${midY - signY1 * rEff}`,
+        `Q ${sx},${midY} ${sx + signX * rEff},${midY}`,
+        `L ${tx - signX * rEff},${midY}`,
+        `Q ${tx},${midY} ${tx},${midY + signY2 * rEff}`,
+        `L ${tx},${ty}`
+    ].join(' ');
+}
+
+function buildHVHPath(sx: number, sy: number, tx: number, ty: number, midX: number, r: number): string {
+    const dy = ty - sy;
+    const dx1 = midX - sx;
+    const dx2 = tx - midX;
+    if (Math.abs(dy) < 1) return `M ${sx},${sy} L ${tx},${ty}`;
+    const signY = Math.sign(dy);
+    const signX1 = Math.sign(dx1) || 1;
+    const signX2 = Math.sign(dx2) || 1;
+    const rEff = Math.min(r, Math.abs(dx1) / 2, Math.abs(dx2) / 2, Math.abs(dy) / 2);
+    if (rEff < 1) {
+        return `M ${sx},${sy} L ${midX},${sy} L ${midX},${ty} L ${tx},${ty}`;
+    }
+    return [
+        `M ${sx},${sy}`,
+        `L ${midX - signX1 * rEff},${sy}`,
+        `Q ${midX},${sy} ${midX},${sy + signY * rEff}`,
+        `L ${midX},${ty - signY * rEff}`,
+        `Q ${midX},${ty} ${midX + signX2 * rEff},${ty}`,
+        `L ${tx},${ty}`
+    ].join(' ');
+}
+
+const AvoidingEdge: React.FC<EdgeProps> = (props) => {
+    const {
+        sourceX, sourceY, targetX, targetY,
+        sourcePosition, targetPosition,
+        markerEnd, style, data,
+        label, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius
+    } = props;
+    const obstacles = (data as AvoidingEdgeData | undefined)?.obstacles ?? [];
+    const medium = (data as AvoidingEdgeData | undefined)?.medium;
+    // Pick the routing shape from the handle orientations React Flow gave us.
+    const srcVertical = sourcePosition === Position.Top || sourcePosition === Position.Bottom;
+    const tgtVertical = targetPosition === Position.Top || targetPosition === Position.Bottom;
+    let path: string;
+    let labelX: number;
+    let labelY: number;
+    if (medium === 'wifi') {
+        // Wireless link: curved bezier instead of orthogonal V-H-V. The
+        // dashed pattern + curve communicates "this isn't a physical cable"
+        // at a glance. Obstacle avoidance is skipped here on purpose — wifi
+        // cables can pass through other infra cards because the spine
+        // accordion layout already positions clients to make that uncommon.
+        const [bezierPath, lx, ly] = getBezierPath({
+            sourceX, sourceY, targetX, targetY,
+            sourcePosition, targetPosition
+        });
+        path = bezierPath;
+        labelX = lx;
+        labelY = ly;
+    } else if (srcVertical && tgtVertical) {
+        const suggested = (data as AvoidingEdgeData | undefined)?.suggestedMidY;
+        const midY = findClearMidY(sourceX, sourceY, targetX, targetY, obstacles, suggested);
+        path = buildVHVPath(sourceX, sourceY, targetX, targetY, midY, AVOID_CORNER_RADIUS);
+        labelX = (sourceX + targetX) / 2;
+        labelY = midY;
+    } else if (!srcVertical && !tgtVertical) {
+        const midX = findClearMidX(sourceX, sourceY, targetX, targetY, obstacles);
+        path = buildHVHPath(sourceX, sourceY, targetX, targetY, midX, AVOID_CORNER_RADIUS);
+        labelX = midX;
+        labelY = (sourceY + targetY) / 2;
+    } else {
+        // Mixed orientation (e.g., bottom→left) — fall back to React Flow's
+        // standard smoothstep. Avoidance is a future iteration if needed.
+        const [smoothPath, lx, ly] = getSmoothStepPath({
+            sourceX, sourceY, targetX, targetY,
+            sourcePosition, targetPosition,
+            borderRadius: AVOID_CORNER_RADIUS
+        });
+        path = smoothPath;
+        labelX = lx;
+        labelY = ly;
+    }
+    return (
+        <BaseEdge
+            path={path}
+            markerEnd={markerEnd}
+            style={style}
+            label={label}
+            labelStyle={labelStyle}
+            labelBgStyle={labelBgStyle}
+            labelBgPadding={labelBgPadding}
+            labelBgBorderRadius={labelBgBorderRadius}
+            labelX={labelX}
+            labelY={labelY}
+        />
+    );
+};
+
+const edgeTypes = { avoiding: AvoidingEdge };
+
 function pickChipClass(disabled: boolean, active: boolean, activeBg: string): string {
     if (disabled) return 'opacity-40 cursor-not-allowed border-slate-800 text-slate-500';
     if (active) return activeBg;
@@ -540,9 +761,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
     const [dragMode, setDragMode] = useState(false);
     const [moveStep, setMoveStep] = useState(5);
     // Snap-to-grid toggle for the drag-edit experience. 10px grid is fine
-    // enough to feel like free placement but still helps the user line two
-    // cards on the same vertical/horizontal axis without arrow-key nudging.
-    // OFF by default — the user explicitly asked for "free placement first".
+    // enough to feel like free placement but still helps line two cards on
+    // the same axis without arrow-key nudging. OFF by default.
     const [snapEnabled, setSnapEnabled] = useState<boolean>(() => {
         try { return globalThis.localStorage?.getItem(SNAP_STORAGE_KEY) === '1'; }
         catch { return false; }
@@ -799,12 +1019,15 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         }));
 
         const rfEdges: Edge[] = filteredGraph.edges.map(e => {
-            const color = EDGE_COLOR[e.medium];
+            const color = e.medium === 'wifi'
+                ? wifiColorFromSignal(e.signal)
+                : EDGE_COLOR[e.medium];
             const isUplink = e.medium === 'uplink';
             const isWifi = e.medium === 'wifi';
             const isVirtual = e.medium === 'virtual';
-            // SSID / speed / port now live on the client card itself, so client
-            // edges (ethernet + wifi) are unlabelled. Uplinks stay labelless.
+            // Only uplink edges carry a label on the cable. Wired-client link
+            // speed lives on the client card itself (top-right corner). Wi-Fi
+            // info (SSID/band/speed) is already on the client card too.
             const label = isUplink ? buildEdgeLabel(e) : undefined;
             const marker: EdgeMarkerType = { type: MarkerType.ArrowClosed, color };
             // Wi-Fi: animated dashed line (marching-ants) so the wireless
@@ -925,8 +1148,40 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
         return map;
     }, [layouted.nodes]);
 
+    const heightById = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const n of layouted.nodes) map.set(n.id, getNodeHeight(n));
+        return map;
+    }, [layouted.nodes]);
+
+    // Infra ids — the only obstacle kinds the custom edge avoids
+    // (gateway / switch / AP / repeater / VM-host).
+    const infraIds = useMemo(() => {
+        const set = new Set<string>();
+        for (const n of layouted.nodes) {
+            const kind = (n.data as { kind?: string } | undefined)?.kind;
+            if (kind && INFRA_OBSTACLE_KINDS.has(kind)) set.add(n.id);
+        }
+        return set;
+    }, [layouted.nodes]);
+
+    // Obstacle list passed to every edge via `data.obstacles`. Built once per
+    // layout change so AvoidingEdge can compute a clear path without crossing
+    // any infra card. Filtered per-edge inside the memo below.
+    const obstaclesAll = useMemo<ObstacleRect[]>(() => {
+        const list: ObstacleRect[] = [];
+        for (const [id, pos] of finalPositions) {
+            if (!infraIds.has(id)) continue;
+            const w = widthById.get(id);
+            const h = heightById.get(id);
+            if (typeof w !== 'number' || typeof h !== 'number') continue;
+            list.push({ id, x: pos.x, y: pos.y, w, h });
+        }
+        return list;
+    }, [finalPositions, infraIds, widthById, heightById]);
+
     const edges = useMemo<Edge[]>(() => {
-        const initial = layouted.edges.map(e => {
+        const initial: Edge[] = layouted.edges.map(e => {
             const d = (e.data ?? {}) as {
                 medium?: EdgeMedium;
                 portIndex?: number;
@@ -956,24 +1211,96 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                     filter: `drop-shadow(0 0 6px ${stroke})`
                 }
                 : baseStyle;
-            // Always smoothstep — the user explicitly rejected diagonals
-            // ("jamais oblique"). Decrochement / Z artefacts on parallel pairs
-            // are mitigated by the FAN_OUT_COUNT bump (tighter handle grid)
-            // and the smaller pathOptions offsets so any remaining bend is
-            // a few pixels wide instead of a visible zigzag.
+            // Filter obstacles to exclude this edge's endpoints — the cable's
+            // source/target cards are NOT obstacles for the cable itself.
+            const edgeObstacles = obstaclesAll.filter(o => o.id !== e.source && o.id !== e.target);
             return {
                 ...e,
-                type: 'smoothstep',
+                type: 'avoiding',
                 sourceHandle: handles.source,
                 targetHandle: handles.target,
                 selected: isSelected,
                 zIndex: isSelected ? 10 : undefined,
-                style
+                style,
+                data: { ...(e.data as object), obstacles: edgeObstacles }
             };
         });
         spreadCentralHandles(initial, finalPositions, widthById);
+        // L-bend deconfliction: group cables whose natural mid-Y is close
+        // (same rank boundary) and fan them out vertically so their L-bends
+        // don't stack on the same horizontal line. The user's rule: "decaller
+        // si L dans un trait est trop proche de l'autre — peu importe le sens
+        // du L".
+        //
+        // We approximate the natural mid-Y as (source.bottom + target.top) / 2
+        // — what AvoidingEdge would pick if no avoidance kicked in. Sort each
+        // bin deterministically by source X then target X so the fan-out is
+        // stable across renders and visually ordered (leftmost cable gets the
+        // topmost slot).
+        const BEND_BIN = 16;     // 1 bin = ~ one card-height fraction
+        const BEND_STEP = 16;    // px between adjacent cables in a fan — larger value = more
+                                 // V_2 differential between neighbours, so parallel H segments
+                                 // don't crowd each other
+        // For cables going to a sub-infra (switch → switch/AP/repeater), we
+        // push the L-bend DOWN — making V_1 (before the L) long and V_2
+        // (after the L) short. Visually this keeps the horizontal segment
+        // CLEAR of the wired-row above and close to the target's top, so
+        // there's no symmetry between top and bottom legs of the cable.
+        const INFRA_TARGET_BIAS = 0.78;  // 0.5 = natural midpoint; closer to 1 = H closer to target
+        type EdgeInfo = { sx: number; tx: number; midY: number };
+        const naturalMidYs: Array<{ id: string; info: EdgeInfo }> = [];
+        for (const e of initial) {
+            const srcPos = finalPositions.get(e.source);
+            const tgtPos = finalPositions.get(e.target);
+            const srcH = heightById.get(e.source);
+            const tgtW = widthById.get(e.target);
+            const srcW = widthById.get(e.source);
+            if (!srcPos || !tgtPos || typeof srcH !== 'number' || typeof srcW !== 'number' || typeof tgtW !== 'number') continue;
+            const sx = srcPos.x + srcW / 2;
+            const tx = tgtPos.x + tgtW / 2;
+            const sy = srcPos.y + srcH;   // source bottom
+            const ty = tgtPos.y;           // target top
+            const targetIsInfra = infraIds.has(e.target);
+            const bias = targetIsInfra ? INFRA_TARGET_BIAS : 0.5;
+            const midY = sy + (ty - sy) * bias;
+            naturalMidYs.push({ id: e.id, info: { sx, tx, midY } });
+        }
+        const bins = new Map<number, Array<{ id: string; info: EdgeInfo }>>();
+        for (const entry of naturalMidYs) {
+            const bin = Math.round(entry.info.midY / BEND_BIN);
+            const list = bins.get(bin);
+            if (list) list.push(entry); else bins.set(bin, [entry]);
+        }
+        const suggestedById = new Map<string, number>();
+        for (const list of bins.values()) {
+            if (list.length === 1) {
+                suggestedById.set(list[0].id, list[0].info.midY);
+                continue;
+            }
+            // Order matters: the cable reaching the FURTHEST-RIGHT target
+            // gets the highest slot (smallest midY), so its long H segment
+            // runs ABOVE the shorter cables. Shorter cables drop UNDER it
+            // and their V_2 stubs don't cross the longer cable's H. Tie-
+            // break by source X descending so the slot assignment stays
+            // stable across renders.
+            list.sort((a, b) => b.info.tx - a.info.tx || b.info.sx - a.info.sx);
+            const n = list.length;
+            list.forEach((entry, idx) => {
+                const offset = (idx - (n - 1) / 2) * BEND_STEP;
+                suggestedById.set(entry.id, entry.info.midY + offset);
+            });
+        }
+        for (let i = 0; i < initial.length; i++) {
+            const suggested = suggestedById.get(initial[i].id);
+            if (suggested === undefined) continue;
+            const prevData = (initial[i].data ?? {}) as Record<string, unknown>;
+            initial[i] = {
+                ...initial[i],
+                data: { ...prevData, suggestedMidY: suggested }
+            } as Edge;
+        }
         return initial;
-    }, [layouted.edges, finalPositions, widthById, mode, selectedEdgeId]);
+    }, [layouted.edges, finalPositions, widthById, heightById, obstaclesAll, infraIds, mode, selectedEdgeId]);
 
     // Node selection and edge selection are mutually exclusive — clicking a
     // node clears the edge panel and vice versa. The pane click clears both.
@@ -1269,6 +1596,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({ graph, height = '7
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 nodesDraggable={dragMode}
                 snapToGrid={dragMode && snapEnabled}
                 snapGrid={SNAP_GRID}

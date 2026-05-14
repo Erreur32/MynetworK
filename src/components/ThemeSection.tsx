@@ -4,7 +4,8 @@
  * Complete theme management section with theme selection and color customization
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useClickOutside } from '../hooks';
 import { useTranslation } from 'react-i18next';
 import { Lightbulb, Palette, RefreshCw, Save, Eye, ChevronUp, ChevronDown, ChevronDown as ChevronDownIcon, Check, Bell, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -304,21 +305,8 @@ const AnimationSelector: React.FC<AnimationSelectorProps> = ({ value, options, o
     const dropdownRef = useRef<HTMLDivElement>(null);
     const selectedOption = options.find(opt => opt.value === value);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isOpen]);
+    const closeDropdown = useCallback(() => setIsOpen(false), []);
+    useClickOutside(dropdownRef, closeDropdown, isOpen);
 
     return (
         <div className="relative w-full" ref={dropdownRef}>
