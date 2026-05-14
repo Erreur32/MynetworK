@@ -484,6 +484,37 @@ function placeWrappedChildren(
 
 interface HierarchicalOpts { nodesep: number; ranksep: number }
 
+// Permute X positions among infra siblings so port-1 child sits leftmost,
+// port-N child rightmost. Preserves dagre's chosen spacing — we only swap
+// which sibling owns which slot.
+function reorderInfraSiblingsByPort(
+    g: dagre.graphlib.Graph,
+    edges: Edge[],
+    nodeById: Map<string, Node>,
+    portByChild: Map<string, number>
+): void {
+    const childrenByParent = new Map<string, string[]>();
+    for (const e of edges) {
+        if (!isInfraInfraEdge(e, nodeById)) continue;
+        const bucket = childrenByParent.get(e.source);
+        if (bucket) bucket.push(e.target);
+        else childrenByParent.set(e.source, [e.target]);
+    }
+    for (const childIds of childrenByParent.values()) {
+        if (childIds.length < 2) continue;
+        const sortedByPort = [...childIds].sort((a, b) => {
+            const pa = portByChild.get(a) ?? Number.POSITIVE_INFINITY;
+            const pb = portByChild.get(b) ?? Number.POSITIVE_INFINITY;
+            return pa - pb;
+        });
+        const dagreXs = childIds.map(id => g.node(id)?.x ?? 0).sort((a, b) => a - b);
+        for (let i = 0; i < sortedByPort.length; i++) {
+            const node = g.node(sortedByPort[i]);
+            if (node) node.x = dagreXs[i];
+        }
+    }
+}
+
 // Shared implementation behind both `horizontal` and `editable` modes — they
 // use the same placement system (wifi-accordion / wired-column / split / grid)
 // and the same sibling Y equalisation. Only the dagre rank/node spacing
@@ -518,34 +549,7 @@ function buildHierarchicalLayout(
     }
     dagre.layout(g);
 
-    // Reorder infra siblings by their physical port on the parent — port 1
-    // leftmost → port N rightmost. We preserve dagre's chosen X positions
-    // (so spacing / cluster widths are respected) but permute them among
-    // siblings so the leftmost X goes to the lowest port number. This makes
-    // the visual order of APs / sub-switches match the upstream port order,
-    // mirroring the wired-column sort for clients.
-    const infraChildrenByParent = new Map<string, string[]>();
-    for (const e of edges) {
-        if (!isInfraInfraEdge(e, nodeById)) continue;
-        const bucket = infraChildrenByParent.get(e.source);
-        if (bucket) bucket.push(e.target);
-        else infraChildrenByParent.set(e.source, [e.target]);
-    }
-    for (const childIds of infraChildrenByParent.values()) {
-        if (childIds.length < 2) continue;
-        const sortedByPort = [...childIds].sort((a, b) => {
-            const pa = portByChild.get(a) ?? Number.POSITIVE_INFINITY;
-            const pb = portByChild.get(b) ?? Number.POSITIVE_INFINITY;
-            return pa - pb;
-        });
-        const dagreXs = childIds
-            .map(id => g.node(id)?.x ?? 0)
-            .sort((a, b) => a - b);
-        for (let i = 0; i < sortedByPort.length; i++) {
-            const node = g.node(sortedByPort[i]);
-            if (node) node.x = dagreXs[i];
-        }
-    }
+    reorderInfraSiblingsByPort(g, edges, nodeById, portByChild);
 
     const positionedInfra: Node[] = infraNodes.map(n => {
         const dim = dims.get(n.id);

@@ -689,6 +689,28 @@ function buildUniFiClientNode(
     return node;
 }
 
+// Wired clients: `sw_port_speed` is unreliable across UniFi controller
+// versions (often missing), so we fall back to the parent SWITCH's
+// port_table[sw_port].speed which is authoritative. Wireless clients:
+// `tx_rate` is the negotiated PHY rate to the AP.
+function resolveUniFiLinkSpeed(
+    cli: UniFiClient,
+    parentMac: string,
+    isWired: boolean,
+    nodes: Map<string, TopologyNode>
+): number | undefined {
+    if (!isWired) {
+        const rawTx = cli.tx_rate;
+        return typeof rawTx === 'number' && rawTx > 0 ? Math.round(rawTx) : undefined;
+    }
+    const rawCliSpeed = cli.sw_port_speed;
+    if (typeof rawCliSpeed === 'number' && rawCliSpeed > 0) return Math.round(rawCliSpeed);
+    if (typeof cli.sw_port !== 'number') return undefined;
+    const parentNode = nodes.get(macNodeId(parentMac));
+    const port = parentNode?.metadata?.ports?.find(p => p.idx === cli.sw_port);
+    return port?.speed && port.speed > 0 ? Math.round(port.speed) : undefined;
+}
+
 function buildUniFiClientEdge(
     cli: UniFiClient,
     mac: string,
@@ -696,33 +718,13 @@ function buildUniFiClientEdge(
     isWired: boolean,
     nodes: Map<string, TopologyNode>
 ): TopologyEdge {
-    // Negotiated link rate. Wired clients: `sw_port_speed` is unreliable
-    // across UniFi controller versions (often missing), so we fall back to
-    // the parent SWITCH's port_table[sw_port].speed which is authoritative.
-    // Wireless clients: `tx_rate` is the negotiated PHY rate to the AP.
-    let linkSpeedMbps: number | undefined;
-    if (isWired) {
-        const rawCliSpeed = cli.sw_port_speed;
-        if (typeof rawCliSpeed === 'number' && rawCliSpeed > 0) {
-            linkSpeedMbps = Math.round(rawCliSpeed);
-        } else if (typeof cli.sw_port === 'number') {
-            const parentNode = nodes.get(macNodeId(parentMac));
-            const port = parentNode?.metadata?.ports?.find(p => p.idx === cli.sw_port);
-            if (port?.speed && port.speed > 0) {
-                linkSpeedMbps = Math.round(port.speed);
-            }
-        }
-    } else {
-        const rawTx = cli.tx_rate;
-        if (typeof rawTx === 'number' && rawTx > 0) linkSpeedMbps = Math.round(rawTx);
-    }
     const portIdx = isWired && typeof cli.sw_port === 'number' ? cli.sw_port : undefined;
     return {
         id: `unifi:client:${parentMac}->${mac}`,
         source: macNodeId(parentMac),
         target: macNodeId(mac),
         medium: isWired ? 'ethernet' : 'wifi',
-        linkSpeedMbps,
+        linkSpeedMbps: resolveUniFiLinkSpeed(cli, parentMac, isWired, nodes),
         portIndex: portIdx,
         ssid: isWired ? undefined : cli.essid,
         band: isWired ? undefined : cli.radio,

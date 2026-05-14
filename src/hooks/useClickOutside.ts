@@ -12,7 +12,8 @@ export function useClickOutside<T extends HTMLElement>(
     if (!enabled) return;
     const onDocMouseDown = (event: MouseEvent) => {
       const el = ref.current;
-      if (el && !el.contains(event.target as Node)) {
+      const target = event.target;
+      if (el && target instanceof Node && !el.contains(target)) {
         handler();
       }
     };

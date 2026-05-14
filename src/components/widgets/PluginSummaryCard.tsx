@@ -93,10 +93,13 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const plugin = plugins.find(p => p.id === pluginId);
     const stats = pluginStats[pluginId];
 
-    if (!plugin) return null;
-
-    const isActive = plugin.enabled && plugin.connectionStatus;
-    const hasStats = stats && (stats.network || stats.devices || stats.system);
+    // All hooks must run BEFORE any conditional return (Rules of Hooks). The
+    // `plugin == null` early return below is the gate that may exit the
+    // component, so every useState / useRef / useEffect / custom hook call
+    // sits above it. Derived values that read `plugin` use optional chaining
+    // so they remain safe to compute even when plugin is undefined.
+    const isActive = !!(plugin?.enabled && plugin?.connectionStatus);
+    const hasStats = !!(stats && (stats.network || stats.devices || stats.system));
 
     // UniFi real-time bandwidth from WebSocket store
     const { history: unifiHistory, isConnected: unifiWsConnected, pushPoint: pushUnifiPoint } = useUnifiRealtimeStore();
@@ -123,6 +126,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                 .finally(() => setUnifiHttpFetched(true));
         }
     }, [pluginId, isActive, unifiHttpFetched, unifiHistory.length, pushUnifiPoint]);
+
+    if (!plugin) return null;
 
     // Helper function to render clickable IP addresses
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {

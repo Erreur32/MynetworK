@@ -515,8 +515,10 @@ function findClearMidY(sx: number, sy: number, tx: number, ty: number, obstacles
     const validMax = Math.max(sy, ty);
     const candidates: number[] = [];
     for (const o of blocking) {
-        candidates.push(o.y - AVOID_MARGIN - AVOID_CLEARANCE_PAD);
-        candidates.push(o.y + o.h + AVOID_MARGIN + AVOID_CLEARANCE_PAD);
+        candidates.push(
+            o.y - AVOID_MARGIN - AVOID_CLEARANCE_PAD,
+            o.y + o.h + AVOID_MARGIN + AVOID_CLEARANCE_PAD
+        );
     }
     const valid = candidates.filter(y => y >= validMin && y <= validMax && isClear(y));
     if (valid.length === 0) {
