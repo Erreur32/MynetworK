@@ -203,8 +203,8 @@ export class NetworkScanService {
 
         if (!this.isScanRangeAuthorized(range.trim())) {
             throw new Error(
-                'Scan not allowed: use only a subnet where this server has a LAN address, or the range saved in network scan settings (Admin). ' +
-                    'The 10.10.x.x space and similar overlays are blocked unless that range is explicitly configured.'
+                'Scan not allowed: use only a subnet where this server has a LAN address, ' +
+                    'or add this range to your scan configuration (Settings → Network Scan).'
             );
         }
         
@@ -227,10 +227,6 @@ export class NetworkScanService {
         }
 
         ipsToScan = ipsToScan.filter(ip => {
-            if (this.isDockerIp(ip)) {
-                logger.debug('NetworkScanService', `Skipping Docker IP during scan: ${ip}`);
-                return false;
-            }
             if (ipBlacklistService.isBlacklisted(ip)) {
                 logger.info('NetworkScanService', `Skipping blacklisted IP during scan: ${ip}`);
                 return false;
@@ -240,7 +236,7 @@ export class NetworkScanService {
         
         if (ipsToScan.length === 0) {
             throw new Error(
-                'No IP addresses to scan: range is invalid, empty, or every address was excluded (Docker bridge 172.17–31.x / blacklist). ' +
+                'No IP addresses to scan: range is invalid, empty, or every address was excluded by your IP blacklist. ' +
                     'Set a valid range in network scan settings (e.g. CIDR 192.168.1.0/24 or 192.168.1.1-254).'
             );
         }
@@ -615,12 +611,6 @@ export class NetworkScanService {
             return null;
         }
 
-        // Skip Docker IPs completely to avoid scanning internal container networks
-        if (this.isDockerIp(ip)) {
-            logger.debug('NetworkScanService', `Skipping Docker IP in scanSingleIp: ${ip}`);
-            return null;
-        }
-
         // Skip and clean up blacklisted IPs
         if (ipBlacklistService.isBlacklisted(ip)) {
             logger.info('NetworkScanService', `Skipping blacklisted IP in scanSingleIp: ${ip}`);
@@ -736,12 +726,6 @@ export class NetworkScanService {
             return null;
         }
 
-        // Skip Docker IPs completely
-        if (this.isDockerIp(ip)) {
-            logger.debug('NetworkScanService', `Skipping Docker IP in rescanSingleIpWithPorts: ${ip}`);
-            return null;
-        }
-
         // Skip blacklisted IPs
         if (ipBlacklistService.isBlacklisted(ip)) {
             logger.info('NetworkScanService', `Skipping blacklisted IP in rescanSingleIpWithPorts: ${ip}`);
@@ -818,8 +802,7 @@ export class NetworkScanService {
         // Get all existing IPs from database
         const existingScans = NetworkScanRepository.find({ limit: 10000 });
 
-        // Load configured range and blacklist to restrict refresh scope
-        const configuredRange = this.getConfiguredRange();
+        const configuredRanges = this.getConfiguredRanges();
         const blacklist = ipBlacklistService.getBlacklist();
 
         // Ensure blacklisted IPs are not kept in the main table
@@ -843,24 +826,15 @@ export class NetworkScanService {
                     return false;
                 }
 
-                // Skip Docker networks such as 172.17-31.x.x and 10.10.x.x
-                if (this.isDockerIp(ip)) {
-                    logger.debug('NetworkScanService', `Skipping Docker IP during refresh: ${ip}`);
-                    return false;
-                }
-
                 // Skip blacklisted IPs completely
                 if (ipBlacklistService.isBlacklisted(ip)) {
                     logger.info('NetworkScanService', `Skipping blacklisted IP during refresh: ${ip}`);
                     return false;
                 }
 
-                // If a configured range exists, keep only IPs inside this range
-                if (configuredRange) {
-                    return this.isIpInRange(ip, configuredRange);
+                if (configuredRanges.length > 0) {
+                    return configuredRanges.some(r => this.isIpInRange(ip, r));
                 }
-
-                // No configured range: keep the IP
                 return true;
             });
         
@@ -1144,7 +1118,8 @@ export class NetworkScanService {
 
     /**
      * Non-loopback IPv4 /24 subnets derived from this host's interfaces (real LAN candidates).
-     * Excludes Docker bridges (172.17–31), virtual iface names, and 10.10.x.x (overlay — must be set in Admin options to scan).
+     * Container/virtual interfaces are filtered by name (docker*, br-*, veth*, lo*, tun*, tap*).
+     * No IP-range blacklist — what the user configures is authoritative.
      */
     private collectEligibleLanSlash24s(): Array<{ cidr: string; priority: number; name: string }> {
         const interfaces = os.networkInterfaces();
@@ -1163,6 +1138,8 @@ export class NetworkScanService {
                 name.startsWith('docker') ||
                 name.startsWith('veth') ||
                 name.startsWith('br-') ||
+                name.startsWith('tun') ||
+                name.startsWith('tap') ||
                 (name.startsWith('eth0') && name.includes('docker'))
             ) {
                 continue;
@@ -1176,25 +1153,8 @@ export class NetworkScanService {
                 }
 
                 const ip = iface.address;
-
-                if (ip.startsWith('172.')) {
-                    const p = ip.split('.').map(Number);
-                    if (p.length === 4 && p[0] === 172 && p[1] >= 17 && p[1] <= 31) {
-                        logger.debug('NetworkScanService', `Skipping Docker network interface ${name} with IP ${ip}`);
-                        continue;
-                    }
-                }
-
                 const parts = ip.split('.').map(Number);
                 if (parts.length !== 4 || parts.some(n => Number.isNaN(n) || n < 0 || n > 255)) {
-                    continue;
-                }
-
-                if (parts[0] === 10 && parts[1] === 10) {
-                    logger.debug(
-                        'NetworkScanService',
-                        `Skipping 10.10.x.x on ${name} (${ip}) for auto LAN; configure default range in Admin if you need this subnet`
-                    );
                     continue;
                 }
 
@@ -1225,7 +1185,8 @@ export class NetworkScanService {
     }
 
     /**
-     * Whether a scan range is allowed: subnet of a real host interface, or covered by network_scan_default.
+     * Whether a scan range is allowed: subnet of a real host interface,
+     * or covered by any of the user-configured ranges (primary + additional).
      */
     isScanRangeAuthorized(range: string): boolean {
         const trimmed = range.trim();
@@ -1233,12 +1194,9 @@ export class NetworkScanService {
             return false;
         }
 
-        const cfg = this.getConfiguredRange();
-        if (cfg) {
-            const pScan = this.firstHostProbeForRange(trimmed);
-            if (pScan && this.isIpInRange(pScan, cfg)) {
-                return true;
-            }
+        const pScan = this.firstHostProbeForRange(trimmed);
+        if (pScan && this.getConfiguredRanges().some(cfg => this.isIpInRange(pScan, cfg))) {
+            return true;
         }
 
         for (const m of this.getMachineLanRanges()) {
@@ -1401,7 +1359,7 @@ export class NetworkScanService {
                 for (let i = 1; i <= 254; i++) {
                     const candidateIp = `${baseIp}.${i}`;
                     // Skip Docker and blacklisted IPs directly in the generated list
-                    if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                    if (ipBlacklistService.isBlacklisted(candidateIp)) {
                         continue;
                     }
                     ips.push(candidateIp);
@@ -1420,7 +1378,7 @@ export class NetworkScanService {
                         continue;
                     }
                     const candidateIp = `${baseIp}.${third}.${fourth}`;
-                    if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                    if (ipBlacklistService.isBlacklisted(candidateIp)) {
                         continue;
                     }
                     ips.push(candidateIp);
@@ -1458,7 +1416,7 @@ export class NetworkScanService {
             
             for (let i = startNum; i <= endNum && i <= 254; i++) {
                 const candidateIp = `${baseIp}.${i}`;
-                if (this.isDockerIp(candidateIp) || ipBlacklistService.isBlacklisted(candidateIp)) {
+                if (ipBlacklistService.isBlacklisted(candidateIp)) {
                     continue;
                 }
                 ips.push(candidateIp);
@@ -2989,60 +2947,31 @@ export class NetworkScanService {
     }
 
     /**
-     * Check if an IP belongs to a Docker/overlay network that should be ignored.
-     *
-     * - 172.17–31.x.x: Docker bridges (always skipped).
-     * - 10.10.x.x: overlay unless that subnet is explicitly set in network_scan_default (Admin).
+     * Get all configured ranges (primary + additional). Authoritative source for
+     * "what the user wants scanned" — replaces hardcoded Docker exclusions.
      */
-    /** Exposed for routes that filter history (same rules as scan). */
-    isDockerIp(ip: string): boolean {
-        if (!ip || !this.isValidIp(ip)) {
-            return false;
-        }
-
-        const parts = ip.split('.').map(Number);
-        if (parts.length !== 4 || parts.some(p => Number.isNaN(p))) {
-            return false;
-        }
-
-        // 172.17.0.0/16 to 172.31.255.255 (typical Docker bridge networks)
-        if (parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31) {
-            return true;
-        }
-
-        if (parts[0] === 10 && parts[1] === 10) {
-            const cfg = this.getConfiguredRange();
-            if (cfg && this.isIpInRange(ip, cfg)) {
-                return false;
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Get configured default network range from AppConfig.
-     * Returns null if no valid configuration is found.
-     *
-     * This is used to ensure that:
-     * - Manual refresh operations only re-ping IPs in the expected LAN range.
-     * - History views can be limited to the primary LAN when desired.
-     */
-    getConfiguredRange(): string | null {
+    getConfiguredRanges(): string[] {
         try {
             const raw = AppConfigRepository.get('network_scan_default');
             if (!raw) {
-                return null;
+                return [];
             }
             const parsed = JSON.parse(raw);
+            const ranges: string[] = [];
             if (parsed && typeof parsed.defaultRange === 'string' && parsed.defaultRange.trim().length > 0) {
-                return parsed.defaultRange.trim();
+                ranges.push(parsed.defaultRange.trim());
             }
-            return null;
+            if (parsed && Array.isArray(parsed.additionalRanges)) {
+                for (const r of parsed.additionalRanges) {
+                    if (typeof r === 'string' && r.trim().length > 0 && !ranges.includes(r.trim())) {
+                        ranges.push(r.trim());
+                    }
+                }
+            }
+            return ranges;
         } catch (error: any) {
             logger.warn('NetworkScanService', `Failed to parse network_scan_default config: ${error.message || error}`);
-            return null;
+            return [];
         }
     }
 

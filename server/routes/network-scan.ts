@@ -442,37 +442,25 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
         // Get all items first
         let items = NetworkScanRepository.find(filters);
         
-        // Filter by configured range if available
+        let configuredRanges: string[] = [];
         const defaultConfigStr = AppConfigRepository.get('network_scan_default');
-        let configuredRange: string | null = null;
         if (defaultConfigStr) {
             try {
-                const defaultConfig = JSON.parse(defaultConfigStr);
-                if (defaultConfig.defaultRange && !defaultConfig.defaultAutoDetect) {
-                    configuredRange = defaultConfig.defaultRange;
+                if (!JSON.parse(defaultConfigStr).defaultAutoDetect) {
+                    configuredRanges = networkScanService.getConfiguredRanges();
                 }
             } catch {
                 // Ignore parse errors
             }
         }
-        
-        // Filter out Docker IPs and blacklisted IPs, and filter by range if configured
+
         items = items.filter((item) => {
-            // Exclude Docker IPs
-            if (networkScanService.isDockerIp(item.ip)) {
-                return false;
-            }
-            
-            // Exclude blacklisted IPs
             if (ipBlacklistService.isBlacklisted(item.ip)) {
                 return false;
             }
-            
-            // Filter by configured range if available
-            if (configuredRange && !networkScanService.isIpInRange(item.ip, configuredRange)) {
+            if (configuredRanges.length > 0 && !configuredRanges.some(r => networkScanService.isIpInRange(item.ip, r))) {
                 return false;
             }
-            
             return true;
         });
         
@@ -779,15 +767,18 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
                 success: true,
                 result: {
                     defaultRange: appConfig.defaultScanRange,
-                    defaultAutoDetect: false
-                    // defaultScanType retiré - scan complet toujours en mode 'full'
+                    defaultAutoDetect: false,
+                    additionalRanges: []
                 }
             });
         }
 
         const config = JSON.parse(configStr);
-        // Retirer defaultScanType si présent (compatibilité avec anciennes configs)
+        // Strip legacy defaultScanType; ensure additionalRanges always present for the UI
         const { defaultScanType, ...configWithoutScanType } = config;
+        if (!Array.isArray(configWithoutScanType.additionalRanges)) {
+            configWithoutScanType.additionalRanges = [];
+        }
         res.json({
             success: true,
             result: configWithoutScanType
@@ -816,8 +807,7 @@ router.get('/default-config', requireAuth, asyncHandler(async (req: Authenticate
  * }
  */
 router.post('/default-config', requireAuth, requireAdmin, autoLog('network-scan', 'default-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { defaultRange = appConfig.defaultScanRange, defaultAutoDetect = false } = req.body;
-    // defaultScanType retiré - scan complet toujours en mode 'full'
+    const { defaultRange = appConfig.defaultScanRange, defaultAutoDetect = false, additionalRanges = [] } = req.body;
 
     // Validate defaultRange format (basic validation)
     if (typeof defaultRange !== 'string' || defaultRange.trim() === '') {
@@ -841,11 +831,47 @@ router.post('/default-config', requireAuth, requireAdmin, autoLog('network-scan'
         });
     }
 
+    // Validate additionalRanges: array of non-empty strings, max 10 entries
+    if (!Array.isArray(additionalRanges)) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'additionalRanges must be an array of CIDR strings',
+                code: 'INVALID_ADDITIONAL_RANGES'
+            }
+        });
+    }
+    if (additionalRanges.length > 10) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'additionalRanges cannot exceed 10 entries',
+                code: 'TOO_MANY_RANGES'
+            }
+        });
+    }
+    const cleanedAdditional: string[] = [];
+    for (const r of additionalRanges) {
+        if (typeof r !== 'string' || r.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Each additionalRanges entry must be a non-empty string',
+                    code: 'INVALID_ADDITIONAL_RANGES'
+                }
+            });
+        }
+        const trimmed = r.trim();
+        if (trimmed !== defaultRange.trim() && !cleanedAdditional.includes(trimmed)) {
+            cleanedAdditional.push(trimmed);
+        }
+    }
+
     try {
         const config = {
             defaultRange: defaultRange.trim(),
-            defaultAutoDetect
-            // defaultScanType retiré - scan complet toujours en mode 'full'
+            defaultAutoDetect,
+            additionalRanges: cleanedAdditional
         };
 
         AppConfigRepository.set('network_scan_default', JSON.stringify(config));

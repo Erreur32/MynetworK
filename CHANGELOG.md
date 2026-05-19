@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-05-19
+
+### Fixed
+
+- Network scan: removed hardcoded Docker IP exclusions (`172.17–31.x.x` and `10.10.x.x` ranges that were always skipped). These collided with legitimate LAN ranges on hosts that use `172.16/12` as their working network (fixes #17). Container and virtual interfaces are still filtered for auto-detection, but by interface name (`docker*`, `br-*`, `veth*`, `tun*`, `tap*`) instead of by IP range. What the user configures is now authoritative.
+
+### Added
+
+- Network scan: multi-VLAN support. Scan configuration now accepts a primary `defaultRange` plus up to 10 `additionalRanges`. The history filter, the refresh job, and `isScanRangeAuthorized()` all honour the full list. UI editor added to the Network Scan settings modal (add/remove rows, EN/FR i18n).
+- Auto-detect now also skips `tun*` and `tap*` interfaces (VPN tunnels) in addition to the existing `docker*` / `br-*` / `veth*` filters.
+
+### Changed
+
+- Removed `isDockerIp()` and the now-dead `getConfiguredRange()` (singular). All call sites read the full configured range list via `getConfiguredRanges()`.
+- Scan error messages updated: no more references to the removed `172.17–31` / `10.10` exclusions; messages now point users to the scan configuration modal.
+
+---
+
 ## [0.9.1] - 2026-05-14
 
 ### Fixed

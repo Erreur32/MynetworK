@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download } from 'lucide-react';
+import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePluginStore } from '../../stores/pluginStore';
 
@@ -38,8 +38,8 @@ interface UnifiedAutoScanConfig {
 
 interface DefaultScanConfig {
     defaultRange: string;
-    // defaultScanType retiré - scan complet toujours en mode 'full'
     defaultAutoDetect: boolean;
+    additionalRanges: string[];
 }
 
 interface NetworkScanConfigModalProps {
@@ -91,7 +91,21 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     // Keep old configs for backward compatibility during transition
     const [autoConfig, setAutoConfig] = useState<AutoScanConfig>({ enabled: false, interval: 30, scanType: 'quick' });
     const [refreshConfig, setRefreshConfig] = useState<AutoRefreshConfig>({ enabled: false, interval: 15 });
-    const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultAutoDetect: false });
+    const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultAutoDetect: false, additionalRanges: [] });
+    const [newRangeInput, setNewRangeInput] = useState('');
+
+    const addAdditionalRange = () => {
+        const trimmed = newRangeInput.trim();
+        if (!trimmed) return;
+        if (defaultConfig.additionalRanges.length >= 10) return;
+        if (trimmed === defaultConfig.defaultRange.trim()) return;
+        if (defaultConfig.additionalRanges.includes(trimmed)) return;
+        setDefaultConfig({
+            ...defaultConfig,
+            additionalRanges: [...defaultConfig.additionalRanges, trimmed]
+        });
+        setNewRangeInput('');
+    };
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -1115,6 +1129,77 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 placeholder="192.168.1.0/24"
                                                 className="w-full px-4 py-2 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:border-blue-500"
                                             />
+
+                                            {/* Additional ranges (multi-VLAN) */}
+                                            <div className="mt-4">
+                                                <label className="block text-sm text-gray-400 mb-2">
+                                                    {t('config.additionalRangesLabel')}
+                                                </label>
+                                                <p className="text-xs text-gray-500 mb-2">
+                                                    {t('config.additionalRangesHelp')}
+                                                </p>
+
+                                                {defaultConfig.additionalRanges.length > 0 && (
+                                                    <div className="space-y-2 mb-2">
+                                                        {defaultConfig.additionalRanges.map((range, idx) => (
+                                                            <div key={idx} className="flex items-center gap-2">
+                                                                <input
+                                                                    type="text"
+                                                                    value={range}
+                                                                    onChange={(e) => {
+                                                                        const next = [...defaultConfig.additionalRanges];
+                                                                        next[idx] = e.target.value;
+                                                                        setDefaultConfig({ ...defaultConfig, additionalRanges: next });
+                                                                    }}
+                                                                    placeholder="192.168.10.0/24"
+                                                                    className="flex-1 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-blue-500"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const next = defaultConfig.additionalRanges.filter((_, i) => i !== idx);
+                                                                        setDefaultConfig({ ...defaultConfig, additionalRanges: next });
+                                                                    }}
+                                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 transition-colors"
+                                                                    title={t('config.removeRange')}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newRangeInput}
+                                                        onChange={(e) => setNewRangeInput(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && newRangeInput.trim()) {
+                                                                e.preventDefault();
+                                                                addAdditionalRange();
+                                                            }
+                                                        }}
+                                                        placeholder="192.168.10.0/24"
+                                                        disabled={defaultConfig.additionalRanges.length >= 10}
+                                                        className="flex-1 px-3 py-1.5 bg-[#1a1a1a] border border-gray-700 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={addAdditionalRange}
+                                                        disabled={!newRangeInput.trim() || defaultConfig.additionalRanges.length >= 10}
+                                                        className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1 text-sm"
+                                                        title={t('config.addRange')}
+                                                    >
+                                                        <Plus size={14} />
+                                                        {t('config.addRange')}
+                                                    </button>
+                                                </div>
+                                                {defaultConfig.additionalRanges.length >= 10 && (
+                                                    <p className="text-xs text-amber-400 mt-1">{t('config.additionalRangesMax')}</p>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
 
