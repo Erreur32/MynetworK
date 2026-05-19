@@ -4,7 +4,7 @@
  * Modal for configuring automatic network scan and refresh settings
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api/client';
@@ -93,6 +93,18 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const [refreshConfig, setRefreshConfig] = useState<AutoRefreshConfig>({ enabled: false, interval: 15 });
     const [defaultConfig, setDefaultConfig] = useState<DefaultScanConfig>({ defaultRange: '192.168.1.0/24', defaultAutoDetect: false, additionalRanges: [] });
     const [newRangeInput, setNewRangeInput] = useState('');
+    // Stable keys for the editable additionalRanges list (avoids React index-key pitfalls on delete).
+    const rangeIdCounter = useRef(0);
+    const [rangeIds, setRangeIds] = useState<number[]>([]);
+
+    const generateRangeIds = (count: number): number[] => {
+        const ids: number[] = [];
+        for (let i = 0; i < count; i++) {
+            rangeIdCounter.current += 1;
+            ids.push(rangeIdCounter.current);
+        }
+        return ids;
+    };
 
     const addAdditionalRange = () => {
         const trimmed = newRangeInput.trim();
@@ -104,6 +116,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             ...defaultConfig,
             additionalRanges: [...defaultConfig.additionalRanges, trimmed]
         });
+        setRangeIds([...rangeIds, ...generateRangeIds(1)]);
         setNewRangeInput('');
     };
     const [isLoading, setIsLoading] = useState(false);
@@ -322,6 +335,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             if (defaultResponse.success && defaultResponse.result) {
                 setDefaultConfig(defaultResponse.result);
                 setInitialDefaultConfig(JSON.parse(JSON.stringify(defaultResponse.result))); // Deep copy
+                setRangeIds(generateRangeIds(defaultResponse.result.additionalRanges?.length ?? 0));
             }
         } catch (error) {
             console.error('Failed to fetch configs:', error);
@@ -1142,7 +1156,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 {defaultConfig.additionalRanges.length > 0 && (
                                                     <div className="space-y-2 mb-2">
                                                         {defaultConfig.additionalRanges.map((range, idx) => (
-                                                            <div key={idx} className="flex items-center gap-2">
+                                                            <div key={rangeIds[idx] ?? `fallback-${idx}`} className="flex items-center gap-2">
                                                                 <input
                                                                     type="text"
                                                                     value={range}
@@ -1157,8 +1171,11 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        const next = defaultConfig.additionalRanges.filter((_, i) => i !== idx);
-                                                                        setDefaultConfig({ ...defaultConfig, additionalRanges: next });
+                                                                        setDefaultConfig({
+                                                                            ...defaultConfig,
+                                                                            additionalRanges: defaultConfig.additionalRanges.filter((_, i) => i !== idx)
+                                                                        });
+                                                                        setRangeIds(rangeIds.filter((_, i) => i !== idx));
                                                                     }}
                                                                     className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 transition-colors"
                                                                     title={t('config.removeRange')}
