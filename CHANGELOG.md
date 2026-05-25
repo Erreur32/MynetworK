@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.4] - 2026-05-25
+
+### Security
+
+- Pinned `shell-quote` to `>=1.8.4` via `overrides` (transitive via `concurrently`, devDependency only) to fix the Snyk-reported critical Arbitrary Command Injection in `quote` (object-token shape validation, released 2026-05-22). Closes Snyk Open Source alert #223 and Snyk Container alert #224.
+
+---
+
 ## [0.9.3] - 2026-05-25
 
 ### Security
