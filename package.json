@@ -1,7 +1,7 @@
 {
   "name": "mynetwork",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -50,7 +50,7 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tsx": "^4.21.0",
-    "ws": "^8.18.3",
+    "ws": "^8.20.1",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

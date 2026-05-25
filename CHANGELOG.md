@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-05-25
+
+### Security
+
+- Bumped `ws` from 8.18.3 to 8.20.1 to fix GHSA-q8mj-m7cp-5q26 (uninitialized memory disclosure in `websocket.close()`).
+- Bumped `qs` from 6.14.2 to 6.15.2 (transitive via express) to fix GHSA-58qx-3vcg-4xpx (remotely triggerable DoS in `qs.stringify` with comma-format arrays).
+
+Resolves Dependabot PR #18, alerts #14 and #15, and Scorecard alert #222.
+
+---
+
 ## [0.9.2] - 2026-05-19
 
 ### Fixed
