@@ -190,9 +190,15 @@ function getCorsConfig() {
         }
       }
 
+      // Wildcard origin ("*") combined with credentials:true is rejected by
+      // every browser and flagged by CodeQL as a permissive-CORS misconfig.
+      // Force credentials:false whenever the admin chose "*".
+      const isWildcardOrigin = typeof origin === "string" && origin === "*";
       return {
-        origin: typeof origin === "string" && origin === "*" ? true : origin,
-        credentials: corsConfig.allowCredentials ?? true,
+        origin: isWildcardOrigin ? true : origin,
+        credentials: isWildcardOrigin
+          ? false
+          : (corsConfig.allowCredentials ?? true),
         methods: corsConfig.allowedMethods || [
           "GET",
           "POST",

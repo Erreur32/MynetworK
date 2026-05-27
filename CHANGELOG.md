@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.8] - 2026-05-27
+
+### Security
+
+- CORS: when admin sets `allowedOrigins = "*"`, force `credentials:false`. Resolves CodeQL alert #228 (permissive CORS misconfig on `server/index.ts:194`). The wildcard+credentials combo was already browser-rejected, this aligns the server config with the spec
+
+---
+
 ## [0.9.7] - 2026-05-27
 
 ### Fixed
