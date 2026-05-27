@@ -112,3 +112,5 @@ entities.json
 
 # Local Playwright captures (Claude verification artifacts)
 img-capture/
+.playwright-mcp/
+prod-*.png
