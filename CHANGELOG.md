@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.6] - 2026-05-27
+
+### Fixed
+
+- Sonar bug S3923 on `server/index.ts:1072`: version label color ternary had two identical branches, simplified
+- Sonar `S6606` on `server/index.ts:196`: use `??` nullish coalescing instead of `!== undefined ? : true` for `allowCredentials`
+- JWT secret warning now uses top-level `await` instead of a promise chain (sonar S7059)
+
+### Removed
+
+- Unused locals `displayIP` and `containerPadding` in `server/index.ts`
+
+### Refactored
+
+- Extracted nested ternary `ingressBlock` from `urlBlockLines` for readability
+
+---
+
 ## [0.9.5] - 2026-05-27
 
 ### Fixed

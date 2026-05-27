@@ -192,10 +192,7 @@ function getCorsConfig() {
 
       return {
         origin: typeof origin === "string" && origin === "*" ? true : origin,
-        credentials:
-          corsConfig.allowCredentials !== undefined
-            ? corsConfig.allowCredentials
-            : true,
+        credentials: corsConfig.allowCredentials ?? true,
         methods: corsConfig.allowedMethods || [
           "GET",
           "POST",
@@ -767,13 +764,15 @@ function getHostMachineIP(): string | null {
 const jwtSecret =
   process.env.JWT_SECRET || "change-me-in-production-please-use-strong-secret";
 if (jwtSecret === "change-me-in-production-please-use-strong-secret") {
-  securityNotificationService.notifyJwtSecretWarning().catch((err) => {
+  try {
+    await securityNotificationService.notifyJwtSecretWarning();
+  } catch (err) {
     logger.error(
       "Security",
       "Failed to send JWT secret warning notification:",
       err,
     );
-  });
+  }
 }
 
 // Helper function to detect if running in Docker
@@ -845,7 +844,6 @@ server.listen(port, host, () => {
   // Get host machine IP (for Docker) or container IP (for dev)
   const hostIP = isDockerEnv ? getHostMachineIP() : null;
   const containerIP = getNetworkIP();
-  const displayIP = hostIP || containerIP || "localhost";
 
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
@@ -991,10 +989,11 @@ server.listen(port, host, () => {
     return label.padEnd(maxLabelLength);
   };
 
+  const ingressBlock = isIngress
+    ? ["  UI: served via Ingress (use the Home Assistant sidebar)"]
+    : [];
   const urlBlockLines = hidePortUrls
-    ? isIngress
-      ? ["  UI: served via Ingress (use the Home Assistant sidebar)"]
-      : []
+    ? ingressBlock
     : [
         `  🌐 ${padLabel("Frontend WEB")}: ${frontendWebUrl}`,
         `  💻 ${padLabel("Frontend Local")}: ${frontendLocalUrl}`,
@@ -1049,12 +1048,6 @@ server.listen(port, host, () => {
     return line + " ".repeat(padding);
   };
 
-  // Calculate padding for container label
-  const containerPadding = Math.max(
-    Math.floor((width - visibleLength(containerLabel)) / 2),
-    minPadding,
-  );
-
   const urlBlockConsole = urlBlockLines
     .map(
       (line) =>
@@ -1069,7 +1062,7 @@ ${colors.bright}${colors.cyan}╔${"═".repeat(width)}${colors.reset}
 ${colors.bright}${colors.cyan}║${" ".repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${" ".repeat(width - titlePadding - visibleLength(title))}${colors.reset}
 ${colors.bright}${colors.cyan}║${" ".repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${" ".repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
 ${colors.bright}${colors.cyan}╠${"═".repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${" ".repeat(versionPadding)}${isDockerProd ? colors.yellow : isNpmDev || isDockerDev ? colors.bright : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${" ".repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${colors.bright}${colors.cyan}║${" ".repeat(versionPadding)}${isDockerProd ? colors.yellow : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${" ".repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📦${colors.reset} ${colors.bright}Container:${colors.reset}           ${colors.cyan}${containerName}${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}╠${"═".repeat(width)}${colors.reset}
 ${urlBlockConsole}
