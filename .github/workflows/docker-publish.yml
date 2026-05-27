@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   pull_request:
     branches:
       - main
@@ -16,7 +16,6 @@ env:
   # GitHub déprécie Node.js 20 pour les actions. On force Node.js 24 dès maintenant
   # pour éviter les warnings et les incompatibilités futures.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 
 jobs:
   build-and-push:
@@ -75,4 +74,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+          # Multi-arch only on version tags (v*.*.*). Push to main and PRs
+          # build amd64 only — saves ~15 min/build (QEMU arm64 emulation is
+          # the bottleneck). ARM64 users get a real multi-arch image on the
+          # tagged releases that they care about.
+          platforms: ${{ startsWith(github.ref, 'refs/tags/v') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}

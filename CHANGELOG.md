@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.9] - 2026-05-27
+
+### Added
+
+- Topology: dynamic vertical gap between a switch and its clients, scales `50 → 130 px` with the client count above 3, so dense fan-outs don't mask the switch label
+- Topology: new `vm-accordion` placement for vm-host (Proxmox / KVM) stacks, mirrors `wifi-accordion` (two columns flanking the parent), VMs no longer overflow into the neighbouring wired clients
+- Topology: virtual edges (vm-host → VM) now share the wifi spine routing (central bottom handle + bezier curve), the layout reads "non-cabled" at a glance like wifi
+
+### Changed
+
+- CI: Docker build multi-arch (amd64 + arm64) now runs **only on `v*.*.*` tag pushes**. Push to `main` builds amd64 only, saves ~15 min/build during day-to-day iteration. ARM64 users still get a multi-arch image on every release tag
+
+---
+
 ## [0.9.8] - 2026-05-27
 
 ### Security
