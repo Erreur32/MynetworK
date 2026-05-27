@@ -1,0 +1,676 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e28]:
+      - banner [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - img "MynetworK" [ref=e32]
+            - generic [ref=e33]:
+              - generic [ref=e34]: MynetworK
+              - generic [ref=e36]: Version v0.9.5
+          - button "Search Global search" [ref=e37] [cursor=pointer]:
+            - img [ref=e39]
+            - generic [ref=e42]:
+              - generic [ref=e43]: Search
+              - generic [ref=e44]: Global search
+          - button "Topology Network topology" [ref=e45] [cursor=pointer]:
+            - img [ref=e47]
+            - generic [ref=e52]:
+              - generic [ref=e53]: Topology
+              - generic [ref=e54]: Network topology
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - img [ref=e59]
+              - generic [ref=e61]:
+                - img [ref=e62]
+                - generic [ref=e64]: "255"
+                - generic [ref=e65]: kb/s
+            - generic [ref=e67]:
+              - img [ref=e69]
+              - generic [ref=e71]:
+                - img [ref=e72]
+                - generic [ref=e74]: "1.3"
+                - generic [ref=e75]: Mb/s
+          - generic [ref=e77] [cursor=pointer]:
+            - img [ref=e79]
+            - generic [ref=e82]: 59°C
+          - generic [ref=e84] [cursor=pointer]:
+            - img [ref=e86]
+            - generic [ref=e88]: 64°C
+          - generic [ref=e90] [cursor=pointer]:
+            - img [ref=e92]
+            - generic [ref=e95]: 61°C
+          - generic [ref=e98]:
+            - generic [ref=e99]: 15:19
+            - generic [ref=e100]: Wed, May 27
+          - button "Erreur32" [ref=e102] [cursor=pointer]:
+            - img "Erreur32" [ref=e103]
+      - main [ref=e105]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - heading "Plugin status" [level=3] [ref=e110]
+                - generic [ref=e112]:
+                  - text: "Active plugins:"
+                  - generic [ref=e113]: 3 / 3
+              - generic [ref=e117]:
+                - generic "Go to administration to configure Freebox" [ref=e118] [cursor=pointer]:
+                  - generic [ref=e119]:
+                    - generic [ref=e120]:
+                      - img [ref=e122]
+                      - generic [ref=e124]:
+                        - generic [ref=e125]: Freebox
+                        - generic [ref=e126]: Firmware 4.11.1
+                    - generic [ref=e128]:
+                      - img [ref=e129]
+                      - text: Active
+                  - generic [ref=e133]:
+                    - generic [ref=e134]:
+                      - generic [ref=e135]: "API version:"
+                      - generic [ref=e136]: "15.0"
+                    - generic [ref=e137]:
+                      - generic [ref=e138]: "Box firmware:"
+                      - generic [ref=e139]: 4.11.1
+                - generic "Go to administration to configure UniFi Controller" [ref=e140] [cursor=pointer]:
+                  - generic [ref=e141]:
+                    - generic [ref=e142]:
+                      - img [ref=e144]
+                      - generic [ref=e146]:
+                        - generic [ref=e147]: UniFi Controller
+                        - generic [ref=e148]: Firmware 10.4.57
+                    - generic [ref=e150]:
+                      - img [ref=e151]
+                      - text: Active
+                  - generic [ref=e155]:
+                    - generic [ref=e156]:
+                      - generic [ref=e157]: "API mode:"
+                      - generic [ref=e158]: controller
+                    - generic [ref=e159]:
+                      - generic [ref=e160]: "Firmware version:"
+                      - generic [ref=e161]: 10.4.57
+                - generic "Go to administration to configure Network scan" [ref=e162] [cursor=pointer]:
+                  - generic [ref=e163]:
+                    - generic [ref=e164]:
+                      - img [ref=e166]
+                      - generic [ref=e168]:
+                        - generic [ref=e169]: Network scan
+                        - generic [ref=e170]: Version 0.9.5
+                    - generic [ref=e172]:
+                      - img [ref=e173]
+                      - text: Active
+                  - generic [ref=e178]:
+                    - generic [ref=e179]: "Last scan:"
+                    - generic [ref=e180]: 4min ago
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - heading "Freebox Bandwidth" [level=3] [ref=e184]:
+                  - generic [ref=e185]:
+                    - text: Freebox Bandwidth
+                    - img [ref=e187]
+                - generic [ref=e191]:
+                  - generic [ref=e192]:
+                    - img [ref=e193]
+                    - generic [ref=e195]: 255 kb/s
+                  - generic [ref=e196]:
+                    - img [ref=e197]
+                    - generic [ref=e199]: 1.3 Mb/s
+              - generic [ref=e200]:
+                - generic [ref=e201]:
+                  - generic [ref=e203]:
+                    - button "Freebox" [ref=e204] [cursor=pointer]
+                    - button "UniFi" [ref=e205] [cursor=pointer]
+                  - generic [ref=e207]: "Period: 1h"
+                  - generic [ref=e208]:
+                    - button "Live" [ref=e209] [cursor=pointer]
+                    - button "1h" [ref=e210] [cursor=pointer]
+                    - button "6h" [ref=e211] [cursor=pointer]
+                    - button "24h" [ref=e212] [cursor=pointer]
+                    - button "7j" [ref=e213] [cursor=pointer]
+                - generic [ref=e216]:
+                  - list [ref=e218]:
+                    - listitem [ref=e219]:
+                      - img "[object Object] legend icon" [ref=e220]
+                      - generic [ref=e222]: Download
+                    - listitem [ref=e223]:
+                      - img "[object Object] legend icon" [ref=e224]
+                      - generic [ref=e226]: Upload
+                  - application [ref=e227]:
+                    - generic [ref=e248]:
+                      - generic [ref=e249]:
+                        - generic [ref=e251]: 14:19
+                        - generic [ref=e253]: 14:22
+                        - generic [ref=e255]: 14:26
+                        - generic [ref=e257]: 14:29
+                        - generic [ref=e259]: 14:33
+                        - generic [ref=e261]: 14:36
+                        - generic [ref=e263]: 14:40
+                        - generic [ref=e265]: 14:43
+                        - generic [ref=e267]: 14:47
+                        - generic [ref=e269]: 14:50
+                        - generic [ref=e271]: 14:54
+                        - generic [ref=e273]: 14:57
+                        - generic [ref=e275]: 15:01
+                        - generic [ref=e277]: 15:04
+                        - generic [ref=e279]: 15:08
+                        - generic [ref=e281]: 15:11
+                        - generic [ref=e283]: 15:19
+                      - generic [ref=e284]:
+                        - generic [ref=e286]: 0 b/s
+                        - generic [ref=e288]: 5.7Mb/s
+                        - generic [ref=e290]: 11 Mb/s
+                        - generic [ref=e292]: 17 Mb/s
+                        - generic [ref=e294]: 23 Mb/s
+          - generic [ref=e295]:
+            - generic [ref=e296]:
+              - generic [ref=e297]:
+                - heading "Network summary" [level=3] [ref=e299]
+                - generic [ref=e301]:
+                  - generic [ref=e302]:
+                    - generic [ref=e303]: "Network managed by:"
+                    - generic [ref=e304]: Freebox
+                  - generic [ref=e305]:
+                    - generic [ref=e306]: "Gateway:"
+                    - generic [ref=e307]: 192.168.1.254
+                  - generic [ref=e308]:
+                    - generic [ref=e309]: "Subnet:"
+                    - generic [ref=e310]: 192.168.1.0/24
+                  - generic [ref=e312]:
+                    - generic [ref=e313]: "Freebox:"
+                    - generic [ref=e314]: 192.168.1.254
+                  - generic [ref=e315]:
+                    - generic [ref=e316]: "Mode:"
+                    - generic [ref=e317]: Router
+                  - generic [ref=e318]:
+                    - generic [ref=e319]: "DMZ:"
+                    - generic "DMZ → 192.168.1.2" [ref=e321]: Active → 192.168.1.2
+                  - generic [ref=e323]:
+                    - generic [ref=e324]: "UniFi Gateway:"
+                    - generic [ref=e325]: 192.168.1.2
+                  - generic [ref=e326]:
+                    - generic [ref=e327]: "Name:"
+                    - generic [ref=e328]: Cloud Gateway Fiber32
+                  - generic [ref=e330]: DHCP
+                  - generic [ref=e331]:
+                    - generic [ref=e332]:
+                      - generic [ref=e333]:
+                        - generic [ref=e334]: Freebox
+                        - generic [ref=e335]: Active
+                      - generic [ref=e336]:
+                        - generic [ref=e337]: "Used IPv4:"
+                        - generic [ref=e338]: 4 / 5
+                      - generic [ref=e339]:
+                        - generic [ref=e340]: "IP range:"
+                        - generic [ref=e341]: 192.168.1.1 → 192.168.1.5
+                      - generic [ref=e342]:
+                        - generic [ref=e343]: "Usage:"
+                        - generic [ref=e344]: 80%
+                    - generic [ref=e345]:
+                      - generic [ref=e346]:
+                        - generic [ref=e347]: UniFi
+                        - generic [ref=e348]: Active
+                      - generic [ref=e349]:
+                        - generic [ref=e350]: "Connected clients:"
+                        - generic [ref=e351]: "34"
+                      - generic [ref=e352]:
+                        - generic [ref=e353]: "IP range:"
+                        - generic [ref=e354]: 192.168.32.10 - 192.168.32.254
+              - generic [ref=e355]:
+                - heading "Server system" [level=3] [ref=e357]
+                - generic [ref=e359]:
+                  - generic [ref=e360]:
+                    - generic [ref=e361]:
+                      - generic [ref=e362]:
+                        - img [ref=e363]
+                        - text: CPU
+                      - generic [ref=e366]: 16 cores
+                    - generic [ref=e369]:
+                      - generic [ref=e370]: 12th Gen Intel(R) Core(TM) i5-12600H
+                      - generic [ref=e371]: 3.8%
+                  - generic [ref=e372]:
+                    - generic [ref=e373]:
+                      - generic [ref=e374]:
+                        - img [ref=e375]
+                        - text: RAM
+                      - generic [ref=e377]: 8.08 GB / 30.90 GB
+                    - generic [ref=e380]:
+                      - generic [ref=e381]: "Free: 22.82 GB"
+                      - generic [ref=e382]: 26.1%
+                  - generic [ref=e383]:
+                    - generic [ref=e384]:
+                      - generic [ref=e385]:
+                        - img [ref=e386]
+                        - generic [ref=e390]: Database
+                      - generic [ref=e391]:
+                        - img [ref=e392]
+                        - text: OK
+                    - generic [ref=e396]:
+                      - generic [ref=e397]: Size
+                      - generic [ref=e398]: 94.82 MB
+                  - generic [ref=e399]:
+                    - generic [ref=e400]:
+                      - generic [ref=e401]: Hostname
+                      - generic [ref=e402]: Myoueb.fr
+                    - generic [ref=e403]:
+                      - generic [ref=e404]: Platform
+                      - generic [ref=e405]: linux (x64)
+                  - generic [ref=e406]:
+                    - generic [ref=e407]:
+                      - text: Uptime
+                      - img [ref=e409]
+                    - generic [ref=e411]: 1j 16h
+            - generic [ref=e413]:
+              - generic [ref=e414]:
+                - generic [ref=e415]:
+                  - heading "Freebox" [level=3] [ref=e416]:
+                    - generic [ref=e417]:
+                      - img [ref=e418]
+                      - generic [ref=e420]: Freebox
+                  - button "Access" [ref=e423] [cursor=pointer]:
+                    - text: Access
+                    - img [ref=e424]
+                - generic [ref=e427]:
+                  - generic [ref=e429]:
+                    - generic [ref=e431]:
+                      - generic [ref=e432]:
+                        - generic:
+                          - generic: Freebox
+                        - generic:
+                          - generic: Firmware
+                        - generic:
+                          - generic: LAN Network
+                        - generic [ref=e433]: IP Public
+                      - generic [ref=e434]:
+                        - generic:
+                          - generic: Freebox v9 (r1)
+                        - generic [ref=e435]:
+                          - generic [ref=e436]: Box
+                          - generic [ref=e437]: v4.11.1
+                        - generic:
+                          - generic: 192.168.1.x
+                        - generic [ref=e439]: 82.66.14.92
+                    - generic [ref=e442]:
+                      - generic [ref=e443]: DHCP
+                      - generic [ref=e444]: Active
+                      - generic [ref=e445]: 2 / 61
+                    - generic [ref=e447]:
+                      - generic [ref=e448]:
+                        - generic [ref=e449]:
+                          - generic [ref=e450]: Download (realtime)
+                          - generic [ref=e451]:
+                            - generic [ref=e452]: "255"
+                            - generic [ref=e453]: kb/s
+                            - img [ref=e454]
+                        - img [ref=e457]
+                      - generic [ref=e459]:
+                        - generic [ref=e460]:
+                          - generic [ref=e461]: Upload (realtime)
+                          - generic [ref=e462]:
+                            - generic [ref=e463]: "1.3"
+                            - generic [ref=e464]: Mb/s
+                            - img [ref=e465]
+                        - img [ref=e468]
+                    - generic [ref=e470]:
+                      - generic [ref=e471]: System state
+                      - generic [ref=e472]:
+                        - generic [ref=e473]:
+                          - img [ref=e475]
+                          - generic [ref=e478]: 59°C
+                        - generic [ref=e479]:
+                          - img [ref=e481]
+                          - generic [ref=e483]: 64°C
+                        - generic [ref=e484]:
+                          - img [ref=e486]
+                          - generic [ref=e488]: 750 T/min
+                        - generic [ref=e489]:
+                          - img [ref=e491]
+                          - generic [ref=e495]: OK
+                        - generic [ref=e496]:
+                          - img [ref=e498]
+                          - generic [ref=e500]: OK
+                        - generic [ref=e501]:
+                          - img [ref=e503]
+                          - generic [ref=e505]: UP
+                        - generic [ref=e506]:
+                          - img [ref=e508]
+                          - generic [ref=e512]: Session OK
+                      - generic [ref=e513]:
+                        - generic [ref=e514]:
+                          - generic [ref=e515]: Freebox Wi‑Fi stations
+                          - generic [ref=e516]: 4 access point(s)
+                        - generic [ref=e517]:
+                          - generic [ref=e518]:
+                            - generic:
+                              - generic:
+                                - generic: o0o6
+                                - generic: 6GHz • Channel n/a
+                            - generic [ref=e520]: Disabled
+                          - generic [ref=e521]:
+                            - generic:
+                              - generic:
+                                - generic: dev
+                                - generic: 5GHz • Channel n/a
+                            - generic [ref=e523]: Disabled
+                          - generic [ref=e524]:
+                            - generic:
+                              - generic:
+                                - generic: oFo
+                                - generic: 5GHz • Channel 64
+                            - generic [ref=e525]:
+                              - generic [ref=e526]: 1 devices
+                              - generic [ref=e527]: Load 8%
+                          - generic [ref=e528]:
+                            - generic:
+                              - generic:
+                                - generic: o0o
+                                - generic: 2.4GHz • Channel n/a
+                            - generic [ref=e530]: Disabled
+                  - generic [ref=e531]:
+                    - generic [ref=e532]:
+                      - text: Uptime
+                      - img [ref=e534]
+                    - generic [ref=e536]: 5j
+              - generic [ref=e537]:
+                - generic [ref=e538]:
+                  - heading "UniFi Controller" [level=3] [ref=e539]:
+                    - generic [ref=e540]:
+                      - img [ref=e541]
+                      - generic [ref=e543]: UniFi Controller
+                  - button "Access" [ref=e546] [cursor=pointer]:
+                    - text: Access
+                    - img [ref=e547]
+                - generic [ref=e550]:
+                  - generic [ref=e552]:
+                    - generic [ref=e554]:
+                      - generic [ref=e555]:
+                        - generic: UniFi
+                        - generic: Firmware
+                        - generic: Controller
+                        - generic [ref=e556]: Type
+                      - generic [ref=e557]:
+                        - generic: UniFi
+                        - generic [ref=e558]: v10.4.57
+                        - generic: 192.168.32.1
+                        - generic [ref=e559]: CloudGateway
+                    - generic [ref=e561]:
+                      - generic [ref=e562]:
+                        - generic [ref=e563]: DHCP
+                        - generic [ref=e564]: Active
+                      - generic [ref=e565]:
+                        - generic [ref=e566]: Range
+                        - generic [ref=e567]: 192.168.32.10 - 192.168.32.254
+                    - generic [ref=e568]:
+                      - generic [ref=e569]:
+                        - generic [ref=e570]:
+                          - generic [ref=e571]: Download (realtime)
+                          - generic [ref=e572]:
+                            - generic [ref=e573]: "442"
+                            - generic [ref=e574]: kb/s
+                            - img [ref=e575]
+                        - img [ref=e578]
+                      - generic [ref=e581]:
+                        - generic [ref=e582]:
+                          - generic [ref=e583]: Upload (realtime)
+                          - generic [ref=e584]:
+                            - generic [ref=e585]: "778"
+                            - generic [ref=e586]: kb/s
+                            - img [ref=e587]
+                        - img [ref=e590]
+                    - generic [ref=e593]:
+                      - generic [ref=e594]: System state
+                      - generic [ref=e596]:
+                        - img [ref=e598]
+                        - generic [ref=e601]: 61°C
+                    - generic [ref=e602]:
+                      - generic [ref=e603]:
+                        - generic [ref=e604]:
+                          - generic [ref=e605]: UniFi Sites
+                          - generic [ref=e607]: v10.4.57
+                        - generic [ref=e609]:
+                          - generic:
+                            - generic:
+                              - generic: Cloud Gateway Fiber32
+                          - generic:
+                            - generic: "Hostname: Cloud-Gateway-Fiber32"
+                            - generic:
+                              - generic [ref=e612]: "Devices:"
+                              - text: "41"
+                          - generic:
+                            - generic [ref=e613]: 36 Clients
+                            - generic [ref=e614]: 2 APs
+                            - generic [ref=e615]: 2 Switches
+                      - generic [ref=e616]:
+                        - generic [ref=e618]: Access points
+                        - generic [ref=e619]:
+                          - generic [ref=e620]:
+                            - generic [ref=e621]:
+                              - 'generic "Access point: ☠ U7 Pro (192.168.32.5)"': ☠ U7 Pro
+                              - generic "Access point IP address" [ref=e622]: 192.168.32.5
+                            - generic [ref=e623]:
+                              - generic [ref=e624]:
+                                - generic [ref=e625]:
+                                  - 'generic "Supported frequency band: 2.4GHz" [ref=e626]': 2.4GHz
+                                  - 'generic "Supported frequency band: 5GHz" [ref=e627]': 5GHz
+                                  - 'generic "Supported frequency band: 6GHz" [ref=e628]': 6GHz
+                                - generic [ref=e629]:
+                                  - 'generic "Canal utilisé sur 2.4GHz: Canal 9" [ref=e630]': 2.4:9
+                                  - 'generic "Canal utilisé sur 5GHz: Canal 104" [ref=e631]': 5:104
+                                  - 'generic "Canal utilisé sur 6GHz: Canal auto" [ref=e632]': 6:auto
+                              - generic [ref=e633]:
+                                - generic:
+                                  - 'generic "Bande de fréquence: 2.4GHz"': 2.4GHz
+                                  - 'generic "Réseau Wi-Fi (SSID) transmis sur 2.4GHz: o0o" [ref=e634]': o0o
+                                  - 'generic "Nombre de clients connectés sur 2.4GHz: 9 clients actifs" [ref=e635]': "9"
+                                - generic:
+                                  - 'generic "Bande de fréquence: 5GHz"': 5GHz
+                                  - generic "Aucun réseau Wi-Fi configuré sur 5GHz" [ref=e636]: "--"
+                                - generic:
+                                  - 'generic "Bande de fréquence: 6GHz"': 6GHz
+                                  - generic "Aucun réseau Wi-Fi configuré sur 6GHz" [ref=e637]: "--"
+                          - generic [ref=e638]:
+                            - generic [ref=e639]:
+                              - 'generic "Access point: ☠ AC Pro (192.168.32.6)"': ☠ AC Pro
+                              - generic "Access point IP address" [ref=e640]: 192.168.32.6
+                            - generic [ref=e641]:
+                              - generic [ref=e642]:
+                                - generic [ref=e643]:
+                                  - 'generic "Supported frequency band: 2.4GHz" [ref=e644]': 2.4GHz
+                                  - 'generic "Supported frequency band: 5GHz" [ref=e645]': 5GHz
+                                - generic [ref=e646]:
+                                  - 'generic "Canal utilisé sur 2.4GHz: Canal 1" [ref=e647]': 2.4:1
+                                  - 'generic "Canal utilisé sur 5GHz: Canal 48" [ref=e648]': 5:48
+                              - generic [ref=e649]:
+                                - generic:
+                                  - 'generic "Bande de fréquence: 2.4GHz"': 2.4GHz
+                                  - 'generic "Réseau Wi-Fi (SSID) transmis sur 2.4GHz: o0o" [ref=e650]': o0o
+                                  - 'generic "Nombre de clients connectés sur 2.4GHz: 16 clients actifs" [ref=e651]': "16"
+                                - generic:
+                                  - 'generic "Bande de fréquence: 5GHz"': 5GHz
+                                  - generic "Aucun réseau Wi-Fi configuré sur 5GHz" [ref=e652]: "--"
+                                - generic:
+                                  - 'generic "Bande de fréquence: 6GHz"': 6GHz
+                                  - generic "Aucun réseau Wi-Fi configuré sur 6GHz" [ref=e653]: "--"
+                  - generic [ref=e654]:
+                    - generic [ref=e655]:
+                      - text: Uptime
+                      - img [ref=e657]
+                    - generic [ref=e659]: 5j 3h
+              - generic [ref=e660]:
+                - generic [ref=e661]:
+                  - heading "Network scan" [level=3] [ref=e662]:
+                    - generic [ref=e663]:
+                      - img [ref=e664]
+                      - generic [ref=e669]: Network scan
+                  - button "View details" [ref=e671] [cursor=pointer]:
+                    - text: View details
+                    - img [ref=e672]
+                - generic [ref=e675]:
+                  - generic [ref=e676]:
+                    - generic [ref=e677]:
+                      - generic: "57"
+                      - generic: Total IPs
+                    - generic [ref=e678]:
+                      - generic: "38"
+                      - generic: Online
+                    - generic [ref=e679]:
+                      - generic: "19"
+                      - generic: Offline
+                  - generic [ref=e681]:
+                    - generic [ref=e682]: "Last scan:"
+                    - generic [ref=e684]:
+                      - generic [ref=e685]: Auto
+                      - generic [ref=e686]:
+                        - text: Refresh
+                        - generic [ref=e687]: (Quick)
+                      - generic [ref=e688]: 27/05/2026, 15:15
+                      - generic [ref=e689]: 4 min ago
+                    - generic [ref=e690]:
+                      - generic [ref=e691]:
+                        - generic [ref=e692]: Full Scan
+                        - generic [ref=e693]: Full
+                        - generic [ref=e694]: In 30 min (15:49)
+                        - generic [ref=e695]: 192.168.32.1/24
+                      - generic [ref=e696]:
+                        - generic [ref=e697]: Refresh
+                        - generic [ref=e698]: Quick
+                        - generic [ref=e699]: In less than 1 min (15:20)
+                  - generic [ref=e700]:
+                    - generic [ref=e701]: Offline IPs (10)
+                    - generic [ref=e702]:
+                      - generic [ref=e703]:
+                        - generic [ref=e704]:
+                          - generic [ref=e706]: 192.168.32.75
+                          - generic [ref=e707]: (Netatmo-Personal-Weather-Station)
+                        - generic [ref=e708]: 70:ee:50:00:c2:b2
+                      - generic [ref=e709]:
+                        - generic [ref=e710]:
+                          - generic [ref=e712]: 192.168.32.32
+                          - generic [ref=e713]: (S23-Erreur32)
+                        - generic [ref=e714]: 4c:66:a6:21:07:f6
+                      - generic [ref=e715]:
+                        - generic [ref=e716]:
+                          - generic [ref=e718]: 192.168.32.109
+                          - generic [ref=e719]: (iPad-pro-St3ve)
+                        - generic [ref=e720]: 70:48:0f:e1:40:4c
+                      - generic [ref=e721]:
+                        - generic [ref=e722]:
+                          - generic [ref=e724]: 192.168.32.244
+                          - generic [ref=e725]: ([TV] Home32)
+                        - generic [ref=e726]: 0c:89:10:41:d2:e6
+                      - generic [ref=e727]:
+                        - generic [ref=e728]:
+                          - generic [ref=e730]: 192.168.32.254
+                          - generic [ref=e731]: (yeelink-light-lamp15_miap223E)
+                        - generic [ref=e732]: 54:48:e6:23:22:3e
+                      - generic [ref=e733]:
+                        - generic [ref=e734]:
+                          - generic [ref=e736]: 192.168.32.145
+                          - generic [ref=e737]: (Echo M5Stack Echo M5Stack)
+                        - generic [ref=e738]: e8:6b:ea:23:ba:b4
+                      - generic [ref=e739]:
+                        - generic [ref=e740]:
+                          - generic [ref=e742]: 192.168.32.50
+                          - generic [ref=e743]: (Gamer32)
+                        - generic [ref=e744]: 04:42:1a:e9:4e:a5
+                      - generic [ref=e745]:
+                        - generic [ref=e746]:
+                          - generic [ref=e748]: 192.168.32.87
+                          - generic [ref=e749]: (espressif)
+                        - generic [ref=e750]: a8:03:2a:95:3f:04
+                      - generic [ref=e751]:
+                        - generic [ref=e752]:
+                          - generic [ref=e754]: 192.168.32.252
+                          - generic [ref=e755]: (Freebox Player POP)
+                        - generic [ref=e756]: 8c:97:ea:08:42:b1
+                      - generic [ref=e757]:
+                        - generic [ref=e758]:
+                          - generic [ref=e760]: 192.168.32.82
+                          - generic [ref=e761]: (wemo)
+                        - generic [ref=e762]: 94:10:3e:44:4c:75
+                  - generic [ref=e763]:
+                    - generic [ref=e764]: Top worst latency (10)
+                    - generic [ref=e765]:
+                      - generic [ref=e766]:
+                        - generic [ref=e767]:
+                          - generic [ref=e769]: 192.168.32.135
+                          - generic [ref=e770]: (TuYa_WR mypin chat)
+                        - generic [ref=e771]: 202ms
+                      - generic [ref=e772]:
+                        - generic [ref=e773]:
+                          - generic [ref=e775]: 192.168.32.21
+                          - generic [ref=e776]: (zhimi-airpurifier-mb3_mibt54D8)
+                        - generic [ref=e777]: 82.2ms
+                      - generic [ref=e778]:
+                        - generic [ref=e779]:
+                          - generic [ref=e781]: 192.168.32.71
+                          - generic [ref=e782]: (Netatmo-Welcome-g13ed6f)
+                        - generic [ref=e783]: 23.4ms
+                      - generic [ref=e784]:
+                        - generic [ref=e785]:
+                          - generic [ref=e787]: 192.168.32.85
+                          - generic [ref=e788]: (P110M)
+                        - generic [ref=e789]: 18.3ms
+                      - generic [ref=e790]:
+                        - generic [ref=e791]:
+                          - generic [ref=e793]: 192.168.32.142
+                          - generic [ref=e794]: (Yeelight)
+                        - generic [ref=e795]: 16ms
+                      - generic [ref=e796]:
+                        - generic [ref=e797]:
+                          - generic [ref=e799]: 192.168.32.83
+                          - generic [ref=e800]: (P110M)
+                        - generic [ref=e801]: 15ms
+                      - generic [ref=e802]:
+                        - generic [ref=e803]:
+                          - generic [ref=e805]: 192.168.32.41
+                          - generic [ref=e806]: (HueSyncBox-C429960CFF0E)
+                        - generic [ref=e807]: 14.6ms
+                      - generic [ref=e808]:
+                        - generic [ref=e809]:
+                          - generic [ref=e811]: 192.168.32.222
+                          - generic [ref=e812]: (Meross Smart Switch)
+                        - generic [ref=e813]: 14.1ms
+                      - generic [ref=e814]:
+                        - generic [ref=e815]:
+                          - generic [ref=e817]: 192.168.32.113
+                          - generic [ref=e818]: (meross-mss620-db67)
+                        - generic [ref=e819]: 13.6ms
+                      - generic [ref=e820]:
+                        - generic [ref=e821]:
+                          - generic [ref=e823]: 192.168.32.73
+                          - generic [ref=e824]: (Netatmo-Presence-g26ac3c)
+                        - generic [ref=e825]: 9.98ms
+      - contentinfo [ref=e826]:
+        - generic [ref=e827]:
+          - generic [ref=e828]:
+            - button "MynetworK" [ref=e829] [cursor=pointer]:
+              - img [ref=e830]
+              - generic [ref=e833]: MynetworK
+            - button "Search" [ref=e834] [cursor=pointer]:
+              - img [ref=e835]
+              - generic [ref=e838]: Search
+            - button "Topology" [ref=e839] [cursor=pointer]:
+              - img [ref=e840]
+              - generic [ref=e845]: Topology
+            - button "Administration" [ref=e846] [cursor=pointer]:
+              - img [ref=e847]
+              - generic [ref=e850]: Administration
+          - generic [ref=e851]:
+            - button "Freebox" [ref=e852] [cursor=pointer]:
+              - img [ref=e854]
+              - generic [ref=e856]: Freebox
+            - button "UniFi" [ref=e857] [cursor=pointer]:
+              - img [ref=e859]
+              - generic [ref=e861]: UniFi
+            - button "IPs" [ref=e862] [cursor=pointer]:
+              - img [ref=e864]
+              - generic [ref=e868]: IPs
+    - region "Notifications alt+T":
+      - list:
+        - listitem [ref=e869]:
+          - button "Close toast" [ref=e870] [cursor=pointer]:
+            - img [ref=e871]
+          - img [ref=e875]
+          - generic [ref=e878]: Bienvenue Erreur32
+  - generic [ref=e879]: 0 b/s

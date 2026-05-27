@@ -1,0 +1,356 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e1793]:
+      - banner [ref=e1794]:
+        - button "UniFi Controller Version v0.9.6" [ref=e1796] [cursor=pointer]:
+          - img [ref=e1798]
+          - generic [ref=e1800]:
+            - generic [ref=e1801]: UniFi Controller
+            - generic [ref=e1802]: Version v0.9.6
+        - generic [ref=e1803]:
+          - generic [ref=e1804]:
+            - generic [ref=e1805]:
+              - img [ref=e1806]
+              - generic [ref=e1808]: 467 kb/s
+            - generic [ref=e1810]:
+              - img [ref=e1811]
+              - generic [ref=e1813]: 1 Mb/s
+          - generic [ref=e1815] [cursor=pointer]:
+            - img [ref=e1817]
+            - generic [ref=e1820]: 61°C
+          - generic [ref=e1821]:
+            - img [ref=e1823]
+            - generic [ref=e1825]: 123h
+          - generic [ref=e1826]:
+            - img [ref=e1828]
+            - generic [ref=e1830]: 39 devices
+          - generic [ref=e1831]:
+            - img [ref=e1833]
+            - generic [ref=e1835]: 39 actifs
+          - button "Erreur32" [ref=e1837] [cursor=pointer]:
+            - img "Erreur32" [ref=e1838]
+      - main [ref=e1840]:
+        - generic [ref=e1842]:
+          - generic [ref=e1843]:
+            - generic [ref=e1844]:
+              - button [ref=e1845] [cursor=pointer]:
+                - img [ref=e1846]
+              - generic [ref=e1848]:
+                - heading "UniFi Controller" [level=1] [ref=e1849]:
+                  - img [ref=e1850]
+                  - generic [ref=e1852]: UniFi Controller
+                - paragraph [ref=e1853]:
+                  - link "192.168.32.1" [ref=e1854] [cursor=pointer]:
+                    - /url: https://192.168.32.1:443
+            - generic [ref=e1856]:
+              - generic [ref=e1857]:
+                - img [ref=e1858]
+                - generic [ref=e1861]: Connection
+              - generic [ref=e1862]: •
+              - generic [ref=e1863]:
+                - img [ref=e1864]
+                - generic [ref=e1867]: Site
+              - generic [ref=e1868]: •
+              - generic [ref=e1869]:
+                - img [ref=e1870]
+                - generic [ref=e1873]: Data
+          - generic [ref=e1874]:
+            - button "Overview" [ref=e1875] [cursor=pointer]:
+              - generic [ref=e1876]:
+                - generic:
+                  - img
+                  - text: Overview
+            - button "Traffic" [ref=e1877] [cursor=pointer]:
+              - generic [ref=e1878]:
+                - generic:
+                  - img
+                  - text: Traffic
+            - button "Threats" [ref=e1879] [cursor=pointer]:
+              - generic [ref=e1880]:
+                - generic:
+                  - img
+                  - text: Threats
+            - button "Analysis" [ref=e1881] [cursor=pointer]:
+              - generic [ref=e1882]:
+                - generic:
+                  - img
+                  - text: Analysis
+            - button "NAT" [ref=e1883] [cursor=pointer]:
+              - generic [ref=e1884]:
+                - generic:
+                  - img
+                  - text: NAT
+            - button "Clients" [ref=e1885] [cursor=pointer]:
+              - generic [ref=e1886]:
+                - generic:
+                  - img
+                  - text: Clients
+            - button "Switch" [ref=e1887] [cursor=pointer]:
+              - generic [ref=e1888]:
+                - generic:
+                  - img
+                  - text: Switch
+          - generic [ref=e1889]:
+            - generic [ref=e1890]:
+              - button "Overview" [ref=e1891] [cursor=pointer]
+              - button "Events" [ref=e1892] [cursor=pointer]
+            - generic [ref=e1893]:
+              - generic [ref=e1894]:
+                - generic [ref=e1895]:
+                  - heading "System info" [level=3] [ref=e1897]:
+                    - generic [ref=e1898]:
+                      - text: System info
+                      - img [ref=e1900]
+                  - generic [ref=e1903]:
+                    - generic [ref=e1904]:
+                      - generic [ref=e1905]:
+                        - generic [ref=e1906]: "Controller uptime:"
+                        - generic [ref=e1907]: 5 j 3 h
+                      - generic [ref=e1908]:
+                        - generic [ref=e1909]: "Devices:"
+                        - generic [ref=e1910]: "5"
+                      - generic [ref=e1911]:
+                        - generic [ref=e1912]: "Clients:"
+                        - generic [ref=e1913]: "34"
+                    - generic [ref=e1915]:
+                      - generic [ref=e1916]: Deployment type
+                      - generic [ref=e1918]: UniFiOS
+                    - generic [ref=e1919]:
+                      - generic [ref=e1920]:
+                        - generic [ref=e1921]: "DHCP:"
+                        - generic [ref=e1922]: Active
+                      - generic [ref=e1923]:
+                        - generic [ref=e1924]: "IP range:"
+                        - generic [ref=e1925]: 192.168.32.10 - 192.168.32.254
+                      - generic [ref=e1926]:
+                        - generic [ref=e1927]: "IPs in use:"
+                        - generic [ref=e1928]: "34"
+                    - generic [ref=e1929]:
+                      - generic [ref=e1930]:
+                        - generic [ref=e1931]: "NAT:"
+                        - generic [ref=e1932]: Actif
+                      - generic [ref=e1933]:
+                        - generic [ref=e1934]: "Gateway IP:"
+                        - generic [ref=e1935]: 192.168.1.2
+                      - generic [ref=e1936]:
+                        - generic [ref=e1937]: "Gateway:"
+                        - generic "Cloud Gateway Fiber32" [ref=e1938]
+                      - generic [ref=e1939]:
+                        - generic [ref=e1940]: "LAN:"
+                        - generic [ref=e1941]:
+                          - generic [ref=e1942]: Uni_lan
+                          - generic [ref=e1943]: 192.168.32.1
+                      - generic [ref=e1944]:
+                        - generic [ref=e1945]: "NAT rules:"
+                        - generic [ref=e1946]: "8"
+                    - generic [ref=e1947]:
+                      - generic [ref=e1948]:
+                        - generic [ref=e1949]: "URL:"
+                        - link "192.168.32.1" [ref=e1950] [cursor=pointer]:
+                          - /url: https://192.168.32.1:443
+                      - generic [ref=e1951]:
+                        - generic [ref=e1952]: "Port:"
+                        - generic [ref=e1953]: "8443"
+                      - generic [ref=e1954]:
+                        - generic [ref=e1955]: "Site:"
+                        - generic [ref=e1956]: Cloud Gateway Fiber32
+                - generic [ref=e1957]:
+                  - heading "Network alerts" [level=3] [ref=e1959]:
+                    - generic [ref=e1960]:
+                      - text: Network alerts
+                      - img [ref=e1962]
+                  - generic [ref=e1965]:
+                    - generic [ref=e1966]:
+                      - generic [ref=e1967]: "Level:"
+                      - generic [ref=e1968]:
+                        - button "All" [ref=e1969] [cursor=pointer]
+                        - button "Info" [ref=e1970] [cursor=pointer]
+                        - button "Warnings" [ref=e1971] [cursor=pointer]
+                        - button "Critical" [ref=e1972] [cursor=pointer]
+                    - generic [ref=e1973]: No active alert detected.
+              - generic [ref=e1974]:
+                - generic [ref=e1977]:
+                  - img [ref=e1979]
+                  - generic [ref=e1982]: "5"
+                  - generic [ref=e1983]: Up to date
+                - generic [ref=e1986]:
+                  - generic [ref=e1988]: 🕒
+                  - generic [ref=e1989]: "0"
+                  - generic [ref=e1990]: Update available
+                - generic [ref=e1993]:
+                  - img [ref=e1995]
+                  - generic [ref=e1997]: "0"
+                  - generic [ref=e1998]: Critical update
+                - generic [ref=e2001]:
+                  - generic [ref=e2003]: i
+                  - generic [ref=e2004]: "5"
+                  - generic [ref=e2005]: Total devices
+              - generic [ref=e2006]:
+                - generic [ref=e2007]:
+                  - heading "UniFi Sites" [level=3] [ref=e2009]
+                  - generic [ref=e2012]:
+                    - generic [ref=e2016]: Cloud Gateway Fiber32
+                    - generic [ref=e2018]:
+                      - generic [ref=e2019]: "Hostname: Cloud-Gateway-Fiber32"
+                      - generic [ref=e2020]:
+                        - generic [ref=e2021]: "Devices:"
+                        - text: "39"
+                    - generic [ref=e2022]:
+                      - generic [ref=e2023]: 34 Clients
+                      - generic [ref=e2024]: 2 APs
+                      - generic [ref=e2025]: 2 Switches
+                - generic [ref=e2026]:
+                  - heading "Access points" [level=3] [ref=e2028]
+                  - generic [ref=e2030]:
+                    - generic [ref=e2031]:
+                      - generic [ref=e2032]:
+                        - generic [ref=e2035]: ☠ U7 Pro
+                        - generic [ref=e2036]:
+                          - generic [ref=e2037]: Online
+                          - generic "Access point online (update status in Overview)" [ref=e2038]
+                      - generic [ref=e2039]:
+                        - generic [ref=e2040]:
+                          - generic [ref=e2041]:
+                            - generic [ref=e2042]: IP
+                            - button "192.168.32.5" [ref=e2043] [cursor=pointer]:
+                              - generic [ref=e2044]: 192.168.32.5
+                              - img [ref=e2045]
+                          - generic [ref=e2048]:
+                            - generic [ref=e2049]: Uptime
+                            - generic [ref=e2050]: 35j 3h
+                          - generic [ref=e2051]:
+                            - generic [ref=e2052]: Firmware
+                            - generic [ref=e2053]: v8.5.21.18681
+                        - generic [ref=e2054]:
+                          - generic [ref=e2055]:
+                            - generic [ref=e2056]: Type Wi‑Fi
+                            - generic [ref=e2057]: Wi‑Fi
+                          - generic [ref=e2058]:
+                            - generic [ref=e2059]: Bandes
+                            - generic [ref=e2060]:
+                              - generic [ref=e2061]: 2.4GHz
+                              - generic [ref=e2062]: 5GHz
+                              - generic [ref=e2063]: 6GHz
+                          - generic [ref=e2064]:
+                            - generic [ref=e2065]: Clients
+                            - generic [ref=e2066]: "9"
+                    - generic [ref=e2067]:
+                      - generic [ref=e2068]:
+                        - generic [ref=e2071]: ☠ AC Pro
+                        - generic [ref=e2072]:
+                          - generic [ref=e2073]: Online
+                          - generic "Access point online (update status in Overview)" [ref=e2074]
+                      - generic [ref=e2075]:
+                        - generic [ref=e2076]:
+                          - generic [ref=e2077]:
+                            - generic [ref=e2078]: IP
+                            - button "192.168.32.6" [ref=e2079] [cursor=pointer]:
+                              - generic [ref=e2080]: 192.168.32.6
+                              - img [ref=e2081]
+                          - generic [ref=e2084]:
+                            - generic [ref=e2085]: Uptime
+                            - generic [ref=e2086]: 35j 1h
+                          - generic [ref=e2087]:
+                            - generic [ref=e2088]: Firmware
+                            - generic [ref=e2089]: v6.8.2.15592
+                        - generic [ref=e2090]:
+                          - generic [ref=e2091]:
+                            - generic [ref=e2092]: Type Wi‑Fi
+                            - generic [ref=e2093]: Wi‑Fi
+                          - generic [ref=e2094]:
+                            - generic [ref=e2095]: Bandes
+                            - generic [ref=e2096]:
+                              - generic [ref=e2097]: 2.4GHz
+                              - generic [ref=e2098]: 5GHz
+                          - generic [ref=e2099]:
+                            - generic [ref=e2100]: Clients
+                            - generic [ref=e2101]: "16"
+                - generic [ref=e2102]:
+                  - heading "Switches" [level=3] [ref=e2104]
+                  - generic [ref=e2106]:
+                    - generic [ref=e2107]:
+                      - generic [ref=e2108]:
+                        - generic [ref=e2111]: ☠ USW Flex 2.5G 8 PoE
+                        - generic [ref=e2112]:
+                          - generic [ref=e2113]: Online
+                          - generic "Switch online (update status in Overview)" [ref=e2114]
+                      - generic [ref=e2115]:
+                        - generic [ref=e2116]:
+                          - generic [ref=e2117]:
+                            - generic [ref=e2118]: IP
+                            - button "192.168.32.3" [ref=e2119] [cursor=pointer]:
+                              - generic [ref=e2120]: 192.168.32.3
+                              - img [ref=e2121]
+                          - generic [ref=e2124]:
+                            - generic [ref=e2125]: Uptime
+                            - generic [ref=e2126]: 98j 19h
+                          - generic [ref=e2127]:
+                            - generic [ref=e2128]: Firmware
+                            - generic [ref=e2129]: v2.1.8.971
+                        - generic [ref=e2130]:
+                          - generic [ref=e2131]:
+                            - generic [ref=e2132]: Ports actifs
+                            - generic [ref=e2133]: 10 / 10
+                          - generic [ref=e2134]:
+                            - generic [ref=e2135]: Clients
+                            - generic [ref=e2136]: "7"
+                    - generic [ref=e2137]:
+                      - generic [ref=e2138]:
+                        - generic [ref=e2141]: ☠ USW Flex 2.5G Salon
+                        - generic [ref=e2142]:
+                          - generic [ref=e2143]: Online
+                          - generic "Switch online (update status in Overview)" [ref=e2144]
+                      - generic [ref=e2145]:
+                        - generic [ref=e2146]:
+                          - generic [ref=e2147]:
+                            - generic [ref=e2148]: IP
+                            - button "192.168.32.4" [ref=e2149] [cursor=pointer]:
+                              - generic [ref=e2150]: 192.168.32.4
+                              - img [ref=e2151]
+                          - generic [ref=e2154]:
+                            - generic [ref=e2155]: Uptime
+                            - generic [ref=e2156]: 12j 12h
+                          - generic [ref=e2157]:
+                            - generic [ref=e2158]: Firmware
+                            - generic [ref=e2159]: v2.1.8.971
+                        - generic [ref=e2160]:
+                          - generic [ref=e2161]:
+                            - generic [ref=e2162]: Ports actifs
+                            - generic [ref=e2163]: 10 / 10
+                          - generic [ref=e2164]:
+                            - generic [ref=e2165]: Clients
+                            - generic [ref=e2166]: "0"
+      - contentinfo [ref=e2167]:
+        - generic [ref=e2168]:
+          - generic [ref=e2169]:
+            - button "MynetworK" [ref=e2170] [cursor=pointer]:
+              - img [ref=e2171]
+              - generic [ref=e2174]: MynetworK
+            - button "Search" [ref=e2175] [cursor=pointer]:
+              - img [ref=e2176]
+              - generic [ref=e2179]: Search
+            - button "Topology" [ref=e2180] [cursor=pointer]:
+              - img [ref=e2181]
+              - generic [ref=e2186]: Topology
+            - button "Administration" [ref=e2187] [cursor=pointer]:
+              - img [ref=e2188]
+              - generic [ref=e2191]: Administration
+          - generic:
+            - generic:
+              - img
+              - generic: 2 AP
+            - generic:
+              - img
+              - generic: 2 switches
+          - generic [ref=e2192]:
+            - button "Freebox" [ref=e2193] [cursor=pointer]:
+              - img [ref=e2195]
+              - generic [ref=e2197]: Freebox
+            - button "UniFi" [ref=e2198] [cursor=pointer]:
+              - img [ref=e2200]
+              - generic [ref=e2202]: UniFi
+            - button "IPs" [ref=e2203] [cursor=pointer]:
+              - img [ref=e2205]
+              - generic [ref=e2209]: IPs
+    - region "Notifications alt+T"
+  - generic [ref=e855]: 0 b/s

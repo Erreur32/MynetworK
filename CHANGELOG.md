@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.7] - 2026-05-27
+
+### Fixed
+
+- PWA stale chunks after deploy: enable `skipWaiting` + `clientsClaim` + `cleanupOutdatedCaches`, deny SPA fallback for `/assets/*`, stop runtime-caching scripts. Resolves `Failed to load module script` / MIME mismatch on lazy chunks when users had a tab open before the deploy
+- Router: silence noisy `[App] Invalid currentPage, falling back to dashboard` warning for plugin-gated routes (`freebox`, `unifi`) while plugin connection status is still loading
+- iOS PWA: add `<meta name="mobile-web-app-capable">` alongside the deprecated `apple-mobile-web-app-capable` (W3C standard, removes deprecation warning in Chrome/Edge)
+
+---
+
 ## [0.9.6] - 2026-05-27
 
 ### Fixed

@@ -1,24 +1,28 @@
-import path from 'path';
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
+import path from "path";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 // Intercept console.error to suppress proxy errors in development
 // These errors are normal when the backend is restarting or connections are closed
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== "production") {
   const originalConsoleError = console.error;
   console.error = (...args: any[]) => {
-    const message = args.join(' ');
+    const message = args.join(" ");
     // Suppress Vite WebSocket proxy errors - they are normal during development
     if (
-      message.includes('[vite] ws proxy error') ||
-      message.includes('This socket has been ended by the other party') ||
-      (message.includes('[vite]') && message.includes('proxy error') && message.includes('socket')) ||
+      message.includes("[vite] ws proxy error") ||
+      message.includes("This socket has been ended by the other party") ||
+      (message.includes("[vite]") &&
+        message.includes("proxy error") &&
+        message.includes("socket")) ||
       // Suppress HTTP proxy errors during backend restart
-      (message.includes('[vite] http proxy error') && message.includes('ECONNREFUSED')) ||
+      (message.includes("[vite] http proxy error") &&
+        message.includes("ECONNREFUSED")) ||
       // Suppress WebSocket connection errors
-      message.includes('WebSocket connection to') && message.includes('failed') ||
-      message.includes('Invalid frame header')
+      (message.includes("WebSocket connection to") &&
+        message.includes("failed")) ||
+      message.includes("Invalid frame header")
     ) {
       // Silently ignore - these are expected during development
       return;
@@ -29,73 +33,84 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default defineConfig({
-  base: '/',
+  base: "/",
   server: {
-    port: parseInt(process.env.VITE_PORT || '5173', 10),
-    host: '0.0.0.0', // Listen on all interfaces to allow access via IP
-    allowedHosts: ['mwk-dev.myoueb.fr', '192.168.32.150', 'localhost'],
+    port: parseInt(process.env.VITE_PORT || "5173", 10),
+    host: "0.0.0.0", // Listen on all interfaces to allow access via IP
+    allowedHosts: ["mwk-dev.myoueb.fr", "192.168.32.150", "localhost"],
     // Disable cache in dev so CSS/JS changes are visible immediately
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
     // Configure HMR WebSocket
     // In Docker dev, use DASHBOARD_PORT (host port) instead of VITE_PORT (container port)
     // Vite will automatically detect the host from the browser's window.location.hostname
     // clientPort should be the port the browser connects to (host port in Docker)
     hmr: {
-      clientPort: parseInt(process.env.DASHBOARD_PORT || process.env.VITE_PORT || '5173', 10),
+      clientPort: parseInt(
+        process.env.DASHBOARD_PORT || process.env.VITE_PORT || "5173",
+        10,
+      ),
       // Vite will automatically detect the host from the browser's window.location.hostname
       // So if you access via 192.168.1.150:3666, HMR will use ws://192.168.1.150:3666
     },
     proxy: {
-      '/api': {
+      "/api": {
         // Use localhost for proxy - Vite proxy runs on the same machine as the backend
         // When accessing via IP (192.168.1.150), the proxy still connects to localhost:3003
         // because the proxy runs server-side on the same machine
         // IMPORTANT: Use PORT (container port) not SERVER_PORT (host port) in Docker
         // In Docker dev: PORT=3003 (container), SERVER_PORT=3668 (host)
         // In npm dev: PORT=3003 or SERVER_PORT=3003 (same value)
-        target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
+        target: `http://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || "3003"}`,
         changeOrigin: true,
         secure: false,
         timeout: 60000, // Increased timeout for long-running requests like ping
         proxyTimeout: 60000,
         configure: (proxy, _options) => {
-          proxy.on('error', (err, req, res) => {
+          proxy.on("error", (err, req, res) => {
             // Suppress ECONNREFUSED errors during backend restart - they are normal
-            const errorMessage = err?.message || String(err || '');
-            if (errorMessage.includes('ECONNREFUSED')) {
+            const errorMessage = err?.message || String(err || "");
+            if (errorMessage.includes("ECONNREFUSED")) {
               // Return a proper JSON error response so the frontend can handle it gracefully
               if (res && !res.headersSent) {
                 res.writeHead(503, {
-                  'Content-Type': 'application/json',
+                  "Content-Type": "application/json",
                 });
-                res.end(JSON.stringify({ 
-                  success: false, 
-                  error: { 
-                    code: 'CONNECTION_REFUSED', 
-                    message: 'Le serveur n\'est pas disponible. Reconnexion en cours...',
-                    temporary: true
-                  } 
-                }));
+                res.end(
+                  JSON.stringify({
+                    success: false,
+                    error: {
+                      code: "CONNECTION_REFUSED",
+                      message:
+                        "Le serveur n'est pas disponible. Reconnexion en cours...",
+                      temporary: true,
+                    },
+                  }),
+                );
               }
               return;
             }
             // Handle other proxy errors gracefully
             if (res && !res.headersSent) {
               res.writeHead(500, {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               });
-              res.end(JSON.stringify({ success: false, error: { code: 'PROXY_ERROR', message: 'Erreur de proxy' } }));
+              res.end(
+                JSON.stringify({
+                  success: false,
+                  error: { code: "PROXY_ERROR", message: "Erreur de proxy" },
+                }),
+              );
             }
           });
-        }
+        },
       },
-      '/ws': {
+      "/ws": {
         // IMPORTANT: Use PORT (container port) not SERVER_PORT (host port) in Docker
         // In Docker dev: PORT=3003 (container), SERVER_PORT=3668 (host)
         // In npm dev: PORT=3003 or SERVER_PORT=3003 (same value)
-        target: `ws://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || '3003'}`,
+        target: `ws://127.0.0.1:${process.env.PORT || process.env.SERVER_PORT || "3003"}`,
         ws: true,
         changeOrigin: true,
         secure: false,
@@ -104,65 +119,77 @@ export default defineConfig({
           // Suppress all WebSocket proxy errors - they are normal during connection attempts
           // The frontend will automatically retry connecting
           const shouldSuppressError = (err: any): boolean => {
-            const errorMessage = err?.message || String(err || '');
+            const errorMessage = err?.message || String(err || "");
             return (
-              errorMessage.includes('socket') ||
-              errorMessage.includes('ECONNRESET') ||
-              errorMessage.includes('ECONNREFUSED') ||
-              errorMessage.includes('ended by the other party') ||
-              errorMessage.includes('ECONNABORTED') ||
-              errorMessage.includes('ETIMEDOUT')
+              errorMessage.includes("socket") ||
+              errorMessage.includes("ECONNRESET") ||
+              errorMessage.includes("ECONNREFUSED") ||
+              errorMessage.includes("ended by the other party") ||
+              errorMessage.includes("ECONNABORTED") ||
+              errorMessage.includes("ETIMEDOUT")
             );
           };
-          
+
           // Handle WebSocket proxy errors - suppress all common errors
-          proxy.on('error', (err, _req, _res) => {
+          proxy.on("error", (err, _req, _res) => {
             if (!shouldSuppressError(err)) {
-              console.error('[Vite WS Proxy] Unexpected error:', err?.message || String(err));
+              console.error(
+                "[Vite WS Proxy] Unexpected error:",
+                err?.message || String(err),
+              );
             }
             // Silently ignore all other errors
           });
-          
+
           // Handle WebSocket upgrade errors
-          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
-            socket.on('error', (err) => {
+          proxy.on("proxyReqWs", (proxyReq, req, socket) => {
+            socket.on("error", (err) => {
               // Silently suppress all socket errors during upgrade
               if (!shouldSuppressError(err)) {
-                console.error('[Vite WS Proxy] Socket error:', err?.message || String(err));
+                console.error(
+                  "[Vite WS Proxy] Socket error:",
+                  err?.message || String(err),
+                );
               }
             });
-            
+
             // Handle socket close during upgrade - normal behavior
-            socket.on('close', () => {
+            socket.on("close", () => {
               // Silently handle - this is normal
             });
           });
-          
+
           // Handle WebSocket connection close - normal behavior
-          proxy.on('close', (_res, _socket, _head) => {
+          proxy.on("close", (_res, _socket, _head) => {
             // Silently handle connection closes - this is normal
           });
-          
+
           // Handle WebSocket upgrade response errors
-          (proxy as any).on('proxyResWs', (_proxyRes: any, _req: any, socket: any) => {
-            socket.on('error', (err) => {
-              // Silently suppress all errors after upgrade
-              if (!shouldSuppressError(err)) {
-                console.error('[Vite WS Proxy] Post-upgrade error:', err?.message || String(err));
-              }
-            });
-          });
-        }
-      }
-    }
+          (proxy as any).on(
+            "proxyResWs",
+            (_proxyRes: any, _req: any, socket: any) => {
+              socket.on("error", (err) => {
+                // Silently suppress all errors after upgrade
+                if (!shouldSuppressError(err)) {
+                  console.error(
+                    "[Vite WS Proxy] Post-upgrade error:",
+                    err?.message || String(err),
+                  );
+                }
+              });
+            },
+          );
+        },
+      },
+    },
   },
   // Expose backend port to the frontend so the WebSocket can connect directly
   // in dev mode, bypassing Vite's WS server which conflicts with HMR on the same path.
   // - npm dev:    PORT=3003, SERVER_PORT=3003  → browser connects to :3003
   // - Docker dev: PORT=3003, SERVER_PORT=3668  → browser connects to :3668 (host-mapped port)
   define: {
-    'import.meta.env.VITE_BACKEND_PORT': JSON.stringify(
-      process.env.SERVER_PORT || process.env.PORT || '3003'
+    "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(
+      process.env.SERVER_PORT || process.env.PORT || "3003",
     ),
   },
   plugins: [
@@ -172,93 +199,122 @@ export default defineConfig({
     // (the app monitors a live network — stale cache would mislead the user)
     // but cached app-shell speeds up the next visit.
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['svg/favicon-racine.svg'],
+      registerType: "autoUpdate",
+      includeAssets: ["svg/favicon-racine.svg"],
       manifest: {
-        name: 'MyNetwork',
-        short_name: 'MyNetwork',
-        description: 'Multi-Source Network Dashboard (Freebox, UniFi, network scans)',
-        theme_color: '#0f172a',
-        background_color: '#050505',
-        display: 'standalone',
-        scope: '/',
-        start_url: '/',
+        name: "MyNetwork",
+        short_name: "MyNetwork",
+        description:
+          "Multi-Source Network Dashboard (Freebox, UniFi, network scans)",
+        theme_color: "#0f172a",
+        background_color: "#050505",
+        display: "standalone",
+        scope: "/",
+        start_url: "/",
         icons: [
-          { src: '/pwa-icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/pwa-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
-        ]
+          { src: "/pwa-icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "/pwa-icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
       },
       workbox: {
-        // Precache the built app shell only. Anything matching /api or /ws is
-        // intentionally NOT cached — they must always hit the live backend.
-        navigateFallbackDenylist: [/^\/api/, /^\/ws/],
+        // Activate the new SW as soon as it's available so users on a tab
+        // opened before the deploy don't keep hitting stale chunk hashes
+        // (which would 404 → SPA fallback → MIME mismatch → ErrorBoundary).
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        // Anything matching /api, /ws or /assets is intentionally NOT served
+        // by the SW navigate fallback. /assets in particular: if a hash-named
+        // chunk is missing (post-deploy stale), we want a real 404 instead of
+        // index.html with text/html (which crashes module loading).
+        navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/assets\//],
+        // No runtimeCaching for scripts: hash-named chunks must always hit the
+        // network so a fresh deploy is never shadowed by a cached old chunk.
         runtimeCaching: [
           {
-            // Static assets (already content-hashed by Vite) can be served
-            // straight from cache after first load.
             urlPattern: ({ request }) =>
-              request.destination === 'style' ||
-              request.destination === 'script' ||
-              request.destination === 'image' ||
-              request.destination === 'font',
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'mynetwork-assets' }
-          }
-        ]
-      }
-    })
+              request.destination === "image" || request.destination === "font",
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "mynetwork-assets" },
+          },
+        ],
+      },
+    }),
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
-    }
+      "@": path.resolve(__dirname, "."),
+    },
   },
   build: {
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          if (id.includes('node_modules')) {
+          if (id.includes("node_modules")) {
             // Topology / flow / dagre / image-export stack. Comes BEFORE
             // the recharts catch so @xyflow's d3 deps (d3-zoom / d3-drag /
             // d3-selection / d3-interpolate) don't get pulled in with
             // recharts and crash both bundles at init ("_ is not a
             // function" on prod for v0.7.93).
-            if (id.includes('@xyflow/') || id.includes('/dagre/') || id.includes('html-to-image') || id.includes('jspdf')) {
-              return 'vendor-topology';
+            if (
+              id.includes("@xyflow/") ||
+              id.includes("/dagre/") ||
+              id.includes("html-to-image") ||
+              id.includes("jspdf")
+            ) {
+              return "vendor-topology";
             }
             // Recharts only — its d3 deps fall through to the default
             // 'vendor' chunk so they're shared cleanly with @xyflow.
-            if (id.includes('recharts')) {
-              return 'vendor-charts';
+            if (id.includes("recharts")) {
+              return "vendor-charts";
             }
             // Lucide icons
-            if (id.includes('lucide-react')) {
-              return 'vendor-icons';
+            if (id.includes("lucide-react")) {
+              return "vendor-icons";
             }
             // Zustand state management
-            if (id.includes('zustand')) {
-              return 'vendor-state';
+            if (id.includes("zustand")) {
+              return "vendor-state";
             }
             // Markdown rendering
-            if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('unified') || id.includes('mdast') || id.includes('hast') || id.includes('micromark') || id.includes('vfile')) {
-              return 'vendor-markdown';
+            if (
+              id.includes("react-markdown") ||
+              id.includes("remark") ||
+              id.includes("rehype") ||
+              id.includes("unified") ||
+              id.includes("mdast") ||
+              id.includes("hast") ||
+              id.includes("micromark") ||
+              id.includes("vfile")
+            ) {
+              return "vendor-markdown";
             }
             // i18n
-            if (id.includes('i18next') || id.includes('react-i18next')) {
-              return 'vendor-i18n';
+            if (id.includes("i18next") || id.includes("react-i18next")) {
+              return "vendor-i18n";
             }
             // Keep React/React-DOM in main chunk
-            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/react-is/')) {
+            if (
+              id.includes("/react/") ||
+              id.includes("/react-dom/") ||
+              id.includes("/react-is/")
+            ) {
               return undefined;
             }
-            return 'vendor';
+            return "vendor";
           }
-        }
-      }
+        },
+      },
     },
     // Increase chunk size warning limit to 600 KB (optional, but we're splitting anyway)
-    chunkSizeWarningLimit: 600
-  }
+    chunkSizeWarningLimit: 600,
+  },
 });
