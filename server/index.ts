@@ -1,82 +1,90 @@
-import 'dotenv/config';
-import express from 'express';
-import helmet from 'helmet';
-import compression from 'compression';
-import cors from 'cors';
-import path from 'path';
-import http from 'http';
-import os from 'os';
-import fsSync from 'fs';
-import { fileURLToPath } from 'url';
-import { config, getPublicUrl } from './config.js';
-import { AppConfigRepository } from './database/models/AppConfig.js';
-import { errorHandler } from './middleware/errorHandler.js';
-import { connectionWebSocket } from './services/connectionWebSocket.js';
-import { freeboxNativeWebSocket } from './services/freeboxNativeWebSocket.js';
-import { logsWebSocket } from './services/logsWebSocket.js';
-import { unifiWebSocket } from './services/unifiWebSocket.js';
+import "dotenv/config";
+import express from "express";
+import helmet from "helmet";
+import compression from "compression";
+import cors from "cors";
+import path from "path";
+import http from "http";
+import os from "os";
+import fsSync from "fs";
+import { fileURLToPath } from "url";
+import { config, getPublicUrl } from "./config.js";
+import { AppConfigRepository } from "./database/models/AppConfig.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { connectionWebSocket } from "./services/connectionWebSocket.js";
+import { freeboxNativeWebSocket } from "./services/freeboxNativeWebSocket.js";
+import { logsWebSocket } from "./services/logsWebSocket.js";
+import { unifiWebSocket } from "./services/unifiWebSocket.js";
 
 // Database
-import { initializeDatabase, getDatabase } from './database/connection.js';
-import { UserRepository } from './database/models/User.js';
-import { authService } from './services/authService.js';
+import { initializeDatabase, getDatabase } from "./database/connection.js";
+import { UserRepository } from "./database/models/User.js";
+import { authService } from "./services/authService.js";
 
 // Plugins
-import { pluginManager } from './services/pluginManager.js';
+import { pluginManager } from "./services/pluginManager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Routes
-import authRoutes from './routes/auth.js';
-import usersRoutes from './routes/users.js';
-import pluginsRoutes from './routes/plugins.js';
-import systemRoutes from './routes/system.js';
-import systemServerRoutes from './routes/systemServer.js';
-import connectionRoutes from './routes/connection.js';
-import wifiRoutes from './routes/wifi.js';
-import lanRoutes from './routes/lan.js';
-import downloadsRoutes from './routes/downloads.js';
-import vmRoutes from './routes/vm.js';
-import callsRoutes from './routes/calls.js';
-import contactsRoutes from './routes/contacts.js';
-import fsRoutes from './routes/fs.js';
-import tvRoutes from './routes/tv.js';
-import parentalRoutes from './routes/parental.js';
-import settingsRoutes from './routes/settings.js';
-import notificationsRoutes from './routes/notifications.js';
-import speedtestRoutes from './routes/speedtest.js';
-import capabilitiesRoutes from './routes/capabilities.js';
-import dhcpRoutes from './routes/dhcp.js';
-import dashboardRoutes from './routes/dashboard.js';
-import configRoutes from './routes/config.js';
-import metricsRoutes from './routes/metrics.js';
-import apiDocsRoutes from './routes/api-docs.js';
-import securityRoutes from './routes/security.js';
-import { securityNotificationService } from './services/securityNotificationService.js';
-import { logger } from './utils/logger.js';
-import { logBuffer } from './utils/logBuffer.js';
+import authRoutes from "./routes/auth.js";
+import usersRoutes from "./routes/users.js";
+import pluginsRoutes from "./routes/plugins.js";
+import systemRoutes from "./routes/system.js";
+import systemServerRoutes from "./routes/systemServer.js";
+import connectionRoutes from "./routes/connection.js";
+import wifiRoutes from "./routes/wifi.js";
+import lanRoutes from "./routes/lan.js";
+import downloadsRoutes from "./routes/downloads.js";
+import vmRoutes from "./routes/vm.js";
+import callsRoutes from "./routes/calls.js";
+import contactsRoutes from "./routes/contacts.js";
+import fsRoutes from "./routes/fs.js";
+import tvRoutes from "./routes/tv.js";
+import parentalRoutes from "./routes/parental.js";
+import settingsRoutes from "./routes/settings.js";
+import notificationsRoutes from "./routes/notifications.js";
+import speedtestRoutes from "./routes/speedtest.js";
+import capabilitiesRoutes from "./routes/capabilities.js";
+import dhcpRoutes from "./routes/dhcp.js";
+import dashboardRoutes from "./routes/dashboard.js";
+import configRoutes from "./routes/config.js";
+import metricsRoutes from "./routes/metrics.js";
+import apiDocsRoutes from "./routes/api-docs.js";
+import securityRoutes from "./routes/security.js";
+import { securityNotificationService } from "./services/securityNotificationService.js";
+import { logger } from "./utils/logger.js";
+import { logBuffer } from "./utils/logBuffer.js";
 
 // Initialize database
-logger.info('Server', 'Initializing database...');
+logger.info("Server", "Initializing database...");
 initializeDatabase();
 
 // Initialize database performance configuration (after schema is ready)
-import { initializeDatabaseConfig } from './database/dbConfig.js';
+import { initializeDatabaseConfig } from "./database/dbConfig.js";
 initializeDatabaseConfig();
 
 // Initialize token blacklist service (load persisted revoked tokens into memory)
-import { tokenBlacklistService } from './services/tokenBlacklistService.js';
+import { tokenBlacklistService } from "./services/tokenBlacklistService.js";
 try {
-    tokenBlacklistService.init();
+  tokenBlacklistService.init();
 } catch (error) {
-    logger.error('Server', 'Failed to initialize token blacklist service:', error);
+  logger.error(
+    "Server",
+    "Failed to initialize token blacklist service:",
+    error,
+  );
 }
 
 // Initialize Wireshark vendor database (async, don't block startup)
-import { WiresharkVendorService } from './services/wiresharkVendorService.js';
+import { WiresharkVendorService } from "./services/wiresharkVendorService.js";
 WiresharkVendorService.initialize().catch((error) => {
-    logger.error('Server', 'Failed to initialize Wireshark vendor service:', error);
+  logger.error(
+    "Server",
+    "Failed to initialize Wireshark vendor service:",
+    error,
+  );
 });
 
 // Reload logger config after database is initialized
@@ -84,39 +92,45 @@ logger.reloadConfig();
 
 // Create default admin user if no users exist
 async function createDefaultAdmin() {
-    const users = UserRepository.findAll();
-    if (users.length === 0) {
-        logger.info('Server', 'No users found, creating default admin user...');
-        try {
-            const defaultUsername = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
-            const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
-            const defaultEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@localhost';
-            
-            await authService.register({
-                username: defaultUsername,
-                email: defaultEmail,
-                password: defaultPassword,
-                role: 'admin'
-            });
-            
-            logger.success('Server', `Default admin user created: ${defaultUsername}`);
-            logger.warn('Server', '⚠️  Please change the default password after first login!');
-        } catch (error) {
-            logger.error('Server', 'Failed to create default admin user:', error);
-        }
+  const users = UserRepository.findAll();
+  if (users.length === 0) {
+    logger.info("Server", "No users found, creating default admin user...");
+    try {
+      const defaultUsername = process.env.DEFAULT_ADMIN_USERNAME || "admin";
+      const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+      const defaultEmail = process.env.DEFAULT_ADMIN_EMAIL || "admin@localhost";
+
+      await authService.register({
+        username: defaultUsername,
+        email: defaultEmail,
+        password: defaultPassword,
+        role: "admin",
+      });
+
+      logger.success(
+        "Server",
+        `Default admin user created: ${defaultUsername}`,
+      );
+      logger.warn(
+        "Server",
+        "⚠️  Please change the default password after first login!",
+      );
+    } catch (error) {
+      logger.error("Server", "Failed to create default admin user:", error);
     }
+  }
 }
 createDefaultAdmin();
 
 // Initialize plugins
 async function initializePlugins() {
-    logger.info('Server', 'Initializing plugins...');
-    try {
-        await pluginManager.initializeAllPlugins();
-        logger.success('Server', 'All plugins initialized');
-    } catch (error) {
-        logger.error('Server', 'Failed to initialize plugins:', error);
-    }
+  logger.info("Server", "Initializing plugins...");
+  try {
+    await pluginManager.initializeAllPlugins();
+    logger.success("Server", "All plugins initialized");
+  } catch (error) {
+    logger.error("Server", "Failed to initialize plugins:", error);
+  }
 }
 
 // Initialize plugins (no automatic config file sync)
@@ -127,38 +141,45 @@ const app = express();
 // Trust proxy - Required for correct IP detection in Docker/reverse proxy environments
 // This allows Express to use X-Forwarded-For and X-Real-IP headers
 // Use 1 (single hop) instead of true to avoid express-rate-limit ERR_ERL_PERMISSIVE_TRUST_PROXY
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
 // Middleware - CORS Configuration
 // Get CORS config from database, fallback to defaults
 function getCorsConfig() {
   // When running under Home Assistant Ingress, allow any origin (HA host) and credentials
-  if (process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1') {
+  if (process.env.INGRESS_MODE === "1" || process.env.ADDON_INGRESS === "1") {
     return { origin: true, credentials: true };
   }
   try {
-    const corsConfigJson = AppConfigRepository.get('cors_config');
+    const corsConfigJson = AppConfigRepository.get("cors_config");
     if (corsConfigJson) {
       const corsConfig = JSON.parse(corsConfigJson);
-      
+
       // Process allowedOrigins - convert regex strings to RegExp objects
-      let origin: boolean | string[] | RegExp[] = corsConfig.allowedOrigins || true;
+      let origin: boolean | string[] | RegExp[] =
+        corsConfig.allowedOrigins || true;
       if (Array.isArray(origin)) {
-        const processedOrigin: (string | RegExp)[] = (origin as string[]).map((o: string): string | RegExp => {
-          // Check if it's a regex pattern (starts and ends with /)
-          if (typeof o === 'string' && o.startsWith('/') && o.endsWith('/')) {
-            try {
-              const pattern = o.slice(1, -1); // Remove leading and trailing /
-              return new RegExp(pattern);
-            } catch {
-              return o; // If regex is invalid, return as string
+        const processedOrigin: (string | RegExp)[] = (origin as string[]).map(
+          (o: string): string | RegExp => {
+            // Check if it's a regex pattern (starts and ends with /)
+            if (typeof o === "string" && o.startsWith("/") && o.endsWith("/")) {
+              try {
+                const pattern = o.slice(1, -1); // Remove leading and trailing /
+                return new RegExp(pattern);
+              } catch {
+                return o; // If regex is invalid, return as string
+              }
             }
-          }
-          return o;
-        });
+            return o;
+          },
+        );
         // Check if all are strings or all are RegExp
-        const allStrings = processedOrigin.every(item => typeof item === 'string');
-        const allRegExp = processedOrigin.every(item => item instanceof RegExp);
+        const allStrings = processedOrigin.every(
+          (item) => typeof item === "string",
+        );
+        const allRegExp = processedOrigin.every(
+          (item) => item instanceof RegExp,
+        );
         if (allStrings) {
           origin = processedOrigin as string[];
         } else if (allRegExp) {
@@ -168,39 +189,57 @@ function getCorsConfig() {
           origin = processedOrigin as string[] | RegExp[];
         }
       }
-      
+
       return {
-        origin: (typeof origin === 'string' && origin === '*') ? true : origin,
-        credentials: corsConfig.allowCredentials !== undefined ? corsConfig.allowCredentials : true,
-        methods: corsConfig.allowedMethods || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-        allowedHeaders: corsConfig.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+        origin: typeof origin === "string" && origin === "*" ? true : origin,
+        credentials:
+          corsConfig.allowCredentials !== undefined
+            ? corsConfig.allowCredentials
+            : true,
+        methods: corsConfig.allowedMethods || [
+          "GET",
+          "POST",
+          "PUT",
+          "DELETE",
+          "OPTIONS",
+          "PATCH",
+        ],
+        allowedHeaders: corsConfig.allowedHeaders || [
+          "Content-Type",
+          "Authorization",
+          "X-Requested-With",
+        ],
       };
     }
   } catch (error) {
-    logger.warn('Server', 'Failed to parse CORS config from database, using defaults:', error);
+    logger.warn(
+      "Server",
+      "Failed to parse CORS config from database, using defaults:",
+      error,
+    );
   }
-  
+
   // Default CORS configuration
   // Allow same domain + all subdomains + local network
   const corsOrigin = [
-    /^https?:\/\/([a-z0-9-]+\.)*myoueb\.fr(:\d+)?$/,  // *.myoueb.fr (any subdomain, any port)
-    /^https?:\/\/localhost(:\d+)?$/,                     // localhost (any port)
-    /^https?:\/\/127\.0\.0\.1(:\d+)?$/,                  // 127.0.0.1 (any port)
-    /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/,            // 192.168.x.x (any port)
-    /^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,             // 10.x.x.x (any port)
-    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$/  // 172.16-31.x.x (any port)
+    /^https?:\/\/([a-z0-9-]+\.)*myoueb\.fr(:\d+)?$/, // *.myoueb.fr (any subdomain, any port)
+    /^https?:\/\/localhost(:\d+)?$/, // localhost (any port)
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/, // 127.0.0.1 (any port)
+    /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/, // 192.168.x.x (any port)
+    /^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/, // 10.x.x.x (any port)
+    /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$/, // 172.16-31.x.x (any port)
   ];
-  
+
   return {
     origin: corsOrigin,
-    credentials: true
+    credentials: true,
   };
 }
 
 // Security headers — frameAncestors is built from DB config
 function getFrameAncestors(): string[] {
   try {
-    const iframeOriginsJson = AppConfigRepository.get('iframe_origins');
+    const iframeOriginsJson = AppConfigRepository.get("iframe_origins");
     if (iframeOriginsJson) {
       const origins: string[] = JSON.parse(iframeOriginsJson);
       if (origins.length > 0) {
@@ -213,41 +252,52 @@ function getFrameAncestors(): string[] {
   return ["'self'"];
 }
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"], // Required for Tailwind/inline styles in index.html
-      imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      fontSrc: ["'self'", "data:"],
-      objectSrc: ["'none'"],
-      // frame-ancestors is set dynamically per-request below
-      frameAncestors: ["'self'"],
-      // Disable upgrade-insecure-requests — the app may be accessed via HTTP
-      // directly (dev, LAN). HTTPS is handled by the reverse proxy (NPM).
-      upgradeInsecureRequests: null,
-    }
-  },
-  crossOriginEmbedderPolicy: false, // Allow loading external images
-  // Disable HSTS — the app runs behind NPM which handles HTTPS.
-  // HSTS on the backend causes ERR_SSL_PROTOCOL_ERROR when accessing via HTTP directly.
-  hsts: false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Required for Tailwind/inline styles in index.html
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "ws:", "wss:", "data:"],
+        fontSrc: ["'self'", "data:"],
+        objectSrc: ["'none'"],
+        // frame-ancestors is set dynamically per-request below
+        frameAncestors: ["'self'"],
+        // Disable upgrade-insecure-requests — the app may be accessed via HTTP
+        // directly (dev, LAN). HTTPS is handled by the reverse proxy (NPM).
+        upgradeInsecureRequests: null,
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Allow loading external images
+    // Disable HSTS — the app runs behind NPM which handles HTTPS.
+    // HSTS on the backend causes ERR_SSL_PROTOCOL_ERROR when accessing via HTTP directly.
+    hsts: false,
+  }),
+);
 
 // Dynamic frame-ancestors and X-Frame-Options: re-read iframe_origins from DB
 // on each request so config changes via the UI take effect without server restart
 app.use((_req, res, next) => {
   const ancestors = getFrameAncestors();
   // Update CSP frame-ancestors
-  const csp = res.getHeader('content-security-policy') as string | undefined;
+  const csp = res.getHeader("content-security-policy") as string | undefined;
   if (csp) {
-    res.setHeader('content-security-policy', csp.replace(/frame-ancestors [^;]+/, `frame-ancestors ${ancestors.join(' ')}`));
+    res.setHeader(
+      "content-security-policy",
+      csp.replace(
+        /frame-ancestors [^;]+/,
+        `frame-ancestors ${ancestors.join(" ")}`,
+      ),
+    );
   }
   // Set X-Frame-Options based on allowed origins (SAMEORIGIN if only self, removed if external origins allowed)
-  if (ancestors.length > 1 || (ancestors.length === 1 && ancestors[0] !== "'self'")) {
-    res.removeHeader('x-frame-options'); // Multiple origins: rely on CSP frame-ancestors only
+  if (
+    ancestors.length > 1 ||
+    (ancestors.length === 1 && ancestors[0] !== "'self'")
+  ) {
+    res.removeHeader("x-frame-options"); // Multiple origins: rely on CSP frame-ancestors only
   }
   next();
 });
@@ -256,41 +306,41 @@ app.use((_req, res, next) => {
 app.use(compression());
 
 app.use(cors(getCorsConfig()));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
 
 // Metrics middleware (track all API requests)
-import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+import { metricsMiddleware } from "./middleware/metricsMiddleware.js";
 app.use(metricsMiddleware);
 
 // Request logging (only in debug mode)
 app.use((req, _res, next) => {
-  logger.debug('HTTP', `${req.method} ${req.path}`);
+  logger.debug("HTTP", `${req.method} ${req.path}`);
   next();
 });
 
 // API Routes
 // New routes (users, plugins, logs)
-import logsRoutes from './routes/logs.js';
-import updatesRoutes from './routes/updates.js';
-import debugRoutes from './routes/debug.js';
-import infoRoutes from './routes/info.js';
-import searchRoutes from './routes/search.js';
-import networkScanRoutes from './routes/network-scan.js';
-import latencyMonitoringRoutes from './routes/latency-monitoring.js';
-import databaseRoutes from './routes/database.js';
-import topologyRoutes from './routes/topology.js';
-import { startTopologyScheduler } from './services/topologyScheduler.js';
+import logsRoutes from "./routes/logs.js";
+import updatesRoutes from "./routes/updates.js";
+import debugRoutes from "./routes/debug.js";
+import infoRoutes from "./routes/info.js";
+import searchRoutes from "./routes/search.js";
+import networkScanRoutes from "./routes/network-scan.js";
+import latencyMonitoringRoutes from "./routes/latency-monitoring.js";
+import databaseRoutes from "./routes/database.js";
+import topologyRoutes from "./routes/topology.js";
+import { startTopologyScheduler } from "./services/topologyScheduler.js";
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
-import './services/networkScanScheduler.js';
+import "./services/networkScanScheduler.js";
 // Initialize latency monitoring scheduler
-import { latencyMonitoringScheduler } from './services/latencyMonitoringScheduler.js';
+import { latencyMonitoringScheduler } from "./services/latencyMonitoringScheduler.js";
 // Initialize database purge service (loads configs from database)
-import { initializePurgeService } from './services/databasePurgeService.js';
+import { initializePurgeService } from "./services/databasePurgeService.js";
 // Freebox firmware check (scrapes dev.freebox.fr/blog for update notifications)
-import { freeboxFirmwareCheckService } from './services/freeboxFirmwareCheckService.js';
+import { freeboxFirmwareCheckService } from "./services/freeboxFirmwareCheckService.js";
 // Update check (12h cache + scheduler when enabled)
-import { startScheduler as startUpdateCheckScheduler } from './services/updateCheckService.js';
+import { startScheduler as startUpdateCheckScheduler } from "./services/updateCheckService.js";
 
 // Initialize database purge service (after database is initialized and routes are imported)
 initializePurgeService();
@@ -298,157 +348,169 @@ initializePurgeService();
 // Initialize latency monitoring scheduler (after database is ready)
 // Start with a small delay to ensure database is fully initialized
 setTimeout(() => {
-    try {
-        latencyMonitoringScheduler.start();
-        logger.success('Server', 'Latency monitoring scheduler initialized');
-    } catch (error) {
-        logger.error('Server', 'Failed to initialize latency monitoring scheduler:', error);
-    }
+  try {
+    latencyMonitoringScheduler.start();
+    logger.success("Server", "Latency monitoring scheduler initialized");
+  } catch (error) {
+    logger.error(
+      "Server",
+      "Failed to initialize latency monitoring scheduler:",
+      error,
+    );
+  }
 }, 6000); // Wait 6 seconds for database to be ready
 
 // Start Freebox firmware check service (scrapes blog for firmware updates)
 setTimeout(() => {
-    try {
-        freeboxFirmwareCheckService.start();
-        logger.success('Server', 'Freebox firmware check service initialized');
-    } catch (error) {
-        logger.error('Server', 'Failed to initialize Freebox firmware check service:', error);
-    }
+  try {
+    freeboxFirmwareCheckService.start();
+    logger.success("Server", "Freebox firmware check service initialized");
+  } catch (error) {
+    logger.error(
+      "Server",
+      "Failed to initialize Freebox firmware check service:",
+      error,
+    );
+  }
 }, 7000); // Slightly after latency scheduler
 
 // Start update check scheduler if config enabled (12h interval)
 setTimeout(() => {
-    try {
-        const db = getDatabase();
-        const row = db.prepare('SELECT value FROM app_config WHERE key = ?').get('update_check_config') as { value: string } | undefined;
-        let enabled = false;
-        if (row) {
-            try {
-                const config = JSON.parse(row.value);
-                enabled = config.enabled === true;
-            } catch {
-                // ignore
-            }
-        }
-        if (enabled) {
-            startUpdateCheckScheduler();
-            logger.success('Server', 'Update check scheduler (12h) started');
-        }
-    } catch (error) {
-        logger.error('Server', 'Failed to start update check scheduler:', error);
+  try {
+    const db = getDatabase();
+    const row = db
+      .prepare("SELECT value FROM app_config WHERE key = ?")
+      .get("update_check_config") as { value: string } | undefined;
+    let enabled = false;
+    if (row) {
+      try {
+        const config = JSON.parse(row.value);
+        enabled = config.enabled === true;
+      } catch {
+        // ignore
+      }
     }
+    if (enabled) {
+      startUpdateCheckScheduler();
+      logger.success("Server", "Update check scheduler (12h) started");
+    }
+  } catch (error) {
+    logger.error("Server", "Failed to start update check scheduler:", error);
+  }
 }, 7500);
 
 // Start topology scheduler (daily 04:00 + initial build at boot if no snapshot)
 setTimeout(() => {
-    try {
-        startTopologyScheduler();
-    } catch (error) {
-        logger.error('Server', 'Failed to start topology scheduler:', error);
-    }
+  try {
+    startTopologyScheduler();
+  } catch (error) {
+    logger.error("Server", "Failed to start topology scheduler:", error);
+  }
 }, 8000);
 
-
 // Rate limiting
-import { apiLimiter, scanLimiter } from './middleware/rateLimiter.js';
+import { apiLimiter, scanLimiter } from "./middleware/rateLimiter.js";
 // Apply API rate limiter to all routes except network-scan (has its own limiter)
-app.use('/api/', (req, res, next) => {
-    if (req.path.startsWith('/network-scan')) return next();
-    return apiLimiter(req, res, next);
+app.use("/api/", (req, res, next) => {
+  if (req.path.startsWith("/network-scan")) return next();
+  return apiLimiter(req, res, next);
 });
-app.use('/api/network-scan', scanLimiter);
+app.use("/api/network-scan", scanLimiter);
 
-app.use('/api/users', usersRoutes);
-app.use('/api/plugins', pluginsRoutes);
-app.use('/api/logs', logsRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/metrics', metricsRoutes);
-app.use('/api/docs', apiDocsRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/network-scan', networkScanRoutes);
-app.use('/api/latency-monitoring', latencyMonitoringRoutes);
-app.use('/api/database', databaseRoutes);
-app.use('/api/topology', topologyRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/plugins", pluginsRoutes);
+app.use("/api/logs", logsRoutes);
+app.use("/api/config", configRoutes);
+app.use("/api/metrics", metricsRoutes);
+app.use("/api/docs", apiDocsRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/network-scan", networkScanRoutes);
+app.use("/api/latency-monitoring", latencyMonitoringRoutes);
+app.use("/api/database", databaseRoutes);
+app.use("/api/topology", topologyRoutes);
 
 // Existing Freebox routes (kept for backward compatibility)
-app.use('/api/auth', authRoutes);
-app.use('/api/system', systemRoutes);
-app.use('/api/system', systemServerRoutes);
-app.use('/api/connection', connectionRoutes);
-app.use('/api/wifi', wifiRoutes);
-app.use('/api/lan', lanRoutes);
-app.use('/api/downloads', downloadsRoutes);
-app.use('/api/vm', vmRoutes);
-app.use('/api/calls', callsRoutes);
-app.use('/api/contacts', contactsRoutes);
-app.use('/api/fs', fsRoutes);
-app.use('/api/tv', tvRoutes);
-app.use('/api/parental', parentalRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/notifications', notificationsRoutes);
-app.use('/api/speedtest', speedtestRoutes);
-app.use('/api/capabilities', capabilitiesRoutes);
-app.use('/api/dhcp', dhcpRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/updates', updatesRoutes);
-app.use('/api/debug', debugRoutes);
-app.use('/api/info', infoRoutes);
-app.use('/api/security', securityRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/system", systemRoutes);
+app.use("/api/system", systemServerRoutes);
+app.use("/api/connection", connectionRoutes);
+app.use("/api/wifi", wifiRoutes);
+app.use("/api/lan", lanRoutes);
+app.use("/api/downloads", downloadsRoutes);
+app.use("/api/vm", vmRoutes);
+app.use("/api/calls", callsRoutes);
+app.use("/api/contacts", contactsRoutes);
+app.use("/api/fs", fsRoutes);
+app.use("/api/tv", tvRoutes);
+app.use("/api/parental", parentalRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/notifications", notificationsRoutes);
+app.use("/api/speedtest", speedtestRoutes);
+app.use("/api/capabilities", capabilitiesRoutes);
+app.use("/api/dhcp", dhcpRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/updates", updatesRoutes);
+app.use("/api/debug", debugRoutes);
+app.use("/api/info", infoRoutes);
+app.use("/api/security", securityRoutes);
 
 // Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // Public config for frontend (no auth) - used when running under Home Assistant Ingress
 // Returns ingress flag, base path (from X-Ingress-Path), and whether to show port URLs in UI
-app.get('/api/config', (req, res) => {
-  const isIngress = process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1';
-  let basePath = '';
-  if (isIngress && req.headers['x-ingress-path']) {
-    basePath = String(req.headers['x-ingress-path']).trim();
-    if (basePath && !basePath.startsWith('/')) basePath = '/' + basePath;
-    if (basePath && !basePath.endsWith('/')) basePath = basePath + '/';
+app.get("/api/config", (req, res) => {
+  const isIngress =
+    process.env.INGRESS_MODE === "1" || process.env.ADDON_INGRESS === "1";
+  let basePath = "";
+  if (isIngress && req.headers["x-ingress-path"]) {
+    basePath = String(req.headers["x-ingress-path"]).trim();
+    if (basePath && !basePath.startsWith("/")) basePath = "/" + basePath;
+    if (basePath && !basePath.endsWith("/")) basePath = basePath + "/";
   }
-  const showPorts = process.env.SHOW_PORTS !== 'false';
+  const showPorts = process.env.SHOW_PORTS !== "false";
   res.json({
     success: true,
     result: {
       ingress: isIngress,
       basePath,
-      showPorts
-    }
+      showPorts,
+    },
   });
 });
 
 // Serve static files from dist folder (production build only)
 // IMPORTANT: Must be BEFORE error handler for SPA fallback to work
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '..', 'dist');
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(__dirname, "..", "dist");
   // Add cache control headers to prevent caching issues
-  app.use(express.static(distPath, {
-    setHeaders: (res, filePath) => {
-      // Disable cache for HTML files
-      if (filePath.endsWith('.html')) {
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
-      }
-      // Cache JS/CSS files with version parameter (handled by Vite build)
-      else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      }
-    }
-  }));
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        // Disable cache for HTML files
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        }
+        // Cache JS/CSS files with version parameter (handled by Vite build)
+        else if (filePath.endsWith(".js") || filePath.endsWith(".css")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    }),
+  );
 
   // SPA fallback - serve index.html for all non-API routes
   // Express 5 requires named wildcards, use middleware instead for compatibility
   app.use((req, res, next) => {
     // Skip API routes
-    if (req.path.startsWith('/api/') || req.path.startsWith('/ws/')) {
+    if (req.path.startsWith("/api/") || req.path.startsWith("/ws/")) {
       return next();
     }
-    res.sendFile(path.join(distPath, 'index.html'));
+    res.sendFile(path.join(distPath, "index.html"));
   });
 }
 
@@ -466,17 +528,24 @@ unifiWebSocket.init(server);
 // Verify JWT token from WebSocket upgrade request (query param or Authorization header)
 async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
   try {
-    const urlObj = new URL(request.url || '', `http://${request.headers.host}`);
-    const token = urlObj.searchParams.get('token')
-      || request.headers.authorization?.replace('Bearer ', '');
+    const urlObj = new URL(request.url || "", `http://${request.headers.host}`);
+    const token =
+      urlObj.searchParams.get("token") ||
+      request.headers.authorization?.replace("Bearer ", "");
     if (!token) {
-      logger.warn('WebSocket', 'Connection attempt without authentication token');
+      logger.warn(
+        "WebSocket",
+        "Connection attempt without authentication token",
+      );
       return false;
     }
     await authService.verifyToken(token);
     return true;
   } catch (error) {
-    logger.warn('WebSocket', `Authentication failed: ${error instanceof Error ? error.message : error}`);
+    logger.warn(
+      "WebSocket",
+      `Authentication failed: ${error instanceof Error ? error.message : error}`,
+    );
     return false;
   }
 }
@@ -484,50 +553,50 @@ async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
 // Single upgrade handler that routes to the correct WebSocket server by path.
 // Using noServer:true on each WSS avoids the ws library calling socket.destroy()
 // when a path doesn't match, which caused "Invalid frame header" on the client.
-server.on('upgrade', async (request, socket, head) => {
-  const url = request.url?.split('?')[0] ?? '';
-  if (process.env.DEBUG_UPGRADE === 'true') {
-    logger.debug('HTTP', 'Upgrade request:', url);
+server.on("upgrade", async (request, socket, head) => {
+  const url = request.url?.split("?")[0] ?? "";
+  if (process.env.DEBUG_UPGRADE === "true") {
+    logger.debug("HTTP", "Upgrade request:", url);
   }
 
   // Authenticate WebSocket connections
   const authenticated = await verifyWsToken(request);
   if (!authenticated) {
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
   }
 
-  if (url === '/ws/connection') {
+  if (url === "/ws/connection") {
     const wss = connectionWebSocket.getWss();
     if (wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+        wss.emit("connection", ws, request);
       });
     } else {
       socket.destroy();
     }
-  } else if (url === '/ws/logs') {
+  } else if (url === "/ws/logs") {
     const wss = logsWebSocket.getWss();
     if (wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+        wss.emit("connection", ws, request);
       });
     } else {
       socket.destroy();
     }
-  } else if (url === '/ws/unifi') {
+  } else if (url === "/ws/unifi") {
     const wss = unifiWebSocket.getWss();
     if (wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+        wss.emit("connection", ws, request);
       });
     } else {
       socket.destroy();
     }
   } else {
     // Unknown WS path — reject cleanly
-    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     socket.destroy();
   }
 });
@@ -538,7 +607,7 @@ function getNetworkIP(): string | null {
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name] || []) {
       // Skip internal (loopback) and non-IPv4 addresses
-      if (iface.family === 'IPv4' && !iface.internal) {
+      if (iface.family === "IPv4" && !iface.internal) {
         return iface.address;
       }
     }
@@ -553,19 +622,19 @@ function getHostMachineIP(): string | null {
   if (process.env.HOST_IP) {
     return process.env.HOST_IP;
   }
-  
+
   // Second priority: try to read from host network interfaces
-  const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
-  const routePath = path.join(HOST_ROOT_PATH, 'proc', 'net', 'route');
-  
+  const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || "/host";
+  const routePath = path.join(HOST_ROOT_PATH, "proc", "net", "route");
+
   try {
     // Method 1: Try to read IP addresses from /host/proc/net/route
     // Parse the route file to find the default gateway interface, then try to get its IP
     if (fsSync.existsSync(routePath)) {
       try {
-        const routeContent = fsSync.readFileSync(routePath, 'utf8');
-        const lines = routeContent.split('\n').filter(line => line.trim());
-        
+        const routeContent = fsSync.readFileSync(routePath, "utf8");
+        const lines = routeContent.split("\n").filter((line) => line.trim());
+
         // Find the default route (destination 00000000) to identify the main interface
         let defaultInterface: string | null = null;
         for (let i = 1; i < lines.length; i++) {
@@ -573,39 +642,54 @@ function getHostMachineIP(): string | null {
           if (parts.length >= 2) {
             const ifaceName = parts[0];
             const destination = parts[1];
-            
+
             // Look for default route
-            if (destination === '00000000') {
+            if (destination === "00000000") {
               // Skip virtual interfaces
-              if (!ifaceName.startsWith('lo') && 
-                  !ifaceName.startsWith('docker') && 
-                  !ifaceName.startsWith('veth') &&
-                  !ifaceName.startsWith('br-') &&
-                  !ifaceName.startsWith('virbr')) {
+              if (
+                !ifaceName.startsWith("lo") &&
+                !ifaceName.startsWith("docker") &&
+                !ifaceName.startsWith("veth") &&
+                !ifaceName.startsWith("br-") &&
+                !ifaceName.startsWith("virbr")
+              ) {
                 defaultInterface = ifaceName;
                 break;
               }
             }
           }
         }
-        
+
         // If we found a default interface, try to get its IP from network config files
         // or from /host/proc/net/if_inet6 for IPv6
         if (defaultInterface) {
-          const ifacePath = path.join(HOST_ROOT_PATH, 'sys', 'class', 'net', defaultInterface);
-          const operstatePath = path.join(ifacePath, 'operstate');
-          
+          const ifacePath = path.join(
+            HOST_ROOT_PATH,
+            "sys",
+            "class",
+            "net",
+            defaultInterface,
+          );
+          const operstatePath = path.join(ifacePath, "operstate");
+
           // Check if interface is up
           if (fsSync.existsSync(operstatePath)) {
-            const operstate = fsSync.readFileSync(operstatePath, 'utf8').trim();
-            if (operstate === 'up') {
+            const operstate = fsSync.readFileSync(operstatePath, "utf8").trim();
+            if (operstate === "up") {
               // Try to read IPv6 address from /host/proc/net/if_inet6
-              const inet6Path = path.join(HOST_ROOT_PATH, 'proc', 'net', 'if_inet6');
+              const inet6Path = path.join(
+                HOST_ROOT_PATH,
+                "proc",
+                "net",
+                "if_inet6",
+              );
               if (fsSync.existsSync(inet6Path)) {
                 try {
-                  const inet6Content = fsSync.readFileSync(inet6Path, 'utf8');
-                  const inet6Lines = inet6Content.split('\n').filter(line => line.trim());
-                  
+                  const inet6Content = fsSync.readFileSync(inet6Path, "utf8");
+                  const inet6Lines = inet6Content
+                    .split("\n")
+                    .filter((line) => line.trim());
+
                   for (const line of inet6Lines) {
                     const parts = line.trim().split(/\s+/);
                     if (parts.length >= 6 && parts[5] === defaultInterface) {
@@ -613,7 +697,7 @@ function getHostMachineIP(): string | null {
                       // Convert from hex format to IPv6 address
                       const ipv6Hex = parts[0];
                       // Skip link-local addresses (fe80::)
-                      if (!ipv6Hex.startsWith('fe80')) {
+                      if (!ipv6Hex.startsWith("fe80")) {
                         // Parse IPv6 hex to readable format (simplified)
                         // For now, we'll skip IPv6 and focus on IPv4
                       }
@@ -630,7 +714,7 @@ function getHostMachineIP(): string | null {
         // Continue to next method if route parsing fails
       }
     }
-    
+
     // Method 2: Try to get IP from Docker gateway as a fallback
     // The Docker gateway IP (e.g., 172.17.0.1) is not the host's real IP,
     // but it's better than showing the container IP (172.18.0.2)
@@ -638,17 +722,17 @@ function getHostMachineIP(): string | null {
     // Reuse routePath declared at function level
     if (fsSync.existsSync(routePath)) {
       try {
-        const routeContent = fsSync.readFileSync(routePath, 'utf8');
-        const lines = routeContent.split('\n').filter(line => line.trim());
-        
+        const routeContent = fsSync.readFileSync(routePath, "utf8");
+        const lines = routeContent.split("\n").filter((line) => line.trim());
+
         for (let i = 1; i < lines.length; i++) {
           const parts = lines[i].trim().split(/\s+/);
           if (parts.length >= 3) {
             const destination = parts[1];
             const gateway = parts[2];
-            
+
             // Look for default route (destination 00000000)
-            if (destination === '00000000' && gateway !== '00000000') {
+            if (destination === "00000000" && gateway !== "00000000") {
               // Convert gateway from hex to IP address
               // Format: hex string like "0101A8C0" -> "192.168.1.1"
               const gatewayHex = gateway;
@@ -658,7 +742,7 @@ function getHostMachineIP(): string | null {
                 const octet3 = parseInt(gatewayHex.substring(2, 4), 16);
                 const octet4 = parseInt(gatewayHex.substring(0, 2), 16);
                 const gatewayIP = `${octet1}.${octet2}.${octet3}.${octet4}`;
-                
+
                 // Return gateway IP (Docker bridge IP, e.g., 172.17.0.1)
                 // This is not the host's real IP, but better than container IP
                 return gatewayIP;
@@ -670,21 +754,25 @@ function getHostMachineIP(): string | null {
         // Fallback to null
       }
     }
-    
   } catch (error) {
     // Fallback to null
   }
-  
+
   // Return null to use container IP as fallback
   // Note: The most reliable way is to set HOST_IP environment variable in docker-compose.yml
   return null;
 }
 
 // Check JWT secret on startup and notify if default
-const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
-if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
-  securityNotificationService.notifyJwtSecretWarning().catch(err => {
-    logger.error('Security', 'Failed to send JWT secret warning notification:', err);
+const jwtSecret =
+  process.env.JWT_SECRET || "change-me-in-production-please-use-strong-secret";
+if (jwtSecret === "change-me-in-production-please-use-strong-secret") {
+  securityNotificationService.notifyJwtSecretWarning().catch((err) => {
+    logger.error(
+      "Security",
+      "Failed to send JWT secret warning notification:",
+      err,
+    );
   });
 }
 
@@ -692,22 +780,25 @@ if (jwtSecret === 'change-me-in-production-please-use-strong-secret') {
 const isDocker = (): boolean => {
   try {
     // Check /proc/self/cgroup (Linux)
-    const cgroup = fsSync.readFileSync('/proc/self/cgroup', 'utf8');
-    if (cgroup.includes('docker') || cgroup.includes('containerd')) {
+    const cgroup = fsSync.readFileSync("/proc/self/cgroup", "utf8");
+    if (cgroup.includes("docker") || cgroup.includes("containerd")) {
       return true;
     }
   } catch {
     // Not Linux or file doesn't exist
   }
-  
+
   // Check environment variable
-  if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
+  if (
+    process.env.DOCKER === "true" ||
+    process.env.DOCKER_CONTAINER === "true"
+  ) {
     return true;
   }
-  
+
   // Check for .dockerenv file
   try {
-    fsSync.accessSync('/.dockerenv');
+    fsSync.accessSync("/.dockerenv");
     return true;
   } catch {
     return false;
@@ -716,20 +807,21 @@ const isDocker = (): boolean => {
 
 // Start server
 const port = config.port;
-const host = '0.0.0.0'; // Bind to all interfaces for Docker compatibility
+const host = "0.0.0.0"; // Bind to all interfaces for Docker compatibility
 server.listen(port, host, () => {
   // Determine environment type
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = process.env.NODE_ENV === "production";
   const isDockerEnv = isDocker();
   const isNpmDev = !isProduction && !isDockerEnv;
   const isDockerDev = !isProduction && isDockerEnv;
   const isDockerProd = isProduction && isDockerEnv;
-  const isIngress = process.env.INGRESS_MODE === '1' || process.env.ADDON_INGRESS === '1';
-  const showPorts = process.env.SHOW_PORTS !== 'false';
+  const isIngress =
+    process.env.INGRESS_MODE === "1" || process.env.ADDON_INGRESS === "1";
+  const showPorts = process.env.SHOW_PORTS !== "false";
   const hidePortUrls = isIngress || !showPorts;
 
   // Get container name - try multiple methods
-  let containerName = 'MynetworK';
+  let containerName = "MynetworK";
   if (isDockerEnv) {
     // Try environment variable first
     if (process.env.CONTAINER_NAME) {
@@ -740,37 +832,37 @@ server.listen(port, host, () => {
       // If hostname looks like a container ID (12 hex chars), try to get real container name
       if (hostname && hostname.length === 12 && /^[a-f0-9]+$/.test(hostname)) {
         // It's a container ID, use a default name based on environment
-        containerName = isDockerDev ? 'Mynetwork-dev' : 'MynetworK';
+        containerName = isDockerDev ? "Mynetwork-dev" : "MynetworK";
       } else {
         // Use hostname as container name
         containerName = hostname;
       }
     }
   } else if (isNpmDev) {
-    containerName = 'NPM DEV';
+    containerName = "NPM DEV";
   }
-  
+
   // Get host machine IP (for Docker) or container IP (for dev)
   const hostIP = isDockerEnv ? getHostMachineIP() : null;
   const containerIP = getNetworkIP();
-  const displayIP = hostIP || containerIP || 'localhost';
-  
+  const displayIP = hostIP || containerIP || "localhost";
+
   let frontendWebUrl: string;
   let frontendLocalUrl: string;
   let apiUrl: string;
   let wsUrl: string;
-  
+
   if (isProduction) {
     // Production mode (Docker): check for configured domain first, then use host IP
-    const dashboardPort = process.env.DASHBOARD_PORT || '7505';
+    const dashboardPort = process.env.DASHBOARD_PORT || "7505";
     const publicUrl = getPublicUrl();
-    
+
     if (publicUrl) {
       // Domain configured: use it for all URLs
       frontendWebUrl = publicUrl;
       frontendLocalUrl = publicUrl;
       apiUrl = publicUrl;
-      wsUrl = publicUrl.replace(/^http/, 'ws') + '/ws/connection';
+      wsUrl = publicUrl.replace(/^http/, "ws") + "/ws/connection";
     } else if (hostIP) {
       // No domain configured: use host IP
       frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
@@ -779,7 +871,7 @@ server.listen(port, host, () => {
       wsUrl = `ws://${hostIP}:${dashboardPort}/ws/connection`;
     } else {
       // Fallback: use container IP or localhost
-      const fallbackIP = containerIP || 'localhost';
+      const fallbackIP = containerIP || "localhost";
       frontendWebUrl = `http://${fallbackIP}:${dashboardPort}`;
       frontendLocalUrl = frontendWebUrl;
       apiUrl = `http://${fallbackIP}:${dashboardPort}`;
@@ -788,10 +880,10 @@ server.listen(port, host, () => {
   } else if (isDockerDev) {
     // Docker dev mode: use host ports from compose (DASHBOARD_PORT and SERVER_PORT)
     // These are the ports exposed on the host machine, not the container ports
-    const dashboardPort = process.env.DASHBOARD_PORT || '3666'; // Host port for frontend
-    const serverPort = process.env.SERVER_PORT || '3668'; // Host port for backend
+    const dashboardPort = process.env.DASHBOARD_PORT || "3666"; // Host port for frontend
+    const serverPort = process.env.SERVER_PORT || "3668"; // Host port for backend
     const networkIP = getNetworkIP();
-    
+
     if (hostIP) {
       frontendWebUrl = `http://${hostIP}:${dashboardPort}`;
       frontendLocalUrl = `http://localhost:${dashboardPort}`;
@@ -812,29 +904,31 @@ server.listen(port, host, () => {
     // NPM dev mode: frontend is on Vite dev server, backend on configured port
     // Use environment variables if set, otherwise defaults
     // IMPORTANT: Use config.port (actual server port) not SERVER_PORT env var for display
-    const vitePort = process.env.VITE_PORT || '5173';
+    const vitePort = process.env.VITE_PORT || "5173";
     const actualServerPort = port.toString(); // Use the actual port the server is listening on
     const networkIP = getNetworkIP();
-    
+
     frontendLocalUrl = `http://localhost:${vitePort}`;
-    frontendWebUrl = networkIP ? `http://${networkIP}:${vitePort}` : frontendLocalUrl;
+    frontendWebUrl = networkIP
+      ? `http://${networkIP}:${vitePort}`
+      : frontendLocalUrl;
     apiUrl = `http://localhost:${actualServerPort}`;
     wsUrl = `ws://localhost:${actualServerPort}/ws/connection`;
   }
-  
+
   // ANSI color codes for terminal output
   const colors = {
-    reset: '\x1b[0m',
-    bright: '\x1b[1m',
-    dim: '\x1b[2m',
-    cyan: '\x1b[36m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
-    magenta: '\x1b[35m',
-    white: '\x1b[37m',
-    bgCyan: '\x1b[46m',
-    bgBlue: '\x1b[44m',
+    reset: "\x1b[0m",
+    bright: "\x1b[1m",
+    dim: "\x1b[2m",
+    cyan: "\x1b[36m",
+    green: "\x1b[32m",
+    yellow: "\x1b[33m",
+    blue: "\x1b[34m",
+    magenta: "\x1b[35m",
+    white: "\x1b[37m",
+    bgCyan: "\x1b[46m",
+    bgBlue: "\x1b[44m",
   };
 
   // Helper function to calculate visible length (ignoring ANSI codes)
@@ -842,31 +936,34 @@ server.listen(port, host, () => {
   const visibleLength = (str: string): number => {
     // Remove ANSI escape codes
     const ansiRegex = /\x1b\[[0-9;]*m/g;
-    let cleaned = str.replace(ansiRegex, '');
+    let cleaned = str.replace(ansiRegex, "");
     // Count emojis as 2 characters (they typically take 2 character positions in terminal)
-    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    const emojiRegex =
+      /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
     const emojiMatches = cleaned.match(emojiRegex);
     const emojiCount = emojiMatches ? emojiMatches.length : 0;
     // Remove emojis from length calculation and add them back as 2 chars each
-    const withoutEmojis = cleaned.replace(emojiRegex, '');
-    return withoutEmojis.length + (emojiCount * 2);
+    const withoutEmojis = cleaned.replace(emojiRegex, "");
+    return withoutEmojis.length + emojiCount * 2;
   };
 
   // Read app version from package.json
-  let appVersion = '0.1.0'; // Default fallback
+  let appVersion = "0.1.0"; // Default fallback
   try {
-    const packageJsonPath = path.join(__dirname, '..', 'package.json');
-    const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, 'utf8'));
+    const packageJsonPath = path.join(__dirname, "..", "package.json");
+    const packageJson = JSON.parse(
+      fsSync.readFileSync(packageJsonPath, "utf8"),
+    );
     appVersion = packageJson.version || appVersion;
   } catch (error) {
     // If package.json can't be read, use default version
-    logger.warn('Server', 'Could not read package.json version, using default');
+    logger.warn("Server", "Could not read package.json version, using default");
   }
 
   // Calculate content widths for all lines
-  const title = 'MynetworK Backend Server';
-  const subtitle = 'Multi-Source Network Dashboard';
-  
+  const title = "MynetworK Backend Server";
+  const subtitle = "Multi-Source Network Dashboard";
+
   // Determine version label based on environment
   let versionLabel: string;
   if (isNpmDev) {
@@ -878,30 +975,32 @@ server.listen(port, host, () => {
   } else {
     versionLabel = `DEV v${appVersion}`;
   }
-  
+
   const containerLabel = `📦 Container:            ${containerName}`;
-  
+
   // Align URLs with consistent spacing
   const maxLabelLength = Math.max(
-    'Frontend WEB'.length,
-    'Frontend Local'.length,
-    'Backend API'.length,
-    'WebSocket'.length,
-    'Freebox'.length
+    "Frontend WEB".length,
+    "Frontend Local".length,
+    "Backend API".length,
+    "WebSocket".length,
+    "Freebox".length,
   );
-  
+
   const padLabel = (label: string): string => {
     return label.padEnd(maxLabelLength);
   };
 
   const urlBlockLines = hidePortUrls
-    ? (isIngress ? ['  UI: served via Ingress (use the Home Assistant sidebar)'] : [])
+    ? isIngress
+      ? ["  UI: served via Ingress (use the Home Assistant sidebar)"]
+      : []
     : [
-        `  🌐 ${padLabel('Frontend WEB')}: ${frontendWebUrl}`,
-        `  💻 ${padLabel('Frontend Local')}: ${frontendLocalUrl}`,
-        `  🔌 ${padLabel('Backend API')}: ${apiUrl}/api/health`,
-        `  🔗 ${padLabel('WebSocket')}: ${wsUrl}`,
-        `  📡 ${padLabel('Freebox')}: ${config.freebox.url}`
+        `  🌐 ${padLabel("Frontend WEB")}: ${frontendWebUrl}`,
+        `  💻 ${padLabel("Frontend Local")}: ${frontendLocalUrl}`,
+        `  🔌 ${padLabel("Backend API")}: ${apiUrl}/api/health`,
+        `  🔗 ${padLabel("WebSocket")}: ${wsUrl}`,
+        `  📡 ${padLabel("Freebox")}: ${config.freebox.url}`,
       ];
 
   const contentLines = [
@@ -910,102 +1009,117 @@ server.listen(port, host, () => {
     `  Features:`,
     `  ✓ User Authentication (JWT)`,
     `  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
-    `  ✓ Activity Logging`
+    `  ✓ Activity Logging`,
   ];
-  
+
   // Find the longest line (visible length)
   const maxContentWidth = Math.max(
-    ...contentLines.map(line => visibleLength(line)),
+    ...contentLines.map((line) => visibleLength(line)),
     visibleLength(title),
     visibleLength(subtitle),
     visibleLength(versionLabel),
-    visibleLength(containerLabel)
+    visibleLength(containerLabel),
   );
-  
+
   // Calculate total width: content + minimal padding (4 chars)
   // Minimum width of 60 for readability
   const width = Math.max(maxContentWidth + 4, 60);
   const minPadding = 2;
-  
+
   // Calculate padding for centered titles (no border on right, so no -2)
-  const titlePadding = Math.max(Math.floor((width - visibleLength(title)) / 2), minPadding);
-  const subtitlePadding = Math.max(Math.floor((width - visibleLength(subtitle)) / 2), minPadding);
-  const versionPadding = Math.max(Math.floor((width - visibleLength(versionLabel)) / 2), minPadding);
-  
+  const titlePadding = Math.max(
+    Math.floor((width - visibleLength(title)) / 2),
+    minPadding,
+  );
+  const subtitlePadding = Math.max(
+    Math.floor((width - visibleLength(subtitle)) / 2),
+    minPadding,
+  );
+  const versionPadding = Math.max(
+    Math.floor((width - visibleLength(versionLabel)) / 2),
+    minPadding,
+  );
+
   // Helper to pad content lines
   const padLine = (line: string, label: string, value: string): string => {
     const labelVisible = visibleLength(label);
     const valueVisible = visibleLength(value);
     const totalVisible = visibleLength(line);
     const padding = Math.max(width - totalVisible - 2, 0);
-    return line + ' '.repeat(padding);
+    return line + " ".repeat(padding);
   };
 
   // Calculate padding for container label
-  const containerPadding = Math.max(Math.floor((width - visibleLength(containerLabel)) / 2), minPadding);
+  const containerPadding = Math.max(
+    Math.floor((width - visibleLength(containerLabel)) / 2),
+    minPadding,
+  );
 
   const urlBlockConsole = urlBlockLines
-    .map((line) => `${colors.bright}${colors.cyan}║${colors.reset} ${colors.cyan}${line}${colors.reset}${colors.reset}`)
-    .join('\n');
+    .map(
+      (line) =>
+        `${colors.bright}${colors.cyan}║${colors.reset} ${colors.cyan}${line}${colors.reset}${colors.reset}`,
+    )
+    .join("\n");
   const urlBlockHeader = urlBlockLines.map((line) => `║ ${line}`);
 
   // Display header in console (with colors)
   console.log(`
-${colors.bright}${colors.cyan}╔${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${' '.repeat(width - titlePadding - visibleLength(title))}${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
-${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
-${colors.bright}${colors.cyan}║${' '.repeat(versionPadding)}${isDockerProd ? colors.yellow : (isNpmDev || isDockerDev ? colors.bright : colors.bright)}${colors.green}${colors.bright}${versionLabel}${colors.reset}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
+${colors.bright}${colors.cyan}╔${"═".repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}║${" ".repeat(titlePadding)}${colors.white}${colors.bright}${title}${colors.reset}${" ".repeat(width - titlePadding - visibleLength(title))}${colors.reset}
+${colors.bright}${colors.cyan}║${" ".repeat(subtitlePadding)}${colors.dim}${subtitle}${colors.reset}${" ".repeat(width - subtitlePadding - visibleLength(subtitle))}${colors.reset}
+${colors.bright}${colors.cyan}╠${"═".repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}║${" ".repeat(versionPadding)}${isDockerProd ? colors.yellow : isNpmDev || isDockerDev ? colors.bright : colors.bright}${colors.green}${colors.bright}${versionLabel}${colors.reset}${" ".repeat(width - versionPadding - visibleLength(versionLabel))}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.cyan}📦${colors.reset} ${colors.bright}Container:${colors.reset}           ${colors.cyan}${containerName}${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}╠${'═'.repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}╠${"═".repeat(width)}${colors.reset}
 ${urlBlockConsole}
 ${colors.bright}${colors.cyan}║${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.bright}${colors.white}Features:${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}User Authentication (JWT)${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Plugin System (Freebox, UniFi, Search devices, Scan network...)${colors.reset}${colors.reset}
 ${colors.bright}${colors.cyan}║${colors.reset}  ${colors.dim}${colors.green}✓${colors.reset} ${colors.dim}Activity Logging${colors.reset}${colors.reset}
-${colors.bright}${colors.cyan}╚${'═'.repeat(width)}${colors.reset}
+${colors.bright}${colors.cyan}╚${"═".repeat(width)}${colors.reset}
   `);
 
   // Add header to log buffer (without ANSI codes for cleaner display in logs)
   const headerLines = [
-    `╔${'═'.repeat(width)}`,
-    `║${' '.repeat(titlePadding)}${title}${' '.repeat(width - titlePadding - visibleLength(title))}`,
-    `║${' '.repeat(subtitlePadding)}${subtitle}${' '.repeat(width - subtitlePadding - visibleLength(subtitle))}`,
-    `╠${'═'.repeat(width)}`,
-    `║${' '.repeat(versionPadding)}${versionLabel}${' '.repeat(width - versionPadding - visibleLength(versionLabel))}`,
+    `╔${"═".repeat(width)}`,
+    `║${" ".repeat(titlePadding)}${title}${" ".repeat(width - titlePadding - visibleLength(title))}`,
+    `║${" ".repeat(subtitlePadding)}${subtitle}${" ".repeat(width - subtitlePadding - visibleLength(subtitle))}`,
+    `╠${"═".repeat(width)}`,
+    `║${" ".repeat(versionPadding)}${versionLabel}${" ".repeat(width - versionPadding - visibleLength(versionLabel))}`,
     `║  📦 Container:            ${containerName}`,
-    `╠${'═'.repeat(width)}`,
+    `╠${"═".repeat(width)}`,
     ...urlBlockHeader,
     `║`,
     `║  Features:`,
     `║  ✓ User Authentication (JWT)`,
     `║  ✓ Plugin System (Freebox, UniFi, Search devices, Scan network...)`,
     `║  ✓ Activity Logging`,
-    `╚${'═'.repeat(width)}`
+    `╚${"═".repeat(width)}`,
   ];
-  
+
   // Add each line of the header to the log buffer
-  headerLines.forEach(line => {
-    logBuffer.add('info', 'Server', line.trim());
+  headerLines.forEach((line) => {
+    logBuffer.add("info", "Server", line.trim());
   });
 });
 
 // Graceful shutdown handler
 function gracefulShutdown(signal: string) {
-  logger.info('Server', `${signal} received, shutting down gracefully...`);
+  logger.info("Server", `${signal} received, shutting down gracefully...`);
   server.close(() => {
-    logger.info('Server', 'HTTP server closed');
+    logger.info("Server", "HTTP server closed");
     const db = getDatabase();
     if (db) {
       db.close();
-      logger.info('Server', 'Database connection closed');
+      logger.info("Server", "Database connection closed");
     }
     process.exit(0);
   });
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 export default app;

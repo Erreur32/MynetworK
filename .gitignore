@@ -109,3 +109,6 @@ Thumbs.db
 # MemPalace local tooling (not shared across contributors)
 mempalace.yaml
 entities.json
+
+# Local Playwright captures (Claude verification artifacts)
+img-capture/

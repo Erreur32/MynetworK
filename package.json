@@ -1,7 +1,7 @@
 {
   "name": "mynetwork",
   "private": true,
-  "version": "0.9.4",
+  "version": "0.9.5",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -14,7 +14,9 @@
     "version:bump": "node scripts/bump-version.js",
     "version:patch": "node scripts/bump-version.js patch",
     "version:minor": "node scripts/bump-version.js minor",
-    "version:major": "node scripts/bump-version.js major"
+    "version:major": "node scripts/bump-version.js major",
+    "security:cve": "cve-lite --no-open",
+    "security:cve:strict": "cve-lite --no-open --fail-on high"
   },
   "dependencies": {
     "@types/compression": "^1.8.1",

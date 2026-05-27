@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Hook to dynamically update the favicon based on system color scheme
@@ -10,22 +10,22 @@ import { useEffect, useState } from 'react';
 export const useFavicon = (iconUrl: string, autoInvert: boolean = true) => {
   // Track system dark mode preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (typeof window !== "undefined") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
     return false;
   });
 
   // Listen for system theme changes
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     const handleChange = (e: MediaQueryListEvent) => {
       setIsDarkMode(e.matches);
     };
 
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
 
   useEffect(() => {
@@ -39,37 +39,45 @@ export const useFavicon = (iconUrl: string, autoInvert: boolean = true) => {
 
     const updateFavicon = async () => {
       // Find existing favicon link or create one
-      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      let link: HTMLLinkElement | null =
+        document.querySelector("link[rel~='icon']");
 
       if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
+        link = document.createElement("link");
+        link.rel = "icon";
         document.head.appendChild(link);
       }
 
       if (shouldInvert) {
-        // Fetch the SVG, invert colors, and create a data URL
         try {
-          const response = await fetch(iconUrl);
-          let svgText = await response.text();
+          // Vite inlines small SVGs as data: URLs (< assetsInlineLimit). Decoding
+          // the payload directly avoids a fetch() on a data: URL, which would
+          // hit the CSP connect-src directive.
+          let svgText: string;
+          if (iconUrl.startsWith("data:image/svg+xml")) {
+            const comma = iconUrl.indexOf(",");
+            const payload = iconUrl.slice(comma + 1);
+            svgText = iconUrl.includes(";base64,")
+              ? atob(payload)
+              : decodeURIComponent(payload);
+          } else {
+            const response = await fetch(iconUrl);
+            svgText = await response.text();
+          }
 
-          // Replace white/light colors with dark colors for favicon visibility
-          svgText = svgText.replace(/#FDFDFD/gi, '#1a1a1a');
-          svgText = svgText.replace(/#FFFFFF/gi, '#1a1a1a');
-          svgText = svgText.replace(/white/gi, '#1a1a1a');
+          svgText = svgText.replace(/#FDFDFD/gi, "#1a1a1a");
+          svgText = svgText.replace(/#FFFFFF/gi, "#1a1a1a");
+          svgText = svgText.replace(/white/gi, "#1a1a1a");
 
-          // Create a data URL from the modified SVG
-          const dataUrl = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
-          link.type = 'image/svg+xml';
-          link.href = dataUrl;
+          link.type = "image/svg+xml";
+          link.href = `data:image/svg+xml,${encodeURIComponent(svgText)}`;
         } catch {
-          // Fallback to original if fetch fails
-          link.type = 'image/svg+xml';
+          link.type = "image/svg+xml";
           link.href = iconUrl;
         }
       } else {
         // Use the original icon URL (light icon for dark mode)
-        link.type = 'image/svg+xml';
+        link.type = "image/svg+xml";
         link.href = iconUrl;
       }
     };
