@@ -1,7 +1,7 @@
 {
   "name": "mynetwork",
   "private": true,
-  "version": "0.9.10",
+  "version": "0.9.11",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -77,29 +77,6 @@
     "tough-cookie": ">=4.1.3",
     "tar": ">=7.5.4",
     "rollup": ">=4.59.0",
-    "shell-quote": ">=1.9.0",
-    "vite-plugin-pwa": {
-      "workbox-build": {
-        "ajv": {
-          "fast-uri": ">=3.1.5"
-        },
-        "glob": {
-          "minimatch": {
-            "brace-expansion": ">=5.0.9"
-          }
-        },
-        "@trickfilm400/rollup-plugin-off-main-thread": {
-          "ejs": {
-            "jake": {
-              "filelist": {
-                "minimatch": {
-                  "brace-expansion": ">=2.1.4"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+    "shell-quote": ">=1.9.0"
   }
 }
