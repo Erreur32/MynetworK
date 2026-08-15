@@ -7,9 +7,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - `npm ci` failing in CI (Docker build, Snyk scan) with `package.json and package-lock.json ... not in sync`. The deeply-nested `overrides` added in 0.9.10 (`vite-plugin-pwa` → `workbox-build` → `ajv`/`glob`/`@trickfilm400/rollup-plugin-off-main-thread` chains pinning `fast-uri` and `brace-expansion`) produced a lockfile that `npm install` accepted but `npm ci` rejected — a known npm limitation with multi-level nested overrides on optional/transitive deps. Removed the nested overrides; kept the flat ones (`tough-cookie`, `tar`, `rollup`, `shell-quote`). `npm audit` and `npm run security:cve` remain at 0 vulnerabilities without them.
-- chore(scripts): anchor update-version.sh sed to lockfile header (lines 1-15)
-- fix: Version 0.9.1 — restore dagre@0.8.5 in package-lock.json
-- fix(build): restore dagre@0.8.5 in package-lock.json
 
 ---
 
