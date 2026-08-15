@@ -17,6 +17,9 @@ env:
   # pour éviter les warnings et les incompatibilités futures.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
