@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.10] - 2026-08-15
+
+### Security
+
+- Closed 30 Dependabot alerts. Direct/parent bumps: `postcss` `^8.5.10` to `^8.5.23`, `vite` `^6.4.2` to `^6.4.3`, `ws` `^8.20.1` to `^8.21.0`, `react-router-dom` `^7.16.0` to `^7.18.2`, `concurrently` `^9.2.1` to `^9.2.4`, `express-rate-limit` `^8.3.2` to `^8.5.1` — closes high-severity postcss path-traversal, vite `server.fs.deny` bypass, react-router CSRF/DoS/open-redirect/XSS, and ip-address SSRF bypass alerts
+- Overrides raised: `shell-quote` `>=1.8.4` to `>=1.9.0` (quadratic-complexity DoS), plus nested overrides pinning `fast-uri` (`>=3.1.5`) and `brace-expansion` (`>=5.0.9` / `>=2.1.4`) deep inside `vite-plugin-pwa` → `workbox-build` (host-confusion and ReDoS, build-time only)
+- Lockfile refresh closed `dompurify` (via `jspdf`, supersedes Dependabot PR #21), `nanoid` (via `postcss`), `body-parser`/`@babel/core` (via `express`/`@vitejs/plugin-react`)
+- `npm audit` and `npm run security:cve`: 0 vulnerabilities. `vite build`: OK
+
+---
+
 ## [0.9.9] - 2026-05-27
 
 ### Added
