@@ -3,6 +3,7 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { modelDetection } from '../services/modelDetection.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -135,7 +136,7 @@ router.get('/', asyncHandler(async (_req, res) => {
 
 // GET /api/vm/:id - Get specific VM
 router.get('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }
@@ -158,7 +159,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // POST /api/vm/:id/start - Start VM
 router.post('/:id/start', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }
@@ -179,7 +180,7 @@ router.post('/:id/start', asyncHandler(async (req, res) => {
 
 // POST /api/vm/:id/stop - Stop VM
 router.post('/:id/stop', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }
@@ -200,7 +201,7 @@ router.post('/:id/stop', asyncHandler(async (req, res) => {
 
 // POST /api/vm/:id/restart - Restart VM
 router.post('/:id/restart', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }
@@ -295,7 +296,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/vm/:id - Update VM
 router.put('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }
@@ -316,7 +317,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
 // DELETE /api/vm/:id - Delete VM
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid VM ID', 400, 'INVALID_ID');
   }

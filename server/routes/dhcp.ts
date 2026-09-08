@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get('/static-leases', asyncHandler(async (_req, res) => {
 
 // GET /api/dhcp/static-leases/:id - Get a specific static lease
 router.get('/static-leases/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getDhcpStaticLease(req.params.id);
+  const result = await freeboxApi.getDhcpStaticLease(param(req, 'id'));
   res.json(result);
 }));
 
@@ -37,13 +38,13 @@ router.post('/static-leases', asyncHandler(async (req, res) => {
 
 // PUT /api/dhcp/static-leases/:id - Update a static lease
 router.put('/static-leases/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateDhcpStaticLease(req.params.id, req.body);
+  const result = await freeboxApi.updateDhcpStaticLease(param(req, 'id'), req.body);
   res.json(result);
 }));
 
 // DELETE /api/dhcp/static-leases/:id - Delete a static lease
 router.delete('/static-leases/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteDhcpStaticLease(req.params.id);
+  const result = await freeboxApi.deleteDhcpStaticLease(param(req, 'id'));
   res.json(result);
 }));
 

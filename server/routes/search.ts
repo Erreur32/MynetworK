@@ -10,6 +10,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 import { pluginManager } from '../services/pluginManager.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { freeboxApi } from '../services/freeboxApi.js';
@@ -100,7 +101,7 @@ router.post('/', requireAuth, autoLog('search', 'search'), asyncHandler(async (r
  * Aggregates information from all plugins and scanner database
  */
 router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const { ip } = req.params;
+    const ip = param(req, 'ip');
 
     // Validate IP format (basic IPv4 validation)
     const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;

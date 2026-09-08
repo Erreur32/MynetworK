@@ -17,6 +17,7 @@ import { getClientIp } from '../utils/getClientIp.js';
 import { metricsCollector } from '../services/metricsCollector.js';
 import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -241,7 +242,7 @@ router.get('/', requireAuth, requireAdmin, asyncHandler(async (req: Authenticate
 
 // GET /api/users/:id - Get user by ID (admin only)
 router.get('/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(req.params.id, 10);
+    const userId = parseInt(param(req, 'id'), 10);
     
     if (isNaN(userId)) {
         throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
@@ -258,7 +259,7 @@ router.get('/:id', requireAuth, requireAdmin, asyncHandler(async (req: Authentic
         success: true,
         result: userWithoutPassword
     });
-}), autoLog('user.get', 'user', (req) => req.params.id));
+}), autoLog('user.get', 'user', (req) => param(req, 'id')));
 
 // POST /api/users - Create user (admin only)
 router.post('/', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -301,7 +302,7 @@ router.post('/', requireAuth, requireAdmin, asyncHandler(async (req: Authenticat
 
 // PUT /api/users/:id - Update user (admin only, or self for non-sensitive fields)
 router.put('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(req.params.id, 10);
+    const userId = parseInt(param(req, 'id'), 10);
     
     if (isNaN(userId)) {
         throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
@@ -365,11 +366,11 @@ router.put('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
             user: userWithoutPassword
         }
     });
-}), autoLog('user.update', 'user', (req) => req.params.id));
+}), autoLog('user.update', 'user', (req) => param(req, 'id')));
 
 // DELETE /api/users/:id - Delete user (admin only)
 router.delete('/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(req.params.id, 10);
+    const userId = parseInt(param(req, 'id'), 10);
     
     if (isNaN(userId)) {
         throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
@@ -401,7 +402,7 @@ router.delete('/:id', requireAuth, requireAdmin, asyncHandler(async (req: Authen
             message: 'User deleted successfully'
         }
     });
-}), autoLog('user.delete', 'user', (req) => req.params.id));
+}), autoLog('user.delete', 'user', (req) => param(req, 'id')));
 
 export default router;
 

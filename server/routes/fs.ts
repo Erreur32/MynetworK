@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -105,7 +106,7 @@ router.get('/share', asyncHandler(async (_req, res) => {
 
 // GET /api/fs/share/:token - Get share link by token
 router.get('/share/:token', asyncHandler(async (req, res) => {
-  const { token } = req.params;
+  const token = param(req, 'token');
   const result = await freeboxApi.getShareLink(token);
   res.json(result);
 }));
@@ -121,7 +122,7 @@ router.post('/share', asyncHandler(async (req, res) => {
 
 // DELETE /api/fs/share/:token - Delete share link
 router.delete('/share/:token', asyncHandler(async (req, res) => {
-  const { token } = req.params;
+  const token = param(req, 'token');
   const result = await freeboxApi.deleteShareLink(token);
   res.json(result);
 }));

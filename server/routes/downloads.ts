@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/stats', asyncHandler(async (_req, res) => {
 
 // GET /api/downloads/:id - Get specific download
 router.get('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -28,7 +29,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/trackers - Get download trackers
 router.get('/:id/trackers', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -38,7 +39,7 @@ router.get('/:id/trackers', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/peers - Get download peers
 router.get('/:id/peers', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -48,7 +49,7 @@ router.get('/:id/peers', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/files - Get download files
 router.get('/:id/files', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -58,8 +59,8 @@ router.get('/:id/files', asyncHandler(async (req, res) => {
 
 // PUT /api/downloads/:id/files/:fileId - Update download file priority
 router.put('/:id/files/:fileId', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const fileId = req.params.fileId;
+  const id = parseInt(param(req, 'id'), 10);
+  const fileId = param(req, 'fileId');
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -70,7 +71,7 @@ router.put('/:id/files/:fileId', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/pieces - Get download pieces
 router.get('/:id/pieces', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -80,7 +81,7 @@ router.get('/:id/pieces', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/blacklist - Get download blacklist
 router.get('/:id/blacklist', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -90,7 +91,7 @@ router.get('/:id/blacklist', asyncHandler(async (req, res) => {
 
 // DELETE /api/downloads/:id/blacklist/empty - Empty download blacklist
 router.delete('/:id/blacklist/empty', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -100,7 +101,7 @@ router.delete('/:id/blacklist/empty', asyncHandler(async (req, res) => {
 
 // GET /api/downloads/:id/log - Get download log
 router.get('/:id/log', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -131,7 +132,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/downloads/:id - Update download (pause/resume)
 router.put('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }
@@ -142,7 +143,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
 // DELETE /api/downloads/:id - Delete download
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   if (isNaN(id)) {
     throw createError('Invalid download ID', 400, 'INVALID_ID');
   }

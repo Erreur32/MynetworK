@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.get('/devices', asyncHandler(async (_req, res) => {
 
 // GET /api/lan/devices/:interface - Get devices on specific interface
 router.get('/devices/:interface', asyncHandler(async (req, res) => {
-  const interfaceName = req.params.interface;
+  const interfaceName = param(req, 'interface');
   const result = await freeboxApi.getLanHosts(interfaceName);
   res.json(result);
 }));

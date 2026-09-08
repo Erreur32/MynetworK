@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/bouquets', asyncHandler(async (_req, res) => {
 
 // GET /api/tv/epg/by_time/:timestamp - Get EPG for all channels at a given time
 router.get('/epg/by_time/:timestamp', asyncHandler(async (req, res) => {
-  const rawTimestamp = parseInt(req.params.timestamp) || Math.floor(Date.now() / 1000);
+  const rawTimestamp = parseInt(param(req, 'timestamp')) || Math.floor(Date.now() / 1000);
 
   // Normalize timestamp to fixed 2-hour intervals
   const timestamp = normalizeEpgTimestamp(rawTimestamp);
@@ -99,13 +100,13 @@ router.post('/programmed', asyncHandler(async (req, res) => {
 
 // DELETE /api/tv/programmed/:id - Delete programmed recording
 router.delete('/programmed/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deletePvrProgrammed(parseInt(req.params.id));
+  const result = await freeboxApi.deletePvrProgrammed(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // DELETE /api/tv/recordings/:id - Delete finished recording
 router.delete('/recordings/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deletePvrFinished(parseInt(req.params.id));
+  const result = await freeboxApi.deletePvrFinished(parseInt(param(req, 'id')));
   res.json(result);
 }));
 

@@ -6,6 +6,7 @@ import { freeboxNativeWebSocket } from '../services/freeboxNativeWebSocket.js';
 import { pluginManager } from '../services/pluginManager.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.post('/register', asyncHandler(async (_req, res) => {
 
 // GET /api/auth/status/:trackId - Check registration status
 router.get('/status/:trackId', asyncHandler(async (req, res) => {
-  const trackId = parseInt(req.params.trackId, 10);
+  const trackId = parseInt(param(req, 'trackId'), 10);
   if (isNaN(trackId)) {
     throw createError('Invalid trackId', 400, 'INVALID_TRACK_ID');
   }

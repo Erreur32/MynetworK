@@ -11,6 +11,7 @@ import { securityAuditService } from '../services/securityAuditService.js';
 import { bruteForceProtection } from '../services/bruteForceProtection.js';
 import { securityNotificationService } from '../services/securityNotificationService.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -100,7 +101,7 @@ router.get('/blocked', requireAuth, requireAdmin, asyncHandler(async (req: Authe
 
 // POST /api/security/blocked/:identifier/unblock - Unblock an IP or username
 router.post('/blocked/:identifier/unblock', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const identifier = decodeURIComponent(req.params.identifier);
+    const identifier = decodeURIComponent(param(req, 'identifier'));
 
     const unblocked = bruteForceProtection.unblock(identifier);
 
@@ -116,7 +117,7 @@ router.post('/blocked/:identifier/unblock', requireAuth, requireAdmin, asyncHand
             message: `Identifier "${identifier}" has been unblocked`
         }
     });
-}), autoLog('security.blocked.unblock', 'security', (req) => req.params.identifier));
+}), autoLog('security.blocked.unblock', 'security', (req) => param(req, 'identifier')));
 
 export default router;
 

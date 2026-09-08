@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.put('/config', asyncHandler(async (req, res) => {
 
 // GET /api/connection/ddns/:provider - Get DynDNS config
 router.get('/ddns/:provider', asyncHandler(async (req, res) => {
-  const { provider } = req.params;
+  const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({
       success: false,
@@ -75,7 +76,7 @@ router.get('/ddns/:provider', asyncHandler(async (req, res) => {
 
 // PUT /api/connection/ddns/:provider - Update DynDNS config
 router.put('/ddns/:provider', asyncHandler(async (req, res) => {
-  const { provider } = req.params;
+  const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({
       success: false,
@@ -89,7 +90,7 @@ router.put('/ddns/:provider', asyncHandler(async (req, res) => {
 
 // GET /api/connection/ddns/:provider/status - Get DynDNS status
 router.get('/ddns/:provider/status', asyncHandler(async (req, res) => {
-  const { provider } = req.params;
+  const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({
       success: false,

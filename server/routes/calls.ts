@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.delete('/', asyncHandler(async (_req, res) => {
 
 // DELETE /api/calls/:id - Delete specific call
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteCall(parseInt(req.params.id));
+  const result = await freeboxApi.deleteCall(parseInt(param(req, 'id')));
   res.json(result);
 }));
 

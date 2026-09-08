@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ router.get('/', asyncHandler(async (_req, res) => {
 
 // GET /api/contacts/:id - Get specific contact
 router.get('/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getContact(parseInt(req.params.id));
+  const result = await freeboxApi.getContact(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
@@ -24,13 +25,13 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/contacts/:id - Update contact
 router.put('/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateContact(parseInt(req.params.id), req.body);
+  const result = await freeboxApi.updateContact(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/contacts/:id - Delete contact
 router.delete('/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteContact(parseInt(req.params.id));
+  const result = await freeboxApi.deleteContact(parseInt(param(req, 'id')));
   res.json(result);
 }));
 

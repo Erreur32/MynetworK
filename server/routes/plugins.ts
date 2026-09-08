@@ -12,6 +12,7 @@ import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
@@ -89,7 +90,7 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
 
 // GET /api/plugins/:id - Get plugin details
 router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const pluginId = req.params.id;
+    const pluginId = param(req, 'id');
     const plugin = pluginManager.getPlugin(pluginId);
     
     if (!plugin) {
@@ -121,11 +122,11 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
             settings: dbConfig?.settings || {}
         }
     });
-}), autoLog('plugin.get', 'plugin', (req) => req.params.id));
+}), autoLog('plugin.get', 'plugin', (req) => param(req, 'id')));
 
 // GET /api/plugins/:id/stats - Get plugin statistics
 router.get('/:id/stats', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const pluginId = req.params.id;
+    const pluginId = param(req, 'id');
     const startTime = Date.now();
     
     try {
@@ -149,7 +150,7 @@ router.get('/:id/stats', requireAuth, asyncHandler(async (req: AuthenticatedRequ
         const message = error instanceof Error ? error.message : 'Failed to get plugin stats';
         throw createError(message, 500, 'PLUGIN_STATS_ERROR');
     }
-}), autoLog('plugin.getStats', 'plugin', (req) => req.params.id));
+}), autoLog('plugin.getStats', 'plugin', (req) => param(req, 'id')));
 
 // GET /api/plugins/stats/all - Get statistics from all enabled plugins
 router.get('/stats/all', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -244,7 +245,7 @@ router.post('/freebox/firmware-check/force', requireAuth, requireAdmin, asyncHan
 
 // POST /api/plugins/:id/config - Configure plugin (admin only)
 router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const pluginId = req.params.id;
+    const pluginId = param(req, 'id');
     const plugin = pluginManager.getPlugin(pluginId);
     
     if (!plugin) {
@@ -343,11 +344,11 @@ router.post('/:id/config', requireAuth, requireAdmin, asyncHandler(async (req: A
             config: newConfig
         }
     });
-}), autoLog('plugin.configure', 'plugin', (req) => req.params.id));
+}), autoLog('plugin.configure', 'plugin', (req) => param(req, 'id')));
 
 // POST /api/plugins/:id/test - Test plugin connection (admin only)
 router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const pluginId = req.params.id;
+    const pluginId = param(req, 'id');
     const plugin = pluginManager.getPlugin(pluginId);
     
     if (!plugin) {
@@ -640,11 +641,11 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
             error: errorMessage || undefined
         }
     });
-}), autoLog('plugin.test', 'plugin', (req) => req.params.id));
+}), autoLog('plugin.test', 'plugin', (req) => param(req, 'id')));
 
 // GET /api/plugins/:id/token - Get plugin token/API key (for display in settings)
 router.get('/:id/token', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const pluginId = req.params.id;
+    const pluginId = param(req, 'id');
     const plugin = pluginManager.getPlugin(pluginId);
     
     if (!plugin) {
@@ -690,7 +691,7 @@ router.get('/:id/token', requireAuth, asyncHandler(async (req: AuthenticatedRequ
             }
         });
     }
-}), autoLog('plugin.getToken', 'plugin', (req) => req.params.id));
+}), autoLog('plugin.getToken', 'plugin', (req) => param(req, 'id')));
 
 // GET /api/plugins/unifi/nat - Get UniFi NAT/port forwarding rules
 router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -909,7 +910,7 @@ const GEO_CACHE_TTL = 30 * 60 * 1000; // 30 min
  * Results are cached in memory for 30 minutes.
  */
 router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.ip;
+    const ip = param(req, 'ip');
     if (!ip || !/^[\d.]{7,15}$/.test(ip)) { // NOSONAR S5852 bounded quantifier
         return res.json({ success: true, result: { ok: false, error: 'Invalid IP' } });
     }

@@ -3,6 +3,7 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { modelDetection } from '../services/modelDetection.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get('/aps', asyncHandler(async (_req, res) => {
 
 // GET /api/wifi/aps/:id/stations - Get stations for specific AP
 router.get('/aps/:id/stations', asyncHandler(async (req, res) => {
-  const apId = parseInt(req.params.id, 10);
+  const apId = parseInt(param(req, 'id'), 10);
   const result = await freeboxApi.getWifiApStations(apId);
   res.json(result);
 }));
@@ -42,7 +43,7 @@ router.get('/bss', asyncHandler(async (_req, res) => {
 router.put('/bss/:id', asyncHandler(async (req, res) => {
   const { enabled } = req.body;
   logger.debug('WiFi', `Toggle BSS ${req.params.id} -> enabled: ${enabled}`);
-  const result = await freeboxApi.updateWifiBss(req.params.id, { enabled });
+  const result = await freeboxApi.updateWifiBss(param(req, 'id'), { enabled });
   logger.debug('WiFi', `Toggle BSS result:`, result.success ? 'OK' : 'FAILED');
   res.json(result);
 }));
@@ -277,7 +278,7 @@ router.post('/guest/keys', asyncHandler(async (req, res) => {
 
 // DELETE /api/wifi/guest/keys/:id - Delete guest network key
 router.delete('/guest/keys/:id', asyncHandler(async (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(param(req, 'id'), 10);
   const result = await freeboxApi.deleteWifiCustomKey(id);
   res.json(result);
 }));

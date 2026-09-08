@@ -13,6 +13,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { param } from '../utils/params.js';
 import { config as appConfig } from '../config.js';
 import { networkScanScheduler, type UnifiedAutoScanConfig } from '../services/networkScanScheduler.js';
 import { 
@@ -1438,7 +1439,7 @@ router.get('/database-size-estimate', requireAuth, requireAdmin, asyncHandler(as
  * Get details of a specific IP
  */
 router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.id;
+    const ip = param(req, 'id');
 
     try {
         const scan = NetworkScanRepository.findByIp(ip);
@@ -1544,7 +1545,7 @@ router.post('/add-manual', requireAuth, requireAdmin, autoLog('network-scan', 'a
  * Delete a specific IP from history
  */
 router.delete('/:id', requireAuth, requireAdmin, autoLog('network-scan', 'delete'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.id;
+    const ip = param(req, 'id');
 
     try {
         const deleted = NetworkScanRepository.delete(ip);
@@ -1584,7 +1585,7 @@ router.delete('/:id', requireAuth, requireAdmin, autoLog('network-scan', 'delete
  * Performs complete rescan: ping, MAC detection, hostname resolution, vendor detection, and port scan
  */
 router.post('/:id/rescan', requireAuth, requireAdmin, autoLog('network-scan', 'rescan'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.id;
+    const ip = param(req, 'id');
 
     // Validate IP format
     const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
@@ -1715,7 +1716,7 @@ router.post('/blacklist/add', requireAuth, requireAdmin, autoLog('network-scan',
  * Remove an IP from the blacklist
  */
 router.delete('/blacklist/:ip', requireAuth, requireAdmin, autoLog('network-scan', 'blacklist-remove'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.ip;
+    const ip = param(req, 'ip');
 
     // Validate IP format
     const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
@@ -1756,7 +1757,7 @@ router.delete('/blacklist/:ip', requireAuth, requireAdmin, autoLog('network-scan
  * Update hostname for a specific IP
  */
 router.post('/:id/hostname', requireAuth, requireAdmin, autoLog('network-scan', 'update-hostname'), asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const ip = req.params.id;
+    const ip = param(req, 'id');
     const { hostname, hostnameSource } = req.body;
 
     if (hostname !== undefined && typeof hostname !== 'string' && hostname !== null) {

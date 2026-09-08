@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] - 2026-09-08
+
+### Fixed
+
+- 108 preexisting TypeScript errors (`Argument of type 'string | string[]' is not assignable to parameter of type 'string'`) across 18 route files, caused by Express 5's `ParamsDictionary` type now allowing `string[]` for route params (to support new path-to-regexp v6+ wildcard patterns). This project has no such routes, so every param is always a plain string at runtime — the error was type-level only, no logic bug. Added `server/utils/params.ts` (`param(req, key)`), a small helper that extracts a route param as a string, used at each of the 108 call sites instead of `req.params.xxx` directly. Investigated a single-point fix via TypeScript module augmentation first (redeclaring `ParamsDictionary`); not possible, TypeScript rejects merging two incompatible index signatures for the same interface.
+
+---
+
 ## [0.10.0] - 2026-09-08
 
 ### Added

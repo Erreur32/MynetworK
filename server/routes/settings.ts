@@ -3,6 +3,7 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { param } from '../utils/params.js';
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.post('/dhcp/static', asyncHandler(async (req, res) => {
 
 // DELETE /api/settings/dhcp/static/:id - Delete static lease
 router.delete('/dhcp/static/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteDhcpStaticLease(req.params.id);
+  const result = await freeboxApi.deleteDhcpStaticLease(param(req, 'id'));
   res.json(result);
 }));
 
@@ -69,31 +70,31 @@ router.get('/vpn/servers', asyncHandler(async (_req, res) => {
 
 // GET /api/settings/vpn/servers/:id - Get specific VPN server
 router.get('/vpn/servers/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getVpnServer(req.params.id);
+  const result = await freeboxApi.getVpnServer(param(req, 'id'));
   res.json(result);
 }));
 
 // GET /api/settings/vpn/servers/:id/config - Get VPN server config
 router.get('/vpn/servers/:id/config', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getVpnServerConfig(req.params.id);
+  const result = await freeboxApi.getVpnServerConfig(param(req, 'id'));
   res.json(result);
 }));
 
 // PUT /api/settings/vpn/servers/:id/config - Update VPN server config
 router.put('/vpn/servers/:id/config', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateVpnServerConfig(req.params.id, req.body);
+  const result = await freeboxApi.updateVpnServerConfig(param(req, 'id'), req.body);
   res.json(result);
 }));
 
 // POST /api/settings/vpn/servers/:id/start - Start VPN server
 router.post('/vpn/servers/:id/start', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.startVpnServer(req.params.id);
+  const result = await freeboxApi.startVpnServer(param(req, 'id'));
   res.json(result);
 }));
 
 // POST /api/settings/vpn/servers/:id/stop - Stop VPN server
 router.post('/vpn/servers/:id/stop', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.stopVpnServer(req.params.id);
+  const result = await freeboxApi.stopVpnServer(param(req, 'id'));
   res.json(result);
 }));
 
@@ -124,7 +125,7 @@ router.post('/vpn/users', asyncHandler(async (req, res) => {
 
 // DELETE /api/settings/vpn/users/:login - Delete VPN user
 router.delete('/vpn/users/:login', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteVpnUser(req.params.login);
+  const result = await freeboxApi.deleteVpnUser(param(req, 'login'));
   res.json(result);
 }));
 
@@ -164,13 +165,13 @@ router.post('/nat/redirections', asyncHandler(async (req, res) => {
 
 // PUT /api/settings/nat/redirections/:id - Update port forwarding rule
 router.put('/nat/redirections/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updatePortForwardingRule(parseInt(req.params.id), req.body);
+  const result = await freeboxApi.updatePortForwardingRule(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/settings/nat/redirections/:id - Delete port forwarding rule
 router.delete('/nat/redirections/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deletePortForwardingRule(parseInt(req.params.id));
+  const result = await freeboxApi.deletePortForwardingRule(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
