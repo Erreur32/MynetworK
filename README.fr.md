@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.1-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.3-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -525,6 +525,55 @@ npm run mcp:token
 ```
 
 Configurez votre client MCP avec l'URL affichée (`http://<IP-LAN>:<PORT>/api/mcp`) et l'en-tête `Authorization: Bearer <jeton>`. Relancer `npm run mcp:token` renouvelle le jeton et révoque l'ancien.
+
+### Connecter un client
+
+Le serveur parle le transport standard MCP **Streamable HTTP** : tout client qui le supporte peut s'y connecter directement.
+
+**Claude Code (CLI)**
+
+```bash
+claude mcp add --transport http mynetwork http://<IP-LAN>:<PORT>/api/mcp \
+  --header "Authorization: Bearer <jeton>"
+```
+
+Ou dans le `.mcp.json` d'un projet :
+
+```json
+{
+  "mcpServers": {
+    "mynetwork": {
+      "type": "http",
+      "url": "http://<IP-LAN>:<PORT>/api/mcp",
+      "headers": { "Authorization": "Bearer <jeton>" }
+    }
+  }
+}
+```
+
+**Claude Desktop**
+
+Les plans payants (Pro/Max/Team/Enterprise) peuvent l'ajouter directement dans Réglages → Connecteurs, qui parle nativement Streamable HTTP. Sur le plan gratuit, ou pour tout client limité au stdio, faites le pont avec [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) dans `claude_desktop_config.json` :
+
+```json
+{
+  "mcpServers": {
+    "mynetwork": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://<IP-LAN>:<PORT>/api/mcp",
+        "--header",
+        "Authorization: Bearer <jeton>"
+      ]
+    }
+  }
+}
+```
+
+**Autres agents / clients**
+
+Tout client MCP supportant Streamable HTTP (Cursor, Continue, agents maison basés sur le SDK MCP...) n'a besoin que de l'URL et de l'en-tête bearer ci-dessus. Pour un client limité au stdio, le même pont `mcp-remote` que pour Claude Desktop s'applique.
 
 ### Outils disponibles
 

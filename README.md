@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.2-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.3-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -526,6 +526,55 @@ npm run mcp:token
 ```
 
 Configure your MCP client with the printed URL (`http://<LAN-IP>:<PORT>/api/mcp`) and `Authorization: Bearer <token>` header. Re-running `npm run mcp:token` rotates and revokes the previous token.
+
+### Connect a client
+
+The server speaks the standard MCP **Streamable HTTP** transport, so any client that supports it can connect directly.
+
+**Claude Code (CLI)**
+
+```bash
+claude mcp add --transport http mynetwork http://<LAN-IP>:<PORT>/api/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+Or add it to a project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mynetwork": {
+      "type": "http",
+      "url": "http://<LAN-IP>:<PORT>/api/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+**Claude Desktop**
+
+Paid plans (Pro/Max/Team/Enterprise) can add it directly under Settings → Connectors, which speaks Streamable HTTP natively. On the free plan, or for any stdio-only client, bridge it with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mynetwork": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://<LAN-IP>:<PORT>/api/mcp",
+        "--header",
+        "Authorization: Bearer <token>"
+      ]
+    }
+  }
+}
+```
+
+**Other agents / clients**
+
+Any MCP client with Streamable HTTP support (Cursor, Continue, custom agents built on the MCP SDK, ...) only needs the URL and the bearer header above. For a stdio-only client, the same `mcp-remote` bridge shown for Claude Desktop applies.
 
 ### Available tools
 

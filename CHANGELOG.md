@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.3] - 2026-09-08
+
+### Fixed
+
+- `require()` does not work in this ESM project (`"type": "module"` since the initial commit) and has silently failed on every call since day one, always falling through to a try/catch fallback. Two remaining active occurrences (beyond the `undici` case already fixed in 0.10.2) are now fixed:
+  - `server/config.ts`: `getPublicUrl()` never actually read the `public_url` value configured via the admin UI database, since `require('./database/models/AppConfig.js')` always threw — silently falling back to the `PUBLIC_URL` env var despite the "Database > Environment variable" priority documented in the code. Replaced with a static ESM import.
+  - `server/services/networkScanService.ts`: `isDockerEnv()` / `getHostPathPrefix()` used `require('fs')` (redundant on top of being broken, since `fs` was already statically imported in the same file) for the `/proc/self/cgroup` and `/.dockerenv` detection. Replaced with the existing static import.
+- Removed `server/plugins/freebox/FreeboxApiService.ts`: dead code carrying the same broken `require('undici')` pattern as the case fixed in 0.10.2, with no import anywhere in the codebase (the active `FreeboxApiService` class lives in `server/services/freeboxApi.ts`).
+
+### Docs
+
+- README (EN/FR): documented how to connect an MCP client to the built-in MCP server — Claude Code CLI (`claude mcp add --transport http`), Claude Code `.mcp.json`, Claude Desktop (native Connectors on paid plans, or the `mcp-remote` stdio bridge otherwise), and any other Streamable HTTP-capable client.
+- `scripts/update-version.sh`: now also syncs the version badge in `README.fr.md` (previously only `README.md` was updated, leaving the French badge stale).
+
+---
+
 ## [0.10.2] - 2026-09-08
 
 ### Security

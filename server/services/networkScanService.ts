@@ -100,22 +100,20 @@ const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operatio
  */
 function isDockerEnv(): boolean {
     try {
-        const fsSync = require('fs').readFileSync;
-        const cgroup = fsSync('/proc/self/cgroup', 'utf8');
+        const cgroup = fs.readFileSync('/proc/self/cgroup', 'utf8');
         if (cgroup.includes('docker') || cgroup.includes('containerd')) {
             return true;
         }
     } catch {
         // Not Linux or file doesn't exist
     }
-    
+
     if (process.env.DOCKER === 'true' || process.env.DOCKER_CONTAINER === 'true') {
         return true;
     }
-    
+
     try {
-        const fsSync = require('fs').accessSync;
-        fsSync('/.dockerenv');
+        fs.accessSync('/.dockerenv');
         return true;
     } catch {
         return false;
@@ -132,8 +130,7 @@ function getHostPathPrefix(): string {
         const HOST_ROOT_PATH = process.env.HOST_ROOT_PATH || '/host';
         // Check if /host/proc exists (mounted from host)
         try {
-            const fsSync = require('fs').accessSync;
-            fsSync(`${HOST_ROOT_PATH}/proc`);
+            fs.accessSync(`${HOST_ROOT_PATH}/proc`);
             return HOST_ROOT_PATH;
         } catch {
             // Host filesystem not mounted, return empty (use container paths)

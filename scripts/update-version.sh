@@ -156,6 +156,12 @@ fi
 echo -e "${BLUE}  📝 Mise à jour de README.md...${NC}"
 sed -i -E "s/MynetworK-[0-9]+\.[0-9]+\.[0-9]+/MynetworK-$NEW_VERSION/g" README.md
 
+# 3a. README.fr.md (badge — kept in sync with README.md)
+if [ -f "README.fr.md" ]; then
+    echo -e "${BLUE}  📝 Mise à jour de README.fr.md...${NC}"
+    sed -i -E "s/MynetworK-[0-9]+\.[0-9]+\.[0-9]+/MynetworK-$NEW_VERSION/g" README.fr.md
+fi
+
 # 3b. sonar-project.properties (SonarCloud project version)
 if [ -f "sonar-project.properties" ]; then
     echo -e "${BLUE}  📝 Mise à jour de sonar-project.properties...${NC}"
@@ -307,6 +313,7 @@ echo -e "  ${BLUE}- server/plugins/freebox/FreeboxPlugin.ts${NC}"
 echo -e "  ${BLUE}- server/plugins/unifi/UniFiPlugin.ts${NC}"
 echo -e "  ${BLUE}- server/plugins/scan-reseau/ScanReseauPlugin.ts${NC}"
 echo -e "  ${BLUE}- README.md${NC}"
+echo -e "  ${BLUE}- README.fr.md${NC}"
 echo -e "  ${BLUE}- sonar-project.properties${NC}"
 echo -e "  ${BLUE}- CHANGELOG.md${NC}"
 echo -e "  ${BLUE}- $COMMIT_MESSAGE_FILE${NC}"

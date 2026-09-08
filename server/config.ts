@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { logger } from './utils/logger.js';
+import { AppConfigRepository } from './database/models/AppConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,14 +129,8 @@ export const config = {
  * This function should be used instead of config.publicUrl to get the current value
  */
 export const getPublicUrl = (): string | null => {
-  try {
-    // Try to get from database (if available)
-    const { AppConfigRepository } = require('./database/models/AppConfig.js');
-    const dbValue = AppConfigRepository.get('public_url');
-    if (dbValue) return dbValue;
-  } catch {
-    // If AppConfigRepository is not available yet, fall back to env
-  }
+  const dbValue = AppConfigRepository.get('public_url');
+  if (dbValue) return dbValue;
   return process.env.PUBLIC_URL || process.env.DASHBOARD_URL || config.publicUrl || null;
 };
 
