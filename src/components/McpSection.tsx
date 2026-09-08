@@ -20,13 +20,18 @@ import {
 } from "lucide-react";
 import { Section, SettingRow } from "../pages/SettingsPage";
 import { api } from "../api/client";
+import { Toggle } from "./ui/Toggle";
 
 interface McpStatus {
   enabled: boolean;
+  runtimeEnabled: boolean;
   configured: boolean;
   endpoint: string;
   createdAt: string | null;
   lastUsedAt: string | null;
+  hostIp: string | null;
+  dashboardPort: string;
+  activeSessions: number;
 }
 
 type McpMainTab = "general" | "setup";
@@ -37,13 +42,35 @@ const CodeBlock: React.FC<{ label?: string; code: string }> = ({
   code,
 }) => {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const handleCopy = async () => {
+    try {
+      // navigator.clipboard needs a secure context (HTTPS or localhost):
+      // undefined/throws when the admin panel is reached over plain HTTP on
+      // a LAN IP, which this app's own LAN-only design makes a common case.
+      if (!navigator.clipboard) throw new Error("clipboard API unavailable");
+      await navigator.clipboard.writeText(code);
+    } catch {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = code;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        setCopyState("failed");
+        setTimeout(() => setCopyState("idle"), 2500);
+        return;
+      }
+    }
+    setCopyState("copied");
+    setTimeout(() => setCopyState("idle"), 2000);
   };
 
   return (
@@ -60,15 +87,33 @@ const CodeBlock: React.FC<{ label?: string; code: string }> = ({
         <button
           type="button"
           onClick={handleCopy}
-          title={copied ? t("admin.mcp.copied") : t("admin.mcp.copy")}
+          title={
+            copyState === "copied"
+              ? t("admin.mcp.copied")
+              : copyState === "failed"
+                ? t("admin.mcp.copyFailed")
+                : t("admin.mcp.copy")
+          }
           className="absolute top-2 right-2 p-1.5 rounded-md hover:bg-theme-tertiary transition-colors"
         >
-          {copied ? (
+          {copyState === "copied" ? (
             <Check size={14} className="text-emerald-400" />
+          ) : copyState === "failed" ? (
+            <AlertCircle size={14} className="text-red-400" />
           ) : (
             <Copy size={14} className="text-theme-secondary" />
           )}
         </button>
+        {copyState === "copied" && (
+          <span className="absolute top-2 right-9 text-[10px] text-emerald-400 bg-theme-secondary px-1.5 py-0.5 rounded">
+            {t("admin.mcp.copied")}
+          </span>
+        )}
+        {copyState === "failed" && (
+          <span className="absolute top-2 right-9 text-[10px] text-red-400 bg-theme-secondary px-1.5 py-0.5 rounded">
+            {t("admin.mcp.copyFailed")}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -97,6 +142,8 @@ export const McpSection: React.FC<{
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clientTab, setClientTab] = useState<ClientTab>("claude-code");
+  const [isToggling, setIsToggling] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const mainTab: McpMainTab = (MAIN_TABS as string[]).includes(
     activeSubTab || "",
@@ -128,8 +175,33 @@ export const McpSection: React.FC<{
     }
   };
 
+  const handleToggleRuntime = async (nextEnabled: boolean) => {
+    if (!status) return;
+    setIsToggling(true);
+    setToggleError(null);
+    try {
+      const response = await api.post<{ runtimeEnabled: boolean }>(
+        "/api/mcp/status",
+        { enabled: nextEnabled },
+      );
+      if (response.success && response.result) {
+        setStatus({ ...status, runtimeEnabled: response.result.runtimeEnabled });
+      } else {
+        setToggleError(t("admin.mcp.toggleError"));
+      }
+    } catch {
+      setToggleError(t("admin.mcp.toggleError"));
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
   const formatDate = (value: string | null) =>
     value ? new Date(value).toLocaleString(dateLocale) : t("admin.mcp.never");
+
+  const lanHost = status?.hostIp
+    ? `${status.hostIp}:${status.dashboardPort}`
+    : "<LAN-IP>:<PORT>";
 
   return (
     <div className="space-y-6">
@@ -174,6 +246,33 @@ export const McpSection: React.FC<{
 
             {mainTab === "general" && (
               <div>
+                <SettingRow label={t("admin.mcp.runtimeToggleLabel")}>
+                  <Toggle
+                    checked={status.runtimeEnabled}
+                    onChange={handleToggleRuntime}
+                    disabled={isToggling || !status.enabled}
+                  />
+                </SettingRow>
+                {toggleError && (
+                  <p className="text-xs text-red-400 mb-3">{toggleError}</p>
+                )}
+                {!status.runtimeEnabled && (
+                  <div className="flex items-start gap-2 p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <AlertCircle size={16} className="text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-red-400">
+                      {t("admin.mcp.runtimeDisabledWarning")}
+                    </p>
+                  </div>
+                )}
+                {status.runtimeEnabled && !status.configured && (
+                  <div className="flex items-start gap-2 p-3 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <AlertCircle size={16} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-400">
+                      {t("admin.mcp.enabledNoTokenWarning")}
+                    </p>
+                  </div>
+                )}
+
                 <SettingRow label={t("admin.mcp.status")}>
                   {status.enabled ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
@@ -219,6 +318,25 @@ export const McpSection: React.FC<{
                     {formatDate(status.lastUsedAt)}
                   </span>
                 </SettingRow>
+
+                <SettingRow label={t("admin.mcp.activeSessions")}>
+                  <span className="inline-flex items-center gap-1.5 text-sm text-theme-secondary">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        status.activeSessions > 0
+                          ? "bg-emerald-400"
+                          : "bg-gray-500"
+                      }`}
+                    />
+                    {status.activeSessions === 0
+                      ? t("admin.mcp.activeSessionsNone")
+                      : status.activeSessions === 1
+                        ? t("admin.mcp.activeSessionsOne")
+                        : t("admin.mcp.activeSessionsMany", {
+                            count: status.activeSessions,
+                          })}
+                  </span>
+                </SettingRow>
               </div>
             )}
 
@@ -237,12 +355,22 @@ export const McpSection: React.FC<{
                     label={t("admin.mcp.dockerLabel")}
                     code="docker exec -it -u node mynetwork npm run mcp:token"
                   />
-                  <CodeBlock
-                    label={t("admin.mcp.localLabel")}
-                    code="npm run mcp:token"
-                  />
+                  {status.configured ? (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle size={12} />
+                      {t("admin.mcp.tokenAlreadySetHint")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                      <AlertCircle size={12} />
+                      {t("admin.mcp.tokenNotSetHint")}
+                    </p>
+                  )}
                   <p className="text-xs text-theme-secondary">
-                    {t("admin.mcp.dockerNote")}
+                    {t("admin.mcp.dockerNote")}{" "}
+                    <strong className="font-semibold text-theme-primary">
+                      {t("admin.mcp.dockerNoteRotate")}
+                    </strong>
                   </p>
                 </div>
 
@@ -254,6 +382,11 @@ export const McpSection: React.FC<{
                     <p className="text-xs text-theme-secondary mt-0.5">
                       {t("admin.mcp.step2Intro")}
                     </p>
+                    {!status.hostIp && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        {t("admin.mcp.hostIpHint")}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-1.5 flex-wrap">
@@ -277,11 +410,14 @@ export const McpSection: React.FC<{
                     <div className="space-y-3">
                       <CodeBlock
                         label={t("admin.mcp.claudeCodeCliLabel")}
-                        code={`claude mcp add --transport http mynetwork http://<LAN-IP>:<PORT>/api/mcp \\\n  --header "Authorization: Bearer <token>"`}
+                        code={`claude mcp add --transport http mynetwork http://${lanHost}/api/mcp \\\n  --header "Authorization: Bearer <token>"`}
                       />
+                      <p className="text-xs text-theme-secondary">
+                        {t("admin.mcp.claudeCodeConfigNote")}
+                      </p>
                       <CodeBlock
                         label={t("admin.mcp.claudeCodeConfigLabel")}
-                        code={`{\n  "mcpServers": {\n    "mynetwork": {\n      "type": "http",\n      "url": "http://<LAN-IP>:<PORT>/api/mcp",\n      "headers": { "Authorization": "Bearer <token>" }\n    }\n  }\n}`}
+                        code={`{\n  "mcpServers": {\n    "mynetwork": {\n      "type": "http",\n      "url": "http://${lanHost}/api/mcp",\n      "headers": { "Authorization": "Bearer <token>" }\n    }\n  }\n}`}
                       />
                     </div>
                   )}
@@ -293,7 +429,7 @@ export const McpSection: React.FC<{
                       </p>
                       <CodeBlock
                         label="claude_desktop_config.json"
-                        code={`{\n  "mcpServers": {\n    "mynetwork": {\n      "command": "npx",\n      "args": [\n        "mcp-remote@latest",\n        "http://<LAN-IP>:<PORT>/api/mcp",\n        "--header",\n        "Authorization: Bearer <token>"\n      ]\n    }\n  }\n}`}
+                        code={`{\n  "mcpServers": {\n    "mynetwork": {\n      "command": "npx",\n      "args": [\n        "mcp-remote@latest",\n        "http://${lanHost}/api/mcp",\n        "--header",\n        "Authorization: Bearer <token>"\n      ]\n    }\n  }\n}`}
                       />
                     </div>
                   )}
@@ -304,7 +440,7 @@ export const McpSection: React.FC<{
                         {t("admin.mcp.otherNote")}
                       </p>
                       <CodeBlock
-                        code={`URL:     http://<LAN-IP>:<PORT>/api/mcp\nHeader:  Authorization: Bearer <token>`}
+                        code={`URL:     http://${lanHost}/api/mcp\nHeader:  Authorization: Bearer <token>`}
                       />
                     </div>
                   )}

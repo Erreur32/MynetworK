@@ -12,6 +12,7 @@ import { AppConfigRepository } from "../database/models/AppConfig.js";
 const TOKEN_HASH_KEY = "mcp_token_hash";
 const CREATED_AT_KEY = "mcp_token_created_at";
 const LAST_USED_KEY = "mcp_token_last_used_at";
+const RUNTIME_DISABLED_KEY = "mcp_runtime_disabled";
 
 const TOKEN_BYTES = 32;
 
@@ -28,9 +29,9 @@ class McpAuthService {
    * The caller (scripts/mcp-token.ts) is responsible for displaying it once.
    * Re-running this rotates/revokes the previous token.
    *
-   * Throws if the hash can't be persisted — e.g. a read-only database file
+   * Throws if the hash can't be persisted, e.g. a read-only database file
    * (common when `docker exec` runs as a different user than the app's
-   * process, which owns the SQLite file) — rather than returning a token
+   * process, which owns the SQLite file), rather than returning a token
    * that looks valid but was never actually saved.
    */
   generateToken(): string {
@@ -38,7 +39,7 @@ class McpAuthService {
     const hashSaved = AppConfigRepository.set(TOKEN_HASH_KEY, this.hash(token));
     if (!hashSaved) {
       throw new Error(
-        "Failed to persist the MCP token hash to the database — the token was NOT saved and will not work. " +
+        "Failed to persist the MCP token hash to the database: the token was NOT saved and will not work. " +
           "This usually means the database file is not writable by the current user (see server logs above for the underlying error).",
       );
     }
@@ -57,6 +58,28 @@ class McpAuthService {
 
   isConfigured(): boolean {
     return !!AppConfigRepository.get(TOKEN_HASH_KEY);
+  }
+
+  /**
+   * Runtime kill switch, independent of the MCP_ENABLED env var (which only
+   * takes effect on the next restart). Toggled instantly from the admin UI,
+   * e.g. to cut MCP access immediately if a client machine holding the token
+   * is suspected compromised, without touching docker-compose.yml.
+   * Absent key = enabled (default), so existing deployments aren't affected.
+   */
+  isRuntimeEnabled(): boolean {
+    return AppConfigRepository.get(RUNTIME_DISABLED_KEY) !== "true";
+  }
+
+  setRuntimeEnabled(enabled: boolean): void {
+    const saved = enabled
+      ? AppConfigRepository.delete(RUNTIME_DISABLED_KEY)
+      : AppConfigRepository.set(RUNTIME_DISABLED_KEY, "true");
+    if (!saved) {
+      throw new Error(
+        "Failed to persist the MCP enabled/disabled state to the database.",
+      );
+    }
   }
 
   verifyToken(candidate: string): boolean {
@@ -83,11 +106,13 @@ class McpAuthService {
     configured: boolean;
     createdAt: string | null;
     lastUsedAt: string | null;
+    runtimeEnabled: boolean;
   } {
     return {
       configured: this.isConfigured(),
       createdAt: AppConfigRepository.get(CREATED_AT_KEY),
       lastUsedAt: AppConfigRepository.get(LAST_USED_KEY),
+      runtimeEnabled: this.isRuntimeEnabled(),
     };
   }
 

@@ -23,4 +23,5 @@ Main user and operations documentation. Key guides are available in **English** 
 - [INTERNATIONALIZATION.md](INTERNATIONALIZATION.md) – i18n (EN/FR) in the app
 - [SERVER_I18N.md](SERVER_I18N.md) – Server messages and client translation
 - [I18N_REMAINING_FRENCH.md](I18N_REMAINING_FRENCH.md) – Remaining French strings to translate (dev)
+- [MCP_DEV_SETUP.md](MCP_DEV_SETUP.md) – MCP token generation: local/dev command, Docker `-u node` requirement and why (dev)
 - [nginx.example.conf](nginx.example.conf) – Example Nginx configuration

@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.7] - 2026-09-08
+
+### Added
+
+- Admin UI, MCP tab: instant on/off kill switch for MCP access, independent of the `MCP_ENABLED` env var (which only takes effect on the next restart). Backed by a new DB flag (`mcp_runtime_disabled`), checked first in `mcpAuthMiddleware` before the IP allowlist and token check. Lets you cut access immediately if a client machine holding the token is suspected compromised, without touching `docker-compose.yml` or restarting the container.
+- Admin UI, MCP tab: connected clients count, using the existing (already wired, previously unused by the UI) `sessionRegistry` active-session counter.
+- Admin UI, MCP tab, Setup: contextual hint next to the token-generation command showing whether a token is already configured (rotates it) or not (generates a new one), and a combined warning when access is on but no token is configured yet.
+- `Docs/MCP_DEV_SETUP.md`: moved the detailed `-u node` / Docker capabilities explanation out of the Setup tab (kept short there) into a dedicated dev reference doc.
+
+### Fixed
+
+- Admin UI, MCP Setup tab and README (EN/FR): the `<LAN-IP>:<PORT>` placeholders in the Claude Code / Claude Desktop / other-client examples are now filled in automatically from the `HOST_IP` and `DASHBOARD_PORT` env vars when set (same vars and fallback already used by `scripts/mcp-token.ts` and the server startup banner), instead of always showing a placeholder the user had to fill in by hand.
+- `scripts/mcp-token.ts`: the printed URL used the container's internal port (`config.port`, always 3000 in Docker) instead of the host-mapped external port, so following it literally produced an unreachable URL for anyone using the default `docker-compose.yml`. Now uses `HOST_IP`/`DASHBOARD_PORT` with the same fallback as the rest of the app.
+- Admin UI, MCP tab, Setup: clarified that the Claude Code `.mcp.json` block is an auto-generated result of the `claude mcp add` command (written to `~/.claude.json` by default, not a project `.mcp.json`, unless `--scope project` is passed), not a file the user needs to create by hand.
+- Copy-to-clipboard buttons: `navigator.clipboard` requires a secure context (HTTPS or localhost) and is undefined when this LAN-only app is reached over plain HTTP on a LAN IP, a common case here, silently breaking every copy button. Added the same `document.execCommand` fallback already used elsewhere in the app, plus a visible "Copied" / "Copy failed" label instead of only a small icon swap.
+
+---
+
 ## [0.10.6] - 2026-09-08
 
 ### Fixed

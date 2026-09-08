@@ -28,6 +28,16 @@ export const mcpAuthMiddleware = (
   res: Response,
   next: NextFunction,
 ): void => {
+  if (!mcpAuthService.isRuntimeEnabled()) {
+    jsonRpcError(
+      res,
+      503,
+      -32000,
+      "MCP access has been disabled by the administrator.",
+    );
+    return;
+  }
+
   const clientIp = req.ip || req.socket.remoteAddress || "";
 
   if (!isPrivateNetworkIp(clientIp)) {

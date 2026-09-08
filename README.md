@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.6-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.7-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -512,7 +512,7 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 
 ## MCP (Model Context Protocol)
 
-MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MCP client (e.g. Claude Desktop, Claude Code) can query and control your Freebox, UniFi controller and network scanner directly — no need to go through the web UI.
+MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MCP client (e.g. Claude Desktop, Claude Code) can query and control your Freebox, UniFi controller and network scanner directly, no need to go through the web UI.
 
 - **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback) in addition to a dedicated bearer token
 - **Own auth token** - separate from the JWT web session, generated from the CLI only (never from the admin panel, since that panel may be internet-exposed while the MCP endpoint must stay LAN-only)
@@ -520,21 +520,21 @@ MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MC
 
 ### 1. Generate the access token
 
-Run on the server host. Prints the token once — it is never shown again, and never stored anywhere you can browse to.
+Run on the server host. Prints the token once: it is never shown again, and never stored anywhere you can browse to.
 
 ```bash
-# Docker (production, default deployment — container name is "mynetwork")
+# Docker (production, default deployment, container name is "mynetwork")
 docker exec -it -u node mynetwork npm run mcp:token
 
 # Local / dev (bare npm run dev, no container)
 npm run mcp:token
 ```
 
-The `-u node` matters: `docker exec` without it attaches as a different user than the app's own process, which owns the database file — omitting it fails with a SQLite "readonly database" error (the token would print but never actually save). Re-running this command rotates the token and revokes the previous one immediately.
+The `-u node` matters: `docker exec` without it attaches as a different user than the app's own process, which owns the database file, and fails with a SQLite "readonly database" error (the token would print but never actually save). Re-running this command rotates the token and revokes the previous one immediately.
 
 ### 2. Connect a client
 
-The server speaks the standard MCP **Streamable HTTP** transport at `http://<LAN-IP>:<PORT>/api/mcp` — swap in the LAN IP and port printed above, and the token, for any client below.
+The server speaks the standard MCP **Streamable HTTP** transport at `http://<LAN-IP>:<PORT>/api/mcp`: swap in the LAN IP and port printed above, and the token, for any client below.
 
 **Claude Code (CLI)**
 
