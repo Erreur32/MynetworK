@@ -4,27 +4,32 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.7.48-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.1-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
-![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
-[![Docker Image](https://img.shields.io/badge/GHCR-ghcr.io%2Ferreur32%2Fmynetwork-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)](https://github.com/erreur32/mynetwork/pkgs/container/mynetwork)
-[![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
-[![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
-[![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
+[![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa)
-![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&labelColor=111827&logoColor=white)
 
-[![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
+[![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
+[![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
+[![SonarCloud](https://img.shields.io/sonar/quality_gate/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Sonar)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Security](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Tech Debt](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=sqale_index)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
+[![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
+[![Snyk](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/snyk.yml?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/snyk.yml)
+
+![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 
 <h1 align="center">MynetworK</h1>
 <p align="center">
-  Gestion unifiée Freebox + UniFi.
+  Gestion unifiée Freebox + UniFi + Scanner réseau.
 </p>
 
 **📖 [Read in English](README.md)**
 
----
+
 
 <p align="center">
   <sub>Powered by</sub><br/>
@@ -33,34 +38,30 @@
   <img src="img-capture/ubiquiti-networks.svg" alt="Ubiquiti Unifi" height="32" />
 </p>
 
+**Un dashboard réseau multi-sources pour gérer Freebox, UniFi et le Scanner réseau**
 
-**Un dashboard multi-sources moderne pour gérer Freebox, UniFi et vos réseaux**
-
-[Installation](#installation) | [Fonctionnalités](#-principales-fonctionnalités) | [Configuration](#configuration) | [Documentation](#-documentation)
+[Installation](#installation) | [Fonctionnalités](#fonctionnalités) | [Configuration](#configuration) | [MCP](#mcp-model-context-protocol) | [Home Assistant](#home-assistant)
 
 </div>
 
+
 ---
 
-> **Version DEV** - Ce projet est en cours de développement actif. Des bugs peuvent être présents et certaines fonctionnalités peuvent ne pas fonctionner comme prévu.
 
 ## Vue d'ensemble
 
-**MynetworK** est un dashboard unifié permettant de gérer et surveiller plusieurs sources de données réseau local via :
+**MynetworK** est un dashboard unifié permettant de gérer et surveiller plusieurs sources de données réseau local :
+
+![Capture Dashboard](https://github.com/Erreur32/MynetworK/blob/main/img-capture/dashboard.png?raw=true)
 
 - **Freebox** - Gestion complète de votre Freebox (Ultra, Delta, Pop)
 - **UniFi Controller** - Surveillance et gestion de votre infrastructure UniFi
-- **Scan Réseau** - Détection et analyse des appareils réseau avec détection automatique des vendors
-
-<details>
-<summary>Cliquez pour voir l'image</summary>
-
-![Capture MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/mynetwork_scan.png?raw=true)
-
-</details>
+- **Scan Réseau** - Détection et analyse des appareils réseau avec détection automatique des fabricants
 
 
-### ✨ Principales fonctionnalités
+
+
+## Fonctionnalités
 
 - 🔐 **Authentification utilisateur** - Système JWT avec gestion des rôles (admin, user, viewer)
 - 🔌 **Système de plugins** - Architecture modulaire pour ajouter facilement de nouvelles sources
@@ -69,6 +70,28 @@
 - 👥 **Gestion des utilisateurs** - Interface d'administration pour gérer les accès
 - 🐳 **Docker Ready** - Déploiement simplifié avec Docker Compose
 - 🌐 **Internationalisation (i18n)** - Anglais (par défaut) et français ; sélecteur de langue dans l'en-tête. Voir [Docs/INTERNATIONALIZATION.md](Docs/INTERNATIONALIZATION.md).
+- 🤖 **Serveur MCP** - Serveur [Model Context Protocol](https://modelcontextprotocol.io) natif pour Freebox, UniFi et le scanner réseau, réseau local uniquement. Voir [MCP](#mcp-model-context-protocol) plus bas.
+
+> [!TIP]
+>  
+> <details>
+> <summary> 🖼️ Cliquez pour voir d'autres captures</summary>
+> 
+> ![Search Ip](https://github.com/Erreur32/MynetworK/blob/main/img-capture/search_ip.png?raw=true)
+>
+> ![MyNetwork Scan](https://github.com/Erreur32/MynetworK/blob/main/img-capture/Scan_network.png?raw=true)
+>
+> ![Unifi Tab](https://github.com/Erreur32/MynetworK/blob/main/img-capture/unifi_tab.png?raw=true)
+>
+> ![Topology](https://github.com/Erreur32/MynetworK/blob/main/img-capture/mynetwork_topology.png?raw=true)
+> 
+> </details>
+
+ 
+> [!NOTE]
+> Une version dédiée et **pleinement fonctionnelle** pour **Home Assistant** est disponible ici :   [https://github.com/Erreur32/HA_mynetwork](https://github.com/Erreur32/HA_mynetwork)
+> 
+
 
 ## Installation
 
@@ -90,7 +113,7 @@ services:
       - "${DASHBOARD_PORT:-7505}:3000"
 
     environment:
-      # 🔐 SECRET OBLIGATOIRE (aucun fallback en production)
+      # Secret obligatoire (aucun fallback en production)
       JWT_SECRET: ${JWT_SECRET}
 
       # Configuration
@@ -98,7 +121,7 @@ services:
       FREEBOX_HOST: ${FREEBOX_HOST:-mafreebox.freebox.fr}
       FREEBOX_TOKEN_FILE: /app/data/freebox_token.json
 
-      # Accès métriques host
+      # Accès aux métriques de l'hôte
       HOST_ROOT_PATH: ${HOST_ROOT_PATH:-/host}
 
       # PUBLIC_URL (optionnel, uniquement avec reverse proxy)
@@ -108,7 +131,7 @@ services:
       # Données persistantes (token Freebox, base locale, etc.)
       - ./data:/app/data
 
-      # Métriques hôte (lecture seule) — CPU, RAM, réseau, table ARP, hostname
+      # Métriques de l'hôte (lecture seule) — CPU, RAM, réseau, table ARP, hostname
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc/hostname:/host/etc/hostname:ro
@@ -133,12 +156,12 @@ services:
 ```
 
 > [!IMPORTANT]
-> **v0.7.80 Breaking Change :** Les volumes Docker ont change. `/:/host:ro` et `docker.sock` retires pour securite. Voir le [CHANGELOG](CHANGELOG.md#0780---2026-04-15) pour les instructions de migration.
+> **Changement majeur v0.7.80 :** Les volumes Docker ont changé. Les montages `/:/host:ro` et `docker.sock` ont été retirés pour raisons de sécurité. Voir le [CHANGELOG](CHANGELOG.md#0780---2026-04-15) pour les instructions de migration.
 
 **Lancement :**
 
 ```bash
-# Lancer avec Docker Compose
+# Démarrer avec Docker Compose
 docker-compose up -d
 
 # Voir les logs
@@ -152,201 +175,411 @@ docker-compose pull
 docker-compose up -d
 ```
 
-**✅ Recommandation :** Utilisez le **fichier [.env](#configuration-sécurisée-de-jwt_secret)** à la racine. Docker Compose le lit automatiquement et injecte `JWT_SECRET` dans le conteneur.
+**Recommandation :** Utilisez le **[fichier .env](#configuration-sécurisée-de-jwt_secret)** (`.env` à la racine du projet) ; Docker Compose le lit automatiquement et injecte `JWT_SECRET` dans le conteneur.
 
-> 💡 **Plus d'infos :** Consultez la section [🔒 Configuration sécurisée de JWT_SECRET](#configuration-sécurisée-de-jwt_secret) pour les méthodes de configuration, bonnes pratiques et vérification.
+> Pour plus de détails, voir la section [Configuration sécurisée de JWT_SECRET](#configuration-sécurisée-de-jwt_secret) pour toutes les méthodes de configuration, les bonnes pratiques de sécurité et la vérification.
 
 Le dashboard sera accessible sur :
 - **http://localhost:7505** - depuis la machine hôte
 - **http://IP_DU_SERVEUR:7505** - depuis un autre appareil du réseau
 
 <details>
-<summary><strong>⚙️ Configuration avancée</strong></summary>
+<summary><strong>Configuration avancée</strong></summary>
 
 ### Optionnel : Fichier de configuration externe (`.conf`)
 
-1. **Créer le fichier :**
+Vous pouvez utiliser un fichier `.conf` externe pour la configuration :
+
+1. **Créer le fichier de config :**
    ```bash
    cp config/mynetwork.conf.example config/mynetwork.conf
    # Éditez config/mynetwork.conf selon vos besoins
    ```
 
-2. **Monter dans Docker :** Décommentez dans `docker-compose.yml` :
+2. **Monter le fichier dans Docker :**  
+   Décommentez la ligne dans `docker-compose.yml` :
    ```yaml
    volumes:
      - mynetwork_data:/app/data
      - ./config/mynetwork.conf:/app/config/mynetwork.conf:ro
    ```
 
-3. **Synchronisation :** Au démarrage, si le `.conf` existe → import en base ; sinon → export de la config actuelle.
+3. **Synchronisation automatique :**
+   - Au démarrage, si le fichier `.conf` existe → import en base de données
+   - Si le fichier n'existe pas → export de la configuration actuelle
 
-4. **API :** `GET /api/config/export`, `POST /api/config/import`, `GET /api/config/file`, `POST /api/config/sync`.
+4. **Endpoints API :**
+   - `GET /api/config/export` - Exporter la configuration actuelle
+   - `POST /api/config/import` - Importer depuis le fichier
+   - `GET /api/config/file` - Vérifier le statut du fichier
+   - `POST /api/config/sync` - Synchronisation manuelle
 
 #### Nginx (reverse proxy)
 
-Sans nginx : pas de `PUBLIC_URL`. Avec nginx : définir `PUBLIC_URL` (ex. `http://mynetwork.example.com`). Voir `Docs/nginx.example.conf` pour un exemple complet.
+Si vous utilisez **nginx** comme reverse proxy devant MynetworK, définissez `PUBLIC_URL` avec l'URL publique (via nginx), pas l'URL du conteneur Docker.
+
+**Cas 1 : Sans nginx (accès direct)**  
+Pas besoin de `PUBLIC_URL`. L'application fonctionne sur le port mappé (ex. `http://VOTRE_IP:7505`).
+
+**Cas 2 : Avec nginx (reverse proxy)**
+
+1. **Config nginx :** Voir `Docs/nginx.example.conf` pour un exemple complet.
+2. **docker-compose.yml :**
+   ```yaml
+   environment:
+     - PUBLIC_URL=http://mynetwork.example.com
+     # Ou avec HTTPS :
+     # - PUBLIC_URL=https://mynetwork.example.com
+   ```
+3. **Exemple nginx minimal :**
+   ```nginx
+   server {
+       listen 80;
+       server_name mynetwork.example.com;
+       location / {
+           proxy_pass http://192.168.1.150:7505;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+   ```
+4. **Avantages de nginx :** SSL/HTTPS (ex. Let's Encrypt), plusieurs services sur un même serveur, cache, URLs propres.
+
+Voir `Docs/nginx.example.conf` pour une configuration HTTP/HTTPS complète.
 
 </details>
 
 <details id="configuration-sécurisée-de-jwt_secret">
-<summary><strong>🔒 Configuration sécurisée de JWT_SECRET</strong></summary>
+<summary><strong>Configuration sécurisée de JWT_SECRET</strong></summary>
 
-**⚠️ CRITIQUE :** Le secret JWT par défaut est pour le **développement** uniquement. En production, définir une variable d'environnement `JWT_SECRET` unique et robuste.
+**Critique - Sécurité :** Le secret JWT par défaut (`change-me-in-production-please-use-strong-secret`) est réservé au **développement**. En production, vous **devez** définir la variable d'environnement `JWT_SECRET` avec une valeur unique et robuste.
 
-#### Pourquoi c'est important ?
+#### Pourquoi c'est important
 
-Le `JWT_SECRET` signe et vérifie les tokens JWT. Un secret faible permet à un attaquant de forger des tokens, d'accéder au système sans authentification et de modifier les permissions.
+`JWT_SECRET` sert à signer et vérifier les tokens JWT d'authentification. Un secret faible ou par défaut permet à un attaquant de :
+- Forger des JWT valides et usurper l'identité de n'importe quel utilisateur
+- Accéder au système sans authentification (accès admin complet)
+- Compromettre tous les utilisateurs et leurs données
+- Modifier les permissions et accéder aux fonctionnalités restreintes
 
-#### Méthodes (recommandation)
+#### Où c'est utilisé
 
-**1. Fichier `.env` à la racine (recommandé)**
+`JWT_SECRET` est chargé au démarrage du serveur dans `server/services/authService.ts` depuis `process.env.JWT_SECRET`. S'il n'est pas défini, la valeur par défaut est utilisée et un avertissement est loggé. Le secret sert à signer les tokens à la connexion et à les vérifier sur les requêtes authentifiées.
 
-1. Générer un secret : `openssl rand -base64 32`
-2. Créer `.env` :
+## Dépendances et chaîne d'approvisionnement
+
+MynetworK tourne entièrement sur votre machine et ne communique qu'avec les équipements réseau que vous configurez (Freebox / UniFi / votre LAN). L'application n'envoie jamais de données vers un serveur tiers. La liste complète des paquets npm utilisés est dans [`package.json`](./package.json) ; voici ce qu'il est important de savoir.
+
+### Runtime — backend (Node / Express)
+
+| Paquet | Utilisé pour | Notes |
+| --- | --- | --- |
+| `express` | Serveur HTTP | Stable, largement audité |
+| `helmet` | En-têtes de sécurité (CSP, HSTS, X-Frame-Options…) | Défense en profondeur |
+| `express-rate-limit` | Limitation des routes API et d'écriture, compatible IPv6 | |
+| `compression` | Compression gzip des réponses | |
+| `cors` | Règles CORS | Configuration restrictive par défaut |
+| `bcrypt` | Hachage des mots de passe | |
+| `jsonwebtoken` | Émission / vérification des JWT | Voir `JWT_SECRET` ci-dessus |
+| `better-sqlite3` | Base de données locale (données, sessions, scans, snapshots de topologie, placements manuels) | Le fichier de base se trouve dans le volume monté `./data` — à sauvegarder comme n'importe quelle base |
+| `node-cron` | Rafraîchissement quotidien de la topologie + scans planifiés | Local uniquement, aucun accès internet |
+| `ws` | WebSockets pour les mises à jour temps réel de l'UI | Écoute sur le même port que le serveur HTTP |
+
+### Runtime — frontend (React / Vite)
+
+| Paquet | Utilisé pour | Notes |
+| --- | --- | --- |
+| `react` / `react-dom` | Framework UI | |
+| `react-router-dom` | Routage côté client | |
+| `zustand` | Gestion d'état | |
+| `i18next` / `react-i18next` | Traductions anglais / français | |
+| `recharts` | Graphiques en barres / lignes du dashboard | Amène `d3-shape`, `d3-scale`, `d3-array`, etc. en dépendances transitives |
+| `@xyflow/react` (React Flow) | Graphe de topologie interactif (`/topology`) | Amène `d3-zoom`, `d3-drag`, `d3-selection`, `d3-interpolate` |
+| `dagre` | Disposition arborescente/hiérarchique de la topologie | |
+| `html-to-image` | Export PNG / SVG de la topologie | Entièrement dans le navigateur, aucun upload |
+| `jspdf` | Export PDF de la topologie (A4, raster) | Navigateur uniquement |
+| `lucide-react` | Icônes | |
+| `react-markdown` + `remark-gfm` | Affichage du changelog dans l'app | Assaini |
+| `leaflet` + `leaflet.markercluster` | Vue carte | |
+| `sonner` | Notifications toast | |
+
+### Considérations de sécurité
+
+- **Aucune télémétrie.** Aucun de ces paquets ne contacte un serveur tiers pendant l'exécution de l'application. Le conteneur Docker n'a pas besoin d'accès internet sortant pour fonctionner — il ne contacte que les équipements de votre LAN que vous configurez.
+- **Librairies d'export (`html-to-image`, `jspdf`)** sont 100 % côté client. Les fichiers PNG / PDF / SVG générés restent dans votre navigateur, rien n'est envoyé.
+- **Stack topologie (`@xyflow/react`, `dagre`)** s'exécute dans le navigateur et sur un snapshot SQLite. Le snapshot ne contient que des données déjà accessibles à vos plugins actifs (équipements Freebox / UniFi de votre LAN).
+- **Stack graphiques (`recharts`)** n'affiche que des données locales.
+- **Chaîne d'approvisionnement.** Dependabot est activé sur ce dépôt et propose des mises à jour hebdomadaires. Snyk tourne à chaque push (`Snyk Security` en CI). SonarCloud tourne à chaque push pour signaler les changements suspects.
+- **Builds reproductibles.** `package-lock.json` est versionné. L'image Docker publiée est construite depuis un commit taggé par GitHub Actions (workflow `Build & Push Docker Image`) et poussée sur GHCR, ce qui permet de vérifier ce qui tourne réellement.
+- **Mise à jour.** Récupérez la nouvelle image depuis GHCR (`docker compose pull && docker compose up -d`). La version en cours d'exécution est affichée dans le pied de page de l'UI et au démarrage dans les logs du conteneur.
+
+Si vous découvrez une faille de sécurité, merci d'ouvrir une alerte de sécurité privée GitHub plutôt qu'une issue publique.
+
+## Configuration 
+
+#### Méthodes de configuration (ordre recommandé)
+
+##### 1. **Fichier `.env` (recommandé pour la production)**
+
+Docker Compose lit automatiquement `.env` à la racine du projet.
+
+1. **Générer un secret robuste** (au moins 32 caractères) :
    ```bash
-   JWT_SECRET=votre_secret_ici_minimum_32_caracteres
+   # Linux/macOS :
+   openssl rand -base64 32
+   
+   # Windows PowerShell :
+   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+   ```
+
+2. **Créer un fichier `.env`** à la racine du projet :
+   ```bash
+   # .env
+   JWT_SECRET=votre_secret_genere_minimum_32_caracteres
+   
    DASHBOARD_PORT=7505
    FREEBOX_HOST=mafreebox.freebox.fr
    PUBLIC_URL=https://mynetwork.example.com
    ```
-3. Restreindre : `chmod 600 .env`
-4. Démarrer : `docker-compose up -d`
 
-**2. Fichier personnalisé :** `docker-compose --env-file .env.production up -d`
+3. **Restreindre les permissions :**
+   ```bash
+   chmod 600 .env
+   ```
+
+4. **Démarrer avec Docker Compose :**
+   ```bash
+   docker-compose up -d
+   ```
+
+##### 2. **`.env` avec `--env-file`**
+
+```bash
+echo "JWT_SECRET=$(openssl rand -base64 32)" > .env.production
+docker-compose --env-file .env.production up -d
+```
 
 #### Vérification
+
+Après le démarrage, vérifiez qu'un secret personnalisé est utilisé :
 
 ```bash
 docker-compose logs | grep -i "jwt\|secret"
 ```
 
-Dans l'interface : **Administration > Sécurité** → section « Configuration JWT ».
+Si vous voyez un avertissement comme : *"Using default JWT secret. Please set JWT_SECRET..."*, alors `JWT_SECRET` n'a pas été correctement défini.
 
-#### Bonnes pratiques
+**Dans l'interface web :** Administration → Sécurité → la section « Configuration JWT » indique si le secret par défaut est utilisé.
 
-- Longueur minimale 32 caractères (64 recommandé)
-- Caractères aléatoires, unicité par instance
-- `.env` en `chmod 600`, dans `.gitignore`
-- Rotation régulière (6–12 mois) ou en cas de compromission
+#### Bonnes pratiques de sécurité
 
-#### Rotation du secret
+1. **Longueur :** Au moins **32 caractères** (64 recommandé)
+2. **Aléatoire :** Utilisez des données aléatoires, pas des mots de passe prévisibles
+3. **Unicité :** Chaque instance de production doit avoir son propre secret
+4. **Stockage :** Restreignez les permissions de `.env` (`chmod 600`), ajoutez `.env` au `.gitignore`, utilisez un gestionnaire de secrets pour les déploiements critiques
+5. **Rotation :** Changez le secret périodiquement (ex. tous les 6-12 mois) ou en cas de suspicion de compromission
+6. **Dev vs prod :** Utilisez des secrets différents pour le développement et la production
 
-1. Nouveau secret : `openssl rand -base64 32`
+#### Rotation du secret JWT
+
+1. Générer un nouveau secret : `openssl rand -base64 32`
 2. Mettre à jour `.env` : `JWT_SECRET=nouveau_secret`
 3. Redémarrer : `docker-compose restart`
-4. Tous les utilisateurs devront se reconnecter.
+4. Tous les utilisateurs devront se reconnecter (les tokens existants sont invalidés).
+
+#### Exemple de `.env`
+
+```bash
+# .env – Production
+
+JWT_SECRET=votre_secret_genere_par_openssl
+
+DASHBOARD_PORT=7505
+FREEBOX_HOST=mafreebox.freebox.fr
+PUBLIC_URL=https://mynetwork.example.com
+```
 
 </details>
 
 
 ## Première connexion
 
-1. Accédez au dashboard (http://localhost:7505 ou votre IP).
-2. Identifiants par défaut : **Username** `admin`, **Password** `admin123`.
-3. ⚠️ **Changez le mot de passe immédiatement après la première connexion !**
+1. Ouvrez le dashboard (http://localhost:7505 ou l'IP de votre serveur).
+2. Connectez-vous avec les identifiants par défaut :
+   - **Utilisateur :** `admin`
+   - **Mot de passe :** `admin123`
+3. **Changez le mot de passe immédiatement après la première connexion.**
 4. Configurez vos plugins dans la page **Plugins**.
 
 <details>
-<summary><strong>🎨 Fonctionnalités</strong></summary>
+<summary><strong>Fonctionnalités</strong></summary>
 
 ### Dashboard principal
-- **Statistiques multi-sources** - Données unifiées de tous les plugins
+- **Statistiques multi-sources** - Vue unifiée des données de tous les plugins
 - **Graphiques en temps réel** - Débits, connexions, statistiques
-- **Vue d'ensemble réseau** - État global de l'infrastructure
+- **Vue d'ensemble réseau** - État global de votre infrastructure
 
 ### Gestion des plugins
-- **Configuration centralisée** - Interface par plugin
-- **Activation / Désactivation** - Contrôle de chaque source
-- **Statut de connexion** - État de chaque plugin
+- **Configuration centralisée** - Interface pour configurer chaque plugin
+- **Activation/désactivation** - Contrôle fin de chaque source de données
+- **Statut de connexion** - Vérifier l'état de chaque plugin
 
 ### Freebox (plugin)
-- **Dashboard complet** - WiFi, LAN, Téléchargements, VMs, TV, Téléphone
+- **Dashboard complet** - Toutes les fonctionnalités Freebox (WiFi, LAN, Téléchargements, VMs, TV, Téléphone)
 - **Compatibilité** - Ultra, Delta, Pop
 - **API native** - API officielle Freebox OS
 
 ### UniFi Controller (plugin)
-- **Surveillance réseau** - AP, clients, trafic
+- **Surveillance réseau** - Stats des AP, clients, trafic
 - **Multi-sites** - Plusieurs sites UniFi
-- **Données en temps réel** - Mise à jour automatique
-- **Dual API** - Controller local et Site Manager API (cloud)
-- **Badges de stats** - Stats système dans l'en-tête
+- **Données temps réel** - Mise à jour automatique des statistiques
+- **Dual API** - Controller local (node-unifi) et Site Manager API (cloud)
+- **Badges de stats** - Statistiques système dans l'en-tête (débit, uptime, équipements)
 
 ### Scan Réseau (plugin)
-- **Détection automatique** - Scan complet (IP, MAC, hostnames)
-- **Détection vendors** - Fabricants via base Wireshark, Freebox/UniFi ou API
-- **Scan automatique** - Scans périodiques (full + refresh)
-- **Historique** - Évolution des appareils avec graphiques
-- **Base Wireshark** - Intégration `manuf` et mise à jour auto
-- **Priorité** - Ordre hostname/vendor (Freebox, UniFi, Scanner)
-- **Interface** - Tableau interactif, tri, filtres, recherche, édition inline
+- **Découverte automatique** - Scan complet du réseau local (IPs, MAC, hostnames)
+- **Détection de fabricant** - Identification automatique du fabricant (base Wireshark, Freebox/UniFi, ou API externe)
+- **Scans planifiés** - Scan complet et rafraîchissement périodiques
+- **Historique** - Évolution des équipements dans le temps avec graphiques
+- **Base de fabricants Wireshark** - Intégration complète avec `manuf` de Wireshark et mise à jour auto
+- **Système de priorité** - Ordre de détection hostname/fabricant (Freebox, UniFi, Scanner)
+- **Interface moderne** - Tableau interactif avec tri, filtres, recherche et édition inline du hostname
 
 ### Gestion des utilisateurs (admin)
-- **CRUD** - Création, modification, suppression
-- **Rôles** - admin, user, viewer
-- **Sécurité** - Mots de passe hashés (bcrypt)
+- **CRUD complet** - Créer, modifier, supprimer des utilisateurs
+- **Rôles** - Permissions (admin, user, viewer)
+- **Sécurité** - Mots de passe hashés avec bcrypt
 
 ### Logs d'activité (admin)
-- **Traçabilité** - Toutes les actions enregistrées
-- **Filtres** - Par utilisateur, plugin, action, niveau, période
-- **Export** - À venir
+- **Traçabilité complète** - Toutes les actions sont loggées
+- **Filtres avancés** - Par utilisateur, plugin, action, niveau, période
+- **Export** - Export des logs (prévu)
 
 </details>
 
 <details>
-<summary><strong>🏗️ Architecture</strong></summary>
+<summary><strong>Architecture</strong></summary>
 
-- **Frontend React** (TypeScript) - Interface utilisateur
+MynetworK utilise une architecture modulaire :
+- **Frontend React** (TypeScript) - Interface utilisateur moderne
 - **Backend Express** (TypeScript) - API REST et WebSocket
-- **SQLite** - Configurations et données
-- **Système de plugins** - Architecture extensible
+- **Base de données SQLite** - Stockage de la configuration et des données
+- **Système de plugins** - Architecture extensible pour de nouvelles sources de données
 
-Voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md).
+Voir [DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md) pour les détails.
 
 </details>
 
 <details>
-<summary><strong>📚 Documentation</strong></summary>
+<summary><strong>Documentation</strong></summary>
 
-### Utilisateurs
-- **[CHANGELOG.md](CHANGELOG.md)** - Journal des changements
+### Pour les utilisateurs
+- **[CHANGELOG.md](CHANGELOG.md)** - Journal des changements et nouvelles fonctionnalités
 
-### Développeurs
-**[DEV/README-DEV.md](DEV/README-DEV.md)** - Documentation de développement.
+### Pour les développeurs
+Voir **[DEV/README-DEV.md](DEV/README-DEV.md)** pour la documentation de développement.
 
-- **[DEV/DOCUMENTATION.md](DEV/DOCUMENTATION.md)** - Index
-- **[DEV/GUIDE_DEVELOPPEMENT.md](DEV/GUIDE_DEVELOPPEMENT.md)** - Guide développeurs
-- **[DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md)** - Architecture plugins
+**Documents principaux :**
+- **[DEV/DOCUMENTATION.md](DEV/DOCUMENTATION.md)** - Index de la documentation
+- **[DEV/GUIDE_DEVELOPPEMENT.md](DEV/GUIDE_DEVELOPPEMENT.md)** - Guide développeur
+- **[DEV/ARCHITECTURE_PLUGINS.md](DEV/ARCHITECTURE_PLUGINS.md)** - Architecture des plugins
 
-**Dossier Docs ([Docs/](Docs/))** : Guides d’installation et de production (UniFi, Freebox, variables d’environnement, Nginx, dépannage, réinitialisation). Les principaux documents existent en **anglais** et en **français** (voir [Docs/README.md](Docs/README.md)).
+**Dossier Docs ([Docs/](Docs/)) :** Guides d'installation et de production (UniFi, Freebox, variables d'environnement, Nginx, dépannage, réinitialisation). Les principaux documents existent en **anglais** et en **français** (voir [Docs/README.md](Docs/README.md)).
 
 </details>
+
+## Home Assistant
+
+> [!IMPORTANT]
+> Une version dédiée et **pleinement fonctionnelle** pour **Home Assistant** est disponible :  
+> [![HA Repo](https://img.shields.io/badge/Home%20Assistant-Dedicated%20Version-41C483?style=for-the-badge&logo=homeassistant&logoColor=white)](https://github.com/Erreur32/HA_mynetwork)  
+> 
+> - **Intégration HACS** prête à l'emploi
+> - Support **Add-on**
+> - **Optimisé** pour HA Supervisor/Docker
+> - **Auto-découverte** des réseaux Freebox/UniFi
+
+Voir le [dépôt HA](https://github.com/Erreur32/HA_mynetwork) pour l'installation.
+
+
+
+## MCP (Model Context Protocol)
+
+MynetworK embarque un serveur [MCP](https://modelcontextprotocol.io) natif : un client MCP (Claude Desktop, Claude Code...) peut ainsi interroger et piloter directement votre Freebox, votre contrôleur UniFi et le scanner réseau, sans passer par l'interface web.
+
+- **Réseau local uniquement** - non exposé via le reverse proxy ; protégé par une liste blanche d'IP (RFC1918 + loopback) en plus d'un jeton dédié
+- **Jeton dédié** - distinct de la session JWT web, généré uniquement en ligne de commande (jamais depuis le panneau admin, potentiellement exposé sur internet, alors que l'endpoint MCP doit rester strictement local)
+- **Statut en lecture seule dans l'UI admin** - l'onglet "MCP" affiche l'état (activé/désactivé), si un jeton est configuré, l'endpoint et la dernière utilisation ; le jeton lui-même n'est jamais affiché
+
+### Configuration
+
+```bash
+# Génère (ou renouvelle) le jeton d'accès - à exécuter sur le serveur, affiché une seule fois
+npm run mcp:token
+```
+
+Configurez votre client MCP avec l'URL affichée (`http://<IP-LAN>:<PORT>/api/mcp`) et l'en-tête `Authorization: Bearer <jeton>`. Relancer `npm run mcp:token` renouvelle le jeton et révoque l'ancien.
+
+### Outils disponibles
+
+| Source | Lecture | Écriture |
+|---|---|---|
+| **Freebox** | infos système, statut connexion, WiFi/stations, hôtes LAN, config/baux DHCP, ports switch, journal d'appels, contacts | reboot, activer/désactiver WiFi/BSS, ajouter un bail DHCP statique |
+| **UniFi** | équipements, clients, WLANs, config réseau, règles de redirection de ports, rapport de bande passante, infos système, sites | bloquer/débloquer un client, activer/désactiver un WLAN, redémarrer un équipement |
+| **Scanner réseau** | statistiques, équipements, équipement par IP, liste noire | lancer/relancer un scan, ajouter une IP manuellement, renommer un hôte, ajouter/retirer de la liste noire |
+
+Les actions d'écriture se limitent à des opérations non destructives (aucune suppression de données), même si certaines restent disruptives par nature (un reboot ou un redémarrage coupe brièvement la connectivité — les descriptions des outils l'indiquent explicitement).
 
 ## Sécurité
 
 - **Authentification JWT** - Tokens sécurisés avec expiration
-- **Hash des mots de passe** - bcrypt
+- **Hash des mots de passe** - bcrypt avec salt rounds
 - **Middleware d'authentification** - Protection des routes sensibles
-- **Logging** - Traçabilité
-- **Rôles** - Permissions granulaires
+- **Logging des actions** - Traçabilité complète
+- **Accès basé sur les rôles** - Permissions granulaires
 
 ## Contribution
 
-Les contributions sont les bienvenues. Respectez le style de code (4 espaces, camelCase, commentaires en anglais), ajoutez des types TypeScript et documentez les nouvelles fonctionnalités.
+Les contributions sont les bienvenues.
+
+### Recommandations
+
+- Respectez le style de code existant (4 espaces, camelCase, commentaires en anglais)
+- Ajoutez des types TypeScript pour le nouveau code
+- Testez les changements avant de soumettre
+- Documentez les nouvelles fonctionnalités
+- Respectez les fichiers de règles du projet
 
 ## Licence
 
-Ce projet est sous licence MIT. Voir [LICENSE](LICENSE).
+Ce projet est sous licence MIT. Voir [LICENSE](LICENSE) pour plus de détails.
 
 ## Remerciements
 
-- **Projet original :** [FreeboxOS-Ultra-Dashboard](https://github.com/HGHugo/FreeboxOS-Ultra-Dashboard) par [HGHugo](https://github.com/HGHugo)
-- [Free](https://www.free.fr), [Freebox SDK](https://dev.freebox.fr), [Ubiquiti](https://www.ui.com), et la communauté open source
+### Projet original
+
+Ce projet s'inspire fortement de **Freebox OS Ultra Dashboard** par [HGHugo](https://github.com/HGHugo/FreeboxOS-Ultra-Dashboard). Merci à l'auteur original pour ce travail qui a servi de base à MynetworK.
+
+**Projet original :** [FreeboxOS-Ultra-Dashboard](https://github.com/HGHugo/FreeboxOS-Ultra-Dashboard)
+
+### Autres
+
+- [Free](https://www.free.fr) pour la Freebox et son API ouverte
+- [Freebox SDK](https://dev.freebox.fr) pour la documentation de l'API
+- [Ubiquiti](https://www.ui.com) pour UniFi
+- La communauté open source pour les librairies utilisées
 
 ---
 
 <div align="center">
 
-**Fait avec ❤️ pour la gestion multi-sources de réseaux**
+**Fait avec ❤️ pour la gestion réseau multi-sources**
 
 **MynetworK - Dashboard réseau multi-sources**
 

@@ -41,7 +41,7 @@
 
 **A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
-[Installation](#installation) | [Features](#features) | [Configuration](#configuration) | [Analytics](#analytics-privacy) | [Home Assistant](#home-assistant)
+[Installation](#installation) | [Features](#features) | [Configuration](#configuration) | [Analytics](#analytics-privacy) | [MCP](#mcp-model-context-protocol) | [Home Assistant](#home-assistant)
 
 </div>
 
@@ -71,6 +71,7 @@
 - 👥 **User management** - Administration interface to manage access
 - 🐳 **Docker ready** - Simplified deployment with Docker Compose
 - 🌐 **Internationalization (i18n)** - English (default) and French; language switcher in header. See [Docs/INTERNATIONALIZATION.md](Docs/INTERNATIONALIZATION.md).
+- 🤖 **MCP server** - Native [Model Context Protocol](https://modelcontextprotocol.io) server for Freebox, UniFi and the network scanner, LAN-only. See [MCP](#mcp-model-context-protocol) below.
 
 > [!TIP]
 >  
@@ -509,6 +510,32 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 
 
 
+## MCP (Model Context Protocol)
+
+MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MCP client (e.g. Claude Desktop, Claude Code) can query and control your Freebox, UniFi controller and network scanner directly — no need to go through the web UI.
+
+- **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback) in addition to a dedicated bearer token
+- **Own auth token** - separate from the JWT web session, generated from the CLI only (never from the admin panel, since that panel may be internet-exposed while the MCP endpoint must stay LAN-only)
+- **Read-only status in the admin UI** - the "MCP" tab shows whether it's enabled, whether a token is configured, the endpoint, and last-used time; it never displays the token itself
+
+### Setup
+
+```bash
+# Generate (or rotate) the access token — run on the server host, prints once
+npm run mcp:token
+```
+
+Configure your MCP client with the printed URL (`http://<LAN-IP>:<PORT>/api/mcp`) and `Authorization: Bearer <token>` header. Re-running `npm run mcp:token` rotates and revokes the previous token.
+
+### Available tools
+
+| Source | Read | Write |
+|---|---|---|
+| **Freebox** | system info, connection status, WiFi status/stations, LAN hosts, DHCP config/leases, switch ports, call log, contacts | reboot, toggle WiFi/BSS, add a DHCP static lease |
+| **UniFi** | devices, clients, WLANs, network config, port forwarding rules, bandwidth report, system info, sites | block/unblock a client, enable/disable a WLAN, restart a device |
+| **Network scanner** | stats, devices, device by IP, blacklist | trigger/rescan a scan, add a manual IP, rename a host, blacklist add/remove |
+
+Write actions are limited to non-destructive operations (nothing deletes data), though some are disruptive by nature (a reboot or a device restart briefly interrupts connectivity — tool descriptions flag this explicitly).
 
 ## Security
 
