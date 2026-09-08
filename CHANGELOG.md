@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.6] - 2026-09-08
+
+### Fixed
+
+- `scripts/mcp-token.ts` / `server/services/mcpAuthService.ts`: `npm run mcp:token` could print "MCP token generated" and a working-looking token even when persisting it to the database silently failed (e.g. a read-only SQLite file) — the token was never actually saved and would never authenticate. `generateToken()` now throws when the hash can't be persisted, and the CLI script exits non-zero with a clear error instead of a false success.
+- README (EN/FR) and the admin MCP Setup tab: the documented `docker exec -it mynetwork npm run mcp:token` command fails with a SQLite "readonly database" error on the default hardened compose (`cap_drop: ALL` without `CAP_DAC_OVERRIDE`) — `docker exec` without `-u` attaches as a different user than the app's own process, which owns the database file. Fixed the documented command to `docker exec -it -u node mynetwork npm run mcp:token`, with an explanation of why `-u node` is required.
+
+---
+
 ## [0.10.5] - 2026-09-08
 
 ### Fixed

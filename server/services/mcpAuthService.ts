@@ -27,10 +27,21 @@ class McpAuthService {
    * Generate a new token, store its hash, and return the plaintext value.
    * The caller (scripts/mcp-token.ts) is responsible for displaying it once.
    * Re-running this rotates/revokes the previous token.
+   *
+   * Throws if the hash can't be persisted — e.g. a read-only database file
+   * (common when `docker exec` runs as a different user than the app's
+   * process, which owns the SQLite file) — rather than returning a token
+   * that looks valid but was never actually saved.
    */
   generateToken(): string {
     const token = crypto.randomBytes(TOKEN_BYTES).toString("hex");
-    AppConfigRepository.set(TOKEN_HASH_KEY, this.hash(token));
+    const hashSaved = AppConfigRepository.set(TOKEN_HASH_KEY, this.hash(token));
+    if (!hashSaved) {
+      throw new Error(
+        "Failed to persist the MCP token hash to the database — the token was NOT saved and will not work. " +
+          "This usually means the database file is not writable by the current user (see server logs above for the underlying error).",
+      );
+    }
     AppConfigRepository.set(CREATED_AT_KEY, new Date().toISOString());
     AppConfigRepository.delete(LAST_USED_KEY);
     this.lastPersistedUseMs = 0;

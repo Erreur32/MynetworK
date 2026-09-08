@@ -192,7 +192,7 @@
       "step1Intro": "Run on the server host. Prints the token once — it is never shown again, and never displayed in this panel.",
       "dockerLabel": "Docker (production)",
       "localLabel": "Local / dev",
-      "dockerNote": "Container name is \"mynetwork\" by default — adjust if you renamed it in docker-compose.yml. Re-running this command rotates the token and revokes the previous one immediately.",
+      "dockerNote": "Container name is \"mynetwork\" by default — adjust if you renamed it in docker-compose.yml. The \"-u node\" matters: without it, docker exec attaches as a different user than the app's own process (which owns the database file), and fails with a SQLite \"readonly database\" error — the token would print but never actually save. Re-running this command rotates the token and revokes the previous one immediately.",
       "step2Title": "2. Connect a client",
       "step2Intro": "The server speaks the standard MCP Streamable HTTP transport — pick your client below.",
       "clientClaudeCode": "Claude Code",

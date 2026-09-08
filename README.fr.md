@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.5-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.6-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -523,13 +523,13 @@ MynetworK embarque un serveur [MCP](https://modelcontextprotocol.io) natif : un 
 
 ```bash
 # Docker (production, déploiement par défaut — nom du conteneur : "mynetwork")
-docker exec -it mynetwork npm run mcp:token
+docker exec -it -u node mynetwork npm run mcp:token
 
 # Local / dev (npm run dev sans conteneur)
 npm run mcp:token
 ```
 
-Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.
+Le `-u node` est important : sans lui, `docker exec` s'exécute sous un autre utilisateur que le process de l'appli (qui possède le fichier de base de données) — ça échoue avec une erreur SQLite "readonly database" (le jeton s'affiche mais n'est en réalité jamais enregistré). Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.
 
 ### 2. Connecter un client
 

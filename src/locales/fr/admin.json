@@ -192,7 +192,7 @@
       "step1Intro": "À exécuter sur le serveur. Affiche le jeton une seule fois : il n'est jamais réaffiché, ni visible dans ce panneau.",
       "dockerLabel": "Docker (production)",
       "localLabel": "Local / dev",
-      "dockerNote": "Le nom du conteneur est \"mynetwork\" par défaut, ajustez si vous l'avez renommé dans docker-compose.yml. Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.",
+      "dockerNote": "Le nom du conteneur est \"mynetwork\" par défaut, ajustez si vous l'avez renommé dans docker-compose.yml. Le \"-u node\" est important : sans lui, docker exec s'exécute sous un autre utilisateur que le process de l'appli (qui possède le fichier de base de données), et échoue avec une erreur SQLite \"readonly database\" (le jeton s'affiche mais n'est jamais réellement enregistré). Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.",
       "step2Title": "2. Connecter un client",
       "step2Intro": "Le serveur parle le transport standard MCP Streamable HTTP, choisissez votre client ci-dessous.",
       "clientClaudeCode": "Claude Code",

@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.5-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.6-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -524,13 +524,13 @@ Run on the server host. Prints the token once — it is never shown again, and n
 
 ```bash
 # Docker (production, default deployment — container name is "mynetwork")
-docker exec -it mynetwork npm run mcp:token
+docker exec -it -u node mynetwork npm run mcp:token
 
 # Local / dev (bare npm run dev, no container)
 npm run mcp:token
 ```
 
-Re-running this command rotates the token and revokes the previous one immediately.
+The `-u node` matters: `docker exec` without it attaches as a different user than the app's own process, which owns the database file — omitting it fails with a SQLite "readonly database" error (the token would print but never actually save). Re-running this command rotates the token and revokes the previous one immediately.
 
 ### 2. Connect a client
 

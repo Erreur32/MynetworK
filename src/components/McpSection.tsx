@@ -235,7 +235,7 @@ export const McpSection: React.FC<{
                   </div>
                   <CodeBlock
                     label={t("admin.mcp.dockerLabel")}
-                    code="docker exec -it mynetwork npm run mcp:token"
+                    code="docker exec -it -u node mynetwork npm run mcp:token"
                   />
                   <CodeBlock
                     label={t("admin.mcp.localLabel")}
