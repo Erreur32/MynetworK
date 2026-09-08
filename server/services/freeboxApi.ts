@@ -1,38 +1,15 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import type { Agent } from 'undici';
 import {config, API_ENDPOINTS} from '../config.js';
 import { logger } from '../utils/logger.js';
+import { insecureAgent } from '../utils/insecureAgent.js';
 
 // Export the class for use in plugins
 export { FreeboxApiService };
 
-// Create HTTPS agent with disabled certificate verification for Freebox self-signed certificates
-// This is safe since we're only communicating with the local Freebox
-// Using undici Agent instead of global NODE_TLS_REJECT_UNAUTHORIZED for better security
-let insecureAgent: any = null;
-
-// Lazy initialization of undici Agent to avoid import errors
-const getInsecureAgent = (): any => {
-    if (!insecureAgent) {
-        try {
-            // Dynamic import of undici (built-in in Node.js 18+)
-            const { Agent } = require('undici');
-            insecureAgent = new Agent({
-                connect: {
-                    rejectUnauthorized: false
-                }
-            });
-        } catch (error) {
-            // Fallback: if undici is not available, we'll use the global env var
-            // This should not happen in Node.js 18+, but provides a fallback
-            logger.warn('FreeboxAPI', 'undici not available, falling back to NODE_TLS_REJECT_UNAUTHORIZED');
-            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-            insecureAgent = {}; // Dummy object to avoid null checks
-        }
-    }
-    return insecureAgent;
-};
+const getInsecureAgent = (): Agent => insecureAgent;
 
 interface TokenData {
     appToken: string;

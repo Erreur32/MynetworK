@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.2] - 2026-09-08
+
+### Security
+
+- **Global TLS certificate verification was silently disabled for the entire process since day one.** `freeboxApi.ts` and `UniFiApiService.ts` tried to build a scoped `undici` `Agent` (`rejectUnauthorized: false`) for Freebox/UniFi's self-signed certificates only, via `require('undici')`. That call always failed — `require` doesn't exist in this ESM project, and `undici` wasn't even an installed dependency — so the fallback path ran on every boot, setting `NODE_TLS_REJECT_UNAUTHORIZED=0` for the whole Node process (every outbound HTTPS request, not just Freebox/UniFi). Fixed: added `undici` as a real dependency, pinned to `^6.21.0` to match the undici version bundled inside Node 22's own `fetch()` (`process.versions.undici` = `6.24.1` as of Node 22.22.3) — a newer major (8.x) breaks the internal dispatcher protocol (`invalid onRequestStart method`) since Node's global `fetch()` doesn't accept a dispatcher built by a different undici major. Switched from `require()` to a static ESM `import`, and factored the agent into a shared `server/utils/insecureAgent.ts` (previously duplicated in both files). Verified: `NODE_TLS_REJECT_UNAUTHORIZED` stays `undefined` for the process lifetime, Freebox/UniFi logins still succeed (real device tests).
+
+### Fixed
+
+- Docker production image was missing `scripts/mcp-token.ts` entirely — `.dockerignore` excluded the whole `scripts/` folder from the build context, and the Dockerfile never copied it into either stage. `npm run mcp:token` (documented as the only way to generate the MCP token) would have failed inside a production container with a module-not-found error. Fixed both layers (`.dockerignore` now keeps `scripts/mcp-token.ts` via a negation pattern; `Dockerfile` copies `scripts/` in the builder and runtime stages) and verified end-to-end with a real `docker build` + `docker run npm run mcp:token`, token generated successfully.
+
+---
+
 ## [0.10.1] - 2026-09-08
 
 ### Fixed

@@ -57,8 +57,9 @@ Docs/
 Doc_Dev/
 Aide*
 
-# Scripts (development only)
+# Scripts (development only, except mcp-token.ts which runs inside the container)
 scripts/
+!scripts/mcp-token.ts
 
 # CI/CD
 .github/

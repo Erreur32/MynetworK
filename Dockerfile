@@ -31,6 +31,7 @@ COPY tsconfig.json vite.config.ts index.html postcss.config.js tailwind.config.j
 COPY server ./server
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 RUN npm run build
 
 # Prepare production node_modules (no devDependencies but with compiled binaries).
@@ -86,6 +87,10 @@ COPY --chown=node:node --from=builder /app/dist ./dist
 # Backend TypeScript (run by tsx)
 COPY --chown=node:node --from=builder /app/server ./server
 COPY --chown=node:node --from=builder /app/tsconfig.json ./
+
+# CLI scripts (e.g. npm run mcp:token), run inside the container via
+# `docker compose exec mynetwork npm run mcp:token`
+COPY --chown=node:node --from=builder /app/scripts ./scripts
 
 ENV NODE_ENV=production
 ENV PORT=3000
