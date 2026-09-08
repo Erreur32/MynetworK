@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.5] - 2026-09-08
+
+### Fixed
+
+- `src/components/topology/TopologyGraph.tsx`: last remaining `tsc` error, `handleNodeDragStop` was typed with React's synthetic `React.MouseEvent` while React Flow's `OnNodeDrag` type expects the native `MouseEvent | TouchEvent`. `npx tsc` is now fully clean (0 errors).
+- `scripts/update-version.sh`: the auto-generated `CHANGELOG.md` entry and `commit-message.txt` were pulling in stale, already-released commit messages on every version bump. Two compounding bugs: (1) the commit range lookup only matched `git log --grep="^feat: Version"`, missing every `fix: Version` bump (the majority of recent releases); (2) even fixed, it fell back to dumping the last 10 raw commits whenever the range was empty — which is always the case in this project's workflow (one commit per version bump, no intermediate commits). Both fixed: the grep now matches any conventional-commit prefix, and the fallback was removed so the script produces an honest empty stub instead of stale content when there's nothing new to report yet.
+
+---
+
 ## [0.10.4] - 2026-09-08
 
 ### Changed

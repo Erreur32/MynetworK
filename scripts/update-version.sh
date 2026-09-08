@@ -180,15 +180,17 @@ if grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md 2>/dev/null; then
     # Mettre à jour la date si nécessaire
     sed -i "s/^## \[$NEW_VERSION\] - .*/## [$NEW_VERSION] - $CURRENT_DATE/" CHANGELOG.md
 else
-    # Récupérer les commits depuis le dernier bump de version pour pré-remplir le changelog
+    # Récupérer les commits depuis le dernier bump de version pour pré-remplir le changelog.
+    # Pas de fallback sur "les N derniers commits" : dans le workflow de ce projet, il n'y a
+    # jamais de commit intermédiaire entre deux bumps (un seul commit par version), donc
+    # COMMIT_LINES est systématiquement vide ici et un tel fallback ne ferait que ressortir
+    # les titres de versions déjà publiées à chaque nouveau bump. Laisser vide : le contenu
+    # réel de la version doit toujours être écrit à la main avant de committer.
     COMMIT_LINES=""
     if command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
-        LAST_VERSION_COMMIT=$(git log --grep="^feat: Version" --pretty=format:"%H" -n 1 2>/dev/null)
+        LAST_VERSION_COMMIT=$(git log --grep="^[a-z]*: Version [0-9]" --pretty=format:"%H" -n 1 2>/dev/null)
         if [ -n "$LAST_VERSION_COMMIT" ]; then
             COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges "${LAST_VERSION_COMMIT}..HEAD" 2>/dev/null)
-        fi
-        if [ -z "$COMMIT_LINES" ]; then
-            COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges -n 10 2>/dev/null)
         fi
     fi
 

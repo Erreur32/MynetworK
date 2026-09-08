@@ -1211,7 +1211,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     };
   }, []);
 
-  const handleNodeDragStop = useCallback((_e: React.MouseEvent, node: Node) => {
+  const handleNodeDragStop = useCallback((_e: MouseEvent | TouchEvent, node: Node) => {
     const x = node.position?.x;
     const y = node.position?.y;
     if (typeof x !== "number" || typeof y !== "number") return;
