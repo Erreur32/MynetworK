@@ -84,6 +84,7 @@ import {
   getNodeHeight,
   type LayoutMode,
 } from "./topologyLayout";
+import { FAN_OUT_COUNT } from "./topologyConstants";
 
 type SourcePlugin = "freebox" | "unifi" | "scan-reseau";
 type EdgeMedium = "ethernet" | "wifi" | "uplink" | "virtual";
@@ -599,13 +600,12 @@ function pickEdgeHandles(q: EdgeHandleQuery): PickResult {
   };
 }
 
-// Must match FAN_OUT_COUNT in TopologyNodeCard.tsx — the card renders that
-// many evenly-spaced source handles on its bottom edge (s0..sN-1) and matching
-// target handles on its top edge (t0..tN-1). 24 keeps the source/target X
-// quantization tight enough (~12-14 px on a 300 px infra card, ~7 px on a
-// 170 px client card) that any residual handle-misalignment bend is sub-
-// pixel-perceptible — no visible "tear" or zigzag.
-const FAN_OUT_COUNT = 24;
+// TopologyNodeCard renders FAN_OUT_COUNT evenly-spaced source handles on its
+// bottom edge (s0..sN-1) and matching target handles on its top edge
+// (t0..tN-1). 24 keeps the source/target X quantization tight enough
+// (~12-14 px on a 300 px infra card, ~7 px on a 170 px client card) that any
+// residual handle-misalignment bend is sub-pixel-perceptible — no visible
+// "tear" or zigzag.
 
 // Pick the fan-handle index whose X position (relative to the card's left
 // edge) best matches the supplied target X. The card stores its handles at
@@ -1244,14 +1244,18 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   const nudgeSelected = useCallback(
     (dx: number, dy: number) => {
       if (!selectedId) return;
+      let next: { x: number; y: number } | undefined;
       setManualPositions((prev) => {
         const layoutedNode = reactFlowRef.current?.getNode(selectedId);
         const fallback = layoutedNode?.position;
         const current = prev.get(selectedId) ?? fallback;
         if (!current) return prev;
-        const next = { x: current.x + dx, y: current.y + dy };
+        next = { x: current.x + dx, y: current.y + dy };
         const map = new Map(prev);
         map.set(selectedId, next);
+        return map;
+      });
+      if (next) {
         api
           .post("/api/topology/positions", {
             nodeId: selectedId,
@@ -1261,8 +1265,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
           .catch(() => {
             /* best-effort */
           });
-        return map;
-      });
+      }
     },
     [selectedId],
   );
@@ -1549,18 +1552,26 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     return map;
   }, [layouted.nodes, manualPositions, editableMode]);
 
-  const nodes = useMemo<Node[]>(() => {
+  // Split from the `selected` flag on purpose: recomputing this on every
+  // click would create a new object for all N nodes, forcing React Flow to
+  // re-render every card just to toggle the ring on 1-2 of them.
+  const baseNodes = useMemo<Node[]>(() => {
     return layouted.nodes.map((n) => {
-      const isSelected = n.id === selectedId;
       const pos = finalPositions.get(n.id) ?? n.position;
       return {
         ...n,
         position: pos,
-        selected: isSelected,
         data: { ...n.data, editingMode: dragMode && editableMode },
       };
     });
-  }, [layouted.nodes, finalPositions, selectedId, dragMode, editableMode]);
+  }, [layouted.nodes, finalPositions, dragMode, editableMode]);
+
+  const nodes = useMemo<Node[]>(() => {
+    if (!selectedId) return baseNodes;
+    return baseNodes.map((n) =>
+      n.id === selectedId ? { ...n, selected: true } : n,
+    );
+  }, [baseNodes, selectedId]);
 
   // Re-pick handles using the FINAL positions: when a card is dragged to
   // the left of its parent, the edge should exit from the parent's left

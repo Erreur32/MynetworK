@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.8] - 2026-09-08
+
+### Fixed
+
+- Topology: `SWITCH_INLINE_PORTS_MAX`, `PORT_CELL_WIDTH`, infra/vm-host/client card widths, and `FAN_OUT_COUNT` were each duplicated across two or three of `topologyLayout.ts` / `TopologyNodeCard.tsx` / `TopologyGraph.tsx`, kept in sync only by comments. Centralized into a new `topologyConstants.ts`, removing the drift risk.
+- Topology: `nudgeSelected()` called `api.post()` from inside the `setManualPositions()` state updater, which can run twice under React StrictMode in dev. The network call now runs once, after the state update.
+- Topology: the `nodes` useMemo rebuilt a new object for all graph nodes (~125 on a typical scanned network) on every click just to toggle the `selected` ring on 1-2 of them, forcing React Flow to re-render every card. Split into a `baseNodes` memo (position/editingMode, independent of selection) and a `nodes` memo that only creates a new object for the selected node.
+- Topology, Tree mode: increased dagre `nodesep` (vertical spacing between sibling nodes) from 24 to 40px.
+
+---
+
 ## [0.10.7] - 2026-09-08
 
 ### Added

@@ -6,6 +6,14 @@
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers } from 'lucide-react';
+import {
+    INFRA_CARD_WIDTH,
+    VM_HOST_CARD_WIDTH,
+    CLIENT_CARD_WIDTH,
+    SWITCH_INLINE_PORTS_MAX,
+    PORT_CELL_WIDTH,
+    FAN_OUT_COUNT,
+} from './topologyConstants';
 
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
@@ -165,30 +173,9 @@ function pickLabelClass(inactive: boolean, isInfra: boolean): string {
     return isInfra ? 'text-white' : 'text-slate-100';
 }
 
-const SWITCH_INLINE_PORTS_MAX = 12;
-// Bottom-row port cell footprint (cell width + gap). Must stay in sync with
-// the xs cell size in SwitchPortGrid and with the handle math below.
-const PORT_CELL_WIDTH = 28;
-// Infra cards (gateway/switch/AP/repeater) are intentionally larger than
-// client cards so they read clearly even in a busy graph. Keep in sync with
-// NODE_WIDTH in topologyLayout.ts — dagre needs the same value.
-const INFRA_CARD_WIDTH = 300;
-// vm-host cards carry an extra info row (vmCount + hypervisor), so they get
-// a touch more width than regular infra to keep things uncramped.
-const VM_HOST_CARD_WIDTH = 340;
-// Must match CLIENT_NODE_WIDTH in topologyLayout.ts. Wide enough that the
-// Wi-Fi connection pill ("MyWifi · 5G · 866 Mbps") fits inside the chip
-// without truncation.
-const CLIENT_CARD_WIDTH = 220;
 const UPLINK_CHIP_W = 64;
 const UPLINK_CHIP_GAP = 6;
 const HIDDEN_HANDLE_CLASS = '!opacity-0 !w-1 !h-1 !border-0';
-// Fan-out handle count: handles are evenly spaced along the bottom (source)
-// and top (target) of the card. 24 keeps the quantization step well under
-// the smoothstep offset, so a residual misalignment between source X and
-// target X never produces a visible zigzag — the bend is too small to read
-// as a "tear". MUST match FAN_OUT_COUNT in TopologyGraph.tsx.
-const FAN_OUT_COUNT = 24;
 
 function pickCardWidth(d: TopologyNodeData): number {
     const isInfra = d.kind === 'gateway' || d.kind === 'switch' || d.kind === 'ap' || d.kind === 'repeater' || d.kind === 'vm-host';

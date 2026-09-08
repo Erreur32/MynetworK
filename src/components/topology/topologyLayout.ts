@@ -21,26 +21,22 @@
 import dagre from "dagre";
 import { Position, type Edge, type Node } from "@xyflow/react";
 import type { TopologyNodeData } from "./TopologyNodeCard";
+import {
+  INFRA_CARD_WIDTH,
+  VM_HOST_CARD_WIDTH,
+  CLIENT_CARD_WIDTH,
+  SWITCH_INLINE_PORTS_MAX,
+  PORT_CELL_WIDTH,
+} from "./topologyConstants";
 
 export type LayoutMode = "tree" | "horizontal" | "editable";
 
-// Network infrastructure cards (gateway, switch, AP, repeater) — bigger
-// than the client cards so they read clearly even in a sea of small clients.
-// MUST stay in sync with INFRA_CARD_WIDTH / PORT_CELL_WIDTH in
-// TopologyNodeCard.tsx — dagre uses these for hit boxes, so a mismatch makes
-// edges land off-port.
-const NODE_WIDTH = 300;
+// dagre uses these for hit boxes, so a mismatch with the card renderer
+// (TopologyNodeCard.tsx) makes edges land off-port.
 const NODE_HEIGHT = 92;
 // vm-host: same height as regular infra + an extra info row (~28 px).
-const VM_HOST_NODE_WIDTH = 340;
 const VM_HOST_NODE_HEIGHT = 120;
-// Must match CLIENT_CARD_WIDTH in TopologyNodeCard.tsx — dagre reserves slots
-// at this width while the card renders at the same width; a mismatch leaves
-// client cards overflowing their reserved column.
-const CLIENT_NODE_WIDTH = 220;
 
-const SWITCH_INLINE_PORTS_MAX = 12;
-const PORT_CELL_WIDTH = 28;
 const PORT_ROW_HEIGHT = 22;
 
 function portsFor(node: Node): TopologyNodeData["ports"] {
@@ -57,13 +53,13 @@ function isInfraData(data: TopologyNodeData | undefined): boolean {
 
 export function getNodeWidth(node: Node): number {
   const data = node.data as TopologyNodeData | undefined;
-  if (!isInfraData(data)) return CLIENT_NODE_WIDTH;
-  if (data?.kind === "vm-host") return VM_HOST_NODE_WIDTH;
+  if (!isInfraData(data)) return CLIENT_CARD_WIDTH;
+  if (data?.kind === "vm-host") return VM_HOST_CARD_WIDTH;
   const ports = portsFor(node);
   if (ports && ports.length > 0 && ports.length <= SWITCH_INLINE_PORTS_MAX) {
-    return Math.max(NODE_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
+    return Math.max(INFRA_CARD_WIDTH, ports.length * PORT_CELL_WIDTH + 18);
   }
-  return NODE_WIDTH;
+  return INFRA_CARD_WIDTH;
 }
 
 export function getNodeHeight(node: Node): number {
@@ -169,7 +165,7 @@ function dagreLayout(
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({
     rankdir: direction,
-    nodesep: direction === "LR" ? 24 : 36,
+    nodesep: direction === "LR" ? 40 : 36,
     ranksep: 80,
     marginx: 20,
     marginy: 20,
@@ -290,7 +286,7 @@ function wifiSpineGap(parentW: number): number {
 }
 
 function wiredRowWidth(n: number): number {
-  return n * CLIENT_NODE_WIDTH + Math.max(0, n - 1) * WIRED_ROW_HGAP;
+  return n * CLIENT_CARD_WIDTH + Math.max(0, n - 1) * WIRED_ROW_HGAP;
 }
 
 function wifiAccordionHeight(n: number): number {
@@ -301,7 +297,7 @@ function wifiAccordionHeight(n: number): number {
 }
 
 function wifiAccordionWidth(parentW: number): number {
-  return 2 * CLIENT_NODE_WIDTH + 2 * wifiSpineGap(parentW);
+  return 2 * CLIENT_CARD_WIDTH + 2 * wifiSpineGap(parentW);
 }
 
 function computeWrappedDims(
@@ -319,7 +315,7 @@ function computeWrappedDims(
     // waste the full accordion footprint for a single card.
     if (wifi && n > 1) {
       const parentNode = nodeById.get(parentId);
-      const parentW = parentNode ? getNodeWidth(parentNode) : NODE_WIDTH;
+      const parentW = parentNode ? getNodeWidth(parentNode) : INFRA_CARD_WIDTH;
       dims.set(parentId, {
         w: wifiAccordionWidth(parentW),
         h: wifiAccordionHeight(n),
@@ -334,7 +330,7 @@ function computeWrappedDims(
     // curve. Skipped for n=1 (one lone VM falls through to wired-row).
     if (vmHost && n > 1) {
       const parentNode = nodeById.get(parentId);
-      const parentW = parentNode ? getNodeWidth(parentNode) : NODE_WIDTH;
+      const parentW = parentNode ? getNodeWidth(parentNode) : INFRA_CARD_WIDTH;
       dims.set(parentId, {
         w: wifiAccordionWidth(parentW),
         h: wifiAccordionHeight(n),
@@ -350,7 +346,7 @@ function computeWrappedDims(
     // reserves the full row width to the right of the parent's centre.
     if (n > 0 && n <= WIRED_ROW_MAX) {
       dims.set(parentId, {
-        w: NODE_WIDTH + WIRED_ROW_LEAD + wiredRowWidth(n),
+        w: INFRA_CARD_WIDTH + WIRED_ROW_LEAD + wiredRowWidth(n),
         h: CLIENT_H,
         n,
         placement: "wired-row",
@@ -363,7 +359,7 @@ function computeWrappedDims(
     const cols = 4;
     const rows = Math.ceil(n / cols);
     dims.set(parentId, {
-      w: cols * CLIENT_NODE_WIDTH + (cols - 1) * WRAPPED_HGAP,
+      w: cols * CLIENT_CARD_WIDTH + (cols - 1) * WRAPPED_HGAP,
       h: rows * CLIENT_H + (rows - 1) * WRAPPED_VGAP,
       n,
       placement: "grid",
@@ -463,7 +459,7 @@ function placeWifiAccordion(
     const sideRow = Math.floor(idx / 2);
     const y = baseY + sideRow * rowH + (isLeft ? 0 : rowH / 2);
     const x = isLeft
-      ? parentCx - spineGap - CLIENT_NODE_WIDTH
+      ? parentCx - spineGap - CLIENT_CARD_WIDTH
       : parentCx + spineGap;
     out.push({
       ...c,
@@ -499,7 +495,7 @@ function placeWiredRow(
       targetPosition: Position.Top,
       sourcePosition: Position.Bottom,
       position: {
-        x: startX + idx * (CLIENT_NODE_WIDTH + WIRED_ROW_HGAP),
+        x: startX + idx * (CLIENT_CARD_WIDTH + WIRED_ROW_HGAP),
         y: baseY,
       },
     });
@@ -525,7 +521,7 @@ function placeOrphanGrid(
       targetPosition: Position.Top,
       sourcePosition: Position.Bottom,
       position: {
-        x: orphanX + col * (CLIENT_NODE_WIDTH + WRAPPED_HGAP),
+        x: orphanX + col * (CLIENT_CARD_WIDTH + WRAPPED_HGAP),
         y: row * (CLIENT_H + WRAPPED_VGAP),
       },
     });
@@ -573,7 +569,7 @@ function placeWrappedChildren(
       targetPosition: Position.Top,
       sourcePosition: Position.Bottom,
       position: {
-        x: baseX + col * (CLIENT_NODE_WIDTH + WRAPPED_HGAP),
+        x: baseX + col * (CLIENT_CARD_WIDTH + WRAPPED_HGAP),
         y: baseY + row * (CLIENT_H + WRAPPED_VGAP),
       },
     });
