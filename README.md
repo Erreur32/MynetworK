@@ -41,7 +41,7 @@
 
 **A multi-source network dashboard to manage Freebox, UniFi  and  Network Scanner**
 
-[Installation](#installation) | [Features](#features) | [Configuration](#configuration) | [Analytics](#analytics-privacy) | [MCP](#mcp-model-context-protocol) | [Home Assistant](#home-assistant)
+[Installation](#installation) | [Features](#features) | [Configuration](#configuration) | [MCP](#mcp-model-context-protocol) | [Home Assistant](#home-assistant)
 
 </div>
 
@@ -536,6 +536,54 @@ Configure your MCP client with the printed URL (`http://<LAN-IP>:<PORT>/api/mcp`
 | **Network scanner** | stats, devices, device by IP, blacklist | trigger/rescan a scan, add a manual IP, rename a host, blacklist add/remove |
 
 Write actions are limited to non-destructive operations (nothing deletes data), though some are disruptive by nature (a reboot or a device restart briefly interrupts connectivity — tool descriptions flag this explicitly).
+
+### Examples
+
+What a tool call looks like from an MCP client, and the kind of response it gets back (values below are illustrative, not real data).
+
+**Freebox — read: which devices are currently on WiFi**
+
+```
+> freebox_get_wifi_stations
+```
+```json
+{
+  "success": true,
+  "result": [
+    {
+      "mac": "AA:BB:CC:11:22:33",
+      "hostname": "laptop-julien",
+      "ip": "192.168.1.42",
+      "band": "5G",
+      "rssi": -52,
+      "connected_since": 3841
+    },
+    {
+      "mac": "AA:BB:CC:44:55:66",
+      "hostname": "iphone-julien",
+      "ip": "192.168.1.57",
+      "band": "2G4",
+      "rssi": -67,
+      "connected_since": 120
+    }
+  ]
+}
+```
+
+**UniFi — write: block a client from the network**
+
+```
+> unifi_block_client { "mac": "AA:BB:CC:77:88:99" }
+```
+```json
+{
+  "success": true,
+  "result": {
+    "mac": "AA:BB:CC:77:88:99",
+    "blocked": true
+  }
+}
+```
 
 ## Security
 

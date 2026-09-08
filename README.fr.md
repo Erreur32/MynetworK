@@ -536,6 +536,54 @@ Configurez votre client MCP avec l'URL affichée (`http://<IP-LAN>:<PORT>/api/mc
 
 Les actions d'écriture se limitent à des opérations non destructives (aucune suppression de données), même si certaines restent disruptives par nature (un reboot ou un redémarrage coupe brièvement la connectivité — les descriptions des outils l'indiquent explicitement).
 
+### Exemples
+
+À quoi ressemble un appel d'outil depuis un client MCP, et le type de réponse obtenue (les valeurs ci-dessous sont illustratives, pas de vraies données).
+
+**Freebox — lecture : quels appareils sont actuellement en WiFi**
+
+```
+> freebox_get_wifi_stations
+```
+```json
+{
+  "success": true,
+  "result": [
+    {
+      "mac": "AA:BB:CC:11:22:33",
+      "hostname": "laptop-julien",
+      "ip": "192.168.1.42",
+      "band": "5G",
+      "rssi": -52,
+      "connected_since": 3841
+    },
+    {
+      "mac": "AA:BB:CC:44:55:66",
+      "hostname": "iphone-julien",
+      "ip": "192.168.1.57",
+      "band": "2G4",
+      "rssi": -67,
+      "connected_since": 120
+    }
+  ]
+}
+```
+
+**UniFi — écriture : bloquer un client du réseau**
+
+```
+> unifi_block_client { "mac": "AA:BB:CC:77:88:99" }
+```
+```json
+{
+  "success": true,
+  "result": {
+    "mac": "AA:BB:CC:77:88:99",
+    "blocked": true
+  }
+}
+```
+
 ## Sécurité
 
 - **Authentification JWT** - Tokens sécurisés avec expiration
