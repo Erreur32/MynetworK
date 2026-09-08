@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.9] - 2026-09-08
+
+### Fixed
+
+- CI: the arm64 leg of the multi-arch Docker build hung silently under QEMU emulation on the last two releases (`v0.10.7`, `v0.10.8`), hitting the 45-minute job timeout and leaving those tags amd64-only on GHCR. Rewrote `docker-publish.yml` to build amd64 and arm64 as separate jobs on their own native GitHub-hosted runners (`ubuntu-latest` / `ubuntu-24.04-arm`, no QEMU), each pushing by digest, merged into one multi-arch manifest by a final job.
+
+---
+
 ## [0.10.8] - 2026-09-08
 
 ### Fixed
