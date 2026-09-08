@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.3-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.4-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -515,20 +515,25 @@ MynetworK embarque un serveur [MCP](https://modelcontextprotocol.io) natif : un 
 
 - **Réseau local uniquement** - non exposé via le reverse proxy ; protégé par une liste blanche d'IP (RFC1918 + loopback) en plus d'un jeton dédié
 - **Jeton dédié** - distinct de la session JWT web, généré uniquement en ligne de commande (jamais depuis le panneau admin, potentiellement exposé sur internet, alors que l'endpoint MCP doit rester strictement local)
-- **Statut en lecture seule dans l'UI admin** - l'onglet "MCP" affiche l'état (activé/désactivé), si un jeton est configuré, l'endpoint et la dernière utilisation ; le jeton lui-même n'est jamais affiché
+- **Statut en lecture seule dans l'UI admin** - l'onglet "MCP" affiche l'état (activé/désactivé), si un jeton est configuré, l'endpoint et la dernière utilisation, ainsi que ces mêmes instructions de configuration avec copie en un clic ; le jeton lui-même n'est jamais affiché
 
-### Configuration
+### 1. Générer le jeton d'accès
+
+À exécuter sur le serveur. Affiche le jeton une seule fois : il n'est jamais réaffiché, ni stocké quelque part de consultable.
 
 ```bash
-# Génère (ou renouvelle) le jeton d'accès - à exécuter sur le serveur, affiché une seule fois
+# Docker (production, déploiement par défaut — nom du conteneur : "mynetwork")
+docker exec -it mynetwork npm run mcp:token
+
+# Local / dev (npm run dev sans conteneur)
 npm run mcp:token
 ```
 
-Configurez votre client MCP avec l'URL affichée (`http://<IP-LAN>:<PORT>/api/mcp`) et l'en-tête `Authorization: Bearer <jeton>`. Relancer `npm run mcp:token` renouvelle le jeton et révoque l'ancien.
+Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.
 
-### Connecter un client
+### 2. Connecter un client
 
-Le serveur parle le transport standard MCP **Streamable HTTP** : tout client qui le supporte peut s'y connecter directement.
+Le serveur parle le transport standard MCP **Streamable HTTP** à l'adresse `http://<IP-LAN>:<PORT>/api/mcp` : remplacez l'IP LAN, le port et le jeton affichés ci-dessus dans l'exemple du client voulu.
 
 **Claude Code (CLI)**
 

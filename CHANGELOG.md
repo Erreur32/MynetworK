@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.4] - 2026-09-08
+
+### Changed
+
+- README (EN/FR): reworked the MCP setup section into a clear two-step flow (generate the token, then connect a client) and added the missing `docker exec -it mynetwork npm run mcp:token` command for the default Docker deployment (previously only the bare `npm run mcp:token`, which doesn't apply when the app runs in a container).
+- Admin UI: split the MCP tab into two sub-tabs, "General" (status, token state, endpoint, timestamps) and "Setup" (the same step-by-step token generation and client connection instructions as the README, with copy-to-clipboard code blocks and a per-client selector for Claude Code / Claude Desktop / other Streamable HTTP clients).
+
+---
+
 ## [0.10.3] - 2026-09-08
 
 ### Fixed

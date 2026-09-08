@@ -5291,7 +5291,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             )}
 
             {activeAdminTab === 'mcp' && (
-              <McpSection />
+              <McpSection
+                activeSubTab={urlSubTab}
+                onSubTabChange={(sub) => setSubTab('mcp', sub)}
+              />
             )}
 
             {activeAdminTab === 'backup' && (

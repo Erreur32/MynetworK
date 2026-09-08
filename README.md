@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.3-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.4-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -516,20 +516,25 @@ MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MC
 
 - **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback) in addition to a dedicated bearer token
 - **Own auth token** - separate from the JWT web session, generated from the CLI only (never from the admin panel, since that panel may be internet-exposed while the MCP endpoint must stay LAN-only)
-- **Read-only status in the admin UI** - the "MCP" tab shows whether it's enabled, whether a token is configured, the endpoint, and last-used time; it never displays the token itself
+- **Read-only status in the admin UI** - the "MCP" tab shows whether it's enabled, whether a token is configured, the endpoint and last-used time, plus these same setup instructions with a one-click copy; it never displays the token itself
 
-### Setup
+### 1. Generate the access token
+
+Run on the server host. Prints the token once — it is never shown again, and never stored anywhere you can browse to.
 
 ```bash
-# Generate (or rotate) the access token — run on the server host, prints once
+# Docker (production, default deployment — container name is "mynetwork")
+docker exec -it mynetwork npm run mcp:token
+
+# Local / dev (bare npm run dev, no container)
 npm run mcp:token
 ```
 
-Configure your MCP client with the printed URL (`http://<LAN-IP>:<PORT>/api/mcp`) and `Authorization: Bearer <token>` header. Re-running `npm run mcp:token` rotates and revokes the previous token.
+Re-running this command rotates the token and revokes the previous one immediately.
 
-### Connect a client
+### 2. Connect a client
 
-The server speaks the standard MCP **Streamable HTTP** transport, so any client that supports it can connect directly.
+The server speaks the standard MCP **Streamable HTTP** transport at `http://<LAN-IP>:<PORT>/api/mcp` — swap in the LAN IP and port printed above, and the token, for any client below.
 
 **Claude Code (CLI)**
 
