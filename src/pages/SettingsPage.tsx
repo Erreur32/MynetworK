@@ -46,7 +46,8 @@ import {
   Download,
   CheckCircle,
   Upload,
-  X
+  X,
+  Cable
 } from 'lucide-react';
 import { api } from '../api/client';
 import { API_ROUTES, GITHUB_REPO_URL } from '../utils/constants';
@@ -63,6 +64,7 @@ import { usePluginStore } from '../stores/pluginStore';
 import { useUserAuthStore, type User } from '../stores/userAuthStore';
 import { ExporterSection, ConfigExportImportSection } from '../components/ExporterSection';
 import { PluginsManagementSection } from '../components/PluginsManagementSection';
+import { McpSection } from '../components/McpSection';
 import logoMynetworK from '../icons/logo_mynetwork.svg';
 import { APP_VERSION, getVersionString } from '../constants/version';
 import { SecuritySection } from '../components/SecuritySection';
@@ -84,9 +86,9 @@ interface SettingsPageProps {
 }
 
 type SettingsTab = 'network' | 'wifi' | 'dhcp' | 'storage' | 'security' | 'system' | 'backup';
-type AdminTab = 'general' | 'plugins' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database';
+type AdminTab = 'general' | 'plugins' | 'security' | 'exporter' | 'theme' | 'debug' | 'info' | 'backup' | 'database' | 'mcp';
 const VALID_SETTINGS_TABS: SettingsTab[] = ['network', 'wifi', 'dhcp', 'storage', 'security', 'system', 'backup'];
-const VALID_ADMIN_TABS: AdminTab[] = ['general', 'plugins', 'security', 'exporter', 'theme', 'debug', 'info', 'backup', 'database'];
+const VALID_ADMIN_TABS: AdminTab[] = ['general', 'plugins', 'security', 'exporter', 'theme', 'debug', 'info', 'backup', 'database', 'mcp'];
 
 // Toggle component
 const Toggle: React.FC<{
@@ -4944,7 +4946,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     { id: 'database', label: t('admin.tabDatabase'), icon: Database, color: 'purple' },
     { id: 'backup', label: t('admin.tabBackup'), icon: Download, color: 'orange' },
     { id: 'debug', label: t('admin.tabLogs'), icon: Monitor, color: 'violet' },
-    { id: 'info', label: t('admin.tabInfo'), icon: Info, color: 'teal' }
+    { id: 'info', label: t('admin.tabInfo'), icon: Info, color: 'teal' },
+    { id: 'mcp', label: t('admin.mcp.title'), icon: Cable, color: 'cyan' }
   ];
 
   return (
@@ -5285,6 +5288,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 activeSubTab={urlSubTab}
                 onSubTabChange={(sub) => setSubTab('database', sub)}
               />
+            )}
+
+            {activeAdminTab === 'mcp' && (
+              <McpSection />
             )}
 
             {activeAdminTab === 'backup' && (

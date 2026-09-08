@@ -305,8 +305,14 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Gzip/deflate compression for API responses and static assets
-app.use(compression());
+// Gzip/deflate compression for API responses and static assets.
+// Excludes /api/mcp: compression buffers the response, which breaks SSE streaming.
+app.use(
+  compression({
+    filter: (req, res) =>
+      req.path.startsWith("/api/mcp") ? false : compression.filter(req, res),
+  }),
+);
 
 app.use(cors(getCorsConfig()));
 app.use(express.json({ limit: "10mb" }));
@@ -332,6 +338,8 @@ import networkScanRoutes from "./routes/network-scan.js";
 import latencyMonitoringRoutes from "./routes/latency-monitoring.js";
 import databaseRoutes from "./routes/database.js";
 import topologyRoutes from "./routes/topology.js";
+import mcpRoutes from "./routes/mcp.js";
+import mcpStatusRoutes from "./routes/mcpStatus.js";
 import { startTopologyScheduler } from "./services/topologyScheduler.js";
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
@@ -431,6 +439,15 @@ app.use("/api/network-scan", networkScanRoutes);
 app.use("/api/latency-monitoring", latencyMonitoringRoutes);
 app.use("/api/database", databaseRoutes);
 app.use("/api/topology", topologyRoutes);
+
+// MCP (Model Context Protocol) - LAN-only, own auth layer (see mcpAuthMiddleware).
+// Status must be mounted before the transport router: mcpRoutes matches any
+// /api/mcp/* subpath, so /api/mcp/status would otherwise never be reached.
+if (config.mcp.enabled) {
+  app.use("/api/mcp/status", mcpStatusRoutes);
+  app.use("/api/mcp", mcpRoutes);
+  logger.info("MCP", "MCP server mounted at /api/mcp");
+}
 
 // Existing Freebox routes (kept for backward compatibility)
 app.use("/api/auth", authRoutes);

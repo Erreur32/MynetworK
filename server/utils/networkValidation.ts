@@ -80,3 +80,32 @@ export function isValidPortRange(range: string): boolean {
 export function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Check whether an IP address belongs to a private/local range (RFC1918 + loopback).
+ * Unwraps IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) before testing.
+ * Used to gate access to LAN-only endpoints (e.g. the MCP server) regardless of
+ * the app's own bind address, which may be 0.0.0.0.
+ */
+export function isPrivateNetworkIp(ip: string): boolean {
+    if (!ip) return false;
+
+    let addr = ip;
+    const mappedMatch = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+    if (mappedMatch) {
+        addr = mappedMatch[1];
+    }
+
+    if (addr === '::1' || addr === 'localhost') return true;
+
+    if (isValidIp(addr)) {
+        if (/^127\./.test(addr)) return true;
+        if (/^10\./.test(addr)) return true;
+        if (/^192\.168\./.test(addr)) return true;
+        const parts = addr.split('.').map(Number);
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+        return false;
+    }
+
+    return false;
+}

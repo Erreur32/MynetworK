@@ -26,7 +26,7 @@ class RebootSchedulerService {
     const tokenPath = config.freebox.tokenFile;
     const configDir = path.dirname(tokenPath);
     this.configPath = path.join(configDir, '.reboot_schedule.json');
-    
+
     this.schedule = this.loadSchedule();
     this.updateCronJob();
   }
@@ -36,10 +36,10 @@ class RebootSchedulerService {
       try {
         const data = fs.readFileSync(this.configPath, 'utf-8');
         const parsed = JSON.parse(data);
-        
+
         // Migration logic for old format if necessary
         let mapping = parsed.mapping || parsed.advancedMapping || {};
-        
+
         // If coming from very old format with days/time but no mapping
         if (Object.keys(mapping).length === 0 && Array.isArray(parsed.days) && parsed.time) {
           parsed.days.forEach((day: number) => {
@@ -47,7 +47,7 @@ class RebootSchedulerService {
           });
         }
 
-        return { 
+        return {
           enabled: parsed.enabled || false,
           mapping
         };
@@ -73,9 +73,9 @@ class RebootSchedulerService {
 
   updateSchedule(newSchedule: Partial<RebootSchedule>): RebootSchedule {
     // We only expect 'enabled' and 'mapping' in the new schedule
-    this.schedule = { 
+    this.schedule = {
       ...this.schedule,
-      ...newSchedule 
+      ...newSchedule
     };
 
     this.saveSchedule();
@@ -103,14 +103,26 @@ class RebootSchedulerService {
 
       if (cron.validate(cronExpression)) {
         logger.info('Scheduler', `Scheduling reboot for day ${day} at ${time} (${cronExpression})`);
-        this.tasks.push(cron.schedule(cronExpression, async () => {
-          logger.info('Scheduler', `Executing scheduled reboot (Day ${day})...`);
-          try {
-            await freeboxApi.reboot();
-          } catch (error) {
-            logger.error('Scheduler', 'Scheduled reboot failed:', error);
-          }
-        }));
+        this.tasks.push(
+          cron.schedule(cronExpression, async () => {
+            logger.info('Scheduler', `Executing scheduled reboot (Day ${day})...`);
+            try {
+              if (!freeboxApi.isLoggedIn()) {
+                logger.error('Scheduler', 'Cannot reboot: Freebox API not authenticated');
+                return;
+              }
+
+              const result = await freeboxApi.reboot();
+              if (result.success) {
+                logger.info('Scheduler', 'Scheduled reboot command sent successfully');
+              } else {
+                logger.error('Scheduler', `Scheduled reboot failed: ${result.msg || result.error_code}`);
+              }
+            } catch (error) {
+              logger.error('Scheduler', 'Scheduled reboot error:', error);
+            }
+          })
+        );
       } else {
         logger.error('Scheduler', `Invalid cron expression for day ${day}: ${cronExpression}`);
       }

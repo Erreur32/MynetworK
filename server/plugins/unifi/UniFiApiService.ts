@@ -1,8 +1,8 @@
 /**
  * UniFi Controller API Service
- * 
+ *
  * Handles communication with UniFi Controller API (local) and Site Manager API (cloud)
- * Documentation: 
+ * Documentation:
  * - Controller API: https://ubntwiki.com/products/software/unifi-controller/api
  * - Site Manager API: https://developer.ui.com/site-manager-api/gettingstarted/
  */
@@ -810,16 +810,17 @@ export class UniFiApiService {
     }
 
     /**
-     * POST request to the UniFi controller API (same auth/session as controllerRequest).
+     * POST/PUT request to the UniFi controller API (same auth/session as controllerRequest).
+     * Shared by controllerPost and controllerPut, which only differ by HTTP method.
      */
-    private async controllerPost<T>(path: string, body: unknown): Promise<T> {
+    private async controllerWrite<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
         if (!this.url) throw new Error('UniFi controller URL not set');
         await this.ensureControllerSession();
         const baseUrl = stripTrailingSlashes(this.url);
         const apiBase = this.getApiBasePath();
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const url = `${baseUrl}${apiBase}${normalizedPath}`;
-        logger.debug('UniFi', `API POST: ${url}`);
+        logger.debug('UniFi', `API ${method}: ${url}`);
         const agent = getInsecureAgent();
         const headers: Record<string, string> = {
             'Cookie': this.sessionCookie as string,
@@ -828,7 +829,7 @@ export class UniFiApiService {
         };
         if (this.csrfToken) headers['X-Csrf-Token'] = this.csrfToken;
         const opts: RequestInit = {
-            method: 'POST',
+            method,
             headers,
             body: JSON.stringify(body),
         };
@@ -839,13 +840,86 @@ export class UniFiApiService {
             this.sessionCookie = null; this.csrfToken = null; this.isAuthenticated = false;
             await this.ensureControllerSession({ force: true });
             const r2 = await fetch(url, opts);
-            if (!r2.ok) throw new Error(`UniFi POST ${r2.status} (${normalizedPath})`);
+            if (!r2.ok) throw new Error(`UniFi ${method} ${r2.status} (${normalizedPath})`);
             const j2: any = await r2.json();
             return (j2.data ?? j2) as T;
         }
-        if (!response.ok) throw new Error(`UniFi POST ${response.status} (${normalizedPath})`);
+        if (!response.ok) throw new Error(`UniFi ${method} ${response.status} (${normalizedPath})`);
         const json: any = await response.json();
         return (json.data ?? json) as T;
+    }
+
+    /**
+     * POST request to the UniFi controller API (same auth/session as controllerRequest).
+     */
+    private async controllerPost<T>(path: string, body: unknown): Promise<T> {
+        return this.controllerWrite<T>('POST', path, body);
+    }
+
+    /**
+     * PUT request to the UniFi controller API (same auth/session as controllerPost).
+     * Used for REST resource updates, e.g. /rest/wlanconf/<id>.
+     */
+    private async controllerPut<T>(path: string, body: unknown): Promise<T> {
+        return this.controllerWrite<T>('PUT', path, body);
+    }
+
+    /**
+     * Whether this service is connected via the Site Manager cloud API rather
+     * than a local controller. Command endpoints (cmd/stamgr, cmd/devmgr, rest/*)
+     * only exist on the local controller / UniFiOS API.
+     */
+    isSiteManagerMode(): boolean {
+        return this.apiMode === 'site-manager';
+    }
+
+    /**
+     * Block a client from the network (by MAC address). Local controller API only.
+     */
+    async blockClient(mac: string): Promise<void> {
+        if (this.isSiteManagerMode()) {
+            throw new Error('blockClient requires a local controller connection, not the Site Manager cloud API.');
+        }
+        await this.ensureLoggedIn();
+        const encodedSite = encodeURIComponent(this.site);
+        await this.controllerPost(`/api/s/${encodedSite}/cmd/stamgr`, { cmd: 'block-sta', mac });
+    }
+
+    /**
+     * Unblock a previously blocked client (by MAC address). Local controller API only.
+     */
+    async unblockClient(mac: string): Promise<void> {
+        if (this.isSiteManagerMode()) {
+            throw new Error('unblockClient requires a local controller connection, not the Site Manager cloud API.');
+        }
+        await this.ensureLoggedIn();
+        const encodedSite = encodeURIComponent(this.site);
+        await this.controllerPost(`/api/s/${encodedSite}/cmd/stamgr`, { cmd: 'unblock-sta', mac });
+    }
+
+    /**
+     * Enable or disable a WLAN (by its wlanconf id, see getWlans()). Local controller API only.
+     */
+    async setWlanEnabled(wlanId: string, enabled: boolean): Promise<void> {
+        if (this.isSiteManagerMode()) {
+            throw new Error('setWlanEnabled requires a local controller connection, not the Site Manager cloud API.');
+        }
+        await this.ensureLoggedIn();
+        const encodedSite = encodeURIComponent(this.site);
+        await this.controllerPut(`/api/s/${encodedSite}/rest/wlanconf/${encodeURIComponent(wlanId)}`, { enabled });
+    }
+
+    /**
+     * Restart a device (access point, switch, gateway) by MAC address. Disruptive but not
+     * destructive: the device reboots and briefly drops offline. Local controller API only.
+     */
+    async restartDevice(mac: string): Promise<void> {
+        if (this.isSiteManagerMode()) {
+            throw new Error('restartDevice requires a local controller connection, not the Site Manager cloud API.');
+        }
+        await this.ensureLoggedIn();
+        const encodedSite = encodeURIComponent(this.site);
+        await this.controllerPost(`/api/s/${encodedSite}/cmd/devmgr`, { cmd: 'restart', mac });
     }
 
     /**
@@ -1027,7 +1101,7 @@ export class UniFiApiService {
     /**
      * Get WiFi networks (WLANs/SSIDs)
      */
-    async getWlans(): Promise<Array<{ name: string; enabled: boolean; ssid?: string }>> {
+    async getWlans(): Promise<Array<{ _id?: string; name: string; enabled: boolean; ssid?: string }>> {
         await this.ensureLoggedIn();
 
         try {
@@ -1059,6 +1133,7 @@ export class UniFiApiService {
                 const wlans = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/rest/wlanconf`);
 
                 return wlans.map((w: any) => ({
+                    _id: w._id,
                     name: w.name || w.ssid || 'Unknown',
                     enabled: w.enabled !== false,
                     ssid: w.ssid || w.name

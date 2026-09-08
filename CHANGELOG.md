@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-09-08
+
+### Added
+
+- Native MCP (Model Context Protocol) server, mounted at `/api/mcp`, LAN-only (IP allowlist + dedicated bearer token, `npm run mcp:token`). Lets an MCP client (e.g. Claude Desktop) query and control the dashboard directly
+- Freebox MCP tools: read-only (system info, connection status, WiFi, LAN hosts, DHCP, switch ports, call log, contacts) plus non-destructive actions (reboot, toggle WiFi/BSS, add a DHCP static lease)
+- UniFi MCP tools: read-only (devices, clients, WLANs, network config, port forwarding, bandwidth report, system info, sites) plus new write actions (block/unblock a client, enable/disable a WLAN, restart a device) — these write paths did not exist before and required new `UniFiApiService` methods (local controller API only, not the Site Manager cloud API)
+- Network scanner MCP tools: read-only (stats, devices, blacklist) plus non-destructive actions (trigger/rescan, add a manual IP, rename a host, blacklist add/remove)
+- Read-only "MCP" admin tab (status, token configured, endpoint, last used) — token generation stays CLI-only since the admin panel is internet-exposed while the MCP endpoint must stay LAN-only
+
+### Fixed
+
+- WiFi dashboard: the Freebox Ultra's two 5GHz radios share the same SSID, which was collapsed into a single entry by an SSID-based dedup key. Now deduped by physical radio (`phy_id`) + band instead
+- Scheduled reboot silently failing (or throwing) when the Freebox session had expired; now checks `isLoggedIn()` first and logs the actual success/failure result
+- `/api/mcp/status` always showing "Error loading MCP status" in the admin UI regardless of actual status: the route wasn't wrapping its response in the `{success, result}` envelope the frontend API client expects
+
+### Security
+
+- `fast-uri` (transitive via `@modelcontextprotocol/sdk` → `ajv`): high-severity advisory, pinned `>=3.1.6` via override
+- `qs` (transitive via `express`): medium-severity advisory, pinned `>=6.16.0` via override
+- `npm run security:cve`: 0 vulnerabilities
+
+---
+
 ## [0.9.11] - 2026-08-15
 
 ### Fixed

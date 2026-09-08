@@ -195,8 +195,15 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.9.11');
+        super('unifi', 'UniFi Controller', '0.10.0');
         this.apiService = new UniFiApiService();
+    }
+
+    /**
+     * Public accessor for the underlying UniFi API service, e.g. for MCP tools.
+     */
+    getApiService(): UniFiApiService {
+        return this.apiService;
     }
 
     private _getOrCreateHistory(wanId: string): BandwidthRawPoint[] {

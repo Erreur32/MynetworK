@@ -115,6 +115,11 @@ export const config = {
 
     // Token storage file path (absolute path for Docker compatibility)
     tokenFile: getTokenFilePath()
+  },
+
+  // MCP (Model Context Protocol) server - LAN-only, opt-out via env
+  mcp: {
+    enabled: process.env.MCP_ENABLED !== 'false',
   }
 };
 

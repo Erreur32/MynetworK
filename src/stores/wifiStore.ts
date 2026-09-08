@@ -67,7 +67,7 @@ const formatBand = (band: string): '2.4GHz' | '5GHz' | '6GHz' => {
 // Extended BSS type for v9+ Freebox with band info in status
 interface ExtendedBss extends WifiBss {
   status: WifiBss['status'] & {
-    band?: string;  // e.g. "6G", "5G", "2G4"
+    band?: string; // e.g. "6G", "5G", "2G4"
   };
 }
 
@@ -113,6 +113,10 @@ export const useWifiStore = create<WifiState>((set, get) => ({
         // For Freebox v9+, BSS contains band info directly in status
         for (const b of bss || []) {
           if (b.config?.enabled) {
+            // Skip secondary BSS (e.g. guest network) broadcast on the same radio as the main one.
+            // Older API responses without this field keep the previous behavior.
+            if (b.status?.is_main_bss === false) continue;
+
             // Get band from BSS status (Freebox v9+) or try to find matching AP
             let band: '2.4GHz' | '5GHz' | '6GHz' = '2.4GHz';
 
@@ -127,8 +131,9 @@ export const useWifiStore = create<WifiState>((set, get) => ({
               }
             }
 
-            // Only add one network per band (they share SSID)
-            const bandKey = `${b.config.ssid}-${band}`;
+            // Dedupe by physical radio + band, not SSID: the Freebox Ultra has two
+            // 5GHz radios sharing the same SSID, which a SSID-based key would collapse into one.
+            const bandKey = `${b.phy_id}-${band}`;
             if (!seenBands.has(bandKey)) {
               seenBands.add(bandKey);
 
@@ -137,17 +142,21 @@ export const useWifiStore = create<WifiState>((set, get) => ({
 
               // Get channel usage from AP status (percentage 0-100)
               // Freebox API provides this as channel_usage in some versions
-              const apStatus = matchingAp?.status as {
-                channel_width?: number;
-                primary_channel?: number;
-                channel_usage?: number;
-                dfs_cac_remaining_time?: number;
-              } | undefined;
+              const apStatus = matchingAp?.status as
+                | {
+                    channel_width?: number;
+                    primary_channel?: number;
+                    channel_usage?: number;
+                    dfs_cac_remaining_time?: number;
+                  }
+                | undefined;
 
-              const apConfig = matchingAp?.config as {
-                channel_width?: string | number;
-                primary_channel?: number;
-              } | undefined;
+              const apConfig = matchingAp?.config as
+                | {
+                    channel_width?: string | number;
+                    primary_channel?: number;
+                  }
+                | undefined;
 
               const channelUsage = apStatus?.channel_usage ?? 0;
 
@@ -158,9 +167,10 @@ export const useWifiStore = create<WifiState>((set, get) => ({
                 channelWidth = apStatus.channel_width;
               } else if (apConfig?.channel_width) {
                 // Config can be string like "80" or number
-                channelWidth = typeof apConfig.channel_width === 'string'
-                  ? parseInt(apConfig.channel_width, 10) || 20
-                  : apConfig.channel_width;
+                channelWidth =
+                  typeof apConfig.channel_width === 'string'
+                    ? parseInt(apConfig.channel_width, 10) || 20
+                    : apConfig.channel_width;
               } else {
                 // Default based on band
                 if (band === '6GHz') channelWidth = 160;
@@ -180,8 +190,10 @@ export const useWifiStore = create<WifiState>((set, get) => ({
               // ~8% per device, max 80%
               // Only calculate load if WiFi is active, otherwise set to 0
               const isActive = b.status?.state === 'active';
-              const estimatedLoad = isActive 
-                ? (channelUsage > 0 ? channelUsage : Math.min(bandDeviceCount * 8, 80))
+              const estimatedLoad = isActive
+                ? channelUsage > 0
+                  ? channelUsage
+                  : Math.min(bandDeviceCount * 8, 80)
                 : 0;
 
               networks.push({
@@ -235,9 +247,7 @@ export const useWifiStore = create<WifiState>((set, get) => ({
         // Update local state optimistically
         const { networks } = get();
         set({
-          networks: networks.map(n =>
-            n.id === bssId ? { ...n, active: enabled } : n
-          )
+          networks: networks.map(n => (n.id === bssId ? { ...n, active: enabled } : n))
         });
         // Refresh full status to get accurate data
         get().fetchWifiStatus();
@@ -264,7 +274,9 @@ export const useWifiStore = create<WifiState>((set, get) => ({
 
   setTempDisable: async (durationSeconds: number) => {
     try {
-      const response = await api.post<WifiTempDisableStatus>(API_ROUTES.WIFI_TEMP_DISABLE, { duration: durationSeconds });
+      const response = await api.post<WifiTempDisableStatus>(API_ROUTES.WIFI_TEMP_DISABLE, {
+        duration: durationSeconds
+      });
       if (response.success) {
         set({ tempDisableStatus: { enabled: true, remaining_time: durationSeconds } });
         // Refresh WiFi status
@@ -288,10 +300,10 @@ export const useWifiStore = create<WifiState>((set, get) => ({
         get().fetchWifiStatus();
         return true;
       }
-      set({ error: response.error?.message || 'Échec de l\'annulation' });
+      set({ error: response.error?.message || "Échec de l'annulation" });
       return false;
     } catch {
-      set({ error: 'Échec de l\'annulation' });
+      set({ error: "Échec de l'annulation" });
       return false;
     }
   },
