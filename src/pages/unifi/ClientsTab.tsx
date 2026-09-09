@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Users, Link2 } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
+import { VendorIcon } from '../../components/ui/VendorIcon';
 import { ClientSortKey } from './types';
 
 interface ClientsTabProps {
@@ -433,17 +434,20 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                                 className={index % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                             >
                                                 <td className="px-3 py-1.5 text-left font-semibold text-[13px] text-gray-300">
-                                                    {(() => {
-                                                        const rawName = (c.name || c.hostname || '').toString().trim();
-                                                        if (!rawName) {
-                                                            const ip = (c.ip || '').toString();
-                                                            const mac = (c.mac || '').toString();
-                                                            if (ip) return renderClickableIp(ip, 'text-gray-300', 9);
-                                                            if (mac) return mac;
-                                                            return '-';
-                                                        }
-                                                        return rawName.charAt(0).toUpperCase() + rawName.slice(1);
-                                                    })()}
+                                                    <div className="flex items-center gap-1.5">
+                                                        <VendorIcon vendor={c.oui} label={c.name || c.hostname} size={14} className="flex-shrink-0" />
+                                                        {(() => {
+                                                            const rawName = (c.name || c.hostname || '').toString().trim();
+                                                            if (!rawName) {
+                                                                const ip = (c.ip || '').toString();
+                                                                const mac = (c.mac || '').toString();
+                                                                if (ip) return renderClickableIp(ip, 'text-gray-300', 9);
+                                                                if (mac) return mac;
+                                                                return '-';
+                                                            }
+                                                            return rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                                                        })()}
+                                                    </div>
                                                 </td>
                                                 <td className="px-3 py-1.5 text-left text-sky-300 font-mono text-[12px]">
                                                     {renderClickableIp(c.ip, 'text-sky-300 font-mono text-[12px]', 9)}

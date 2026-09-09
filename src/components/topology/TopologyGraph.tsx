@@ -87,6 +87,17 @@ import {
 import { FAN_OUT_COUNT } from "./topologyConstants";
 
 type SourcePlugin = "freebox" | "unifi" | "scan-reseau";
+// react-flow's FitViewOptions.padding: either a uniform fraction of the
+// viewport (number) or explicit px/% per side. @xyflow/react doesn't export
+// the `Padding` type by name, so we declare a matching shape locally.
+type FitViewPadding =
+  | number
+  | {
+      left: `${number}px`;
+      top: `${number}px`;
+      right: `${number}%`;
+      bottom: `${number}%`;
+    };
 type EdgeMedium = "ethernet" | "wifi" | "uplink" | "virtual";
 type NodeKind =
   | "gateway"
@@ -280,9 +291,14 @@ function loadPersistedFilters(): PersistedFilters | null {
     const persistedKinds = Array.isArray(parsed.kinds)
       ? parsed.kinds.filter((k) => ALL_KINDS.includes(k))
       : null;
-    const persistedStatuses = Array.isArray(parsed.statuses)
+    let persistedStatuses = Array.isArray(parsed.statuses)
       ? parsed.statuses.filter((s) => ALL_STATUS.includes(s))
       : null;
+    // online + stale ("Ghost") is no longer a valid combo (see toggleStatus)
+    // — drop stale from a filter saved before this rule existed.
+    if (persistedStatuses?.includes("online") && persistedStatuses.includes("stale")) {
+      persistedStatuses = persistedStatuses.filter((s) => s !== "stale");
+    }
     return {
       sources: mergeWithDefaults(persistedSources, ALL_SOURCES),
       kinds: mergeWithDefaults(persistedKinds, ALL_KINDS),
@@ -388,6 +404,18 @@ function toggleSet<T>(set: Set<T>, value: T): Set<T> {
   const next = new Set(set);
   if (next.has(value)) next.delete(value);
   else next.add(value);
+  return next;
+}
+
+// online and stale ("Ghost") are mutually exclusive in the status filter:
+// Ghost cards are long-gone Freebox DHCP cache entries with no reliable
+// medium info, and mixing them with a live online layout produces a mess
+// (Ghost cards crossing/hiding the Freebox's own uplink to the gateway).
+// Turning one on drops the other; offline stays freely combinable with both.
+function toggleStatus(prev: Set<Status>, value: Status): Set<Status> {
+  const next = toggleSet(prev, value);
+  if (value === "online" && next.has("online")) next.delete("stale");
+  if (value === "stale" && next.has("stale")) next.delete("online");
   return next;
 }
 
@@ -1146,10 +1174,6 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     reactFlowRef.current = instance;
   }, []);
 
-  const fitView = useCallback(() => {
-    reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 });
-  }, []);
-
   // Image / PDF / SVG / JSON export of the current graph view.
   // PNG and PDF use a single full-graph capture via html-to-image after a
   // fitView so the user gets the entire topology, not just what scrolls
@@ -1225,19 +1249,6 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     });
   }, []);
 
-  const resetLayout = useCallback(async () => {
-    try {
-      await api.delete("/api/topology/positions");
-    } catch {
-      /* ignore */
-    }
-    setManualPositions(new Map());
-    // Re-fit after a short delay so the dagre layout has rendered
-    globalThis.setTimeout(
-      () => reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 }),
-      50,
-    );
-  }, []);
 
   // Nudge the currently-selected node by (dx, dy) pixels and persist.
   // Used by the edit toolbar arrow buttons and the keyboard arrow keys.
@@ -1296,6 +1307,53 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  // The filters panel is an absolute overlay on top of the canvas (top-left),
+  // not part of React Flow's own layout — fitView has no idea it's there and
+  // happily centers the diagram behind it. When the panel is open, reserve
+  // its measured footprint as extra left/top padding so the graph settles in
+  // the space that's actually visible instead of appearing left/top-stuck.
+  const filtersPanelRef = useRef<HTMLDivElement>(null);
+  const getFitViewPadding = useCallback((): FitViewPadding => {
+    // Only Horizontal/Editable need this — they share the same hierarchical
+    // layout (buildHierarchicalLayout) and can grow tall enough to sit
+    // behind the filters panel. Tree (plain dagre LR) doesn't have that
+    // failure mode, so it keeps the standard uniform padding.
+    if (!filtersOpen || mode === "tree") return 0.2;
+    const el = filtersPanelRef.current;
+    const w = el?.offsetWidth ?? 0;
+    const h = el?.offsetHeight ?? 0;
+    return {
+      left: `${w + 24}px` as `${number}px`,
+      top: `${h + 24}px` as `${number}px`,
+      right: "10%",
+      bottom: "10%",
+    };
+  }, [filtersOpen, mode]);
+
+  const fitView = useCallback(() => {
+    reactFlowRef.current?.fitView({
+      padding: getFitViewPadding(),
+      duration: 400,
+    });
+  }, [getFitViewPadding]);
+
+  const resetLayout = useCallback(async () => {
+    try {
+      await api.delete("/api/topology/positions");
+    } catch {
+      /* ignore */
+    }
+    setManualPositions(new Map());
+    // Re-fit after a short delay so the dagre layout has rendered
+    globalThis.setTimeout(
+      () =>
+        reactFlowRef.current?.fitView({
+          padding: getFitViewPadding(),
+          duration: 400,
+        }),
+      50,
+    );
+  }, [getFitViewPadding]);
 
   // Skip the initial mount: we'd just write back what we just read.
   const didMountFilters = useRef(false);
@@ -1805,12 +1863,15 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       lastFittedModeRef.current !== null && lastFittedModeRef.current !== mode;
     if (!firstLoad && !modeChanged) return;
     const id = globalThis.setTimeout(() => {
-      reactFlowRef.current?.fitView({ padding: 0.2, duration: 400 });
+      reactFlowRef.current?.fitView({
+        padding: getFitViewPadding(),
+        duration: 400,
+      });
       lastFittedCountRef.current = count;
       lastFittedModeRef.current = mode;
     }, 200);
     return () => globalThis.clearTimeout(id);
-  }, [layouted, mode]);
+  }, [layouted, mode, getFitViewPadding]);
 
   const nodeLabelById = useMemo(
     () => new Map(filteredGraph.nodes.map((n) => [n.id, n.label])),
@@ -1863,7 +1924,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       style={{ height }}
     >
       {/* Filters panel (top-left) — collapsible */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-700 shadow-lg max-w-[60vw]">
+      <div
+        ref={filtersPanelRef}
+        className="absolute top-3 left-3 z-10 flex flex-col gap-2 p-2 rounded-lg bg-slate-900/90 border border-slate-700 shadow-lg max-w-[60vw]"
+      >
         <button
           onClick={() => setFiltersOpen((prev) => !prev)}
           className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-300 hover:text-slate-100 transition-colors"
@@ -1967,7 +2031,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   <button
                     key={s}
                     onClick={() =>
-                      setStatusFilter((prev) => toggleSet(prev, s))
+                      setStatusFilter((prev) => toggleStatus(prev, s))
                     }
                     className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded border transition-colors ${
                       active

@@ -17,6 +17,7 @@ import { SearchHistoryModal, type SearchHistoryEntry } from '../components/modal
 import { useTranslation } from 'react-i18next';
 import logoFreebox from '../icons/logo_ultra.svg';
 import logoUnifi from '../icons/logo_unifi.svg';
+import { VendorIcon } from '../components/ui/VendorIcon';
 
 /** Ports connus : numéro → nom du service (comme sur la page Scan) */
 const WELL_KNOWN_PORTS: Record<number, string> = {
@@ -1497,7 +1498,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <div className="flex-1">
                                     <h2 className="text-2xl font-bold text-theme-primary mb-2">{ipDetails.ip}</h2>
                                     {(ipDetails.unifi?.client?.name || ipDetails.unifi?.client?.hostname || ipDetails.freebox?.name || ipDetails.scanner?.hostname) && (
-                                        <p className="text-lg text-theme-secondary font-medium">
+                                        <p className="text-lg text-theme-secondary font-medium flex items-center gap-2">
+                                            <VendorIcon
+                                                vendor={ipDetails.scanner?.vendor}
+                                                label={ipDetails.unifi?.client?.name || ipDetails.unifi?.client?.hostname || ipDetails.freebox?.name || ipDetails.scanner?.hostname}
+                                                size={18}
+                                                className="flex-shrink-0"
+                                            />
                                             {ipDetails.unifi?.client?.name || ipDetails.unifi?.client?.hostname || ipDetails.freebox?.name || ipDetails.scanner?.hostname}
                                         </p>
                                     )}
@@ -2322,6 +2329,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                         const isUnifi = result.pluginId === 'unifi' || (isMerged && sources?.some(s => s.toLowerCase().includes('unifi')));
                                         const isScan = result.pluginId === 'scan-reseau' || (isMerged && sources?.some(s => s.includes('Scan')));
                                         const dhcpFrom = (result.additionalData as { dhcpFrom?: 'freebox' | 'unifi' } | undefined)?.dhcpFrom;
+                                        const resultVendor = (result.additionalData as { vendor?: string } | undefined)?.vendor;
                                         const openPortsCount = (result.additionalData as { openPortsCount?: number } | undefined)?.openPortsCount ?? 0;
                                         const adPorts = result.additionalData as { openPorts?: { port: number; protocol?: string }[]; lastPortScan?: string } | undefined;
                                         const openPortsList = Array.isArray(adPorts?.openPorts) ? adPorts.openPorts : [];
@@ -2342,6 +2350,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                         {isScan && (
                                                             <span title="Scan Réseau : découverte, ports ouverts"><Activity size={16} className="text-cyan-400 flex-shrink-0" /></span>
                                                         )}
+                                                        <VendorIcon vendor={resultVendor} label={result.name} size={16} className="flex-shrink-0" />
                                                         {dhcpFrom && (
                                                             <span
                                                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${

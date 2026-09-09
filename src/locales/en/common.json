@@ -163,7 +163,7 @@
     "status": {
       "online": "Online",
       "offline": "Offline",
-      "stale": "Stale",
+      "stale": "Ghost",
       "staleHint": "Devices only seen by Freebox while inactive — likely cached after migration to UniFi DHCP"
     },
     "fitView": "Fit",

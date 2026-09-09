@@ -14,6 +14,10 @@ import {
     PORT_CELL_WIDTH,
     FAN_OUT_COUNT,
 } from './topologyConstants';
+import { siProxmox } from 'simple-icons';
+import { getVendorBrand, getVendorBrandFromLabel, getVendorIconFallback, getVendorIconFallbackFromLabel } from '../../utils/vendorBrand';
+import { mapHostTypeToCategory, CATEGORY_ICON } from '../../utils/deviceCategory';
+import { BrandSvgIcon } from '../ui/VendorIcon';
 
 type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
@@ -259,6 +263,9 @@ export const SwitchPortGrid: React.FC<{
 
 function pickClientIcon(d: TopologyNodeData, fallback: React.ElementType): React.ElementType {
     if (isFreeboxPlayer(d)) return Tv;
+    const vendorFallback = getVendorIconFallback(d.vendor) ?? getVendorIconFallbackFromLabel(d.label);
+    if (vendorFallback) return vendorFallback;
+    if (d.host_type) return CATEGORY_ICON[mapHostTypeToCategory(d.host_type)];
     return fallback;
 }
 
@@ -385,6 +392,16 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
     const isInfra = INFRA_KINDS_SET.has(d.kind);
     const BrandIcon = isInfra ? pickInfraIcon(d.kind, d.sources) : null;
+    // vm-host cards show the hypervisor's own logo (currently just Proxmox)
+    // ahead of the source-plugin logo — it's the more meaningful identifier.
+    const vmHostBrand = d.kind === 'vm-host' && d.hypervisor?.toLowerCase() === 'proxmox' ? siProxmox : null;
+    // Client cards prefer a vendor brand logo (e.g. Apple, Samsung) — or a
+    // label-based match for software-only vendors like Veeam that never
+    // show up in OUI vendor detection — over the Freebox-player / host_type
+    // category icon, which itself beats the generic kind icon (Smartphone).
+    const clientVendorBrand = !isInfra && !isFreeboxPlayer(d)
+        ? (getVendorBrand(d.vendor) ?? getVendorBrandFromLabel(d.label))
+        : null;
     const ClientIcon = isInfra ? null : pickClientIcon(d, style.icon);
     const Icon = BrandIcon ?? ClientIcon ?? style.icon;
     const inactive = d.active === false;
@@ -499,7 +516,13 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
             })}
             <div className={`relative flex items-center ${isInfra ? 'gap-2.5 p-3' : 'gap-2 p-2.5'}`}>
                 <div className={`flex-none rounded-md bg-slate-950/70 border border-white/15 flex items-center justify-center ${iconWrapperColor} ${isInfra ? 'w-11 h-11' : 'w-9 h-9'}`}>
-                    <Icon size={isInfra ? 22 : 18} />
+                    {vmHostBrand ? (
+                        <BrandSvgIcon icon={vmHostBrand} size={isInfra ? 22 : 18} />
+                    ) : clientVendorBrand ? (
+                        <BrandSvgIcon icon={clientVendorBrand} size={isInfra ? 22 : 18} />
+                    ) : (
+                        <Icon size={isInfra ? 22 : 18} />
+                    )}
                 </div>
                 <div className="min-w-0 flex-1">
                     <div className={`font-semibold truncate ${isInfra ? 'text-base' : 'text-sm'} ${labelClass}`}>

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.11] - 2026-09-09
+
+### Fixed
+
+- Topology: Freebox is its own Wi-Fi AP but never got a dedicated `ap` node (its AP MAC is merged onto the gateway box), so its wifi clients never qualified for the accordion layout and piled up in the same flat grid as wired clients. Added a `gateway-mixed` placement that splits a parent's children by edge medium instead of node kind: wired clients cascade diagonally to the left of the Freebox card, wifi clients cascade diagonally to the right, each card stepping further from the axis instead of stacking in a strict column so no card sits behind another link. UniFi AP / VM-host accordions are untouched.
+- Topology: the "Stale" status filter is renamed "Ghost" (label only) and is now mutually exclusive with "Online". Combining both mixed live devices with long-gone Freebox DHCP cache entries that have no reliable medium info, producing an unreadable graph. Offline still combines freely with either.
+
+### Added
+
+- Vendor brand icons (simple-icons) across Topology, Devices list, Network scan, Search and UniFi Clients: known manufacturers (Apple, Samsung, TP-Link, Ubiquiti, Synology, Proxmox...) now show their real logo instead of a generic device-type icon, resolved from the OUI vendor string or hostname for software-only brands with no MAC block (Veeam, LaMetric).
+
+---
+
 ## [0.10.10] - 2026-09-09
 
 ### Fixed

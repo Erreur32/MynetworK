@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { API_ROUTES } from '../utils/constants';
 import type { LanHost } from '../types/api';
 import type { Device } from '../types';
+import { mapHostTypeToCategory } from '../utils/deviceCategory';
 
 interface LanState {
   devices: Device[];
@@ -13,28 +14,6 @@ interface LanState {
   fetchDevices: () => Promise<void>;
   wakeOnLan: (mac: string, interfaceName?: string) => Promise<boolean>;
 }
-
-// Map host type to device type
-const mapHostType = (hostType: string): Device['type'] => {
-  const typeMap: Record<string, Device['type']> = {
-    smartphone: 'phone',
-    phone: 'phone',
-    tablet: 'tablet',
-    laptop: 'laptop',
-    computer: 'desktop',
-    workstation: 'desktop',
-    desktop: 'desktop',
-    multimedia: 'tv',
-    tv: 'tv',
-    television: 'tv',
-    gaming_console: 'tv',
-    networking_device: 'repeater',
-    printer: 'iot',
-    car: 'car',
-    other: 'other'
-  };
-  return typeMap[hostType?.toLowerCase()] || 'other';
-};
 
 export const useLanStore = create<LanState>((set, get) => ({
   devices: [],
@@ -76,7 +55,7 @@ export const useLanStore = create<LanState>((set, get) => ({
           return {
             id: host.id,
             name: host.primary_name || host.vendor_name || 'Unknown Device',
-            type: mapHostType(host.host_type),
+            type: mapHostTypeToCategory(host.host_type),
             connection: connectionType,
             speedDown: Math.round(speedDown * 10) / 10,
             speedUp: Math.round(speedUp * 10) / 10,

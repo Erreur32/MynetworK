@@ -1,50 +1,31 @@
 import React from 'react';
 import {
-  Smartphone,
-  Laptop,
-  Monitor,
-  Tv,
-  Globe,
-  Tablet,
-  Car,
-  Wifi,
   Cable,
   Signal,
   ArrowDown,
   ArrowUp
 } from 'lucide-react';
 import type { Device } from '../../types';
+import { CATEGORY_ICON } from '../../utils/deviceCategory';
+import { hasVendorIcon } from '../../utils/vendorBrand';
+import { VendorIcon } from '../ui/VendorIcon';
 
 interface DevicesListProps {
   devices: Device[];
   onDeviceClick?: (device: Device) => void;
 }
 
-const DeviceIcon: React.FC<{ type: Device['type']; active?: boolean }> = ({
+const DeviceIcon: React.FC<{ type: Device['type']; vendor?: string; name?: string; active?: boolean }> = ({
   type,
+  vendor,
+  name,
   active = true
 }) => {
-  const iconProps = { size: 18, className: active ? 'text-gray-300' : 'text-gray-600' };
-
-  switch (type) {
-    case 'phone':
-      return <Smartphone {...iconProps} />;
-    case 'tablet':
-      return <Tablet {...iconProps} />;
-    case 'laptop':
-      return <Laptop {...iconProps} />;
-    case 'desktop':
-      return <Monitor {...iconProps} />;
-    case 'tv':
-      return <Tv {...iconProps} />;
-    case 'car':
-      return <Car {...iconProps} />;
-    case 'repeater':
-      return <Wifi {...iconProps} />;
-    case 'iot':
-    default:
-      return <Globe {...iconProps} />;
+  if (hasVendorIcon(vendor, name)) {
+    return <VendorIcon vendor={vendor} label={name} size={18} />;
   }
+  const Icon = CATEGORY_ICON[type];
+  return <Icon size={18} className={active ? 'text-gray-300' : 'text-gray-600'} />;
 };
 
 export const DevicesList: React.FC<DevicesListProps> = ({ devices, onDeviceClick }) => {
@@ -94,7 +75,7 @@ export const DevicesList: React.FC<DevicesListProps> = ({ devices, onDeviceClick
                 p-2 rounded-lg
                 ${dev.active ? 'bg-[#252525]' : 'bg-[#1a1a1a]'}
               `}>
-                <DeviceIcon type={dev.type} active={dev.active} />
+                <DeviceIcon type={dev.type} vendor={dev.vendor} name={dev.name} active={dev.active} />
               </div>
               <div className="flex flex-col min-w-0">
                 <span className={`text-sm font-medium truncate ${dev.active ? 'text-gray-200' : 'text-gray-500'}`}>

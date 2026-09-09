@@ -11,7 +11,7 @@ export interface NetworkStat {
 export interface Device {
   id: string;
   name: string;
-  type: 'phone' | 'laptop' | 'desktop' | 'iot' | 'tv' | 'tablet' | 'car' | 'repeater' | 'other';
+  type: 'phone' | 'laptop' | 'desktop' | 'iot' | 'tv' | 'tablet' | 'car' | 'repeater' | 'nas' | 'other';
   connection: 'ethernet' | 'wifi';
   speedDown: number;
   speedUp: number;

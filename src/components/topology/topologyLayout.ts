@@ -200,10 +200,19 @@ function dagreLayout(
   return { nodes: positioned, edges };
 }
 
-function isWifiCluster(parentId: string, nodeById: Map<string, Node>): boolean {
-  const parent = nodeById.get(parentId);
-  const data = parent?.data as TopologyNodeData | undefined;
-  return data?.kind === "ap" || data?.kind === "repeater";
+// Per-child transport medium (from edge.data.medium). Drives the wifi vs
+// wired split below — unlike the old kind-based check, this also catches a
+// gateway (Freebox) that is its own Wi-Fi AP: it never gets an "ap"/"repeater"
+// node of its own (ensureFreeboxAp merges the AP MAC onto the gateway box),
+// so only the edge medium tells us which of its clients are wireless.
+function buildMediumByChild(edges: Edge[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const e of edges) {
+    const data = e.data as { medium?: string } | undefined;
+    // edges go parent→child; the child is the target
+    if (data?.medium) m.set(e.target, data.medium);
+  }
+  return m;
 }
 
 // vm-host stacks (Proxmox / KVM) get the same flanking-column treatment as
@@ -223,6 +232,11 @@ const ORPHAN = "__orphan__";
 // Horizontal-mode layout. Cluster placements depending on parent kind and
 // child count:
 //   - 'wifi-accordion'  Wi-Fi clients flank the AP (alternating L/R, half-row stagger)
+//   - 'gateway-mixed'   A gateway that is ALSO its own Wi-Fi AP (Freebox):
+//                       Wi-Fi clients get the accordion band right below the
+//                       card, wired clients get a centered grid band further
+//                       below — instead of dumping everything into one flat
+//                       grid regardless of medium.
 //   - 'wired-row'       Wired clients in a HORIZONTAL row below the switch,
 //                       ordered left-to-right by switch port (port 1 leftmost).
 //                       Replaces the old wired-column / wired-split-columns
@@ -236,6 +250,7 @@ const ORPHAN = "__orphan__";
 // different Y lines under the same main switch.
 type WrappedPlacement =
   | "wifi-accordion"
+  | "gateway-mixed"
   | "vm-accordion"
   | "wired-row"
   | "grid";
@@ -246,10 +261,20 @@ interface WrappedDim {
   n: number;
   placement: WrappedPlacement;
   anchor: WrappedAnchor;
+  // 'gateway-mixed' only — pre-split children so placement doesn't need to
+  // re-derive the medium split.
+  wifiChildren?: string[];
+  otherChildren?: string[];
 }
 
 const WRAPPED_HGAP = 28;
 const WRAPPED_VGAP = 18;
+// Column count for the "grid" fallback placement (large unparented clusters,
+// or >16 wired clients on one switch). Wide on purpose — React Flow's
+// zoom/fitView handles final on-screen scaling, so there's no need to
+// measure the actual canvas width here. Shared by computeWrappedDims,
+// placeWrappedChildren and placeOrphanGrid so the three stay consistent.
+const GRID_COLS = 8;
 // Vertical gap between an infra card and its cluster below.
 // Dynamic with client count: a switch with many clients has a dense fan-out
 // of edges arriving at its bottom edge. Adding vertical breathing room keeps
@@ -275,6 +300,38 @@ const WIRED_ROW_LEAD = 48; // gap between the switch's right edge and the first 
 const WIRED_ROW_BOTTOM_PAD = 90; // extra reserved height below the wired-row so the next infra rank
 // sits clear of the client cards
 const WIRED_ROW_MAX = 16; // beyond this, fall back to the grid placement (large unstructured set)
+
+// 'gateway-mixed' cascade: each successive card in a flank drifts further
+// AWAY from the parent's axis both horizontally and vertically (a diagonal
+// staircase instead of a strict vertical column). Every cable still exits
+// the parent from the same single point, so without this drift, cables to
+// cards deep in the flank would have to sweep past the cards closer to the
+// axis — this keeps a clear corridor per cable. Wraps into a new parallel
+// lane, offset past the previous lane's full reach, once a lane gets deep
+// enough that the drift would push cards too far out.
+const CASCADE_STEP_X = 34; // per-row horizontal drift away from the axis
+const CASCADE_ROW_H = CLIENT_H + 16; // per-row vertical step within a lane
+const CASCADE_LANE_MAX = 6; // cards per lane before wrapping to a new one
+const CASCADE_LANE_GAP = 24; // horizontal gap between two parallel lanes
+
+function cascadeLaneReach(depth: number): number {
+  return CLIENT_CARD_WIDTH + Math.max(0, depth - 1) * CASCADE_STEP_X;
+}
+
+// Reserved width for one flank (from the axis gap outward), used by dagre.
+function cascadeFlankWidth(n: number): number {
+  if (n <= 0) return 0;
+  const lanes = Math.ceil(n / CASCADE_LANE_MAX);
+  const fullLaneReach = cascadeLaneReach(CASCADE_LANE_MAX);
+  return lanes * fullLaneReach + Math.max(0, lanes - 1) * CASCADE_LANE_GAP;
+}
+
+// Reserved height for one flank — every lane is filled to CASCADE_LANE_MAX
+// depth before the next one starts, so the tallest lane bounds the flank.
+function cascadeFlankHeight(n: number): number {
+  if (n <= 0) return 0;
+  return Math.min(n, CASCADE_LANE_MAX) * CASCADE_ROW_H;
+}
 
 // Horizontal distance from the AP centre to the nearest edge of a flanking
 // client card. Sized so the AP card itself fits INSIDE the channel between
@@ -303,23 +360,52 @@ function wifiAccordionWidth(parentW: number): number {
 function computeWrappedDims(
   childrenByParent: Map<string, string[]>,
   nodeById: Map<string, Node>,
+  mediumByChild: Map<string, string>,
 ): Map<string, WrappedDim> {
   const dims = new Map<string, WrappedDim>();
   for (const [parentId, children] of childrenByParent) {
     const n = children.length;
-    const wifi = isWifiCluster(parentId, nodeById);
     const vmHost = isVmHostCluster(parentId, nodeById);
-    // wifi-accordion is built around a spine flanked by 2 columns — only
-    // makes sense for ≥2 clients. A lone wifi client falls through to the
-    // wired-column branch (placed to the right of the AP) so we don't
-    // waste the full accordion footprint for a single card.
-    if (wifi && n > 1) {
+    // Split by transport medium — works for an AP/repeater (all wifi), a
+    // switch (all wired) AND a gateway that is also its own AP (Freebox:
+    // a mix of both under the same parent).
+    const wifiChildren = vmHost
+      ? []
+      : children.filter((c) => mediumByChild.get(c) === "wifi");
+    const otherChildren = vmHost
+      ? children
+      : children.filter((c) => mediumByChild.get(c) !== "wifi");
+    // Gateway that is also its own AP (Freebox): wired clients cascade to
+    // the LEFT, wifi clients cascade to the RIGHT — never mixed in the same
+    // flank. Requires a real mix; a lone wifi client (n<=1) falls through
+    // to the wired-row/grid branches below, same as a pure switch.
+    if (wifiChildren.length > 1 && otherChildren.length > 0) {
+      const parentNode = nodeById.get(parentId);
+      const parentW = parentNode ? getNodeWidth(parentNode) : INFRA_CARD_WIDTH;
+      const gap = wifiSpineGap(parentW);
+      const leftW = gap + cascadeFlankWidth(otherChildren.length);
+      const rightW = gap + cascadeFlankWidth(wifiChildren.length);
+      dims.set(parentId, {
+        w: 2 * Math.max(leftW, rightW),
+        h: Math.max(
+          cascadeFlankHeight(otherChildren.length),
+          cascadeFlankHeight(wifiChildren.length),
+        ),
+        n: Math.max(wifiChildren.length, otherChildren.length),
+        placement: "gateway-mixed",
+        anchor: "center",
+        wifiChildren,
+        otherChildren,
+      });
+      continue;
+    }
+    if (wifiChildren.length > 1) {
       const parentNode = nodeById.get(parentId);
       const parentW = parentNode ? getNodeWidth(parentNode) : INFRA_CARD_WIDTH;
       dims.set(parentId, {
         w: wifiAccordionWidth(parentW),
-        h: wifiAccordionHeight(n),
-        n,
+        h: wifiAccordionHeight(wifiChildren.length),
+        n: wifiChildren.length,
         placement: "wifi-accordion",
         anchor: "center",
       });
@@ -355,8 +441,9 @@ function computeWrappedDims(
       continue;
     }
     // Grid fallback for very large sets (>16 clients on a single
-    // switch — rare in home networks).
-    const cols = 4;
+    // switch — rare in home networks — or an unparented/orphan cluster,
+    // which is common once a status filter excludes all infra nodes).
+    const cols = GRID_COLS;
     const rows = Math.ceil(n / cols);
     dims.set(parentId, {
       w: cols * CLIENT_CARD_WIDTH + (cols - 1) * WRAPPED_HGAP,
@@ -472,6 +559,63 @@ function placeWifiAccordion(
   return out;
 }
 
+// One flank of the gateway-mixed cascade. direction=1 drifts rightwards
+// (wifi), direction=-1 drifts leftwards (wired) — see CASCADE_* constants
+// above for why each card steps away from the axis instead of stacking in
+// a strict column.
+function placeCascadeFlank(
+  axisX: number,
+  originY: number,
+  children: string[],
+  clientById: Map<string, Node>,
+  direction: 1 | -1,
+): Node[] {
+  const out: Node[] = [];
+  children.forEach((cid, idx) => {
+    const c = clientById.get(cid);
+    if (!c) return;
+    const lane = Math.floor(idx / CASCADE_LANE_MAX);
+    const depth = idx % CASCADE_LANE_MAX;
+    const laneOffset = lane * (cascadeLaneReach(CASCADE_LANE_MAX) + CASCADE_LANE_GAP);
+    const drift = laneOffset + depth * CASCADE_STEP_X;
+    const x = direction === 1 ? axisX + drift : axisX - drift - CLIENT_CARD_WIDTH;
+    out.push({
+      ...c,
+      // Cable enters from the side facing the parent's axis.
+      targetPosition: direction === 1 ? Position.Left : Position.Right,
+      sourcePosition: Position.Bottom,
+      position: { x, y: originY + depth * CASCADE_ROW_H },
+    });
+  });
+  return out;
+}
+
+function placeGatewayMixed(
+  parent: Node,
+  dim: WrappedDim,
+  clientById: Map<string, Node>,
+): Node[] {
+  const wifiChildren = dim.wifiChildren ?? [];
+  const otherChildren = dim.otherChildren ?? [];
+  const parentW = getNodeWidth(parent);
+  const parentCx = parent.position.x + parentW / 2;
+  const gap = wifiSpineGap(parentW);
+  const originY =
+    parent.position.y + nodeHeightFor(parent) + wrappedClientVGap(dim.n);
+  const out: Node[] = [];
+  if (otherChildren.length > 0) {
+    out.push(
+      ...placeCascadeFlank(parentCx - gap, originY, otherChildren, clientById, -1),
+    );
+  }
+  if (wifiChildren.length > 0) {
+    out.push(
+      ...placeCascadeFlank(parentCx + gap, originY, wifiChildren, clientById, 1),
+    );
+  }
+  return out;
+}
+
 // Lay out wired clients in a horizontal row trailing to the RIGHT of the
 // parent (switch). Children are already pre-sorted by physical switch port
 // in bucketChildren (port 1 first), so iterating in array order gives the
@@ -507,9 +651,10 @@ function placeOrphanGrid(
   children: string[],
   clientById: Map<string, Node>,
   orphanX: number,
+  orphanBaseY: number,
   dim: WrappedDim,
 ): { nodes: Node[]; nextOrphanX: number } {
-  const cols = Math.max(1, Math.min(4, children.length));
+  const cols = Math.max(1, Math.min(GRID_COLS, children.length));
   const out: Node[] = [];
   children.forEach((cid, idx) => {
     const c = clientById.get(cid);
@@ -522,7 +667,7 @@ function placeOrphanGrid(
       sourcePosition: Position.Bottom,
       position: {
         x: orphanX + col * (CLIENT_CARD_WIDTH + WRAPPED_HGAP),
-        y: row * (CLIENT_H + WRAPPED_VGAP),
+        y: orphanBaseY + row * (CLIENT_H + WRAPPED_VGAP),
       },
     });
   });
@@ -535,8 +680,16 @@ function placeWrappedChildren(
   clientById: Map<string, Node>,
   dim: WrappedDim,
   orphanX: number,
+  orphanBaseY: number,
 ): { nodes: Node[]; nextOrphanX: number } {
-  if (!parent) return placeOrphanGrid(children, clientById, orphanX, dim);
+  if (!parent)
+    return placeOrphanGrid(children, clientById, orphanX, orphanBaseY, dim);
+  if (dim.placement === "gateway-mixed") {
+    return {
+      nodes: placeGatewayMixed(parent, dim, clientById),
+      nextOrphanX: orphanX,
+    };
+  }
   if (dim.placement === "wifi-accordion" || dim.placement === "vm-accordion") {
     // Same geometry, different semantic (drives the virtual-link curve on
     // the edge renderer side). Sides of the parent → cards facing inward.
@@ -552,7 +705,7 @@ function placeWrappedChildren(
     };
   }
   // grid — large fallback, cluster centered below parent
-  const cols = 4;
+  const cols = GRID_COLS;
   const baseX = parent.position.x + getNodeWidth(parent) / 2 - dim.w / 2;
   const baseY =
     parent.position.y +
@@ -637,7 +790,7 @@ function buildHierarchicalLayout(
     ORPHAN,
     portByChild,
   );
-  const dims = computeWrappedDims(childrenByParent, nodeById);
+  const dims = computeWrappedDims(childrenByParent, nodeById, buildMediumByChild(edges));
   const reservedH = equalizeSiblings(infraNodes, edges, nodeById, dims);
 
   const g = new dagre.graphlib.Graph();
@@ -684,6 +837,18 @@ function buildHierarchicalLayout(
 
   const positionedClients: Node[] = [];
   let orphanX = -500;
+  // Orphan cards (no surviving parent — e.g. a status filter excludes every
+  // infra node) get their own grid, unrelated to any dagre rank. Without
+  // this they'd start at y=0 and land on top of whichever infra nodes DID
+  // survive the filter. Start below the lowest point of the real hierarchy
+  // instead — reservedH already accounts for each infra's own cluster.
+  const orphanBaseY = positionedInfra.length
+    ? Math.max(
+        ...positionedInfra.map(
+          (n) => n.position.y + (reservedH.get(n.id) ?? nodeHeightFor(n)),
+        ),
+      ) + WRAPPED_CLIENT_VGAP_BASE
+    : 0;
   // Index for O(1) parent/child lookups inside the placement loop (was
   // O(P×I) and O(N²) with `.find()` on each child).
   const clientById = new Map(clientNodes.map((c) => [c.id, c] as const));
@@ -698,6 +863,7 @@ function buildHierarchicalLayout(
       clientById,
       dim,
       orphanX,
+      orphanBaseY,
     );
     positionedClients.push(...placed.nodes);
     orphanX = placed.nextOrphanX;

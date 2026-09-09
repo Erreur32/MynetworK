@@ -16,6 +16,7 @@ import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 import { ToastContainer, type ToastData } from '../components/ui/Toast';
+import { VendorIcon } from '../components/ui/VendorIcon';
 import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
@@ -2140,6 +2141,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         </td>
                                         <td className="py-3 px-4 text-sm text-gray-300">
                                             <div className="flex items-start gap-2 flex-wrap">
+                                                <VendorIcon vendor={scan.vendor} label={scan.hostname} size={14} className="flex-shrink-0 mt-0.5" />
                                                 <span className="break-words whitespace-normal">{scan.vendor || '--'}</span>
                                                 {scan.vendorSource && (() => {
                                                     const badge = getSourceBadge(scan.vendorSource, 'vendor');
