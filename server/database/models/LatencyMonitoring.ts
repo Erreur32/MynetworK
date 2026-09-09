@@ -186,18 +186,69 @@ export class LatencyMonitoringRepository {
     }
 
     /**
-     * Get measurements for an IP within a time range
+     * Get measurements for an IP within a time range.
+     *
+     * Raw pings happen every ~15s (see latencyMonitoringScheduler), so a naive
+     * SELECT * over 3-30 days can return 17k-170k rows and freeze the browser
+     * chart. Above `maxPoints * 2` raw rows, we bucket by time window in SQL
+     * and keep only the min/max latency per bucket (preserves spike visibility
+     * without shipping every raw point).
      */
-    static getMeasurements(ip: string, days: number = 30): LatencyMeasurement[] {
+    static getMeasurements(ip: string, days: number = 30, maxPoints: number = 2000): LatencyMeasurement[] {
         const db = getDatabase();
+        const IP_AND_RANGE_FILTER = `ip = ? AND measured_at >= datetime('now', '-' || ? || ' days')`;
+
+        const countRow = db.prepare(`
+            SELECT COUNT(*) as count FROM latency_measurements WHERE ${IP_AND_RANGE_FILTER}
+        `).get(ip, days) as { count: number };
+
+        if (countRow.count <= maxPoints * 2) {
+            const stmt = db.prepare(`
+                SELECT * FROM latency_measurements
+                WHERE ${IP_AND_RANGE_FILTER}
+                ORDER BY measured_at ASC
+            `);
+            const rows = stmt.all(ip, days) as any[];
+            return rows.map(row => this.mapRowToLatencyMeasurement(row));
+        }
+
+        const RAW_INTERVAL_SECONDS = 15;
+        const bucketSeconds = Math.max(RAW_INTERVAL_SECONDS, Math.ceil((days * 86400) / maxPoints));
+
         const stmt = db.prepare(`
-            SELECT * FROM latency_measurements 
-            WHERE ip = ? AND measured_at >= datetime('now', '-' || ? || ' days')
-            ORDER BY measured_at ASC
+            SELECT
+                MIN(measured_at) as bucketStart,
+                MAX(measured_at) as bucketEnd,
+                MIN(CASE WHEN packet_loss = 0 THEN latency END) as minLatency,
+                MAX(CASE WHEN packet_loss = 0 THEN latency END) as maxLatency,
+                SUM(packet_loss) as lossCount
+            FROM latency_measurements
+            WHERE ${IP_AND_RANGE_FILTER}
+            GROUP BY (CAST(strftime('%s', measured_at) AS INTEGER) / CAST(? AS INTEGER))
+            ORDER BY bucketStart ASC
         `);
-        const rows = stmt.all(ip, days) as any[];
-        
-        return rows.map(row => this.mapRowToLatencyMeasurement(row));
+        const buckets = stmt.all(ip, days, bucketSeconds) as Array<{
+            bucketStart: string;
+            bucketEnd: string;
+            minLatency: number | null;
+            maxLatency: number | null;
+            lossCount: number;
+        }>;
+
+        const result: LatencyMeasurement[] = [];
+        for (const bucket of buckets) {
+            // Synthetic rows have no real DB id since they represent an aggregated bucket, not a single ping.
+            if (bucket.lossCount > 0) {
+                result.push({ id: 0, ip, latency: null, packetLoss: true, measuredAt: new Date(bucket.bucketStart) });
+            }
+            if (bucket.minLatency !== null) {
+                result.push({ id: 0, ip, latency: bucket.minLatency, packetLoss: false, measuredAt: new Date(bucket.bucketStart) });
+                if (bucket.maxLatency !== bucket.minLatency) {
+                    result.push({ id: 0, ip, latency: bucket.maxLatency, packetLoss: false, measuredAt: new Date(bucket.bucketEnd) });
+                }
+            }
+        }
+        return result;
     }
 
     /**

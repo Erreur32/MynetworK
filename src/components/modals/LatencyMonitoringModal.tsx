@@ -6,17 +6,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { X } from 'lucide-react';
-import {
-    ScatterChart,
-    Scatter,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    Cell
-} from 'recharts';
 import { api } from '../../api/client';
+import { LatencyCanvasChart } from './LatencyCanvasChart';
 
 interface LatencyMonitoringModalProps {
     isOpen: boolean;
@@ -42,19 +33,6 @@ interface Statistics {
 interface NetworkScanResponse {
     hostname?: string;
 }
-
-/**
- * Get color for latency value (exactly like Lagident)
- * Green for low (0-50ms), Yellow/Orange for moderate (50-150ms), Red for high (150-250ms)
- */
-const getLatencyColor = (latency: number | null): string => {
-    if (latency === null) return '#ef4444'; // Red for packet loss
-    
-    if (latency < 50) return '#10b981'; // Green
-    if (latency < 100) return '#f59e0b'; // Yellow/Orange
-    if (latency < 150) return '#f97316'; // Orange
-    return '#ef4444'; // Red
-};
 
 /**
  * Format time for X-axis (adapts based on time range)
@@ -142,54 +120,35 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
         }
     };
 
-    // Downsample data if too many points (like Lagident optimization)
-    // Maximum points for smooth rendering: ~10,000 points
-    const MAX_POINTS = 10000;
-    
-    // Prepare data for scatter chart with downsampling
+    // Safety net only: the server already caps the payload to ~4000 points
+    // (see /api/latency-monitoring/measurements bucketing). This is a plain
+    // fixed-stride decimation to guarantee a hard cap regardless of server config.
+    const MAX_POINTS = 6000;
+
     const chartData = useMemo(() => {
         const validMeasurements = measurements
             .filter(m => !m.packetLoss && m.latency !== null && m.latency !== undefined)
             .map(m => ({
                 x: new Date(m.measuredAt).getTime(),
-                y: m.latency!,
                 latency: m.latency!,
                 timestamp: m.measuredAt
             }));
-        
-        // If we have too many points, downsample intelligently
-        if (validMeasurements.length > MAX_POINTS) {
-            // Downsampling: keep every Nth point, but ensure we keep min/max in each window
-            const step = Math.ceil(validMeasurements.length / MAX_POINTS);
-            const downsampled: typeof validMeasurements = [];
-            
-            for (let i = 0; i < validMeasurements.length; i += step) {
-                const window = validMeasurements.slice(i, Math.min(i + step, validMeasurements.length));
-                if (window.length === 0) continue;
-                
-                // Keep min, max, and middle point of each window to preserve spikes
-                const sorted = [...window].sort((a, b) => a.latency - b.latency);
-                const min = sorted[0];
-                const max = sorted[sorted.length - 1];
-                const middle = sorted[Math.floor(sorted.length / 2)];
-                
-                // Add points, avoiding duplicates
-                const pointsToAdd = [min, middle, max].filter((p, idx, arr) => 
-                    arr.findIndex(p2 => p2.x === p.x) === idx
-                );
-                downsampled.push(...pointsToAdd);
-            }
-            
-            // Sort by time to maintain chronological order
-            return downsampled.sort((a, b) => a.x - b.x);
+
+        if (validMeasurements.length <= MAX_POINTS) {
+            return validMeasurements;
         }
-        
-        return validMeasurements;
+
+        const step = Math.ceil(validMeasurements.length / MAX_POINTS);
+        const decimated: typeof validMeasurements = [];
+        for (let i = 0; i < validMeasurements.length; i += step) {
+            decimated.push(validMeasurements[i]);
+        }
+        return decimated;
     }, [measurements]);
 
     // Calculate dynamic Y domain exactly like Lagident
     // Lagident uses: min = 0, max = max(latency) + padding, with adaptive padding
-    const yDomain = useMemo(() => {
+    const yDomain = useMemo<[number, number]>(() => {
         if (chartData.length === 0) return [0, 250];
         
         const latencies = chartData.map(d => d.latency);
@@ -238,7 +197,6 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
             .filter(m => m.packetLoss)
             .map(m => ({
                 x: new Date(m.measuredAt).getTime(),
-                y: 1, // Loss axis value
                 timestamp: m.measuredAt
             }));
     }, [measurements]);
@@ -261,46 +219,6 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
         };
     }, [dataRange]);
     
-    // Calculate optimal tick interval based on data range
-    // With horizontal dates, we need fewer ticks to avoid overlap
-    const xAxisTickInterval = useMemo(() => {
-        if (!dataRange) return 'preserveStartEnd';
-        const daysSpan = (dataRange.max - dataRange.min) / (1000 * 60 * 60 * 24);
-        
-        // With horizontal dates, limit ticks to avoid overlap
-        // Show approximately 8-12 ticks maximum
-        const totalPoints = chartData.length;
-        if (totalPoints === 0) return 0;
-        
-        // Calculate interval to show ~10 ticks
-        const desiredTicks = 10;
-        const interval = Math.max(1, Math.floor(totalPoints / desiredTicks));
-        
-        // For very short ranges (< 1 day), show more ticks
-        if (daysSpan < 1) return Math.max(0, Math.floor(interval / 2));
-        
-        // For longer ranges, use calculated interval
-        return interval;
-    }, [dataRange, chartData.length]);
-
-    // Custom tooltip
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length > 0) {
-            const data = payload[0].payload;
-            return (
-                <div className="bg-[#1f2937] border border-gray-700 rounded-lg p-3 shadow-lg">
-                    <p className="text-gray-300 text-sm mb-1">
-                        {new Date(data.timestamp).toLocaleString('fr-FR')}
-                    </p>
-                    <p className="text-white font-medium">
-                        Latence: <span style={{ color: getLatencyColor(data.latency) }}>{typeof data.latency === 'number' ? data.latency.toFixed(3) : 'N/A'}ms</span>
-                    </p>
-                </div>
-            );
-        }
-        return null;
-    };
-
     if (!isOpen) return null;
 
     const displayName = hostname ? `${hostname} - ${ip}` : ip;
@@ -391,87 +309,12 @@ export const LatencyMonitoringModal: React.FC<LatencyMonitoringModalProps> = ({
                                     </div>
                                 )}
                                 <div className="w-full flex-1 min-h-0 bg-[#0f0f0f] rounded border border-gray-900/50 p-2 relative">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ScatterChart
-                                            margin={{ top: 20, right: 80, bottom: 60, left: 20 }}
-                                        >
-                                        <CartesianGrid 
-                                            strokeDasharray="3 3" 
-                                            stroke="#374151" 
-                                            vertical={true}
-                                            horizontal={true}
-                                        />
-                                        {/* Fine vertical grid lines for X-axis */}
-                                        <CartesianGrid 
-                                            strokeDasharray="1 1" 
-                                            stroke="#2a2a2a" 
-                                            vertical={true}
-                                            horizontal={false}
-                                        />
-                                        <XAxis
-                                            type="number"
-                                            dataKey="x"
-                                            domain={['dataMin', 'dataMax']}
-                                            tickFormatter={formatXAxis}
-                                            stroke="#6b7280"
-                                            tick={{ fill: '#6b7280', fontSize: 10 }}
-                                            angle={0}
-                                            textAnchor="middle"
-                                            height={50}
-                                            interval={typeof xAxisTickInterval === 'number' ? xAxisTickInterval : undefined}
-                                            allowDuplicatedCategory={false}
-                                        />
-                                        <YAxis
-                                            yAxisId="latency"
-                                            type="number"
-                                            dataKey="y"
-                                            domain={yDomain}
-                                            label={{ value: 'Latency', angle: -90, position: 'insideLeft', style: { fill: '#9ca3af' } }}
-                                            stroke="#6b7280"
-                                            tick={{ fill: '#6b7280', fontSize: 11 }}
-                                            allowDataOverflow={false}
-                                        />
-                                        <YAxis
-                                            yAxisId="loss"
-                                            type="number"
-                                            dataKey="y"
-                                            domain={[0, 1]}
-                                            orientation="right"
-                                            label={{ value: 'Loss', angle: 90, position: 'insideRight', style: { fill: '#9ca3af' } }}
-                                            stroke="#6b7280"
-                                            tick={{ fill: '#6b7280', fontSize: 11 }}
-                                            ticks={[0, 1]}
-                                        />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Scatter
-                                            yAxisId="latency"
-                                            name="Latency"
-                                            data={chartData}
-                                            fill="#8884d8"
-                                        >
-                                            {chartData.map((entry, index) => (
-                                                <Cell 
-                                                    key={`cell-${index}`} 
-                                                    fill={getLatencyColor(entry.latency)}
-                                                    r={chartData.length > 5000 ? 1.5 : chartData.length > 2000 ? 2.5 : chartData.length > 1000 ? 3 : 4}
-                                                />
-                                            ))}
-                                        </Scatter>
-                                        {/* Packet loss as vertical lines */}
-                                        {packetLossData.length > 0 && (
-                                            <Scatter
-                                                yAxisId="loss"
-                                                name="Packet Loss"
-                                                data={packetLossData}
-                                                fill="#ef4444"
-                                            >
-                                                {packetLossData.map((entry, index) => (
-                                                    <Cell key={`loss-${index}`} fill="#ef4444" />
-                                                ))}
-                                            </Scatter>
-                                        )}
-                                    </ScatterChart>
-                                    </ResponsiveContainer>
+                                    <LatencyCanvasChart
+                                        data={chartData}
+                                        lossData={packetLossData}
+                                        yDomain={yDomain}
+                                        formatXAxis={formatXAxis}
+                                    />
                                 </div>
 
                                 {/* Color Legend */}

@@ -134,7 +134,8 @@ router.get('/measurements/:ip', (req, res) => {
     try {
         const ip = req.params.ip;
         const days = parseInt(req.query.days as string) || 30;
-        
+        const maxPoints = Math.min(5000, Math.max(200, parseInt(req.query.maxPoints as string) || 2000));
+
         if (!isValidIpv4(ip)) {
             return res.status(400).json({
                 success: false,
@@ -144,7 +145,7 @@ router.get('/measurements/:ip', (req, res) => {
             });
         }
 
-        const measurements = latencyMonitoringService.getMeasurements(ip, days);
+        const measurements = latencyMonitoringService.getMeasurements(ip, days, maxPoints);
         
         const formattedMeasurements = measurements.map(m => ({
             latency: m.latency !== null ? Number(m.latency) : null,

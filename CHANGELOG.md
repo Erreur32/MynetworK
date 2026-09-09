@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.10] - 2026-09-09
+
+### Fixed
+
+- Network scan, Latency Monitoring modal: opening it for an IP monitored over several days could freeze the tab. Pings run every ~15s, so 3-30 days meant 17k-170k raw rows returned by `/api/latency-monitoring/measurements/:ip` with no aggregation, plus a broken client-side downsampling step that could return up to 3x its stated cap instead of reducing point count.
+- The measurements endpoint now aggregates in SQL once the raw row count exceeds a threshold, bucketing by time window and keeping the min/max latency per bucket so spikes stay visible while the payload is capped at a few thousand points regardless of the selected period.
+- Replaced the Recharts scatter chart (one SVG node per data point) with a canvas-based renderer (`LatencyCanvasChart`) for this view, removing the per-point DOM/fiber overhead that made large point counts unusable.
+
+---
+
 ## [0.10.9] - 2026-09-08
 
 ### Fixed

@@ -95,12 +95,12 @@ export class LatencyMonitoringService {
     /**
      * Get measurements for an IP
      */
-    getMeasurements(ip: string, days: number = 30): Array<{
+    getMeasurements(ip: string, days: number = 30, maxPoints: number = 2000): Array<{
         latency: number | null;
         packetLoss: boolean;
         measuredAt: Date;
     }> {
-        const measurements = LatencyMonitoringRepository.getMeasurements(ip, days);
+        const measurements = LatencyMonitoringRepository.getMeasurements(ip, days, maxPoints);
         return measurements.map(m => ({
             latency: m.latency,
             packetLoss: m.packetLoss,
