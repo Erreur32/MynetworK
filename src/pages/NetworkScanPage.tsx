@@ -77,6 +77,29 @@ const TOOLTIP_V_GAP = 16;
 const SHOW_VENDOR_SOURCE_BADGE = false;
 const SHOW_HOSTNAME_SOURCE_BADGE = false;
 
+/** Bouton copier-coller générique (icône seule ou icône + libellé), avec retour visuel "copié" temporaire. */
+const CopyButton: React.FC<{
+    text: string;
+    title: string;
+    size?: number;
+    label?: string;
+    copiedLabel?: string;
+    className?: string;
+}> = ({ text, title, size = 14, label, copiedLabel, className = 'p-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors flex-shrink-0' }) => {
+    const [copied, setCopied] = useState(false);
+    const handleClick = () => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+    return (
+        <button onClick={handleClick} className={className} title={title}>
+            {copied ? <Check size={size} className="text-emerald-400" /> : <Copy size={size} />}
+            {label && (copied ? copiedLabel : label)}
+        </button>
+    );
+};
+
 /** Calcule left/top du tooltip, centré horizontalement sur l'élément survolé (rect). Au-dessus si possible, sinon en dessous. Horizontalement : centré puis clamp tableau/fenêtre. */
 function getTooltipPosition(
     rect: { left: number; top: number; bottom: number; right: number },
@@ -214,18 +237,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
-    const [copiedMac, setCopiedMac] = useState(false);
-    const handleCopyMac = (mac: string) => {
-        navigator.clipboard.writeText(mac);
-        setCopiedMac(true);
-        setTimeout(() => setCopiedMac(false), 2000);
-    };
-    const [copiedPorts, setCopiedPorts] = useState(false);
-    const handleCopyPorts = (ports: { port: number; protocol?: string }[]) => {
-        navigator.clipboard.writeText(ports.map((p) => p.port).join(', '));
-        setCopiedPorts(true);
-        setTimeout(() => setCopiedPorts(false), 2000);
-    };
     const TOOLTIP_MAC_W = 320;
     const TOOLTIP_MAC_H = 100;
     const TOOLTIP_PORTS_W = 640;
@@ -2370,13 +2381,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{t('networkScan.tooltips.macAddress')}</div>
                         <div className="flex items-center gap-2">
                             <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
-                            <button
-                                onClick={() => handleCopyMac(macTooltip.mac)}
-                                className="p-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors flex-shrink-0"
-                                title={t('networkScan.tooltips.copyMac')}
-                            >
-                                {copiedMac ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                            </button>
+                            <CopyButton text={macTooltip.mac} title={t('networkScan.tooltips.copyMac')} />
                         </div>
                     </div>
                 );
@@ -2532,14 +2537,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         <div className="flex items-center justify-between mb-3">
                             <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">{portsTooltip.ip}</div>
                             {sorted.length > 0 && (
-                                <button
-                                    onClick={() => handleCopyPorts(sorted)}
-                                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors text-xs"
+                                <CopyButton
+                                    text={sorted.map((p) => p.port).join(', ')}
                                     title={t('networkScan.tooltips.copyPorts')}
-                                >
-                                    {copiedPorts ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                                    {copiedPorts ? t('networkScan.tooltips.copied') : t('networkScan.tooltips.copyAll')}
-                                </button>
+                                    size={12}
+                                    label={t('networkScan.tooltips.copyAll')}
+                                    copiedLabel={t('networkScan.tooltips.copied')}
+                                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors text-xs"
+                                />
                             )}
                         </div>
                         {sorted.length > 0 ? (

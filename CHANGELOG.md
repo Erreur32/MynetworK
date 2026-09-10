@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.14] - 2026-09-10
+
+### Fixed
+
+- Network scan table: extracted a reusable `CopyButton` component to remove the duplicated copy-to-clipboard state/handler pairs behind the MAC address and Open Ports tooltip buttons, fixing SonarCloud's new-code duplication alert on `NetworkScanPage.tsx`.
+
+---
+
 ## [0.10.13] - 2026-09-10
 
 ### Fixed
