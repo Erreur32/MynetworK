@@ -607,8 +607,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
         
-        {/* Search icon/badge - On dashboard and topology, next to logo */}
-        {(pageType === 'dashboard' || pageType === 'topology') && onSearchClick && (
+        {/* Search icon/badge - On dashboard, topology and network-scan, next to logo */}
+        {(pageType === 'dashboard' || pageType === 'topology' || pageType === 'network-scan') && onSearchClick && (
           <>
             {/* Mobile: Only icon */}
             <button
@@ -650,8 +650,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Topology icon/badge - On dashboard, topology and search */}
-        {(pageType === 'dashboard' || pageType === 'topology' || pageType === 'search') && onTopologyClick && (
+        {/* Topology icon/badge - On dashboard, topology, search and network-scan */}
+        {(pageType === 'dashboard' || pageType === 'topology' || pageType === 'search' || pageType === 'network-scan') && onTopologyClick && (
           <>
             {/* Mobile: Only icon */}
             <button

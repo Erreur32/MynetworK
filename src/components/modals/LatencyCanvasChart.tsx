@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTimeFormat } from '../../hooks/useTimeFormat';
 
 export interface LatencyChartPoint {
     x: number; // epoch ms
@@ -49,6 +50,8 @@ export const LatencyCanvasChart: React.FC<LatencyCanvasChartProps> = ({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [hover, setHover] = useState<{ point: LatencyChartPoint; px: number; py: number } | null>(null);
+    const { format: timeFormat } = useTimeFormat();
+    const hour12 = timeFormat === '12h';
 
     useEffect(() => {
         const el = containerRef.current;
@@ -218,7 +221,7 @@ export const LatencyCanvasChart: React.FC<LatencyCanvasChartProps> = ({
                     }}
                 >
                     <p className="text-gray-300 text-sm mb-1">
-                        {new Date(hover.point.timestamp).toLocaleString('fr-FR')}
+                        {new Date(hover.point.timestamp).toLocaleString('fr-FR', { hour12 })}
                     </p>
                     <p className="text-white font-medium">
                         Latence: <span style={{ color: getLatencyColor(hover.point.latency) }}>{hover.point.latency.toFixed(3)}ms</span>

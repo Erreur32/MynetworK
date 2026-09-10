@@ -165,6 +165,7 @@ interface MiniBarChartProps {
   labels?: string[]; // Optional labels for tooltips (dates/times)
   valueLabel?: string; // Label for the value (e.g., "Online", "Total", "Offline")
   fadeFromBottom?: boolean; // Add transparency gradient from bottom to soften top color
+  showRangeLabels?: boolean; // Show the first/last time labels permanently below the bars, not just on hover
 }
 
 export const MiniBarChart: React.FC<MiniBarChartProps> = ({
@@ -173,7 +174,8 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
   height = 24,
   labels,
   valueLabel = 'Valeur',
-  fadeFromBottom = false
+  fadeFromBottom = false,
+  showRangeLabels = false
 }) => {
   const maxValue = Math.max(...data, 1);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -197,8 +199,11 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
   const sideDark = `rgba(${Math.max(0, rgb.r - 120)}, ${Math.max(0, rgb.g - 120)}, ${Math.max(0, rgb.b - 120)}, 1)`;
   const baseBlack = `rgba(0, 0, 0, 0.85)`; // Noir très foncé à la base
 
+  const barsHeight = showRangeLabels ? height - 14 : height;
+
   return (
-    <div className="relative flex items-end gap-[2px]" style={{ height }}>
+    <div className="flex flex-col" style={{ height }}>
+      <div className="relative flex items-end gap-[2px]" style={{ height: barsHeight }}>
       {data.map((value, idx) => {
         const barHeight = (value / maxValue) * 100;
         const label = labels && labels[idx] ? labels[idx] : null;
@@ -297,6 +302,13 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
           </div>
         );
       })}
+      </div>
+      {showRangeLabels && labels && labels.length > 0 && (
+        <div className="flex justify-between px-0.5 mt-1 text-[9px] leading-none text-gray-500 tabular-nums">
+          <span>{labels[0]}</span>
+          <span className="font-medium text-gray-400">{labels[labels.length - 1]}</span>
+        </div>
+      )}
     </div>
   );
 };

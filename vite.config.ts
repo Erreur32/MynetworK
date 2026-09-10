@@ -37,7 +37,7 @@ export default defineConfig({
   server: {
     port: parseInt(process.env.VITE_PORT || "5173", 10),
     host: "0.0.0.0", // Listen on all interfaces to allow access via IP
-    allowedHosts: ["mwk-dev.myoueb.fr", "192.168.32.150", "localhost"],
+    allowedHosts: ["mwk-dev.myoueb.fr", "192.168.32.150", "192.168.32.202", "localhost"],
     // Disable cache in dev so CSS/JS changes are visible immediately
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate",

@@ -11,6 +11,7 @@ import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
+import { useTimeFormat } from '../hooks/useTimeFormat';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
@@ -67,26 +68,23 @@ function getPortCategoryColor(cat: string): { label: string; cell: string; icon:
 }
 
 /** Options optionnelles pour le positionnement. tableRect = garder le tooltip horizontalement dans le tableau. */
-type TooltipPositionOptions = { preferAbove?: boolean; offsetX?: number; offsetY?: number; tableRect?: { left: number; right: number } };
+type TooltipPositionOptions = { tableRect?: { left: number; right: number } };
 
 /** Écart vertical minimal entre la ligne et le tooltip (rapproché de la ligne). */
-const TOOLTIP_V_GAP = 2;
+const TOOLTIP_V_GAP = 16;
 
-/** Calcule left/top du tooltip. rect = cellule survolée (même si la ligne est sur plusieurs lignes, on s'aligne sur le bord haut/bas de la cellule). Au-dessus si possible, sinon en dessous. Horizontalement : clamp tableau puis fenêtre. */
+/** Calcule left/top du tooltip, centré horizontalement sur l'élément survolé (rect). Au-dessus si possible, sinon en dessous. Horizontalement : centré puis clamp tableau/fenêtre. */
 function getTooltipPosition(
     rect: { left: number; top: number; bottom: number; right: number },
     tooltipWidth: number,
     tooltipHeight: number,
-    options?: boolean | TooltipPositionOptions
+    options?: TooltipPositionOptions
 ): { left: number; top: number } {
-    const forcePreferAbove = options === true || (typeof options === 'object' && options?.preferAbove);
-    const offsetX = typeof options === 'object' && options?.offsetX != null ? options.offsetX : 0;
-    const offsetY = typeof options === 'object' && options?.offsetY != null ? options.offsetY : 0;
-    const tableRect = typeof options === 'object' && options?.tableRect != null ? options.tableRect : null;
+    const tableRect = options?.tableRect ?? null;
     const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 300;
     const margin = 16;
-    let left = rect.left - offsetX;
+    let left = (rect.left + rect.right) / 2 - tooltipWidth / 2;
     if (tableRect != null) {
         left = Math.max(tableRect.left, Math.min(left, tableRect.right - tooltipWidth));
     }
@@ -96,13 +94,7 @@ function getTooltipPosition(
     const belowTop = rect.bottom + TOOLTIP_V_GAP;
     const canAbove = aboveTop >= margin;
     const canBelow = belowTop + tooltipHeight <= vh - margin;
-    let top: number;
-    if (forcePreferAbove) {
-        top = canAbove ? aboveTop : (canBelow ? belowTop : Math.max(margin, vh - margin - tooltipHeight));
-    } else {
-        top = canAbove ? aboveTop : (canBelow ? belowTop : Math.max(margin, vh - margin - tooltipHeight));
-    }
-    top -= offsetY;
+    let top = canAbove ? aboveTop : (canBelow ? belowTop : Math.max(margin, vh - margin - tooltipHeight));
     if (top + tooltipHeight > vh - margin) top = Math.max(margin, vh - margin - tooltipHeight);
     if (top < margin) top = margin;
     return { left, top };
@@ -346,9 +338,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     
-    // IEEE OUI vendor database stats
-    const [wiresharkVendorStats, setWiresharkVendorStats] = useState<{ totalVendors: number; lastUpdate: string | null } | null>(null);
-
     const scanReseauPlugin = plugins.find(p => p.id === 'scan-reseau');
     const isActive = scanReseauPlugin?.enabled && scanReseauPlugin?.connectionStatus;
 
@@ -378,17 +367,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             }
         } catch (error) {
             console.error('Failed to fetch stats history:', error);
-        }
-    }, []);
-
-    const fetchWiresharkVendorStats = useCallback(async () => {
-        try {
-            const response = await api.get<{ totalVendors: number; lastUpdate: string | null }>('/api/network-scan/wireshark-vendor-stats');
-            if (response.success && response.result) {
-                setWiresharkVendorStats(response.result);
-            }
-        } catch (error) {
-            console.error('Failed to fetch IEEE OUI vendor stats:', error);
         }
     }, []);
 
@@ -575,10 +553,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         fetchPlugins();
         fetchStats();
         fetchStatsHistory();
-        fetchWiresharkVendorStats();
         fetchDefaultConfig();
         fetchAutoStatus();
-    }, [fetchPlugins, fetchStats, fetchStatsHistory, fetchWiresharkVendorStats, fetchDefaultConfig, fetchAutoStatus]);
+    }, [fetchPlugins, fetchStats, fetchStatsHistory, fetchDefaultConfig, fetchAutoStatus]);
 
     useEffect(() => {
         if (defaultConfigLoaded) {
@@ -1140,10 +1117,12 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // fetchHistory is now handled in the useEffect above that depends on defaultConfigLoaded
 
     const currentLocale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+    const { format: timeFormat } = useTimeFormat();
+    const hour12 = timeFormat === '12h';
 
     const formatDate = (dateStr: string): string => {
         const date = new Date(dateStr);
-        return date.toLocaleString(currentLocale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleString(currentLocale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12 });
     };
 
     const formatRelativeTime = (dateStr: string): string => {
@@ -1211,7 +1190,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         // If the next scan is overdue, show the exact planned date/time
         if (diffMs <= 0) {
             const dateStr = nextDate.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
-            const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+            const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit', hour12 });
             return t('networkScan.time.nextExecutionLate', { date: dateStr, time: timeStr });
         }
         
@@ -1219,7 +1198,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
         
-        const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+        const timeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit', hour12 });
         
         // For very close scans (< 1h), show precise minutes
         if (diffMins < 60) {
@@ -1242,7 +1221,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         
         // For further dates, show full date
         const fullDateStr = nextDate.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const fullTimeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+        const fullTimeStr = nextDate.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit', hour12 });
         return t('networkScan.time.nextExecutionDate', { date: fullDateStr, time: fullTimeStr });
     };
 
@@ -1310,113 +1289,43 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     }, [scans, statusFilter, searchFilter, sortBy, sortOrder, latencyStats, monitoringStatus]);
 
     // Optimize chart data calculations with useMemo
-    const totalChartData = useMemo(() => {
-        if (!stats) return { data: [], labels: [] };
-        
+    const buildScanChartData = useCallback((key: 'total' | 'online' | 'offline', currentValue: number) => {
         let chartData: number[];
         if (statsHistory.length > 0) {
-            chartData = statsHistory.map(h => h.total || 0).filter(v => v >= 0);
+            chartData = statsHistory.map(h => h[key] || 0).filter(v => v >= 0);
             if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                chartData = Array(24).fill(stats.total || 0);
+                chartData = Array(24).fill(currentValue);
             }
         } else {
-            chartData = Array(24).fill(stats.total || 0);
+            chartData = Array(24).fill(currentValue);
         }
-        
-        const displayData = chartData.slice(-48);
-        if (displayData.length < 12) {
-            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.total || 0;
-            while (displayData.length < 12) {
-                displayData.unshift(fillValue);
-            }
-        }
-        
-        const timeLabels = statsHistory.length > 0 
-            ? statsHistory.map(h => h.time).slice(-48)
-            : [];
-        const labels = timeLabels.length === displayData.length 
-            ? timeLabels 
-            : displayData.map((_, i) => {
-                const now = new Date();
-                const hoursAgo = displayData.length - i - 1;
-                const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
-            });
-        
-        return { data: displayData, labels };
-    }, [stats, statsHistory]);
 
-    const onlineChartData = useMemo(() => {
-        if (!stats) return { data: [], labels: [] };
-        
-        let chartData: number[];
-        if (statsHistory.length > 0) {
-            chartData = statsHistory.map(h => h.online || 0).filter(v => v >= 0);
-            if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                chartData = Array(24).fill(stats.online || 0);
-            }
-        } else {
-            chartData = Array(24).fill(stats.online || 0);
-        }
-        
         const displayData = chartData.slice(-48);
         if (displayData.length < 12) {
-            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.online || 0;
+            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : currentValue;
             while (displayData.length < 12) {
                 displayData.unshift(fillValue);
             }
         }
-        
-        const timeLabels = statsHistory.length > 0 
-            ? statsHistory.map(h => h.time).slice(-48)
-            : [];
-        const labels = timeLabels.length === displayData.length 
-            ? timeLabels 
-            : displayData.map((_, i) => {
-                const now = new Date();
-                const hoursAgo = displayData.length - i - 1;
-                const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
-            });
-        
-        return { data: displayData, labels };
-    }, [stats, statsHistory]);
 
-    const offlineChartData = useMemo(() => {
-        if (!stats) return { data: [], labels: [] };
-        
-        let chartData: number[];
-        if (statsHistory.length > 0) {
-            chartData = statsHistory.map(h => h.offline || 0).filter(v => v >= 0);
-            if (chartData.length === 0 || chartData.every(v => v === 0)) {
-                chartData = Array(24).fill(stats.offline || 0);
-            }
-        } else {
-            chartData = Array(24).fill(stats.offline || 0);
-        }
-        
-        const displayData = chartData.slice(-48);
-        if (displayData.length < 12) {
-            const fillValue = displayData.length > 0 ? displayData[displayData.length - 1] : stats.offline || 0;
-            while (displayData.length < 12) {
-                displayData.unshift(fillValue);
-            }
-        }
-        
-        const timeLabels = statsHistory.length > 0 
+        const timeLabels = statsHistory.length > 0
             ? statsHistory.map(h => h.time).slice(-48)
             : [];
-        const labels = timeLabels.length === displayData.length 
-            ? timeLabels 
+        const labels = timeLabels.length === displayData.length
+            ? timeLabels
             : displayData.map((_, i) => {
                 const now = new Date();
                 const hoursAgo = displayData.length - i - 1;
                 const time = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
+                return time.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit', hour12 });
             });
-        
+
         return { data: displayData, labels };
-    }, [stats, statsHistory]);
+    }, [statsHistory, currentLocale, hour12]);
+
+    const totalChartData = useMemo(() => stats ? buildScanChartData('total', stats.total || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
+    const onlineChartData = useMemo(() => stats ? buildScanChartData('online', stats.online || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
+    const offlineChartData = useMemo(() => stats ? buildScanChartData('offline', stats.offline || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
 
     return (
         <div className="space-y-6">
@@ -1634,35 +1543,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 
                                 {/* Stats vendors et scan auto */}
                                 <div className="pt-2 border-t border-gray-800 space-y-2">
-                                    {/* Info base vendors IEEE OUI */}
-                                    {wiresharkVendorStats && (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2 text-xs">
-                                                <span className="text-gray-400 w-20">{t('networkScan.stats.vendorBase')}</span>
-                                                {wiresharkVendorStats.totalVendors > 0 ? (
-                                                    <>
-                                                        <span className="text-emerald-400 font-medium">{wiresharkVendorStats.totalVendors.toLocaleString()}</span>
-                                                        {wiresharkVendorStats.lastUpdate && (
-                                                            <span className="text-gray-500">
-                                                            ({t('networkScan.stats.update')} {new Date(wiresharkVendorStats.lastUpdate).toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' })})
-                                                        </span>
-                                            )}
-                                        </>
-                                            ) : (
-                                                <span className="text-orange-400">{t('networkScan.stats.notLoaded')}</span>
-                                            )}
-                                            </div>
-                                            {scanRange && (
-                                                <div className="flex items-center gap-2 text-xs">
-                                                    <span className="text-gray-400 w-20">{t('networkScan.stats.network')}</span>
-                                                    <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
-                                                        {scanRange}
-                                                    </span>
-                                                    </div>
-                                            )}
-                                                    </div>
+                                    {scanRange && (
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-gray-400 w-20">{t('networkScan.stats.network')}</span>
+                                            <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
+                                                {scanRange}
+                                            </span>
+                                        </div>
                                     )}
-                                    
+
                                     {/* Scan auto actif ou pas */}
                                     {autoStatusLoading ? (
                                         <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -1689,24 +1578,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     {/* Total IPs - 1 colonne */}
                     <Card title={t('networkScan.stats.totalIps')}>
                         <div className="text-3xl font-bold text-gray-200 text-center mb-1">{stats.total}</div>
-                        <div className="h-16 mt-1">
-                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel={t('networkScan.stats.totalIps')} height={64} fadeFromBottom={true} />
+                        <div className="h-[76px] mt-1">
+                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel={t('networkScan.stats.totalIps')} height={76} fadeFromBottom={true} showRangeLabels={true} />
                                 </div>
                     </Card>
-                    
+
                     {/* Online - 1 colonne */}
                     <Card title={t('networkScan.status.online')}>
                         <div className="text-3xl font-bold text-emerald-400 text-center mb-1">{stats.online}</div>
-                        <div className="h-16 mt-1">
-                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel={t('networkScan.status.online')} height={64} />
+                        <div className="h-[76px] mt-1">
+                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel={t('networkScan.status.online')} height={76} showRangeLabels={true} />
                         </div>
                     </Card>
-                    
+
                     {/* Offline - 1 colonne */}
                     <Card title={t('networkScan.status.offline')}>
                         <div className="text-3xl font-bold text-red-400 text-center mb-1">{stats.offline}</div>
-                        <div className="h-16 mt-1">
-                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel={t('networkScan.status.offline')} height={64} />
+                        <div className="h-[76px] mt-1">
+                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel={t('networkScan.status.offline')} height={76} showRangeLabels={true} />
                         </div>
                     </Card>
                 </div>
@@ -2232,7 +2121,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     {formatDate(scan.lastSeen)}
                                                 </span>
                                             ) : (
-                                                <span className={`text-sm font-medium break-words whitespace-normal ${getLatencyColor(scan.pingLatency)}`}>
+                                                <span className={`text-sm font-medium whitespace-nowrap ${getLatencyColor(scan.pingLatency)}`}>
                                                     {formatLatency(scan.pingLatency)}
                                                 </span>
                                             )}
@@ -2470,10 +2359,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {statusTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(statusTooltip.rect, 260, 72, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipPosition(statusTooltip.rect, 260, 90, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(260px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
@@ -2486,43 +2375,52 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {latencyTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(latencyTooltip.rect, 280, 72, tr ? { preferAbove: true, offsetX: 70, offsetY: 50, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 70, offsetY: 50 });
+                const pos = getTooltipPosition(latencyTooltip.rect, 280, 104, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{latencyTooltip.label}</div>
-                        <div className="text-sm">
-                            {latencyTooltip.isOffline ? (
-                                <>
-                                    <span className="text-gray-400">{t('networkScan.tooltips.offSince', { date: '' }).trimEnd()}</span>
+                        {latencyTooltip.isOffline ? (() => {
+                            const [before, after] = t('networkScan.tooltips.offSince', { date: ' ' }).split(' ');
+                            return (
+                                <div className="text-sm">
+                                    <span className="text-gray-400">{before}</span>
                                     <span className="text-amber-300 font-medium">{latencyTooltip.date}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-gray-400">{(() => {
-                                        const s = t('networkScan.tooltips.lastPing', { date: '', latency: '' }).trimEnd();
-                                        return s.endsWith(':') ? s.slice(0, -1).trimEnd() : s;
-                                    })()}</span>
-                                    <span className="text-cyan-300 font-medium">{latencyTooltip.date}</span>
-                                    <span className="text-gray-400">: </span>
-                                    <span className="text-emerald-300 font-medium">{latencyTooltip.latency}</span>
-                                </>
-                            )}
-                        </div>
+                                    {after && <span className="text-gray-400">{after}</span>}
+                                </div>
+                            );
+                        })() : (() => {
+                            const raw = t('networkScan.tooltips.lastPing', { date: ' D ', latency: ' L ' });
+                            const [before, rest] = raw.split(' D ');
+                            const [between, after] = rest.split(' L ');
+                            return (
+                                <div className="text-sm space-y-1">
+                                    <div>
+                                        <span className="text-gray-400">{before}</span>
+                                        <span className="text-cyan-300 font-medium">{latencyTooltip.date}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-400">{between.trim()} </span>
+                                        <span className="text-emerald-300 font-medium">{latencyTooltip.latency}</span>
+                                        {after && <span className="text-gray-400">{after}</span>}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
                 );
             })()}
 
             {actionsTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(actionsTooltip.rect, 280, 88, tr ? { preferAbove: true, offsetX: 0, offsetY: 50, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 0, offsetY: 50 });
+                const pos = getTooltipPosition(actionsTooltip.rect, 280, 104, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
@@ -2535,10 +2433,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {scatterIconTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70, tr ? { preferAbove: true, offsetX: 70, offsetY: 50, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 70, offsetY: 50 });
+                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(260px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
@@ -2553,7 +2451,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const pos = getTooltipPosition(ipTooltip.rect, 280, 88, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
@@ -2566,10 +2464,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {firstSeenTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(firstSeenTooltip.rect, 280, 120, tr ? { preferAbove: true, offsetX: 70, offsetY: 50, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 70, offsetY: 50 });
+                const pos = getTooltipPosition(firstSeenTooltip.rect, 280, 170, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
                         style={{ left: pos.left, top: pos.top }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
@@ -2589,7 +2487,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             {portsTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
                 const portsMaxH = typeof window !== 'undefined' ? Math.min(TOOLTIP_PORTS_H, Math.floor(window.innerHeight * 0.7)) : TOOLTIP_PORTS_H;
-                const pos = getTooltipPosition(portsTooltip.rect, TOOLTIP_PORTS_W, portsMaxH, tr ? { preferAbove: true, offsetX: 70, offsetY: 50, tableRect: { left: tr.left, right: tr.right } } : { preferAbove: true, offsetX: 70, offsetY: 50 });
+                const pos = getTooltipPosition(portsTooltip.rect, TOOLTIP_PORTS_W, portsMaxH, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 const sorted = [...portsTooltip.openPorts].sort((a, b) => a.port - b.port);
                 const byCategory = sorted.reduce<Record<string, { port: number; protocol?: string }[]>>((acc, p) => {
                     const cat = getPortCategory(p.port);
@@ -2635,7 +2533,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         )}
                         {portsTooltip.lastPortScan && (
                             <div className="mt-3 pt-3 border-t border-gray-700/80 text-xs text-gray-500">
-                                Scan : {new Date(portsTooltip.lastPortScan).toLocaleString(currentLocale)}
+                                Scan : {formatDate(portsTooltip.lastPortScan)}
                             </div>
                         )}
                     </div>
@@ -2651,10 +2549,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         // Reload default config after closing modal in case it was changed
                         fetchDefaultConfig();
                     }}
-                    onVendorUpdate={() => {
-                        // Refresh vendor stats after vendor database update
-                        fetchWiresharkVendorStats();
-                    }}
                     onDataChanged={async () => {
                         // Clear local state IMMEDIATELY (before API calls)
                         setScans([]);
@@ -2669,8 +2563,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                             await Promise.all([
                                 fetchHistory(),
                                 fetchStats(),
-                                fetchStatsHistory(),
-                                fetchWiresharkVendorStats()
+                                fetchStatsHistory()
                             ]);
                         } catch (error) {
                             console.error('[NetworkScanPage] Error refreshing data after clear:', error);

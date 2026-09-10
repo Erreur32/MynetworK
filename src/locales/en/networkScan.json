@@ -113,12 +113,9 @@
       "lastScan": "Last scan",
       "noScan": "No scan",
       "totalIps": "Total IPs",
-      "vendorBase": "Vendor base",
-      "update": "updated",
       "network": "Network",
       "networkLabel": "Network",
-      "autoScan": "Auto scan",
-      "notLoaded": "Not loaded"
+      "autoScan": "Auto scan"
     },
     "buttons": {
       "config": "Configuration",

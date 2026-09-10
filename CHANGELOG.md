@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.12] - 2026-09-10
+
+### Fixed
+
+- Network scan table: hover tooltips (Status, Latency, Actions, First Seen, IP, Open ports, scatter icon) had a mismatch between the hardcoded width/height used to compute their position and their actual rendered size, causing them to overlap the cursor or neighboring rows. Added explicit CSS width classes matching the position calculation, and corrected height estimates for wrapped/localized text.
+- Network scan table: Latency column tooltip position shifted inconsistently row to row because its own content could wrap to one or two lines depending on the value's width. The tooltip now always renders as two fixed lines (date, then latency), and the in-cell latency value no longer wraps either.
+- Network scan table: fixed a missing separating space between label text and interpolated values in the Latency tooltip, introduced by trimming translated strings instead of using a stable placeholder to split them.
+- Dev server: added the LAN IP used to reach the dev server over the local network to Vite's `allowedHosts`.
+
+### Added
+
+- Analytics: uptime history is now a GitHub-style weekly contribution heatmap (one square per day) instead of a bar chart, with a status legend (Up / Reboot detected / Down / No data).
+- Analytics: fan speed gauge bar, and an empty state for the temperature history chart while data is still being collected.
+- Analytics page is now nested under Freebox (`/freebox/analytics`) and reachable from the Search/Topology icons on the network scan page.
+- Vendor icons: added Ecovacs, a Tapo fallback resolving to the TP-Link icon, and Freebox/Aqara fallback icons.
+
+---
+
 ## [0.10.11] - 2026-09-09
 
 ### Fixed

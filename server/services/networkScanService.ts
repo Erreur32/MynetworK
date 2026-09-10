@@ -2355,7 +2355,7 @@ export class NetworkScanService {
                 if (deviceByIp && deviceByIp.mac) {
                     const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
                     if (deviceMac === normalizedMac) {
-                        const vendor = deviceByIp.vendor || deviceByIp.vendor_name || deviceByIp.type;
+                        const vendor = deviceByIp.vendor || deviceByIp.vendor_name || deviceByIp.oui;
                         if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
                             logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via IP)`);
                             return vendor.trim();
@@ -2366,7 +2366,7 @@ export class NetworkScanService {
                 return null;
             }
             
-            const vendor = device.vendor || device.vendor_name || device.type;
+            const vendor = device.vendor || device.vendor_name || device.oui;
             if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
                 logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via MAC)`);
                 return vendor.trim();

@@ -58,6 +58,9 @@ const COLORS = {
 
 const PIE_COLORS = [COLORS.blue, COLORS.green, COLORS.cyan, COLORS.orange, COLORS.purple, COLORS.pink];
 
+// Freebox fans typically top out around 6000 RPM — used to scale the gauge bar
+const FAN_MAX_RPM = 6000;
+
 interface AnalyticsPageProps {
   onBack: () => void;
 }
@@ -66,7 +69,8 @@ type AnalyticsTab = 'bandwidth' | 'temperature' | 'wifi' | 'system';
 const VALID_ANALYTICS_TABS = new Set<AnalyticsTab>(['bandwidth', 'temperature', 'wifi', 'system']);
 
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-US';
   const location = useLocation();
   const navigate = useNavigate();
   const { status, history, extendedHistory, temperatureHistory, rrdPermissionDenied, fetchExtendedHistory, fetchTemperatureHistory } = useConnectionStore();
@@ -224,11 +228,11 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
     return Math.round((upDays / uptimeHistory.length) * 100);
   }, [uptimeHistory]);
 
-  // Derive active tab from URL: /analytics/wifi → 'wifi'
-  const urlTab = location.pathname.split('/')[2] as AnalyticsTab | undefined;
+  // Derive active tab from URL: /freebox/analytics/wifi → 'wifi'
+  const urlTab = location.pathname.split('/')[3] as AnalyticsTab | undefined;
   const activeTab: AnalyticsTab = urlTab && VALID_ANALYTICS_TABS.has(urlTab) ? urlTab : 'bandwidth';
   const setActiveTab = useCallback((tab: AnalyticsTab) => {
-    navigate(`/analytics/${tab}`);
+    navigate(`/freebox/analytics/${tab}`);
   }, [navigate]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
 
@@ -321,14 +325,36 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
     }));
   }, [networks]);
 
-  // Uptime data for chart
-  const uptimeData = React.useMemo(() => {
-    return uptimeHistory.slice(-30).map((day, index) => ({
-      day: index + 1,
-      uptime: day.status === 'up' ? 100 : day.status === 'down' ? 0 : 50,
-      status: day.status
-    }));
+  // Group the 30-day uptime history into GitHub-style weekly columns (Monday-first),
+  // padding with null cells so each column lines up on the correct weekday row.
+  const uptimeWeeks = React.useMemo(() => {
+    const days = uptimeHistory.slice(-30);
+    if (!days.length) return [];
+    const firstWeekday = (new Date(`${days[0].date}T00:00:00`).getDay() + 6) % 7; // 0 = Monday
+    const padded: (typeof days[number] | null)[] = Array(firstWeekday).fill(null).concat(days);
+    while (padded.length % 7 !== 0) padded.push(null);
+    const weeks: (typeof days[number] | null)[][] = [];
+    for (let i = 0; i < padded.length; i += 7) {
+      weeks.push(padded.slice(i, i + 7));
+    }
+    return weeks;
   }, [uptimeHistory]);
+
+  const UPTIME_STATUS_COLOR: Record<'up' | 'down' | 'partial' | 'unknown', string> = {
+    up: 'bg-green-500',
+    down: 'bg-red-500',
+    partial: 'bg-amber-500',
+    unknown: 'bg-gray-800'
+  };
+
+  const uptimeStatusLabel = (status: 'up' | 'down' | 'partial' | 'unknown'): string => {
+    switch (status) {
+      case 'up': return t('analytics.uptimeLegendUp');
+      case 'down': return t('analytics.uptimeLegendDown');
+      case 'partial': return t('analytics.uptimeLegendPartial');
+      default: return t('analytics.uptimeLegendUnknown');
+    }
+  };
 
   // Format KB/s to Freebox-style speed units (kb/s, Mb/s, Gb/s)
   // Input is in KB/s (kilobytes), we convert to bits for display
@@ -723,6 +749,12 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
                       </div>
                     </div>
                   )}
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full bg-cyan-500 transition-all"
+                      style={{ width: `${Math.min(100, ((fanAvgRpm || 0) / FAN_MAX_RPM) * 100)}%` }}
+                    />
+                  </div>
                   {/* Add some padding to match CPU card height when there's only 1 fan */}
                   {fans.length === 1 && cpuSensors.length > 2 && (
                     <div className="pt-4" />
@@ -790,38 +822,46 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
             <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.tempHistory')}</h3>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={temperatureHistory.length ? temperatureHistory : systemTempHistory}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    dataKey="time"
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
-                    domain={[20, 80]}
-                    tickFormatter={(value) => `${value}°`}
-                  />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                    labelStyle={{ color: '#9ca3af' }}
-                    formatter={(value: number, name: string) => {
-                      const labels: Record<string, string> = {
-                        cpuM: 'CPU (Moyenne)',
-                        sw: 'Switch',
-                        hdd: 'Disque'
-                      };
-                      return [`${value}°C`, labels[name] || name];
-                    }}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name="CPU (Moyenne)" dot={false} />
-                  {tempStats.avgSw > 0 && <Line type="monotone" dataKey="sw" stroke={COLORS.cyan} name="Switch" dot={false} />}
-                </LineChart>
-              </ResponsiveContainer>
+              {(temperatureHistory.length > 0 || systemTempHistory.length > 0) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={temperatureHistory.length ? temperatureHistory : systemTempHistory}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      dataKey="time"
+                      stroke="#6b7280"
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      stroke="#6b7280"
+                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      domain={[20, 80]}
+                      tickFormatter={(value) => `${value}°`}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af' }}
+                      formatter={(value: number, name: string) => {
+                        const labels: Record<string, string> = {
+                          cpuM: 'CPU (Moyenne)',
+                          sw: 'Switch',
+                          hdd: 'Disque'
+                        };
+                        return [`${value}°C`, labels[name] || name];
+                      }}
+                    />
+                    <Legend />
+                    <Line type="monotone" dataKey="cpuM" stroke={COLORS.orange} name="CPU (Moyenne)" dot={false} />
+                    {tempStats.avgSw > 0 && <Line type="monotone" dataKey="sw" stroke={COLORS.cyan} name="Switch" dot={false} />}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                  <Thermometer className="w-12 h-12 mb-3 opacity-50" />
+                  <p className="text-sm">{t('analytics.collectingData')}</p>
+                  <p className="text-xs mt-1">{t('analytics.chartWillFill')}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1077,48 +1117,41 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Uptime Chart */}
+          {/* Uptime Chart - GitHub-style contribution graph, one square per day */}
           <div className="bg-[#121212] rounded-xl p-6 border border-gray-800">
             <h3 className="text-lg font-semibold text-white mb-4">{t('analytics.uptimeHistory')}</h3>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={uptimeData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                  <XAxis
-                    dataKey="day"
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 10 }}
-                  />
-                  <YAxis
-                    stroke="#6b7280"
-                    tick={{ fill: '#6b7280', fontSize: 10 }}
-                    domain={[0, 100]}
-                    tickFormatter={(value) => `${value}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1f2937',
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#ffffff'
-                    }}
-                    labelStyle={{ color: '#9ca3af' }}
-                    itemStyle={{ color: '#ffffff' }}
-                    formatter={(value: number) => [`${value}%`, t('analytics.uptime')]}
-                  />
-                  <Bar
-                    dataKey="uptime"
-                    radius={[2, 2, 0, 0]}
-                  >
-                    {uptimeData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.status === 'up' ? COLORS.green : entry.status === 'down' ? COLORS.red : COLORS.orange}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="flex items-start gap-4 overflow-x-auto pb-1">
+              <div className="grid grid-flow-col gap-1">
+                {uptimeWeeks.map((week, weekIndex) => (
+                  <div key={weekIndex} className="grid grid-rows-7 gap-1">
+                    {week.map((day, dayIndex) =>
+                      day ? (
+                        <div
+                          key={dayIndex}
+                          title={`${new Date(`${day.date}T00:00:00`).toLocaleDateString(dateLocale, { day: '2-digit', month: 'short', year: 'numeric' })} — ${uptimeStatusLabel(day.status)}`}
+                          className={`w-3.5 h-3.5 rounded-sm ${UPTIME_STATUS_COLOR[day.status]}`}
+                        />
+                      ) : (
+                        <div key={dayIndex} className="w-3.5 h-3.5" />
+                      )
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1.5 text-xs text-gray-500 pt-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-green-500" /> {t('analytics.uptimeLegendUp')}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-amber-500" /> {t('analytics.uptimeLegendPartial')}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-red-500" /> {t('analytics.uptimeLegendDown')}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-gray-800" /> {t('analytics.uptimeLegendUnknown')}
+                </div>
+              </div>
             </div>
           </div>
 

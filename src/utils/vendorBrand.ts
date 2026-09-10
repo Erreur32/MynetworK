@@ -48,10 +48,11 @@ import {
   siVeeam,
   siMotorola,
   siNokia,
+  siEcovacs,
   type SimpleIcon
 } from 'simple-icons';
 import type { LucideIcon } from 'lucide-react';
-import { Plug, Thermometer, Clock } from 'lucide-react';
+import { Plug, Thermometer, Clock, Router, Radio } from 'lucide-react';
 
 // Ordered by specificity: longer/more specific substrings first so e.g.
 // "TP-Link" doesn't get shadowed by a shorter unrelated match.
@@ -98,7 +99,8 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /mitsubishi/i, icon: siMitsubishi },
   { pattern: /proxmox/i, icon: siProxmox },
   { pattern: /motorola/i, icon: siMotorola },
-  { pattern: /\bnokia\b|hmd\s*global/i, icon: siNokia }
+  { pattern: /\bnokia\b|hmd\s*global/i, icon: siNokia },
+  { pattern: /ecovacs/i, icon: siEcovacs }
 ];
 
 /**
@@ -114,10 +116,14 @@ export function getVendorBrand(vendorRaw?: string | null): SimpleIcon | null {
   return null;
 }
 
-// Brands with no registered MAC OUI block (pure software/service vendors) —
+// Brands with no registered MAC OUI block (pure software/service vendors), or
+// whose OUI vendor string isn't yet in the local IEEE database snapshot —
 // detectable only from the device's label/hostname, never from `vendor`.
 const LABEL_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
-  { pattern: /veeam/i, icon: siVeeam }
+  { pattern: /veeam/i, icon: siVeeam },
+  // Tapo product line reports under the parent TP-Link OUI; falls back here
+  // when the local vendor lookup hasn't caught up with a recent OUI block.
+  { pattern: /\btapo\b/i, icon: siTplink }
 ];
 
 /**
@@ -136,7 +142,9 @@ export function getVendorBrandFromLabel(label?: string | null): SimpleIcon | nul
 // beats the generic category fallback while we don't vendor a local SVG.
 const VENDOR_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon }> = [
   { pattern: /meross/i, icon: Plug },
-  { pattern: /netatmo/i, icon: Thermometer }
+  { pattern: /netatmo/i, icon: Thermometer },
+  { pattern: /freebox/i, icon: Router },
+  { pattern: /aqara|lumi\s*united/i, icon: Radio }
 ];
 
 export function getVendorIconFallback(vendorRaw?: string | null): LucideIcon | null {

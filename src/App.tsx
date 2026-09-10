@@ -321,7 +321,6 @@ const App: React.FC = () => {
       "/phone": "phone",
       "/files": "files",
       "/vms": "vms",
-      "/analytics": "analytics",
       "/settings": "settings",
       "/plugins": "plugins",
       "/users": "users",
@@ -342,7 +341,7 @@ const App: React.FC = () => {
       phone: "/phone",
       files: "/files",
       vms: "/vms",
-      analytics: "/analytics",
+      analytics: "/freebox/analytics",
       settings: "/settings",
       plugins: "/plugins",
       users: "/users",
@@ -355,9 +354,13 @@ const App: React.FC = () => {
   );
 
   // Support sub-paths: /unifi/traffic → 'unifi', /settings/general → 'settings'
+  // Analytics is nested under Freebox (/freebox/analytics, /freebox/analytics/wifi)
+  // so it needs to be checked before the generic first-segment fallback below.
   const currentPage: PageType =
     pageRoutes[location.pathname] ||
-    pageRoutes["/" + location.pathname.split("/")[1]] ||
+    (location.pathname === "/freebox/analytics" || location.pathname.startsWith("/freebox/analytics/")
+      ? "analytics"
+      : pageRoutes["/" + location.pathname.split("/")[1]]) ||
     "dashboard";
 
   const setCurrentPage = useCallback(
@@ -990,6 +993,8 @@ const App: React.FC = () => {
           onProfileClick={handleProfileClick}
           onUsersClick={handleUsersClick}
           onLogout={handleLogout}
+          onSearchClick={() => setCurrentPage("search")}
+          onTopologyClick={() => setCurrentPage("topology")}
         />
         <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
           <Suspense fallback={<PageLoader t={t} />}>
