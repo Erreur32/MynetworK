@@ -11,7 +11,7 @@ import { initTheme } from './utils/themeManager';
 
 // Application version and name
 const APP_NAME = 'MyNetwork';
-const APP_VERSION = '0.10.12';
+const APP_VERSION = '0.10.13';
 
 // Console log with colored background
 const logAppInfo = () => {
@@ -67,6 +67,21 @@ if (import.meta.env.PROD) {
     originalConsoleWarn.apply(console, args);
   };
 }
+
+// A deploy can replace the built assets while a tab is still open with an
+// older index.html; the chunk hash baked into its already-loaded JS then
+// 404s. Vite fires 'vite:preloadError' when a dynamic import() fails for this
+// reason — reload once to pick up the current index.html with fresh hashes.
+// The sessionStorage flag prevents a reload loop if the failure isn't
+// deploy-related; it's cleared once the app has been up for a while so a
+// later, genuine deploy can still trigger one more auto-reload.
+const STALE_CHUNK_RELOAD_KEY = 'mynetwork:reloaded-for-stale-chunk';
+window.addEventListener('vite:preloadError', () => {
+  if (sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY)) return;
+  sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, '1');
+  window.location.reload();
+});
+setTimeout(() => sessionStorage.removeItem(STALE_CHUNK_RELOAD_KEY), 30000);
 
 // Initialize theme before rendering (async, but don't block rendering)
 initTheme().catch(err => console.warn('Theme initialization error:', err));

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.13] - 2026-09-10
+
+### Fixed
+
+- App: recover automatically from `Failed to fetch dynamically imported module` errors caused by a deploy replacing the built assets while a tab still holds an older chunk manifest, by reloading the page once when Vite's `vite:preloadError` event fires.
+
+### Added
+
+- Network scan table: Open Ports tooltip is now wider (640px, up from 420px) with a 5-column port grid instead of 3, showing more ports per row and reducing the tooltip's height.
+- Network scan table: Avg1h and Max latency values are now rounded to whole milliseconds (no decimals), and their column padding was tightened, freeing horizontal space for the Vendor column.
+- Network scan table: MAC address tooltip now has a copy-to-clipboard button.
+- Network scan table: Open Ports tooltip now has a "copy all" button to copy the full port list at once.
+
+### Changed
+
+- Network scan table: Vendor and Hostname source badges are temporarily hidden (display only, easily re-enabled) to give more room to the Vendor and Hostname columns while testing.
+
+---
+
 ## [0.10.12] - 2026-09-10
 
 ### Fixed

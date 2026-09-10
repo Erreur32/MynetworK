@@ -169,6 +169,10 @@
       "banIp": "Bannir cette IP (exclure des scans futurs)",
       "delete": "Supprimer",
       "macAddress": "Adresse MAC",
+      "copyMac": "Copier l'adresse MAC",
+      "copyPorts": "Copier la liste des ports",
+      "copyAll": "Copier tout",
+      "copied": "Copié",
       "headerTotal": "Nombre total d'IPs en base (en ligne + hors ligne)",
       "headerOnline": "Nombre d'IPs en ligne (répondant au ping)",
       "headerOffline": "Nombre d'IPs hors ligne (ne répondant pas, présentes dans l'historique)"

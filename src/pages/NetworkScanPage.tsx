@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Clock, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -72,6 +72,10 @@ type TooltipPositionOptions = { tableRect?: { left: number; right: number } };
 
 /** Écart vertical minimal entre la ligne et le tooltip (rapproché de la ligne). */
 const TOOLTIP_V_GAP = 16;
+
+/** Désactivés temporairement (test) pour laisser plus de place au contenu des colonnes Vendor et Hostname. */
+const SHOW_VENDOR_SOURCE_BADGE = false;
+const SHOW_HOSTNAME_SOURCE_BADGE = false;
 
 /** Calcule left/top du tooltip, centré horizontalement sur l'élément survolé (rect). Au-dessus si possible, sinon en dessous. Horizontalement : centré puis clamp tableau/fenêtre. */
 function getTooltipPosition(
@@ -210,9 +214,21 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [copiedMac, setCopiedMac] = useState(false);
+    const handleCopyMac = (mac: string) => {
+        navigator.clipboard.writeText(mac);
+        setCopiedMac(true);
+        setTimeout(() => setCopiedMac(false), 2000);
+    };
+    const [copiedPorts, setCopiedPorts] = useState(false);
+    const handleCopyPorts = (ports: { port: number; protocol?: string }[]) => {
+        navigator.clipboard.writeText(ports.map((p) => p.port).join(', '));
+        setCopiedPorts(true);
+        setTimeout(() => setCopiedPorts(false), 2000);
+    };
     const TOOLTIP_MAC_W = 320;
     const TOOLTIP_MAC_H = 100;
-    const TOOLTIP_PORTS_W = 420;
+    const TOOLTIP_PORTS_W = 640;
     const TOOLTIP_PORTS_H = 320;
     const tooltipHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -1866,7 +1882,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" onClick={() => {
                                     if (sortBy === 'avg1h') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('avg1h'); setSortOrder('asc'); }
                                 }}>
@@ -1877,7 +1893,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-4 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors" onClick={() => {
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" onClick={() => {
                                     if (sortBy === 'max') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                     else { setSortBy('max'); setSortOrder('asc'); }
                                 }}>
@@ -2010,7 +2026,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             ) : (
                                                 <div className="flex items-start gap-2 group flex-wrap">
                                                     <span className="break-words whitespace-normal">{scan.hostname || '--'}</span>
-                                                    {scan.hostnameSource && (() => {
+                                                    {SHOW_HOSTNAME_SOURCE_BADGE && scan.hostnameSource && (() => {
                                                         const badge = getSourceBadge(scan.hostnameSource, 'hostname');
                                                         return badge ? (
                                                             <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
@@ -2032,7 +2048,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             <div className="flex items-start gap-2 flex-wrap">
                                                 <VendorIcon vendor={scan.vendor} label={scan.hostname} size={14} className="flex-shrink-0 mt-0.5" />
                                                 <span className="break-words whitespace-normal">{scan.vendor || '--'}</span>
-                                                {scan.vendorSource && (() => {
+                                                {SHOW_VENDOR_SOURCE_BADGE && scan.vendorSource && (() => {
                                                     const badge = getSourceBadge(scan.vendorSource, 'vendor');
                                                     return badge ? (
                                                         <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
@@ -2177,14 +2193,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 return <span className="text-gray-500">{t('networkScan.status.notScanned')}</span>;
                                             })()}
                                         </td>
-                                        <td className="py-3 px-4">
+                                        <td className="py-3 px-2 whitespace-nowrap">
                                             <span className={`text-sm font-medium ${latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? getLatencyColor(latencyStats[scan.ip].avg1h!) : 'text-gray-500'}`}>
-                                                {latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? `${latencyStats[scan.ip].avg1h!.toFixed(3)}ms` : '--'}
+                                                {latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? `${Math.round(latencyStats[scan.ip].avg1h!)}ms` : '--'}
                                             </span>
                                         </td>
-                                        <td className="py-3 px-4">
+                                        <td className="py-3 px-2 whitespace-nowrap">
                                             <span className={`text-sm font-medium ${latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? getLatencyColor(latencyStats[scan.ip].max!) : 'text-gray-500'}`}>
-                                                {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${latencyStats[scan.ip].max!.toFixed(3)}ms` : '--'}
+                                                {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${Math.round(latencyStats[scan.ip].max!)}ms` : '--'}
                                             </span>
                                         </td>
                                         <td className="py-3 px-2 whitespace-nowrap">
@@ -2352,7 +2368,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                     onMouseLeave={hideAllTooltips}
                     >
                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{t('networkScan.tooltips.macAddress')}</div>
-                        <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
+                        <div className="flex items-center gap-2">
+                            <div className="text-xl font-mono text-gray-100 break-all leading-relaxed">{macTooltip.mac}</div>
+                            <button
+                                onClick={() => handleCopyMac(macTooltip.mac)}
+                                className="p-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors flex-shrink-0"
+                                title={t('networkScan.tooltips.copyMac')}
+                            >
+                                {copiedMac ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                            </button>
+                        </div>
                     </div>
                 );
             })()}
@@ -2499,12 +2524,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 const orderedCategories = categoryOrder.filter((c) => byCategory[c]?.length).concat(Object.keys(byCategory).filter((c) => !categoryOrder.includes(c)));
                 return (
                     <div
-                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(420px,calc(100vw-32px))] overflow-y-auto"
+                        className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(640px,calc(100vw-32px))] overflow-y-auto"
                         style={{ left: pos.left, top: pos.top, maxHeight: portsMaxH }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
-                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{portsTooltip.ip}</div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">{portsTooltip.ip}</div>
+                            {sorted.length > 0 && (
+                                <button
+                                    onClick={() => handleCopyPorts(sorted)}
+                                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors text-xs"
+                                    title={t('networkScan.tooltips.copyPorts')}
+                                >
+                                    {copiedPorts ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                    {copiedPorts ? t('networkScan.tooltips.copied') : t('networkScan.tooltips.copyAll')}
+                                </button>
+                            )}
+                        </div>
                         {sorted.length > 0 ? (
                             <div className="space-y-3">
                                 {orderedCategories.map((cat) => {
@@ -2512,7 +2549,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     return (
                                         <div key={cat}>
                                             <div className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${colors.label}`}>{t(`networkScan.portCategories.${cat}`)}</div>
-                                            <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                                            <div className="grid grid-cols-5 gap-x-3 gap-y-1">
                                                 {byCategory[cat].map((p) => {
                                                     const Icon = getPortIcon(p.port);
                                                     return (
