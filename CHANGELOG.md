@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.15] - 2026-09-12
+
+### Fixed
+- Removed duplicate GHCR badge on the settings info page
+
 ## [0.10.14] - 2026-09-10
 
 ### Fixed

@@ -3023,7 +3023,6 @@ const GITHUB_BADGES: Array<{ src: string; alt: string; href?: string }> = [
   { src: 'https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8', alt: 'React' },
   { src: 'https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa', alt: 'TypeScript' },
   { src: 'https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white', alt: 'License' },
-  { src: 'https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white', alt: 'GHCR', href: 'https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork' },
 ];
 
 /** Parses CHANGELOG.md content into version blocks (## [version] - date). Returns array of { version, date, body }. */
