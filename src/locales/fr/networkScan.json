@@ -167,6 +167,7 @@
       "lastCheck": "Dernier check",
       "lastPing": "Dernier ping le {{date}} : {{latency}}",
       "offSince": "Hors ligne depuis le {{date}}",
+      "downSince": "En panne depuis : {{duration}}",
       "rescan": "Rescanner (scan complet + ports)",
       "rescanOfflineDisabled": "Impossible de rescanner une IP hors ligne",
       "banIp": "Bannir cette IP (exclure des scans futurs)",

@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { MiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
@@ -254,7 +254,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [macTooltip, setMacTooltip] = useState<{ mac: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [portsTooltip, setPortsTooltip] = useState<{ ip: string; openPorts: { port: number; protocol?: string }[]; lastPortScan?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [firstSeenTooltip, setFirstSeenTooltip] = useState<{ firstSeenDate: string; lastSeenDate: string; lastCheckText?: string; isOffline: boolean; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
-    const [latencyTooltip, setLatencyTooltip] = useState<{ label: string; date: string; latency?: string; isOffline: boolean; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [latencyTooltip, setLatencyTooltip] = useState<{ label: string; date: string; latency?: string; isOffline: boolean; downDuration?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ ip: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
@@ -1225,6 +1225,41 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return date.getFullYear().toString();
     };
 
+    /** Ultra-compact last-seen format: 5m / 3h / 2d / 27/03 */
+    const formatLastSeenCompact = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const diffMs = Date.now() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        if (diffMins < 1) return '<1m';
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays < 365) return date.toLocaleDateString(currentLocale, { day: '2-digit', month: '2-digit' });
+        return date.getFullYear().toString();
+    };
+
+    /** Duration since a device went down, in full words (e.g. "5 heures", "5 jours") for the offline tooltip. */
+    const formatDownDuration = (dateStr: string): string => {
+        const date = new Date(dateStr);
+        const diffMs = Math.max(0, Date.now() - date.getTime());
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        const diffMonths = Math.floor(diffDays / 30);
+        const diffYears = Math.floor(diffDays / 365);
+        const isFr = currentLocale.startsWith('fr');
+        const unit = (count: number, fr: [string, string], en: [string, string]) => {
+            const [singular, plural] = isFr ? fr : en;
+            return `${count} ${count === 1 ? singular : plural}`;
+        };
+        if (diffYears >= 1) return unit(diffYears, ['an', 'ans'], ['year', 'years']);
+        if (diffMonths >= 1) return unit(diffMonths, ['mois', 'mois'], ['month', 'months']);
+        if (diffDays >= 1) return unit(diffDays, ['jour', 'jours'], ['day', 'days']);
+        if (diffHours >= 1) return unit(diffHours, ['heure', 'heures'], ['hour', 'hours']);
+        return unit(Math.max(1, diffMins), ['minute', 'minutes'], ['minute', 'minutes']);
+    };
+
     const formatNextExecution = (lastExecution: string | null, intervalMinutes: number): string => {
         const now = new Date();
         let nextDate: Date;
@@ -2105,14 +2140,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     date: formatDate(scan.lastSeen),
                                                     latency: scan.status === 'online' ? formatLatency(scan.pingLatency ?? 0) : undefined,
                                                     isOffline: scan.status === 'offline',
+                                                    downDuration: scan.status === 'offline' ? formatDownDuration(scan.lastSeen) : undefined,
                                                     rect: getEventRect(e)
                                                 });
                                             }}
                                             onMouseLeave={() => scheduleTooltipHide()}
                                         >
                                             {scan.status === 'offline' ? (
-                                                <span className="text-sm text-gray-500 whitespace-nowrap">
-                                                    {formatDate(scan.lastSeen)}
+                                                <span className="flex items-center gap-1 text-sm text-gray-500 whitespace-nowrap">
+                                                    <XCircle size={14} className="text-red-400 flex-shrink-0" />
+                                                    {formatLastSeenCompact(scan.lastSeen)}
                                                 </span>
                                             ) : (
                                                 <span className={`text-sm font-medium whitespace-nowrap ${getLatencyColor(scan.pingLatency)}`}>
@@ -2313,11 +2350,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {latencyTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(latencyTooltip.rect, 280, 104, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(latencyTooltip.rect, 280, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
@@ -2325,10 +2362,17 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         {latencyTooltip.isOffline ? (() => {
                             const [before, after] = t('networkScan.tooltips.offSince', { date: ' ' }).split(' ');
                             return (
-                                <div className="text-sm">
-                                    <span className="text-gray-400">{before}</span>
-                                    <span className="text-amber-300 font-medium">{latencyTooltip.date}</span>
-                                    {after && <span className="text-gray-400">{after}</span>}
+                                <div className="text-sm space-y-1">
+                                    <div>
+                                        <span className="text-gray-400">{before}</span>
+                                        <span className="text-amber-300 font-medium">{latencyTooltip.date}</span>
+                                        {after && <span className="text-gray-400">{after}</span>}
+                                    </div>
+                                    {latencyTooltip.downDuration && (
+                                        <div className="text-red-400 font-medium">
+                                            {t('networkScan.tooltips.downSince', { duration: latencyTooltip.downDuration })}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })() : (() => {

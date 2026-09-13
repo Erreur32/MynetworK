@@ -49,6 +49,28 @@ import {
   siMotorola,
   siNokia,
   siEcovacs,
+  siIkea,
+  siIrobot,
+  siWemo,
+  siBose,
+  siSmartthings,
+  siLifx,
+  siHomeassistant,
+  siTruenas,
+  siUnraid,
+  siOpenmediavault,
+  siPortainer,
+  siPihole,
+  siAdguard,
+  siPlex,
+  siJellyfin,
+  siNextcloud,
+  siGrafana,
+  siNginxproxymanager,
+  siHomebridge,
+  siEsphome,
+  siTasmota,
+  siZigbee,
   type SimpleIcon
 } from 'simple-icons';
 import type { LucideIcon } from 'lucide-react';
@@ -100,7 +122,14 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /proxmox/i, icon: siProxmox },
   { pattern: /motorola/i, icon: siMotorola },
   { pattern: /\bnokia\b|hmd\s*global/i, icon: siNokia },
-  { pattern: /ecovacs/i, icon: siEcovacs }
+  { pattern: /ecovacs/i, icon: siEcovacs },
+  // Common home-network / IoT hardware brands
+  { pattern: /ikea|tradfri/i, icon: siIkea },
+  { pattern: /irobot|roomba/i, icon: siIrobot },
+  { pattern: /\bwemo\b|belkin/i, icon: siWemo },
+  { pattern: /\bbose\b/i, icon: siBose },
+  { pattern: /smartthings/i, icon: siSmartthings },
+  { pattern: /\blifx\b/i, icon: siLifx }
 ];
 
 /**
@@ -123,7 +152,27 @@ const LABEL_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /veeam/i, icon: siVeeam },
   // Tapo product line reports under the parent TP-Link OUI; falls back here
   // when the local vendor lookup hasn't caught up with a recent OUI block.
-  { pattern: /\btapo\b/i, icon: siTplink }
+  { pattern: /\btapo\b/i, icon: siTplink },
+  // Home automation hub, runs on generic hardware, identifiable only by hostname.
+  { pattern: /home\s*assistant|\bhassio\b|\bhomeassistant\b/i, icon: siHomeassistant },
+  // NAS operating systems, often self-built or on generic hardware, no dedicated OUI.
+  { pattern: /truenas/i, icon: siTruenas },
+  { pattern: /unraid/i, icon: siUnraid },
+  { pattern: /openmediavault|\bomv\b/i, icon: siOpenmediavault },
+  // Common self-hosted / Docker services on a home server or NAS.
+  { pattern: /portainer/i, icon: siPortainer },
+  { pattern: /pi-?hole/i, icon: siPihole },
+  { pattern: /adguard/i, icon: siAdguard },
+  { pattern: /\bplex\b/i, icon: siPlex },
+  { pattern: /jellyfin/i, icon: siJellyfin },
+  { pattern: /nextcloud/i, icon: siNextcloud },
+  { pattern: /grafana/i, icon: siGrafana },
+  { pattern: /nginx-?proxy-?manager|\bnpm\b/i, icon: siNginxproxymanager },
+  { pattern: /homebridge/i, icon: siHomebridge },
+  // IoT firmware / integration hubs, identified by hostname rather than OUI.
+  { pattern: /esphome/i, icon: siEsphome },
+  { pattern: /tasmota/i, icon: siTasmota },
+  { pattern: /zigbee/i, icon: siZigbee }
 ];
 
 /**

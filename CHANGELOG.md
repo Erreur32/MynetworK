@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.18] - 2026-09-13
+
+### Fixed
+
+- Network scan table: latency column tooltip now anchors to the bottom of the hovered row like the ports tooltip, so it always grows upward instead of shifting when its content spans multiple lines.
+- Network scan table: offline devices now show a red circle-cross icon with a compact last-seen date in the latency column, and the tooltip adds a "down since" duration line (hours/days/months/years).
+
+### Added
+
+- Vendor icon detection: Home Assistant, TrueNAS, Unraid, OpenMediaVault, Portainer, Pi-hole, AdGuard Home, Plex, Jellyfin, Nextcloud, Grafana, Nginx Proxy Manager, Homebridge, ESPHome, Tasmota, Zigbee2MQTT, IKEA, iRobot, Wemo, Bose, SmartThings, LIFX.
+
+---
+
 ## [0.10.17] - 2026-09-13
 
 ### Fixed

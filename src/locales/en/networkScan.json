@@ -167,6 +167,7 @@
       "lastCheck": "Last check",
       "lastPing": "Last ping on {{date}}: {{latency}}",
       "offSince": "Off since {{date}}",
+      "downSince": "Down since: {{duration}}",
       "rescan": "Rescan (full scan + ports)",
       "rescanOfflineDisabled": "Cannot rescan an offline IP",
       "banIp": "Ban this IP (exclude from future scans)",
