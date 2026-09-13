@@ -229,14 +229,25 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        // Anything matching /api, /ws or /assets is intentionally NOT served
-        // by the SW navigate fallback. /assets in particular: if a hash-named
-        // chunk is missing (post-deploy stale), we want a real 404 instead of
-        // index.html with text/html (which crashes module loading).
-        navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/assets\//],
+        // Disable the default navigateFallback: it registers a NavigationRoute
+        // that serves the precached index.html CacheFirst (network is never
+        // even tried), so any client whose SW hasn't finished updating yet
+        // gets served an old shell referencing chunk hashes that a later
+        // deploy has already deleted from disk — even on a brand new
+        // navigation (e.g. reopening the browser). The Express server already
+        // serves index.html with no-cache and handles the SPA fallback, so
+        // navigation doesn't need the SW's app-shell precache to work online.
+        navigateFallback: null,
         // No runtimeCaching for scripts: hash-named chunks must always hit the
         // network so a fresh deploy is never shadowed by a cached old chunk.
         runtimeCaching: [
+          {
+            // Prefer the live index.html (always fresh); only fall back to the
+            // cached shell when the network is genuinely unavailable.
+            urlPattern: ({ request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: { cacheName: "mynetwork-shell", networkTimeoutSeconds: 3 },
+          },
           {
             urlPattern: ({ request }) =>
               request.destination === "image" || request.destination === "font",

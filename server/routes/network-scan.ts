@@ -297,6 +297,18 @@ router.get('/port-scan-progress', requireAuth, asyncHandler(async (_req: Authent
 }));
 
 /**
+ * GET /api/network-scan/nmap-status
+ * Check whether nmap is installed (required for port scanning after a full scan)
+ */
+router.get('/nmap-status', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    const available = await portScanService.isNmapAvailable();
+    res.json({
+        success: true,
+        result: { available }
+    });
+}));
+
+/**
  * POST /api/network-scan/port-scan-stop
  * Request stop of the background port scan (nmap). Takes effect between current and next host.
  */

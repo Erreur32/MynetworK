@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download, Plus, Trash2 } from 'lucide-react';
+import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePluginStore } from '../../stores/pluginStore';
 
@@ -71,12 +71,14 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const { plugins } = usePluginStore();
     const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     // New unified config
-    const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({ 
+    const [unifiedConfig, setUnifiedConfig] = useState<UnifiedAutoScanConfig>({
         enabled: false,
         fullScan: { enabled: false, interval: 1440, portScanEnabled: false },
         refresh: { enabled: false, interval: 10, scanType: 'quick' }
     });
-    
+    // Whether nmap is installed on the server (required for port scanning)
+    const [nmapAvailable, setNmapAvailable] = useState<boolean | null>(null);
+
     // Plugin priority config
     const [pluginPriorityConfig, setPluginPriorityConfig] = useState({
         hostnamePriority: ['freebox', 'unifi', 'scanner'] as ('freebox' | 'unifi' | 'scanner')[],
@@ -163,9 +165,31 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             fetchPluginPriorityConfig();
             fetchWiresharkVendorStats();
             loadAutoUpdateConfig();
+            fetchNmapStatus();
         }
     }, [isOpen]);
-    
+
+    const fetchNmapStatus = async () => {
+        try {
+            const response = await api.get<{ available: boolean }>('/api/network-scan/nmap-status');
+            if (response.success && response.result) {
+                setNmapAvailable(response.result.available);
+            }
+        } catch (error) {
+            console.error('Failed to fetch nmap status:', error);
+        }
+    };
+
+    // Force the port scan option off when nmap is missing, even if a stale value was loaded from config
+    useEffect(() => {
+        if (nmapAvailable === false && unifiedConfig.fullScan?.portScanEnabled) {
+            setUnifiedConfig((prev) => ({
+                ...prev,
+                fullScan: { ...prev.fullScan!, portScanEnabled: false }
+            }));
+        }
+    }, [nmapAvailable, unifiedConfig.fullScan?.portScanEnabled]);
+
     const loadAutoUpdateConfig = async () => {
         try {
             const response = await api.get<DatabaseConfig>('/api/database/config');
@@ -710,12 +734,13 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                             <option value="1440">{t('config.interval24h')}</option>
                                                         </select>
                                                     </div>
-                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                    <label className={`flex items-center gap-2 ${nmapAvailable === false ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`} title={nmapAvailable === false ? t('config.nmapMissingTitle') : undefined}>
                                                         <input
                                                             id="full-scan-port-scan"
                                                             name="full-scan-port-scan"
                                                             type="checkbox"
-                                                            checked={unifiedConfig.fullScan?.portScanEnabled ?? false}
+                                                            checked={nmapAvailable === false ? false : (unifiedConfig.fullScan?.portScanEnabled ?? false)}
+                                                            disabled={nmapAvailable === false}
                                                             onChange={(e) => setUnifiedConfig({
                                                                 ...unifiedConfig,
                                                                 fullScan: {
@@ -723,7 +748,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                                     portScanEnabled: e.target.checked
                                                                 }
                                                             })}
-                                                            className="w-4 h-4"
+                                                            className="w-4 h-4 disabled:cursor-not-allowed"
                                                         />
                                                         <span className="text-xs text-gray-400">{t('config.portScanAfterFull')}</span>
                                                     </label>
@@ -814,6 +839,19 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                 )}
                             </div>
 
+                            {/* Avertissement nmap manquant */}
+                            {nmapAvailable === false && (
+                                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                                    <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-2">
+                                        <AlertTriangle size={14} className="text-red-400" />
+                                        <span>{t('config.nmapMissingTitle')}</span>
+                                    </h3>
+                                    <p className="text-xs text-gray-500">
+                                        {t('config.nmapMissingDesc')}
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Réinitialisation des scans */}
                             <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
                                 <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2 mb-3">
@@ -895,7 +933,8 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                     <p className="text-xs text-gray-400 mt-1">{t('config.pluginPriorityDesc')}</p>
                                 </div>
                             </div>
-                            
+                            <p className="text-xs text-gray-500 italic mb-4">{t('config.pluginPriorityHint')}</p>
+
                             {isLoadingPriority ? (
                                 <div className="flex items-center justify-center py-4">
                                     <RefreshCw size={20} className="text-gray-400 animate-spin" />

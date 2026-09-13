@@ -17,6 +17,7 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_PORT_RANGE = '1-10000';
 const NMAP_TIMEOUT_MS = 120000; // 2 minutes per host
 const MAX_ONLINE_HOSTS = 200;
+const PORT_SCAN_CONCURRENCY = 5; // number of nmap processes run in parallel
 
 export interface OpenPort {
     port: number;
@@ -27,7 +28,7 @@ export interface PortScanProgress {
     active: boolean;
     current: number;
     total: number;
-    currentIp?: string;
+    currentIps?: string[];
 }
 
 let _portScanProgress: PortScanProgress = { active: false, current: 0, total: 0 };
@@ -140,20 +141,15 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
     }
 
     _portScanAbortRequested = false;
-    _portScanProgress = { active: true, current: 0, total: online.length };
-    logger.info('PortScanService', `Starting background port scan for ${online.length} online host(s)`);
+    const activeIps = new Set<string>();
+    let completed = 0;
+    _portScanProgress = { active: true, current: 0, total: online.length, currentIps: [] };
+    logger.info('PortScanService', `Starting background port scan for ${online.length} online host(s) (concurrency: ${PORT_SCAN_CONCURRENCY})`);
 
-    for (let i = 0; i < online.length; i++) {
-        if (_portScanAbortRequested) {
-            _portScanProgress.active = false;
-            _portScanProgress.current = i;
-            logger.info('PortScanService', `Background port scan stopped by user at ${i}/${online.length}`);
-            return;
-        }
-
-        const host = online[i];
-        _portScanProgress.currentIp = host.ip;
-        _portScanProgress.current = i;
+    let nextIndex = 0;
+    const scanHost = async (host: (typeof online)[number]): Promise<void> => {
+        activeIps.add(host.ip);
+        _portScanProgress.currentIps = Array.from(activeIps);
 
         try {
             const { openPorts } = await runPortScan(host.ip, options);
@@ -167,7 +163,28 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
             logger.debug('PortScanService', `${host.ip}: ${openPorts.length} open port(s)`);
         } catch (err: any) {
             logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${err.message || err}`);
+        } finally {
+            activeIps.delete(host.ip);
+            completed++;
+            _portScanProgress.current = completed;
+            _portScanProgress.currentIps = Array.from(activeIps);
         }
+    };
+
+    const worker = async (): Promise<void> => {
+        while (nextIndex < online.length && !_portScanAbortRequested) {
+            const host = online[nextIndex++];
+            await scanHost(host);
+        }
+    };
+
+    const workerCount = Math.min(PORT_SCAN_CONCURRENCY, online.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    if (_portScanAbortRequested) {
+        logger.info('PortScanService', `Background port scan stopped by user at ${completed}/${online.length}`);
+        _portScanProgress = { active: false, current: completed, total: online.length };
+        return;
     }
 
     _portScanProgress = { active: false, current: online.length, total: online.length };

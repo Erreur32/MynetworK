@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.16] - 2026-09-13
+
+### Fixed
+
+- Live bandwidth chart interpolation now renders smoothly for Freebox and UniFi widgets.
+- Network scan table: MAC address column now truncates via CSS ellipsis matching its actual cell width instead of a hardcoded 8-character cutoff.
+- Network scan table: switched to `table-layout: fixed` with explicit column widths, removing the unpredictable space redistribution that `table-auto` caused on wide screens.
+- Network scan table: the Open Ports hover tooltip is no longer height-capped or scrollable — it always renders its full content and grows upward from the hovered row so it never covers it.
+
+### Added
+
+- Network scan table: the IP address hover tooltip now shows the full address (IPv4 or IPv6) with a copy-to-clipboard button, matching the MAC tooltip style.
+- Network scan config: warns when `nmap` is not installed on the server and disables the "port scan after full scan" option accordingly (new `GET /api/network-scan/nmap-status` endpoint).
+- Port scanning now runs with a concurrency pool (5 hosts in parallel) instead of sequentially, speeding up full-network port scans.
+
+### Changed
+
+- Network scan table: adjusted column widths (IP, Hostname, Vendor, MAC, Open Ports) for better readability on large screens.
+- PWA service worker: `index.html` navigation now uses a network-first strategy instead of serving a possibly stale cached app shell, preventing users from being stuck on an outdated build after a deploy.
+
+---
+
 ## [0.10.15] - 2026-09-12
 
 ### Fixed

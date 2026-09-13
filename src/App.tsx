@@ -996,7 +996,7 @@ const App: React.FC = () => {
           onSearchClick={() => setCurrentPage("search")}
           onTopologyClick={() => setCurrentPage("topology")}
         />
-        <main className="p-4 md:p-6 max-w-[1920px] mx-auto">
+        <main className="p-4 md:p-6">
           <Suspense fallback={<PageLoader t={t} />}>
             <NetworkScanPage
               onBack={() => setCurrentPage("dashboard")}
