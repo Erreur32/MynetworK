@@ -340,7 +340,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 )}
                             />
                             <Area
-                                type={selectedRange === 0 ? "linear" : "monotone"}
+                                type="monotone"
                                 dataKey="download"
                                 stackId="1"
                                 stroke={COLORS.blue}
@@ -351,7 +351,7 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                                 hide={hiddenSeries.has('download')}
                             />
                             <Area
-                                type={selectedRange === 0 ? "linear" : "monotone"}
+                                type="monotone"
                                 dataKey="upload"
                                 stackId="2"
                                 stroke={COLORS.green}
