@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.17] - 2026-09-13
+
+### Fixed
+
+- BandwidthHistoryWidget: removed duplicated Freebox/UniFi range-selector markup flagged by SonarCloud, now rendered from a single mapped list of ranges.
+- NetworkScanPage: removed duplicated tooltip-reset and bounding-rect logic across row/action hover handlers flagged by SonarCloud, factored into shared `hideAllTooltips()` and `getEventRect()` helpers.
+
+---
+
 ## [0.10.16] - 2026-09-13
 
 ### Fixed

@@ -197,103 +197,24 @@ const [selectedRange, setSelectedRange] = useState<BandwidthRange>(freeboxAvaila
                         </span>
                     </span>
                 </span>
-                {source === 'freebox' ? (
-                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
+                    {([0, 3600, 21600, 86400, 604800] as BandwidthRange[]).map((range) => (
                         <button
+                            key={range}
                             type="button"
                             className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                                selectedRange === range ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
                             }`}
-                            onClick={() => setSelectedRange(0)}
+                            onClick={() => setSelectedRange(range)}
                         >
-                            {t('dashboard.bandwidth.live')}
+                            {range === 0 && t('dashboard.bandwidth.live')}
+                            {range === 3600 && '1h'}
+                            {range === 21600 && '6h'}
+                            {range === 86400 && '24h'}
+                            {range === 604800 && '7j'}
                         </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 3600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(3600)}
-                        >
-                            1h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 21600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(21600)}
-                        >
-                            6h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 86400 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(86400)}
-                        >
-                            24h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 604800 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(604800)}
-                        >
-                            7j
-                        </button>
-                    </div>
-                ) : (
-                    <div className="inline-flex items-center gap-1 bg-[#1b1b1b] rounded-full p-1 border border-gray-800">
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(0)}
-                        >
-                            {t('dashboard.bandwidth.live')}
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 3600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(3600)}
-                        >
-                            1h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 21600 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(21600)}
-                        >
-                            6h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 86400 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(86400)}
-                        >
-                            24h
-                        </button>
-                        <button
-                            type="button"
-                            className={`px-2 py-0.5 rounded-full text-[11px] ${
-                                selectedRange === 604800 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'
-                            }`}
-                            onClick={() => setSelectedRange(604800)}
-                        >
-                            7j
-                        </button>
-                    </div>
-                )}
+                    ))}
+                </div>
             </div>
             <div className="w-full" style={{ height: '256px', minHeight: '256px' }}>
                 {chartData.length > 0 ? (
