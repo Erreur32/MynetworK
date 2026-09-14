@@ -853,6 +853,15 @@ export const McpSection: React.FC<{
                                 ? () => setExpandedTokenId(isExpanded ? null : tok.id)
                                 : undefined
                             }
+                            onKeyDown={
+                              tok.status === "active"
+                                ? (e) => {
+                                    if (e.key !== "Enter" && e.key !== " ") return;
+                                    e.preventDefault();
+                                    setExpandedTokenId(isExpanded ? null : tok.id);
+                                  }
+                                : undefined
+                            }
                             className={`flex items-center justify-between gap-3 p-2.5 transition-colors ${
                               tok.status === "active" ? "cursor-pointer hover:bg-theme-tertiary" : ""
                             }`}
