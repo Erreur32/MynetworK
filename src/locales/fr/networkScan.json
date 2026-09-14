@@ -22,7 +22,9 @@
       "ban": "Erreur lors du bannissement",
       "banWithError": "Erreur lors du bannissement : {{error}}",
       "hostnameSave": "Erreur lors de la sauvegarde du hostname",
-      "hostnameSaveWithError": "Erreur lors de la sauvegarde : {{error}}"
+      "hostnameSaveWithError": "Erreur lors de la sauvegarde : {{error}}",
+      "vendorSave": "Erreur lors de la sauvegarde du vendor",
+      "vendorSaveWithError": "Erreur lors de la sauvegarde : {{error}}"
     },
     "success": {
       "ipAdded": "IP ajoutée et scannée avec succès",
@@ -116,7 +118,14 @@
       "network": "Réseau",
       "networkLabel": "Réseau",
       "autoScan": "Scan auto",
-      "nmapMissing": "nmap manquant"
+      "nmapMissing": "nmap manquant",
+      "overview": "Vue d'ensemble",
+      "insights": "Analyses",
+      "newDevices": "Nouveaux appareils ({{days}}j)",
+      "flakyDevices": "Déconnexions fréquentes",
+      "noNewDevices": "Aucun nouvel appareil",
+      "noFlakyDevices": "Aucun appareil instable",
+      "transitionsCount": "{{count}}x"
     },
     "buttons": {
       "config": "Configuration",
@@ -152,6 +161,7 @@
       "cancel": "Annuler",
       "source": "Source: {{source}}",
       "rename": "Renommer",
+      "renameVendor": "Modifier le vendor",
       "online": "Online - Appareil en ligne",
       "offline": "Offline - Appareil hors ligne",
       "unknown": "Unknown - Statut inconnu",
@@ -292,6 +302,21 @@
       "noOfflineRecent": "Aucune IP offline récente",
       "topWorstLatency": "Top Pire Latence",
       "noLatencyMeasured": "Aucune latence mesurée"
+    },
+    "vendorIconPicker": {
+      "title": "Choisir l'icône du vendeur",
+      "trigger": "Choisir une icône",
+      "searchPlaceholder": "Rechercher une icône...",
+      "reset": "Revenir à l'icône auto-détectée",
+      "noResults": "Aucune icône trouvée",
+      "groupBrands": "Marques",
+      "groupGeneric": "Génériques",
+      "import": "Importer une icône",
+      "errors": {
+        "invalidType": "Format non supporté. Utilisez PNG, JPG, WebP ou SVG.",
+        "tooLarge": "Fichier trop volumineux (120 Ko max).",
+        "readFailed": "Impossible de lire le fichier."
+      }
     }
   },
   "config": {
@@ -346,6 +371,10 @@
     "overwriteData": "Écrasement des données",
     "overwriteHostname": "Écraser les hostnames existants",
     "overwriteVendor": "Écraser les vendors existants",
+    "protectManual": "Protéger les modifications manuelles",
+    "protectManualDesc": "Si coché, une valeur forcée manuellement n'est jamais effacée par un futur scan.",
+    "protectManualHostname": "Ne jamais effacer un hostname défini manuellement",
+    "protectManualVendor": "Ne jamais effacer un vendor défini manuellement",
     "vendorDb": "Base vendors IEEE OUI",
     "vendorDbDesc": "Base de données complète des vendors IEEE OUI. Mise à jour automatique tous les 7 jours si activée.",
     "autoUpdate": "Mise à jour automatique",

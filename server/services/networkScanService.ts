@@ -1983,13 +1983,13 @@ export class NetworkScanService {
         const config = PluginPriorityConfigService.getConfig();
         const priority = config.hostnamePriority;
         const overwrite = config.overwriteExisting.hostname;
-        
-        // NEVER overwrite manual hostnames, regardless of overwrite setting
-        const isManualHostname = existingScan?.hostnameSource === 'manual' && 
-                                 existingScan?.hostname && 
+
+        // If enabled (default), NEVER overwrite manual hostnames, regardless of overwrite setting
+        const isManualHostname = existingScan?.hostnameSource === 'manual' &&
+                                 existingScan?.hostname &&
                                  existingScan.hostname.trim().length > 0;
-        
-        if (isManualHostname) {
+
+        if (isManualHostname && config.protectManual.hostname) {
             logger.debug('NetworkScanService', `[${ip}] Preserving manual hostname: ${existingScan.hostname} (never overwritten)`);
             return null; // Return null to indicate we should keep the existing manual hostname
         }
@@ -2176,9 +2176,16 @@ export class NetworkScanService {
             existingVendor.toLowerCase() === 'unknown';
         
         const hasValidExistingVendor = !isEmptyVendor;
-        
+
         logger.info('NetworkScanService', `[${ip}] Starting vendor detection for MAC ${macToUse || '(none)'}, priority: [${priority.join(', ')}], overwrite: ${overwrite}, existing: "${existingVendor || '(empty)'}"`);
-        
+
+        // If enabled (default), NEVER overwrite a manually-set vendor, regardless of overwrite setting
+        const isManualVendor = hasValidExistingVendor && existingScan?.vendorSource === 'manual';
+        if (isManualVendor && config.protectManual.vendor) {
+            logger.debug('NetworkScanService', `[${ip}] Preserving manual vendor: ${existingVendor} (never overwritten)`);
+            return null;
+        }
+
         // If vendor exists and is valid AND overwrite is disabled, keep existing
         if (hasValidExistingVendor && !overwrite) {
             logger.info('NetworkScanService', `[${ip}] Keeping existing vendor (overwrite disabled): ${existingVendor} (source: ${existingScan?.vendorSource || 'unknown'})`);

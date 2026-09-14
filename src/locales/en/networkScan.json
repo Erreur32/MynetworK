@@ -22,7 +22,9 @@
       "ban": "Error while banning",
       "banWithError": "Error while banning: {{error}}",
       "hostnameSave": "Error while saving hostname",
-      "hostnameSaveWithError": "Error while saving: {{error}}"
+      "hostnameSaveWithError": "Error while saving: {{error}}",
+      "vendorSave": "Error while saving vendor",
+      "vendorSaveWithError": "Error while saving: {{error}}"
     },
     "success": {
       "ipAdded": "IP added and scanned successfully",
@@ -116,7 +118,14 @@
       "network": "Network",
       "networkLabel": "Network",
       "autoScan": "Auto scan",
-      "nmapMissing": "nmap missing"
+      "nmapMissing": "nmap missing",
+      "overview": "Overview",
+      "insights": "Insights",
+      "newDevices": "New devices ({{days}}d)",
+      "flakyDevices": "Frequently disconnecting",
+      "noNewDevices": "No new devices",
+      "noFlakyDevices": "No unstable devices",
+      "transitionsCount": "{{count}}x"
     },
     "buttons": {
       "config": "Configuration",
@@ -152,6 +161,7 @@
       "cancel": "Cancel",
       "source": "Source: {{source}}",
       "rename": "Rename",
+      "renameVendor": "Edit vendor",
       "online": "Online - Device is online",
       "offline": "Offline - Device is offline",
       "unknown": "Unknown - Status unknown",
@@ -292,6 +302,21 @@
       "noOfflineRecent": "No recent offline IPs",
       "topWorstLatency": "Top worst latency",
       "noLatencyMeasured": "No latency measured"
+    },
+    "vendorIconPicker": {
+      "title": "Choose a vendor icon",
+      "trigger": "Choose an icon",
+      "searchPlaceholder": "Search an icon...",
+      "reset": "Reset to auto-detected icon",
+      "noResults": "No matching icon",
+      "groupBrands": "Brands",
+      "groupGeneric": "Generic",
+      "import": "Import an icon",
+      "errors": {
+        "invalidType": "Unsupported format. Use PNG, JPG, WebP or SVG.",
+        "tooLarge": "File too large (120KB max).",
+        "readFailed": "Could not read the file."
+      }
     }
   },
   "config": {
@@ -346,6 +371,10 @@
     "overwriteData": "Data overwrite",
     "overwriteHostname": "Overwrite existing hostnames",
     "overwriteVendor": "Overwrite existing vendors",
+    "protectManual": "Protect manual edits",
+    "protectManualDesc": "When checked, a manually forced value is never erased by a future scan.",
+    "protectManualHostname": "Never erase a manually set hostname",
+    "protectManualVendor": "Never erase a manually set vendor",
     "vendorDb": "IEEE OUI vendor database",
     "vendorDbDesc": "Complete IEEE OUI vendor database. Automatic update every 7 days if enabled.",
     "autoUpdate": "Automatic update",

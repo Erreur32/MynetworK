@@ -15,6 +15,7 @@ export interface NetworkScan {
     vendor?: string;
     hostnameSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'system', 'manual'
     vendorSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'api', 'manual'
+    vendorIcon?: string; // Manual icon override: 'simple:<slug>' | 'lucide:<name>' | 'custom:<data-url>'
     status: 'online' | 'offline' | 'unknown';
     pingLatency?: number; // Latency in milliseconds
     firstSeen: Date;
@@ -30,6 +31,7 @@ export interface CreateNetworkScanInput {
     vendor?: string;
     hostnameSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'system', 'manual'
     vendorSource?: string; // Source: 'freebox', 'unifi', 'scanner', 'api', 'manual'
+    vendorIcon?: string; // Manual icon override: 'simple:<slug>' | 'lucide:<name>' | 'custom:<data-url>'
     status?: 'online' | 'offline' | 'unknown';
     pingLatency?: number;
     additionalInfo?: Record<string, unknown>;
@@ -77,6 +79,7 @@ export class NetworkScanRepository {
                 vendor: input.vendor,
                 hostnameSource: input.hostnameSource,
                 vendorSource: input.vendorSource,
+                vendorIcon: input.vendorIcon,
                 status: input.status,
                 pingLatency: input.pingLatency,
                 additionalInfo: input.additionalInfo,
@@ -100,10 +103,10 @@ export class NetworkScanRepository {
         const db = getDatabase();
         const stmt = db.prepare(`
             INSERT INTO network_scans (
-                ip, mac, hostname, vendor, hostname_source, vendor_source, status, ping_latency, additional_info
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ip, mac, hostname, vendor, hostname_source, vendor_source, vendor_icon, status, ping_latency, additional_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        
+
         const result = stmt.run(
             input.ip,
             input.mac || null,
@@ -111,6 +114,7 @@ export class NetworkScanRepository {
             input.vendor || null,
             input.hostnameSource || null,
             input.vendorSource || null,
+            input.vendorIcon || null,
             input.status || 'unknown',
             input.pingLatency || null,
             input.additionalInfo ? JSON.stringify(input.additionalInfo) : null
@@ -418,6 +422,10 @@ export class NetworkScanRepository {
             updateFields.push('vendor_source = ?');
             values.push(updates.vendorSource || null);
         }
+        if (updates.vendorIcon !== undefined) {
+            updateFields.push('vendor_icon = ?');
+            values.push(updates.vendorIcon || null);
+        }
         if (updates.status !== undefined) {
             updateFields.push('status = ?');
             values.push(updates.status);
@@ -662,6 +670,57 @@ export class NetworkScanRepository {
     }
 
     /**
+     * Dashboard insights: devices first seen within the last `days` days, and
+     * devices with the most online/offline flips in `network_scan_history`
+     * over the same window (a proxy for connection instability).
+     * Requires the history table to actually hold `days` worth of data —
+     * default history retention is 30 days (see databasePurgeService.ts).
+     */
+    static getInsights(days: number = 30): {
+        newDevices: Array<{ ip: string; hostname?: string; vendor?: string; firstSeen: string }>;
+        flakyDevices: Array<{ ip: string; hostname?: string; vendor?: string; transitions: number }>;
+    } {
+        const db = getDatabase();
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const cutoffIso = cutoff.toISOString();
+
+        const newDevicesStmt = db.prepare(`
+            SELECT ip, hostname, vendor, first_seen
+            FROM network_scans
+            WHERE first_seen >= ?
+            ORDER BY first_seen DESC
+            LIMIT 10
+        `);
+        const newDevices = (newDevicesStmt.all(cutoffIso) as Array<{ ip: string; hostname: string | null; vendor: string | null; first_seen: string }>)
+            .map((row) => ({ ip: row.ip, hostname: row.hostname || undefined, vendor: row.vendor || undefined, firstSeen: row.first_seen }));
+
+        const flakyStmt = db.prepare(`
+            WITH history_window AS (
+                SELECT ip, status, seen_at,
+                    LAG(status) OVER (PARTITION BY ip ORDER BY seen_at) AS prev_status
+                FROM network_scan_history
+                WHERE seen_at >= ?
+            )
+            SELECT ip, COUNT(*) as transitions
+            FROM history_window
+            WHERE prev_status IS NOT NULL AND status != prev_status
+            GROUP BY ip
+            ORDER BY transitions DESC
+            LIMIT 10
+        `);
+        const flakyRows = flakyStmt.all(cutoffIso) as Array<{ ip: string; transitions: number }>;
+        const flakyDevices = flakyRows
+            .filter((row) => row.transitions > 0)
+            .map((row) => {
+                const scan = db.prepare('SELECT hostname, vendor FROM network_scans WHERE ip = ?').get(row.ip) as { hostname: string | null; vendor: string | null } | undefined;
+                return { ip: row.ip, hostname: scan?.hostname || undefined, vendor: scan?.vendor || undefined, transitions: row.transitions };
+            });
+
+        return { newDevices, flakyDevices };
+    }
+
+    /**
      * Purge old scan entries that haven't been seen recently
      * @param retentionDays Number of days to keep entries that haven't been seen (default: 90, 0 = delete all)
      * @returns Number of deleted entries
@@ -808,6 +867,7 @@ export class NetworkScanRepository {
             vendor: row.vendor || undefined,
             hostnameSource: row.hostname_source || undefined,
             vendorSource: row.vendor_source || undefined,
+            vendorIcon: row.vendor_icon || undefined,
             status: row.status as 'online' | 'offline' | 'unknown',
             pingLatency: row.ping_latency || undefined,
             firstSeen: new Date(row.first_seen),

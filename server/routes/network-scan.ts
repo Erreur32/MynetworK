@@ -14,6 +14,7 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
+import { isValidVendorIconId } from '../utils/vendorIconValidation.js';
 import { config as appConfig } from '../config.js';
 import { networkScanScheduler, type UnifiedAutoScanConfig } from '../services/networkScanScheduler.js';
 import { 
@@ -552,6 +553,34 @@ router.get('/stats-history', requireAuth, asyncHandler(async (req: Authenticated
             error: {
                 message: error.message || 'Failed to get stats history',
                 code: 'STATS_HISTORY_ERROR'
+            }
+        });
+    }
+}));
+
+/**
+ * GET /api/network-scan/insights
+ * Devices first seen recently, and devices with the most online/offline
+ * flips over the same window (connection instability proxy).
+ * Query params:
+ * - days?: number (default: 30, max: 90)
+ */
+router.get('/insights', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    try {
+        const days = parseInt(req.query.days as string) || 30;
+        const insights = NetworkScanRepository.getInsights(Math.min(Math.max(days, 1), 90));
+
+        res.json({
+            success: true,
+            result: insights
+        });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to get insights:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to get insights',
+                code: 'INSIGHTS_ERROR'
             }
         });
     }
@@ -1250,7 +1279,7 @@ router.get('/plugin-priority-config', requireAuth, requireAdmin, asyncHandler(as
  */
 router.post('/plugin-priority-config', requireAuth, requireAdmin, autoLog('network-scan', 'plugin-priority-config'), asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const { hostnamePriority, vendorPriority, overwriteExisting } = req.body;
+        const { hostnamePriority, vendorPriority, overwriteExisting, protectManual } = req.body;
         
         // Validate input
         if (!Array.isArray(hostnamePriority) || !Array.isArray(vendorPriority)) {
@@ -1284,6 +1313,10 @@ router.post('/plugin-priority-config', requireAuth, requireAdmin, autoLog('netwo
             overwriteExisting: overwriteExisting || {
                 hostname: true,
                 vendor: true
+            },
+            protectManual: {
+                hostname: protectManual?.hostname ?? true,
+                vendor: protectManual?.vendor ?? true
             }
         };
         
@@ -1820,6 +1853,63 @@ router.post('/:id/hostname', requireAuth, requireAdmin, autoLog('network-scan', 
                 message: error.message || 'Failed to update hostname',
                 code: 'UPDATE_HOSTNAME_ERROR'
             }
+        });
+    }
+}));
+
+/**
+ * POST /api/network-scan/:id/vendor
+ * Manually force the vendor name and/or icon for a specific IP.
+ * Sets vendor_source to 'manual' so future scans preserve it (see protectManual.vendor config).
+ */
+router.post('/:id/vendor', requireAuth, requireAdmin, autoLog('network-scan', 'update-vendor'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const ip = param(req, 'id');
+    const { vendor, vendorIcon } = req.body;
+
+    if (vendor !== undefined && typeof vendor !== 'string' && vendor !== null) {
+        return res.status(400).json({
+            success: false,
+            error: { message: 'vendor must be a string or null', code: 'INVALID_VENDOR' }
+        });
+    }
+
+    if (vendorIcon !== undefined && vendorIcon !== null && !isValidVendorIconId(vendorIcon)) {
+        return res.status(400).json({
+            success: false,
+            error: { message: 'Invalid vendorIcon format', code: 'INVALID_VENDOR_ICON' }
+        });
+    }
+
+    try {
+        const trimmedVendor = vendor && vendor.trim() ? vendor.trim() : undefined;
+        const updateData: any = {
+            vendor: trimmedVendor ?? null
+        };
+
+        if (trimmedVendor) {
+            updateData.vendorSource = 'manual';
+            updateData.vendorIcon = vendorIcon || null;
+        } else {
+            // Clearing the vendor also clears the manual source and icon override
+            updateData.vendorSource = null;
+            updateData.vendorIcon = null;
+        }
+
+        const updated = NetworkScanRepository.update(ip, updateData);
+
+        if (!updated) {
+            return res.status(404).json({
+                success: false,
+                error: { message: 'IP not found', code: 'IP_NOT_FOUND' }
+            });
+        }
+
+        res.json({ success: true, result: updated });
+    } catch (error: any) {
+        logger.error('NetworkScan', 'Failed to update vendor:', error);
+        return res.status(500).json({
+            success: false,
+            error: { message: error.message || 'Failed to update vendor', code: 'UPDATE_VENDOR_ERROR' }
         });
     }
 }));

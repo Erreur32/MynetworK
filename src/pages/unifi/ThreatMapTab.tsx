@@ -109,9 +109,15 @@ export const ThreatMapTab: React.FC<ThreatMapTabProps> = ({ threatData }) => {
         try {
             const map = L.map(mapContainerRef.current, { zoomControl: true }).setView([26, 12], 3);
             mapRef.current = map;
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-                subdomains: 'abcd', maxZoom: 20,
+            // CARTO's free anonymous basemap (basemaps.cartocdn.com) now requires an API key —
+            // tiles still return HTTP 200 but the image itself is watermarked "API key required".
+            // Esri's World Dark Gray Canvas is free, keyless, and gives an equivalent dark look.
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://www.esri.com/">Esri</a>',
+                maxZoom: 16,
+            }).addTo(map);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 16,
             }).addTo(map);
             const MCG = (L as any).markerClusterGroup ?? (window as any).L?.markerClusterGroup;
             if (!MCG) { setError('MarkerCluster not available'); return; }
@@ -246,7 +252,7 @@ export const ThreatMapTab: React.FC<ThreatMapTabProps> = ({ threatData }) => {
                     }
                 })
                 .finally(() => {
-                    // Delay between batches to respect ip-api rate limits
+                    // Delay between batches to respect freeipapi.com rate limits
                     setTimeout(processBatch, 400);
                 });
         };

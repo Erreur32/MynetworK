@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { NetworkStat } from '../../types';
 
 interface BarChartProps {
@@ -308,6 +309,118 @@ export const MiniBarChart: React.FC<MiniBarChartProps> = ({
           <span>{labels[0]}</span>
           <span className="font-medium text-gray-400">{labels[labels.length - 1]}</span>
         </div>
+      )}
+    </div>
+  );
+};
+
+// Stacked variant of MiniBarChart: each bar is split into colored segments
+// (e.g. online at the bottom, offline on top) so several series share one chart.
+interface StackedMiniBarChartSeries {
+  data: number[];
+  color: string;
+  label: string;
+}
+
+interface StackedMiniBarChartProps {
+  series: StackedMiniBarChartSeries[]; // rendered bottom-to-top in array order
+  height?: number;
+  labels?: string[];
+  showRangeLabels?: boolean;
+  /** Label for the summed total shown in the hover tooltip (e.g. "Total IPs"). */
+  totalLabel?: string;
+}
+
+export const StackedMiniBarChart: React.FC<StackedMiniBarChartProps> = ({
+  series,
+  height = 24,
+  labels,
+  showRangeLabels = false,
+  totalLabel
+}) => {
+  const pointCount = series[0]?.data.length ?? 0;
+  const totals = Array.from({ length: pointCount }, (_, i) => series.reduce((sum, s) => sum + (s.data[i] || 0), 0));
+  const maxTotal = Math.max(...totals, 1);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const barRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const barsHeight = showRangeLabels ? height - 14 : height;
+
+  const handleEnter = (idx: number) => {
+    setHoveredIndex(idx);
+    const el = barRefs.current[idx];
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setTooltipPos({ top: rect.top - 8, left: rect.left + rect.width / 2 });
+    }
+  };
+
+  const handleLeave = () => {
+    setHoveredIndex(null);
+    setTooltipPos(null);
+  };
+
+  return (
+    <div className="flex flex-col" style={{ height }}>
+      <div className="relative flex items-end gap-[2px]" style={{ height: barsHeight }}>
+        {totals.map((total, idx) => {
+          const barHeightPct = (total / maxTotal) * 100;
+          const label = labels && labels[idx] ? labels[idx] : null;
+          return (
+            <div
+              key={idx}
+              ref={(el) => { barRefs.current[idx] = el; }}
+              className="flex-1 relative group flex flex-col-reverse"
+              style={{ height: `${Math.max(barHeightPct, total > 0 ? 5 : 1)}%`, cursor: label ? 'pointer' : 'default' }}
+              onMouseEnter={() => handleEnter(idx)}
+              onMouseLeave={handleLeave}
+            >
+              <div className="absolute inset-0 flex flex-col-reverse overflow-hidden rounded-t-sm">
+                {series.map((s, sIdx) => {
+                  const value = s.data[idx] || 0;
+                  const segmentPct = total > 0 ? (value / total) * 100 : 0;
+                  return (
+                    <div
+                      key={sIdx}
+                      className="w-full transition-transform"
+                      style={{
+                        height: `${segmentPct}%`,
+                        background: s.color,
+                        opacity: hoveredIndex === idx ? 1 : 0.85,
+                        transform: hoveredIndex === idx ? 'scaleY(1.03)' : 'scaleY(1)'
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {showRangeLabels && labels && labels.length > 0 && (
+        <div className="flex justify-between px-0.5 mt-1 text-[9px] leading-none text-gray-500 tabular-nums">
+          <span>{labels[0]}</span>
+          <span className="font-medium text-gray-400">{labels[labels.length - 1]}</span>
+        </div>
+      )}
+
+      {hoveredIndex !== null && tooltipPos && labels && labels[hoveredIndex] && createPortal(
+        <div
+          className="fixed px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-[9999] pointer-events-none"
+          style={{ top: tooltipPos.top, left: tooltipPos.left, transform: 'translate(-50%, -100%)' }}
+        >
+          <div className="font-medium">{labels[hoveredIndex]}</div>
+          {totalLabel && (
+            <div className="text-gray-100 font-medium">{totalLabel}: {totals[hoveredIndex]}</div>
+          )}
+          {series.map((s, sIdx) => (
+            <div key={sIdx} className="text-gray-300 flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+              {s.label}: {s.data[hoveredIndex] || 0}
+            </div>
+          ))}
+        </div>,
+        document.body
       )}
     </div>
   );

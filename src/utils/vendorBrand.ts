@@ -27,7 +27,6 @@ import {
   siDell,
   siLenovo,
   siHp,
-  siAsus,
   siAcer,
   siIntel,
   siNvidia,
@@ -41,7 +40,6 @@ import {
   siShelly,
   siSeagate,
   siRazer,
-  siMsi,
   siOrange,
   siMitsubishi,
   siProxmox,
@@ -74,7 +72,10 @@ import {
   type SimpleIcon
 } from 'simple-icons';
 import type { LucideIcon } from 'lucide-react';
-import { Plug, Thermometer, Clock, Router, Radio } from 'lucide-react';
+import {
+  Plug, Thermometer, Clock, Router, Radio, Lightbulb, Tv, Monitor,
+  Smartphone, Tablet, Laptop, HardDrive, Wifi, Globe, Car, Printer, Camera, Speaker, Gamepad2, Server
+} from 'lucide-react';
 
 // Ordered by specificity: longer/more specific substrings first so e.g.
 // "TP-Link" doesn't get shadowed by a shorter unrelated match.
@@ -104,7 +105,6 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /\bdell\b/i, icon: siDell },
   { pattern: /lenovo/i, icon: siLenovo },
   { pattern: /hewlett\s*packard|\bhp\b/i, icon: siHp },
-  { pattern: /asus(tek)?/i, icon: siAsus },
   { pattern: /\bacer\b/i, icon: siAcer },
   { pattern: /\bintel\b/i, icon: siIntel },
   { pattern: /nvidia/i, icon: siNvidia },
@@ -116,7 +116,6 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /\bshelly\b/i, icon: siShelly },
   { pattern: /seagate/i, icon: siSeagate },
   { pattern: /razer/i, icon: siRazer },
-  { pattern: /\bmsi\b|micro-?star/i, icon: siMsi },
   { pattern: /\borange\b/i, icon: siOrange },
   { pattern: /mitsubishi/i, icon: siMitsubishi },
   { pattern: /proxmox/i, icon: siProxmox },
@@ -193,7 +192,21 @@ const VENDOR_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon }
   { pattern: /meross/i, icon: Plug },
   { pattern: /netatmo/i, icon: Thermometer },
   { pattern: /freebox/i, icon: Router },
-  { pattern: /aqara|lumi\s*united/i, icon: Radio }
+  { pattern: /aqara|lumi\s*united/i, icon: Radio },
+  // Tuya: white-label smart-home OEM (plugs, bulbs, sensors, switches) — no simple-icons logo.
+  { pattern: /\btuya\b/i, icon: Lightbulb },
+  // Plain Philips (TVs, shavers, appliances) — distinct from Philips Hue, matched above.
+  { pattern: /\bphilips\b/i, icon: Tv },
+  // Motherboard/mainboard manufacturers: their OUI almost always identifies a
+  // self-built desktop PC's onboard NIC, not a branded consumer product — a
+  // generic PC icon is more accurate here than the manufacturer's own logo.
+  { pattern: /asus(tek)?/i, icon: Monitor },
+  { pattern: /\bmsi\b|micro-?star/i, icon: Monitor },
+  { pattern: /gigabyte/i, icon: Monitor },
+  { pattern: /asrock/i, icon: Monitor },
+  { pattern: /super\s*micro/i, icon: Monitor },
+  { pattern: /biostar/i, icon: Monitor },
+  { pattern: /\bevga\b/i, icon: Monitor }
 ];
 
 export function getVendorIconFallback(vendorRaw?: string | null): LucideIcon | null {
@@ -225,4 +238,99 @@ export function hasVendorIcon(vendorRaw?: string | null, label?: string | null):
     || getVendorBrandFromLabel(label) !== null
     || getVendorIconFallback(vendorRaw) !== null
     || getVendorIconFallbackFromLabel(label) !== null;
+}
+
+// ── Manual icon override catalog ────────────────────────────────────────────
+// Feeds the vendor-icon picker (force a vendor name + pick an icon on a device
+// row). IDs are stable strings persisted in `network_scans.vendor_icon`:
+//   - `simple:<slug>` → a brand logo already bundled above
+//   - `lucide:<Name>` → a lucide fallback icon already bundled above
+//   - `custom:<data-url>` → a user-imported icon, resolved by the caller
+
+function slugifyIconTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+const ALL_SIMPLE_ICONS: SimpleIcon[] = Array.from(
+  new Map(
+    [...VENDOR_MATCHERS.map((m) => m.icon), ...LABEL_MATCHERS.map((m) => m.icon)].map((icon) => [icon.title, icon])
+  ).values()
+);
+
+const ALL_LUCIDE_ICONS: Array<{ name: string; icon: LucideIcon }> = [
+  { name: 'Plug', icon: Plug },
+  { name: 'Thermometer', icon: Thermometer },
+  { name: 'Clock', icon: Clock },
+  { name: 'Router', icon: Router },
+  { name: 'Radio', icon: Radio },
+  { name: 'Lightbulb', icon: Lightbulb },
+  { name: 'Tv', icon: Tv },
+  { name: 'Monitor', icon: Monitor },
+  { name: 'Smartphone', icon: Smartphone },
+  { name: 'Tablet', icon: Tablet },
+  { name: 'Laptop', icon: Laptop },
+  { name: 'HardDrive', icon: HardDrive },
+  { name: 'Wifi', icon: Wifi },
+  { name: 'Globe', icon: Globe },
+  { name: 'Car', icon: Car },
+  { name: 'Printer', icon: Printer },
+  { name: 'Camera', icon: Camera },
+  { name: 'Speaker', icon: Speaker },
+  { name: 'Gamepad2', icon: Gamepad2 },
+  { name: 'Server', icon: Server }
+];
+
+export interface VendorIconCatalogEntry {
+  id: string;
+  title: string;
+  kind: 'simple' | 'lucide';
+  icon: SimpleIcon | LucideIcon;
+}
+
+/** Full list of built-in icons selectable in the vendor-icon picker. */
+export function getVendorIconCatalog(): VendorIconCatalogEntry[] {
+  return [
+    ...ALL_SIMPLE_ICONS.map((icon) => ({ id: `simple:${slugifyIconTitle(icon.title)}`, title: icon.title, kind: 'simple' as const, icon })),
+    ...ALL_LUCIDE_ICONS.map(({ name, icon }) => ({ id: `lucide:${name}`, title: name, kind: 'lucide' as const, icon }))
+  ];
+}
+
+/** Best-guess catalog id for a vendor string, used to prefill the picker. */
+export function suggestVendorIconId(vendorRaw?: string | null): string | null {
+  const brand = getVendorBrand(vendorRaw);
+  if (brand) return `simple:${slugifyIconTitle(brand.title)}`;
+  const FallbackIcon = getVendorIconFallback(vendorRaw);
+  if (FallbackIcon) {
+    const match = ALL_LUCIDE_ICONS.find((e) => e.icon === FallbackIcon);
+    if (match) return `lucide:${match.name}`;
+  }
+  return null;
+}
+
+export type ResolvedVendorIcon =
+  | { kind: 'simple'; icon: SimpleIcon }
+  | { kind: 'lucide'; icon: LucideIcon }
+  | { kind: 'custom'; dataUrl: string };
+
+/** Resolves a persisted `vendor_icon` id (or a live picker selection) to something renderable. */
+export function resolveVendorIconId(id?: string | null): ResolvedVendorIcon | null {
+  if (!id) return null;
+
+  if (id.startsWith('simple:')) {
+    const slug = id.slice('simple:'.length);
+    const found = ALL_SIMPLE_ICONS.find((icon) => slugifyIconTitle(icon.title) === slug);
+    return found ? { kind: 'simple', icon: found } : null;
+  }
+
+  if (id.startsWith('lucide:')) {
+    const name = id.slice('lucide:'.length);
+    const found = ALL_LUCIDE_ICONS.find((e) => e.name === name);
+    return found ? { kind: 'lucide', icon: found.icon } : null;
+  }
+
+  if (id.startsWith('custom:')) {
+    return { kind: 'custom', dataUrl: id.slice('custom:'.length) };
+  }
+
+  return null;
 }

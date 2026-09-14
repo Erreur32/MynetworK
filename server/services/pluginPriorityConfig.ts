@@ -15,6 +15,10 @@ export interface PluginPriorityConfig {
         hostname: boolean; // If true, plugin data overwrites existing non-empty hostname
         vendor: boolean; // If true, plugin data overwrites existing non-empty vendor
     };
+    protectManual: {
+        hostname: boolean; // If true, a hostname with source='manual' is NEVER overwritten by a scan, regardless of overwriteExisting.hostname
+        vendor: boolean; // If true, a vendor with source='manual' is NEVER overwritten by a scan, regardless of overwriteExisting.vendor
+    };
 }
 
 const DEFAULT_CONFIG: PluginPriorityConfig = {
@@ -22,6 +26,10 @@ const DEFAULT_CONFIG: PluginPriorityConfig = {
     vendorPriority: ['freebox', 'unifi', 'scanner'],
     overwriteExisting: {
         hostname: true, // By default, plugin data overwrites scanner data
+        vendor: true
+    },
+    protectManual: {
+        hostname: true,
         vendor: true
     }
 };
@@ -44,6 +52,10 @@ export class PluginPriorityConfigService {
                     overwriteExisting: {
                         hostname: config.overwriteExisting?.hostname ?? DEFAULT_CONFIG.overwriteExisting.hostname,
                         vendor: config.overwriteExisting?.vendor ?? DEFAULT_CONFIG.overwriteExisting.vendor
+                    },
+                    protectManual: {
+                        hostname: config.protectManual?.hostname ?? DEFAULT_CONFIG.protectManual.hostname,
+                        vendor: config.protectManual?.vendor ?? DEFAULT_CONFIG.protectManual.vendor
                     }
                 };
             }

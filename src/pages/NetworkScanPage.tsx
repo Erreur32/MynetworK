@@ -6,9 +6,9 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
-import { MiniBarChart } from '../components/widgets/BarChart';
+import { MiniBarChart, StackedMiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -18,6 +18,7 @@ import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigMo
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
 import { ToastContainer, type ToastData } from '../components/ui/Toast';
 import { VendorIcon } from '../components/ui/VendorIcon';
+import { VendorIconPicker } from '../components/ui/VendorIconPicker';
 import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
@@ -152,6 +153,23 @@ interface NetworkScanPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
+/** Device name in the insights lists: clickable link to search when navigation is available, plain text otherwise. */
+const InsightDeviceName: React.FC<{ ip: string; label: string; searchTitle: string; onNavigateToSearch?: (ip: string) => void }> = ({ ip, label, searchTitle, onNavigateToSearch }) => {
+    if (!onNavigateToSearch) {
+        return <span className="truncate min-w-0" title={label}>{label}</span>;
+    }
+    return (
+        <button
+            type="button"
+            onClick={() => onNavigateToSearch(ip)}
+            className="truncate min-w-0 text-left hover:text-cyan-400 transition-colors cursor-pointer"
+            title={searchTitle}
+        >
+            {label}
+        </button>
+    );
+};
+
 interface NetworkScan {
     id: number;
     ip: string;
@@ -160,6 +178,7 @@ interface NetworkScan {
     vendor?: string;
     hostnameSource?: string; // 'freebox' | 'unifi' | 'scanner' | 'system' | 'manual'
     vendorSource?: string; // 'freebox' | 'unifi' | 'scanner' | 'api' | 'manual'
+    vendorIcon?: string; // manual icon override id ('simple:<slug>' | 'lucide:<Name>' | 'custom:<data-url>')
     status: 'online' | 'offline' | 'unknown';
     pingLatency?: number;
     firstSeen: string;
@@ -222,6 +241,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [scans, setScans] = useState<NetworkScan[]>([]);
     const [stats, setStats] = useState<ScanStats | null>(null);
     const [statsHistory, setStatsHistory] = useState<Array<{ time: string; total: number; online: number; offline: number }>>([]);
+    const [insights, setInsights] = useState<{
+        newDevices: Array<{ ip: string; hostname?: string; vendor?: string; firstSeen: string }>;
+        flakyDevices: Array<{ ip: string; hostname?: string; vendor?: string; transitions: number }>;
+    } | null>(null);
     const [autoStatus, setAutoStatus] = useState<AutoStatus | null>(null);
     const [autoStatusLoading, setAutoStatusLoading] = useState(true);
     const [isScanning, setIsScanning] = useState(false);
@@ -385,7 +408,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Editing hostname state
     const [editingHostname, setEditingHostname] = useState<string | null>(null);
     const [editedHostname, setEditedHostname] = useState<string>('');
-    
+
+    // Editing vendor name state (icon is edited separately via its own overlay)
+    const [editingVendor, setEditingVendor] = useState<string | null>(null);
+    const [editedVendorName, setEditedVendorName] = useState<string>('');
+
     // Config modal state
     const [configModalOpen, setConfigModalOpen] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
@@ -419,6 +446,20 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             }
         } catch (error) {
             console.error('Failed to fetch stats history:', error);
+        }
+    }, []);
+
+    const fetchInsights = useCallback(async () => {
+        try {
+            const response = await api.get<{
+                newDevices: Array<{ ip: string; hostname?: string; vendor?: string; firstSeen: string }>;
+                flakyDevices: Array<{ ip: string; hostname?: string; vendor?: string; transitions: number }>;
+            }>('/api/network-scan/insights?days=30');
+            if (response.success && response.result) {
+                setInsights(response.result);
+            }
+        } catch (error) {
+            console.error('Failed to fetch insights:', error);
         }
     }, []);
 
@@ -619,9 +660,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         fetchPlugins();
         fetchStats();
         fetchStatsHistory();
+        fetchInsights();
         fetchDefaultConfig();
         fetchAutoStatus();
-    }, [fetchPlugins, fetchStats, fetchStatsHistory, fetchDefaultConfig, fetchAutoStatus]);
+    }, [fetchPlugins, fetchStats, fetchStatsHistory, fetchInsights, fetchDefaultConfig, fetchAutoStatus]);
 
     useEffect(() => {
         if (defaultConfigLoaded) {
@@ -691,6 +733,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setTimeout(() => {
             fetchHistory();
                 fetchStatsHistory();
+                fetchInsights();
             }, 100);
             // Fetch auto status less frequently (every other poll)
             setTimeout(() => {
@@ -1131,6 +1174,60 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     };
 
+    // Vendor name edit is fully separate from icon edit: renaming the vendor never
+    // touches the icon, it always keeps whatever icon is currently set on the scan.
+    const handleStartEditVendor = (ip: string, currentVendor: string) => {
+        setEditingVendor(ip);
+        setEditedVendorName(currentVendor || '');
+    };
+
+    const handleCancelEditVendor = () => {
+        setEditingVendor(null);
+        setEditedVendorName('');
+    };
+
+    // Standalone icon edit (badge overlay on the icon column), fully independent from
+    // the vendor-name edit flow: keeps the current vendor name, only changes the icon.
+    const handleSaveVendorIcon = async (ip: string, currentVendor: string, iconId: string | null) => {
+        try {
+            const trimmedVendor = currentVendor.trim();
+            const response = await api.post(`/api/network-scan/${ip}/vendor`, {
+                vendor: trimmedVendor || null,
+                vendorIcon: trimmedVendor ? iconId : null
+            });
+
+            if (response.success) {
+                await fetchHistory();
+            } else {
+                alert(response.error?.message || t('networkScan.errors.vendorSave'));
+            }
+        } catch (error: any) {
+            console.error('Save vendor icon failed:', error);
+            alert(t('networkScan.errors.vendorSaveWithError', { error: error.message || t('networkScan.errors.unknown') }));
+        }
+    };
+
+    const handleSaveVendor = async (ip: string) => {
+        try {
+            const trimmedVendor = editedVendorName.trim();
+            const currentIcon = scans.find((s) => s.ip === ip)?.vendorIcon || null;
+            const response = await api.post(`/api/network-scan/${ip}/vendor`, {
+                vendor: trimmedVendor || null,
+                vendorIcon: trimmedVendor ? currentIcon : null
+            });
+
+            if (response.success) {
+                await fetchHistory();
+                handleCancelEditVendor();
+            } else {
+                alert(response.error?.message || t('networkScan.errors.vendorSave'));
+            }
+        } catch (error: any) {
+            console.error('Save vendor failed:', error);
+            alert(t('networkScan.errors.vendorSaveWithError', { error: error.message || t('networkScan.errors.unknown') }));
+        }
+    };
+
     const getLatencyColor = (latency?: number): string => {
         if (!latency) return 'text-gray-400';
         if (latency < 50) return 'text-emerald-400';
@@ -1410,7 +1507,6 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return { data: displayData, labels };
     }, [statsHistory, currentLocale, hour12]);
 
-    const totalChartData = useMemo(() => stats ? buildScanChartData('total', stats.total || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
     const onlineChartData = useMemo(() => stats ? buildScanChartData('online', stats.online || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
     const offlineChartData = useMemo(() => stats ? buildScanChartData('offline', stats.offline || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
 
@@ -1684,27 +1780,87 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 </div>
                     </Card>
                     
-                    {/* Total IPs - 1 colonne */}
-                    <Card title={t('networkScan.stats.totalIps')}>
-                        <div className="text-3xl font-bold text-gray-200 text-center mb-1">{stats.total}</div>
+                    {/* Aperçu du scan - fusion Total/Online/Offline en un seul graphique empilé - 1 colonne */}
+                    <Card title={t('networkScan.stats.overview')}>
+                        <div className="flex items-center justify-center gap-2.5 flex-wrap text-xs mb-1">
+                            <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
+                                <span className="font-semibold text-gray-200">{stats.total}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-emerald-700 flex-shrink-0" />
+                                <span className="font-semibold text-emerald-600">{stats.online}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-800 flex-shrink-0" />
+                                <span className="font-semibold text-red-700">{stats.offline}</span>
+                            </span>
+                        </div>
                         <div className="h-[76px] mt-1">
-                            <MiniBarChart data={totalChartData.data} color="#9ca3af" labels={totalChartData.labels} valueLabel={t('networkScan.stats.totalIps')} height={76} fadeFromBottom={true} showRangeLabels={true} />
-                                </div>
-                    </Card>
-
-                    {/* Online - 1 colonne */}
-                    <Card title={t('networkScan.status.online')}>
-                        <div className="text-3xl font-bold text-emerald-400 text-center mb-1">{stats.online}</div>
-                        <div className="h-[76px] mt-1">
-                            <MiniBarChart data={onlineChartData.data} color="#10b981" labels={onlineChartData.labels} valueLabel={t('networkScan.status.online')} height={76} showRangeLabels={true} />
+                            <StackedMiniBarChart
+                                series={[
+                                    { data: onlineChartData.data, color: '#0d6b4f', label: t('networkScan.status.online') },
+                                    { data: offlineChartData.data, color: '#8f2a2a', label: t('networkScan.status.offline') }
+                                ]}
+                                labels={onlineChartData.labels}
+                                height={76}
+                                showRangeLabels={true}
+                                totalLabel={t('networkScan.stats.totalIps')}
+                            />
                         </div>
                     </Card>
 
-                    {/* Offline - 1 colonne */}
-                    <Card title={t('networkScan.status.offline')}>
-                        <div className="text-3xl font-bold text-red-400 text-center mb-1">{stats.offline}</div>
-                        <div className="h-[76px] mt-1">
-                            <MiniBarChart data={offlineChartData.data} color="#f87171" labels={offlineChartData.labels} valueLabel={t('networkScan.status.offline')} height={76} showRangeLabels={true} />
+                    {/* Nouveaux appareils & connexions instables - fusion avec la carte réservée - 2 colonnes */}
+                    <Card title={t('networkScan.stats.insights')} className="md:col-span-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <div className="flex items-center gap-1.5 text-gray-400 mb-1.5">
+                                    <Sparkles size={13} className="text-cyan-400 flex-shrink-0" />
+                                    <span>{t('networkScan.stats.newDevices', { days: 30 })}</span>
+                                    <span className="ml-auto text-gray-500 flex-shrink-0">{insights?.newDevices.length ?? 0}</span>
+                                </div>
+                                {insights && insights.newDevices.length > 0 ? (
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                                        {insights.newDevices.slice(0, 8).map((d) => (
+                                            <div key={d.ip} className="flex items-center justify-between gap-1 min-w-0 text-gray-300">
+                                                <InsightDeviceName
+                                                    ip={d.ip}
+                                                    label={d.hostname || d.vendor || d.ip}
+                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
+                                                    onNavigateToSearch={onNavigateToSearch}
+                                                />
+                                                <span className="text-gray-500 flex-shrink-0 whitespace-nowrap">{formatFirstDetectionShort(d.firstSeen)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-600 italic">{t('networkScan.stats.noNewDevices')}</div>
+                                )}
+                            </div>
+                            <div className="pt-3 sm:pt-0 sm:pl-3 border-t sm:border-t-0 sm:border-l border-gray-800">
+                                <div className="flex items-center gap-1.5 text-gray-400 mb-1.5">
+                                    <Activity size={13} className="text-amber-400 flex-shrink-0" />
+                                    <span>{t('networkScan.stats.flakyDevices')}</span>
+                                    <span className="ml-auto text-gray-500 flex-shrink-0">{insights?.flakyDevices.length ?? 0}</span>
+                                </div>
+                                {insights && insights.flakyDevices.length > 0 ? (
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                                        {insights.flakyDevices.slice(0, 8).map((d) => (
+                                            <div key={d.ip} className="flex items-center justify-between gap-1 min-w-0 text-gray-300">
+                                                <InsightDeviceName
+                                                    ip={d.ip}
+                                                    label={d.hostname || d.vendor || d.ip}
+                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
+                                                    onNavigateToSearch={onNavigateToSearch}
+                                                />
+                                                <span className="text-amber-400 flex-shrink-0 whitespace-nowrap">{t('networkScan.stats.transitionsCount', { count: d.transitions })}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-gray-600 italic">{t('networkScan.stats.noFlakyDevices')}</div>
+                                )}
+                            </div>
                         </div>
                     </Card>
                 </div>
@@ -2102,20 +2258,73 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             )}
                                         </td>
                                         <td className="py-3 pl-1 pr-0 text-sm text-gray-300">
-                                            <VendorIcon vendor={scan.vendor} label={scan.hostname} size={16} className="flex-shrink-0" />
+                                            {/* Icon editing is fully separate from the vendor name edit below:
+                                                it always shows the icon + its own hover badge overlay, never
+                                                switches based on editingVendor. */}
+                                            <div className="relative inline-flex items-center justify-center group">
+                                                <VendorIcon vendor={scan.vendor} label={scan.hostname} forcedIcon={scan.vendorIcon} size={16} className="flex-shrink-0" />
+                                                {scan.vendor && (
+                                                    <div className="absolute -bottom-1.5 -right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <VendorIconPicker
+                                                            value={scan.vendorIcon || null}
+                                                            onChange={(iconId) => handleSaveVendorIcon(scan.ip, scan.vendor || '', iconId)}
+                                                            variant="badge"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="py-3 pl-0.5 pr-4 text-sm text-gray-300">
-                                            <div className="flex items-start gap-2 flex-wrap">
-                                                <span className="break-words whitespace-normal">{scan.vendor || '--'}</span>
-                                                {SHOW_VENDOR_SOURCE_BADGE && scan.vendorSource && (() => {
-                                                    const badge = getSourceBadge(scan.vendorSource, 'vendor');
-                                                    return badge ? (
-                                                        <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
-                                                            {badge.label}
-                                                        </span>
-                                                    ) : null;
-                                                })()}
-                                            </div>
+                                            {editingVendor === scan.ip ? (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <input
+                                                        id={`vendor-edit-${scan.ip}`}
+                                                        name={`vendor-edit-${scan.ip}`}
+                                                        type="text"
+                                                        value={editedVendorName}
+                                                        onChange={(e) => setEditedVendorName(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSaveVendor(scan.ip);
+                                                            if (e.key === 'Escape') handleCancelEditVendor();
+                                                        }}
+                                                        className="px-2 py-1 bg-[#1a1a1a] border border-blue-500 rounded text-gray-200 text-sm focus:outline-none focus:border-blue-400 w-full min-w-[150px]"
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={() => handleSaveVendor(scan.ip)}
+                                                        className="p-1 hover:bg-emerald-500/10 text-emerald-400 rounded transition-colors flex-shrink-0"
+                                                        title={t('networkScan.tooltips.save')}
+                                                    >
+                                                        <Save size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={handleCancelEditVendor}
+                                                        className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors flex-shrink-0"
+                                                        title={t('networkScan.tooltips.cancel')}
+                                                    >
+                                                        <XIcon size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-start gap-2 group flex-wrap">
+                                                    <span className="break-words whitespace-normal">{scan.vendor || '--'}</span>
+                                                    {SHOW_VENDOR_SOURCE_BADGE && scan.vendorSource && (() => {
+                                                        const badge = getSourceBadge(scan.vendorSource, 'vendor');
+                                                        return badge ? (
+                                                            <span className={`px-1.5 py-0.5 text-xs rounded ${badge.bgColor} ${badge.color} whitespace-nowrap flex-shrink-0`}>
+                                                                {badge.label}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
+                                                    <button
+                                                        onClick={() => handleStartEditVendor(scan.ip, scan.vendor || '')}
+                                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-500/10 text-blue-400 rounded transition-all flex-shrink-0"
+                                                        title={t('networkScan.tooltips.renameVendor')}
+                                                    >
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                         <td
                                             className="py-3 px-2 max-w-[190px] truncate text-sm font-mono text-gray-400 cursor-default"

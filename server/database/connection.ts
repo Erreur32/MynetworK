@@ -223,6 +223,18 @@ export function initializeDatabase(): void {
         }
     }
 
+    // Migration: Add vendor_icon column (manual icon override, see VendorIcon.tsx)
+    try {
+        database.exec(`
+            ALTER TABLE network_scans ADD COLUMN vendor_icon TEXT;
+        `);
+    } catch (error: any) {
+        // Column already exists, ignore
+        if (!error.message?.includes('duplicate column')) {
+            logger.debug('Database', 'Migration: vendor_icon column may already exist');
+        }
+    }
+
     // Network scan history table (tracks each time an IP is seen)
     database.exec(`
         CREATE TABLE IF NOT EXISTS network_scan_history (

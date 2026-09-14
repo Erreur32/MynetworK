@@ -86,6 +86,10 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
         overwriteExisting: {
             hostname: true,
             vendor: true
+        },
+        protectManual: {
+            hostname: true,
+            vendor: true
         }
     });
     const [isLoadingPriority, setIsLoadingPriority] = useState(false);
@@ -266,10 +270,14 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
     const fetchPluginPriorityConfig = async () => {
         setIsLoadingPriority(true);
         try {
-            const response = await api.get<{ hostnamePriority: ('freebox' | 'unifi' | 'scanner')[]; vendorPriority: ('freebox' | 'unifi' | 'scanner')[]; overwriteExisting: { hostname: boolean; vendor: boolean } }>('/api/network-scan/plugin-priority-config');
+            const response = await api.get<{ hostnamePriority: ('freebox' | 'unifi' | 'scanner')[]; vendorPriority: ('freebox' | 'unifi' | 'scanner')[]; overwriteExisting: { hostname: boolean; vendor: boolean }; protectManual?: { hostname: boolean; vendor: boolean } }>('/api/network-scan/plugin-priority-config');
             if (response.success && response.result) {
-                setPluginPriorityConfig(response.result);
-                setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(response.result))); // Deep copy
+                const result = {
+                    ...response.result,
+                    protectManual: response.result.protectManual ?? { hostname: true, vendor: true }
+                };
+                setPluginPriorityConfig(result);
+                setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(result))); // Deep copy
             }
         } catch (error) {
             console.error('Failed to load plugin priority config:', error);
@@ -1048,6 +1056,38 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                 className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500"
                                             />
                                             <span className="text-sm text-gray-300">{t('config.overwriteVendor')}</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {/* Protect manual overrides */}
+                                <div className="pt-4 border-t border-gray-800 mt-4">
+                                    <h4 className="text-sm font-semibold text-gray-300 mb-1">{t('config.protectManual')}</h4>
+                                    <p className="text-xs text-gray-500 mb-3">{t('config.protectManualDesc')}</p>
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={pluginPriorityConfig.protectManual.hostname}
+                                                onChange={(e) => setPluginPriorityConfig({
+                                                    ...pluginPriorityConfig,
+                                                    protectManual: { ...pluginPriorityConfig.protectManual, hostname: e.target.checked }
+                                                })}
+                                                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm text-gray-300">{t('config.protectManualHostname')}</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={pluginPriorityConfig.protectManual.vendor}
+                                                onChange={(e) => setPluginPriorityConfig({
+                                                    ...pluginPriorityConfig,
+                                                    protectManual: { ...pluginPriorityConfig.protectManual, vendor: e.target.checked }
+                                                })}
+                                                className="w-4 h-4 rounded border-gray-600 bg-[#1a1a1a] text-purple-500 focus:ring-purple-500"
+                                            />
+                                            <span className="text-sm text-gray-300">{t('config.protectManualVendor')}</span>
                                         </label>
                                     </div>
                                 </div>

@@ -904,9 +904,26 @@ router.get('/unifi/threats', requireAuth, asyncHandler(async (req: Authenticated
 const geoCache = new Map<string, { ts: number; data: any }>();
 const GEO_CACHE_TTL = 30 * 60 * 1000; // 30 min
 
+/** Resolves a single IP via freeipapi.com (free, HTTPS, no API key, 60 req/min). */
+async function resolveGeo(ip: string): Promise<{ lat: number; lng: number; country: string; countryCode: string; region: string; city: string; org: string } | null> {
+    const response = await fetch(`https://freeipapi.com/api/json/${ip}`);
+    if (!response.ok) return null;
+    const json = await response.json();
+    if (typeof json.latitude !== 'number' || typeof json.longitude !== 'number') return null;
+    return {
+        lat: json.latitude,
+        lng: json.longitude,
+        country: json.countryName || '',
+        countryCode: json.countryCode || '',
+        region: json.regionName || '',
+        city: json.cityName || '',
+        org: json.asnOrganization || '',
+    };
+}
+
 /**
  * GET /api/plugins/unifi/threats/geo/:ip
- * Resolves an IP to geolocation data using ip-api.com (free tier).
+ * Resolves an IP to geolocation data using freeipapi.com (free tier).
  * Results are cached in memory for 30 minutes.
  */
 router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -922,21 +939,8 @@ router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: Authe
     }
 
     try {
-        const response = await fetch(
-            `http://ip-api.com/json/${ip}?fields=status,country,countryCode,region,regionName,city,org,lat,lon`
-        );
-        const json = await response.json();
-
-        if (json.status === 'success') {
-            const data = {
-                lat: json.lat,
-                lng: json.lon,
-                country: json.country || '',
-                countryCode: json.countryCode || '',
-                region: json.regionName || json.region || '',
-                city: json.city || '',
-                org: json.org || '',
-            };
+        const data = await resolveGeo(ip);
+        if (data) {
             geoCache.set(ip, { ts: Date.now(), data });
             return res.json({ success: true, result: { ok: true, ...data } });
         }
@@ -949,7 +953,8 @@ router.get('/unifi/threats/geo/:ip', requireAuth, asyncHandler(async (req: Authe
 
 /**
  * POST /api/plugins/unifi/threats/geo/batch
- * Batch-resolve multiple IPs at once (max 15 per request to respect ip-api rate limits).
+ * Batch-resolve multiple IPs at once (max 15 per request; freeipapi.com free tier
+ * has no bulk endpoint, so IPs are resolved concurrently, well under its 60 req/min limit).
  */
 router.post('/unifi/threats/geo/batch', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ips: string[] = (req.body?.ips || []).filter((ip: string) => /^[\d.]{7,15}$/.test(ip)).slice(0, 15); // NOSONAR S5852 bounded quantifier
@@ -966,39 +971,21 @@ router.post('/unifi/threats/geo/batch', requireAuth, asyncHandler(async (req: Au
         }
     }
 
-    // Resolve remaining via ip-api.com batch endpoint
-    if (toResolve.length > 0) {
+    // Resolve remaining concurrently via freeipapi.com
+    await Promise.all(toResolve.map(async (ip) => {
         try {
-            const response = await fetch('http://ip-api.com/batch?fields=status,query,country,countryCode,region,regionName,city,org,lat,lon', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(toResolve),
-            });
-            const batch: any[] = await response.json();
-            for (const item of batch) {
-                if (item.status === 'success') {
-                    const data = {
-                        lat: item.lat,
-                        lng: item.lon,
-                        country: item.country || '',
-                        countryCode: item.countryCode || '',
-                        region: item.regionName || item.region || '',
-                        city: item.city || '',
-                        org: item.org || '',
-                    };
-                    geoCache.set(item.query, { ts: Date.now(), data });
-                    results[item.query] = { ok: true, ...data };
-                } else {
-                    results[item.query] = { ok: false };
-                }
+            const data = await resolveGeo(ip);
+            if (data) {
+                geoCache.set(ip, { ts: Date.now(), data });
+                results[ip] = { ok: true, ...data };
+            } else {
+                results[ip] = { ok: false };
             }
         } catch (error) {
-            logger.error('GeoIP', 'Batch resolve failed:', error);
-            for (const ip of toResolve) {
-                if (!results[ip]) results[ip] = { ok: false };
-            }
+            logger.error('GeoIP', `Batch resolve failed for ${ip}:`, error);
+            results[ip] = { ok: false };
         }
-    }
+    }));
 
     return res.json({ success: true, result: results });
 }));
@@ -1014,10 +1001,10 @@ router.get('/unifi/threats/server-geo', requireAuth, asyncHandler(async (_req: A
     }
 
     try {
-        const response = await fetch('http://ip-api.com/json/?fields=status,country,countryCode,city,lat,lon,query');
+        const response = await fetch('https://freeipapi.com/api/json/');
         const json = await response.json();
-        if (json.status === 'success') {
-            const data = { lat: json.lat, lng: json.lon, country: json.country || '', city: json.city || '', ip: json.query || '' };
+        if (typeof json.latitude === 'number' && typeof json.longitude === 'number') {
+            const data = { lat: json.latitude, lng: json.longitude, country: json.countryName || '', city: json.cityName || '', ip: json.ipAddress || '' };
             serverGeoCache = { ts: Date.now(), data };
             return res.json({ success: true, result: { ok: true, ...data } });
         }

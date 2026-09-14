@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.19] - 2026-09-14
+
+### Changed
+
+- Network scan overview: merged the Total/Online/Offline cards into a single stacked bar chart card, and merged the insights card with the empty placeholder card, reducing the stats row from 4 cards to 3.
+- Network scan overview: darkened the stacked bar chart colors (online/offline) for a less saturated look.
+- Network scan insights: "New devices" and "Frequently disconnecting" lists now render in 2 columns to avoid scrolling, and device names are clickable, navigating to the search page with the device's IP.
+- Network scan table: vendor name editing is now fully independent from vendor icon editing; renaming a vendor never affects its icon, and the icon's own hover overlay is always available regardless of the vendor-name edit state.
+- ThreatMapTab: switched map tiles from CARTO (now requiring an API key) to Esri's keyless World Dark Gray Canvas basemap.
+
+### Fixed
+
+- StackedMiniBarChart: hover tooltips are now rendered through a portal, fixing an issue where they were invisible due to being clipped by an ancestor's `overflow-hidden`. Tooltips now include the hour, total IPs, online and offline counts per bar.
+- Fixed vendor icon picker translations (`networkScan.vendorIconPicker.*`) that were nested under the wrong top-level locale section in both `en` and `fr`.
+
+---
+
 ## [0.10.18] - 2026-09-13
 
 ### Fixed
