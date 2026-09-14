@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.22] - 2026-09-14
+
+### Added
+
+- Vendor icon catalog: added logos for Amazon Alexa/Fire TV, Denon, JBL, Tesla, Corsair, Elgato, Steam Deck, DJI, Bambu Lab and AVM/Fritz!Box, plus fallback icons for Canon, Brother, Xerox, Lexmark, Nanoleaf, Govee, SwitchBot, Broadlink, Yeelight, Eufy, Western Digital, Buffalo, Asustor, D-Link, Zyxel and Eero.
+- Vendor icon picker: icons are now grouped by category (Network, Computers & OS, Mobile, Storage & NAS, Smart Home, Audio & Media, Cameras & Security, Printing, Gaming, Servers & Self-hosted, Vehicles & Other, Generic) instead of a flat brands/generic split, and the popover is wider to fit the larger catalog.
+
+### Changed
+
+- Vendor icon column: the whole cell now opens the icon picker on click (with a hover overlay), including on rows with no detected vendor, replacing the small pencil badge that was only visible once a vendor name was set.
+- `POST /api/network-scan/:id/vendor`: a manually picked icon is no longer discarded when the vendor name is empty, decoupling icon selection from vendor name detection.
+- Docker runtime image: removed npm/npx/corepack (unused, the container runs `tsx` directly), eliminating the vulnerable dependencies npm bundles internally (`tar`, `brace-expansion`) from the final image. The `mcp-token` CLI script is now run via `docker exec ... node_modules/.bin/tsx scripts/mcp-token.ts` instead of `npm run mcp:token` (documented in README.md/README.fr.md).
+
+---
+
 ## [0.10.21] - 2026-09-14
 
 ### Fixed

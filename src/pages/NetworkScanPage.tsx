@@ -1186,14 +1186,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         setEditedVendorName('');
     };
 
-    // Standalone icon edit (badge overlay on the icon column), fully independent from
-    // the vendor-name edit flow: keeps the current vendor name, only changes the icon.
+    // Standalone icon edit (whole icon-column cell opens the picker), fully independent
+    // from the vendor-name edit flow: keeps the current vendor name, only changes the icon.
+    // Works even when no vendor is set yet, unlike the name-edit flow below.
     const handleSaveVendorIcon = async (ip: string, currentVendor: string, iconId: string | null) => {
         try {
             const trimmedVendor = currentVendor.trim();
             const response = await api.post(`/api/network-scan/${ip}/vendor`, {
                 vendor: trimmedVendor || null,
-                vendorIcon: trimmedVendor ? iconId : null
+                vendorIcon: iconId
             });
 
             if (response.success) {
@@ -2259,20 +2260,15 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         </td>
                                         <td className="py-3 pl-1 pr-0 text-sm text-gray-300">
                                             {/* Icon editing is fully separate from the vendor name edit below:
-                                                it always shows the icon + its own hover badge overlay, never
-                                                switches based on editingVendor. */}
-                                            <div className="relative inline-flex items-center justify-center group">
+                                                the whole cell opens the picker, whether or not an icon is
+                                                currently set, never switches based on editingVendor. */}
+                                            <VendorIconPicker
+                                                value={scan.vendorIcon || null}
+                                                onChange={(iconId) => handleSaveVendorIcon(scan.ip, scan.vendor || '', iconId)}
+                                                variant="cell"
+                                            >
                                                 <VendorIcon vendor={scan.vendor} label={scan.hostname} forcedIcon={scan.vendorIcon} size={16} className="flex-shrink-0" />
-                                                {scan.vendor && (
-                                                    <div className="absolute -bottom-1.5 -right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <VendorIconPicker
-                                                            value={scan.vendorIcon || null}
-                                                            onChange={(iconId) => handleSaveVendorIcon(scan.ip, scan.vendor || '', iconId)}
-                                                            variant="badge"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
+                                            </VendorIconPicker>
                                         </td>
                                         <td className="py-3 pl-0.5 pr-4 text-sm text-gray-300">
                                             {editingVendor === scan.ip ? (

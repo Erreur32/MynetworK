@@ -1882,18 +1882,15 @@ router.post('/:id/vendor', requireAuth, requireAdmin, autoLog('network-scan', 'u
 
     try {
         const trimmedVendor = vendor?.trim() || undefined;
+        // vendorIcon is independent from the vendor name: the icon-column cell picker
+        // lets a device get a manual icon even without a detected/entered vendor name.
+        // Callers that want the name-edit "clear vendor also clears its icon" behavior
+        // (see handleSaveVendor in NetworkScanPage.tsx) pass vendorIcon: null explicitly.
         const updateData: any = {
-            vendor: trimmedVendor ?? null
+            vendor: trimmedVendor ?? null,
+            vendorSource: trimmedVendor ? 'manual' : null,
+            vendorIcon: vendorIcon || null
         };
-
-        if (trimmedVendor) {
-            updateData.vendorSource = 'manual';
-            updateData.vendorIcon = vendorIcon || null;
-        } else {
-            // Clearing the vendor also clears the manual source and icon override
-            updateData.vendorSource = null;
-            updateData.vendorIcon = null;
-        }
 
         const updated = NetworkScanRepository.update(ip, updateData);
 

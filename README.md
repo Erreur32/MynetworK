@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.21-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.22-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -524,7 +524,7 @@ Run on the server host. Prints the token once: it is never shown again, and neve
 
 ```bash
 # Docker (production, default deployment, container name is "mynetwork")
-docker exec -it -u node mynetwork npm run mcp:token
+docker exec -it -u node mynetwork node_modules/.bin/tsx scripts/mcp-token.ts
 
 # Local / dev (bare npm run dev, no container)
 npm run mcp:token

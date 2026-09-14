@@ -309,8 +309,20 @@
       "searchPlaceholder": "Rechercher une icône...",
       "reset": "Revenir à l'icône auto-détectée",
       "noResults": "Aucune icône trouvée",
-      "groupBrands": "Marques",
-      "groupGeneric": "Génériques",
+      "categories": {
+        "network": "Réseau",
+        "computer": "Ordinateurs & OS",
+        "mobile": "Mobile",
+        "storage": "Stockage & NAS",
+        "smarthome": "Domotique",
+        "media": "Audio & Multimédia",
+        "camera": "Caméras & Sécurité",
+        "printer": "Impression",
+        "gaming": "Gaming",
+        "server": "Serveurs & Auto-hébergé",
+        "vehicle": "Véhicules & Autre",
+        "generic": "Génériques"
+      },
       "import": "Importer une icône",
       "errors": {
         "invalidType": "Format non supporté. Utilisez PNG, JPG, WebP ou SVG.",

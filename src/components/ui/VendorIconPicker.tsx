@@ -4,8 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Upload, RotateCcw, Pencil, type LucideIcon } from 'lucide-react';
 import type { SimpleIcon } from 'simple-icons';
 import { useClickOutside } from '../../hooks';
-import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry, type ResolvedVendorIcon } from '../../utils/vendorBrand';
+import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry, type ResolvedVendorIcon, type IconCategory } from '../../utils/vendorBrand';
 import { BrandSvgIcon } from './VendorIcon';
+
+// Fixed display order for category sections in the picker (most common home-network
+// device families first).
+const CATEGORY_ORDER: IconCategory[] = [
+  'network', 'computer', 'mobile', 'storage', 'smarthome', 'media',
+  'camera', 'printer', 'gaming', 'server', 'vehicle', 'generic'
+];
+
+const POPOVER_WIDTH = 400;
 
 // Kept in sync with server/utils/vendorIconValidation.ts (MAX_CUSTOM_ICON_LENGTH ~= 200_000
 // chars of base64 data URL). Raw file size is capped lower since base64 inflates it ~37%.
@@ -40,10 +49,13 @@ interface VendorIconPickerProps {
   /**
    * 'full' (default): standard icon+chevron trigger, used while the whole vendor row
    * (name + icon) is being edited.
-   * 'badge': small pencil-only trigger meant to overlay an already-rendered VendorIcon,
-   * for standalone icon editing without entering the name-edit flow.
+   * 'cell': wraps `children` (the already-rendered VendorIcon, or nothing when unset) in a
+   * button that covers the whole table cell, with a pencil overlay on hover, so the entire
+   * icon column cell opens the picker, whether or not an icon is currently set.
    */
-  variant?: 'full' | 'badge';
+  variant?: 'full' | 'cell';
+  /** Icon content to wrap, only used by the 'cell' variant. */
+  children?: React.ReactNode;
 }
 
 /**
@@ -51,7 +63,7 @@ interface VendorIconPickerProps {
  * lucide fallbacks) plus a custom-icon import control. Used by the vendor column's
  * inline edit overlay in NetworkScanPage.tsx.
  */
-export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onChange, disabled, variant = 'full' }) => {
+export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onChange, disabled, variant = 'full', children }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -71,13 +83,22 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
     return catalog.filter((entry) => entry.title.toLowerCase().includes(q));
   }, [catalog, search]);
 
-  const simpleEntries = filtered.filter((e) => e.kind === 'simple');
-  const lucideEntries = filtered.filter((e) => e.kind === 'lucide');
+  const groupedEntries = useMemo(() => {
+    const groups = new Map<IconCategory, VendorIconCatalogEntry[]>();
+    for (const entry of filtered) {
+      const bucket = groups.get(entry.category);
+      if (bucket) bucket.push(entry);
+      else groups.set(entry.category, [entry]);
+    }
+    return CATEGORY_ORDER
+      .map((category) => ({ category, entries: groups.get(category) ?? [] }))
+      .filter(({ entries }) => entries.length > 0);
+  }, [filtered]);
 
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 6, left: Math.max(8, rect.left - 260 + rect.width) });
+      setPosition({ top: rect.bottom + 6, left: Math.max(8, rect.left - POPOVER_WIDTH + rect.width) });
     } else {
       setPosition(null);
       setSearch('');
@@ -134,7 +155,7 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
 
   return (
     <>
-      {variant === 'badge' ? (
+      {variant === 'cell' ? (
         <button
           ref={buttonRef}
           type="button"
@@ -143,10 +164,13 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
             e.stopPropagation();
             setIsOpen((v) => !v);
           }}
-          className="flex items-center justify-center w-4 h-4 bg-[#1a1a1a] border border-gray-600 rounded-full text-gray-300 hover:border-blue-500 hover:text-blue-400 transition-colors disabled:opacity-50 shadow"
+          className="group/cell relative flex items-center justify-center w-7 h-7 rounded hover:bg-white/5 transition-colors disabled:opacity-50"
           title={t('networkScan.vendorIconPicker.trigger')}
         >
-          <Pencil size={9} />
+          {children}
+          <span className="absolute inset-0 flex items-center justify-center rounded bg-black/70 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+            <Pencil size={11} className="text-gray-100" />
+          </span>
         </button>
       ) : (
         <button
@@ -170,7 +194,7 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
       {isOpen && position && createPortal(
         <div
           ref={popoverRef}
-          className="fixed w-72 max-h-96 flex flex-col bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden"
+          className="fixed w-[400px] max-h-96 flex flex-col bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden"
           style={{ top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
@@ -204,44 +228,24 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
             {filtered.length === 0 ? (
               <p className="text-xs text-gray-500 text-center py-4">{t('networkScan.vendorIconPicker.noResults')}</p>
             ) : (
-              <>
-                {simpleEntries.length > 0 && (
-                  <div className="mb-2">
-                    <div className="text-[10px] uppercase tracking-wide text-gray-600 px-1 mb-1">{t('networkScan.vendorIconPicker.groupBrands')}</div>
-                    <div className="grid grid-cols-6 gap-1">
-                      {simpleEntries.map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          title={entry.title}
-                          onClick={() => handlePick(entry.id)}
-                          className={`flex items-center justify-center p-1.5 rounded hover:bg-[#252525] transition-colors ${value === entry.id ? 'bg-blue-500/20 ring-1 ring-blue-500' : ''}`}
-                        >
-                          <CatalogIconPreview entry={entry} />
-                        </button>
-                      ))}
-                    </div>
+              groupedEntries.map(({ category, entries }) => (
+                <div key={category} className="mb-2 last:mb-0">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-600 px-1 mb-1">{t(`networkScan.vendorIconPicker.categories.${category}`)}</div>
+                  <div className="grid grid-cols-8 gap-1">
+                    {entries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        title={entry.title}
+                        onClick={() => handlePick(entry.id)}
+                        className={`flex items-center justify-center p-1.5 rounded hover:bg-[#252525] transition-colors ${entry.kind === 'lucide' ? 'text-gray-300' : ''} ${value === entry.id ? 'bg-blue-500/20 ring-1 ring-blue-500' : ''}`}
+                      >
+                        <CatalogIconPreview entry={entry} />
+                      </button>
+                    ))}
                   </div>
-                )}
-                {lucideEntries.length > 0 && (
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide text-gray-600 px-1 mb-1">{t('networkScan.vendorIconPicker.groupGeneric')}</div>
-                    <div className="grid grid-cols-6 gap-1">
-                      {lucideEntries.map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          title={entry.title}
-                          onClick={() => handlePick(entry.id)}
-                          className={`flex items-center justify-center p-1.5 rounded hover:bg-[#252525] transition-colors text-gray-300 ${value === entry.id ? 'bg-blue-500/20 ring-1 ring-blue-500' : ''}`}
-                        >
-                          <CatalogIconPreview entry={entry} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+                </div>
+              ))
             )}
           </div>
 

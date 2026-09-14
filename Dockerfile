@@ -88,8 +88,9 @@ COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/server ./server
 COPY --chown=node:node --from=builder /app/tsconfig.json ./
 
-# CLI scripts (e.g. npm run mcp:token), run inside the container via
-# `docker compose exec mynetwork npm run mcp:token`
+# CLI scripts (e.g. mcp-token.ts), run inside the container via
+# `docker compose exec mynetwork node_modules/.bin/tsx scripts/mcp-token.ts`
+# (npm is removed from the runtime image below, so tsx is invoked directly)
 COPY --chown=node:node --from=builder /app/scripts ./scripts
 
 ENV NODE_ENV=production
@@ -102,6 +103,14 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
  CMD wget -q --spider http://127.0.0.1:${PORT}/api/health || exit 1
 
 EXPOSE 3000
+
+# Remove npm/npx/corepack: unused at runtime (CMD invokes tsx directly, see below,
+# and CLI scripts like mcp-token are run via tsx too, see README). Node's base image
+# bundles npm with its own vendored deps (tar, brace-expansion, sigstore) that lag
+# behind upstream fixes; dropping npm entirely removes that unused attack surface
+# instead of waiting on a patched node:22-alpine.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # TS runtime (tsx runs TypeScript files directly)
 CMD ["node_modules/.bin/tsx", "server/index.ts"]

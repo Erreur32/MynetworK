@@ -309,8 +309,20 @@
       "searchPlaceholder": "Search an icon...",
       "reset": "Reset to auto-detected icon",
       "noResults": "No matching icon",
-      "groupBrands": "Brands",
-      "groupGeneric": "Generic",
+      "categories": {
+        "network": "Network",
+        "computer": "Computers & OS",
+        "mobile": "Mobile",
+        "storage": "Storage & NAS",
+        "smarthome": "Smart Home",
+        "media": "Audio & Media",
+        "camera": "Cameras & Security",
+        "printer": "Printing",
+        "gaming": "Gaming",
+        "server": "Servers & Self-hosted",
+        "vehicle": "Vehicles & Other",
+        "generic": "Generic"
+      },
       "import": "Import an icon",
       "errors": {
         "invalidType": "Unsupported format. Use PNG, JPG, WebP or SVG.",
