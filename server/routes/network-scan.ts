@@ -567,7 +567,7 @@ router.get('/stats-history', requireAuth, asyncHandler(async (req: Authenticated
  */
 router.get('/insights', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const days = parseInt(req.query.days as string) || 30;
+        const days = Number.parseInt(req.query.days as string) || 30;
         const insights = NetworkScanRepository.getInsights(Math.min(Math.max(days, 1), 90));
 
         res.json({
@@ -1881,7 +1881,7 @@ router.post('/:id/vendor', requireAuth, requireAdmin, autoLog('network-scan', 'u
     }
 
     try {
-        const trimmedVendor = vendor && vendor.trim() ? vendor.trim() : undefined;
+        const trimmedVendor = vendor?.trim() || undefined;
         const updateData: any = {
             vendor: trimmedVendor ?? null
         };

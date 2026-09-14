@@ -391,70 +391,53 @@ export class NetworkScanRepository {
     }
 
     /**
+     * Column mapping for `update()`, keyed by the same fields as `NetworkScan`.
+     * `toValue` mirrors each field's original null-coalescing behavior exactly
+     * (e.g. `status`/`scanCount` are pushed as-is so a falsy `0`/`''` isn't
+     * turned into `null` like the other fields).
+     */
+    private static readonly UPDATE_FIELD_MAP: Array<{
+        key: keyof Omit<NetworkScan, 'id' | 'ip'>;
+        column: string;
+        toValue: (value: any) => any;
+    }> = [
+        { key: 'mac', column: 'mac', toValue: (v) => v || null },
+        { key: 'hostname', column: 'hostname', toValue: (v) => v || null },
+        { key: 'hostnameSource', column: 'hostname_source', toValue: (v) => v || null },
+        { key: 'vendor', column: 'vendor', toValue: (v) => v || null },
+        { key: 'vendorSource', column: 'vendor_source', toValue: (v) => v || null },
+        { key: 'vendorIcon', column: 'vendor_icon', toValue: (v) => v || null },
+        { key: 'status', column: 'status', toValue: (v) => v },
+        { key: 'pingLatency', column: 'ping_latency', toValue: (v) => v || null },
+        { key: 'firstSeen', column: 'first_seen', toValue: (v: Date) => v.toISOString() },
+        { key: 'lastSeen', column: 'last_seen', toValue: (v: Date) => v.toISOString() },
+        { key: 'scanCount', column: 'scan_count', toValue: (v) => v },
+        { key: 'additionalInfo', column: 'additional_info', toValue: (v) => (v ? JSON.stringify(v) : null) }
+    ];
+
+    /**
      * Update a network scan entry
      */
     static update(ip: string, updates: Partial<Omit<NetworkScan, 'id' | 'ip'>>): NetworkScan | null {
         const db = getDatabase();
         const existing = this.findByIp(ip);
-        
+
         if (!existing) return null;
-        
+
         const updateFields: string[] = [];
         const values: any[] = [];
-        
-        if (updates.mac !== undefined) {
-            updateFields.push('mac = ?');
-            values.push(updates.mac || null);
+
+        for (const { key, column, toValue } of this.UPDATE_FIELD_MAP) {
+            const value = updates[key];
+            if (value === undefined) continue;
+            updateFields.push(`${column} = ?`);
+            values.push(toValue(value));
         }
-        if (updates.hostname !== undefined) {
-            updateFields.push('hostname = ?');
-            values.push(updates.hostname || null);
-        }
-        if (updates.hostnameSource !== undefined) {
-            updateFields.push('hostname_source = ?');
-            values.push(updates.hostnameSource || null);
-        }
-        if (updates.vendor !== undefined) {
-            updateFields.push('vendor = ?');
-            values.push(updates.vendor || null);
-        }
-        if (updates.vendorSource !== undefined) {
-            updateFields.push('vendor_source = ?');
-            values.push(updates.vendorSource || null);
-        }
-        if (updates.vendorIcon !== undefined) {
-            updateFields.push('vendor_icon = ?');
-            values.push(updates.vendorIcon || null);
-        }
-        if (updates.status !== undefined) {
-            updateFields.push('status = ?');
-            values.push(updates.status);
-        }
-        if (updates.pingLatency !== undefined) {
-            updateFields.push('ping_latency = ?');
-            values.push(updates.pingLatency || null);
-        }
-        if (updates.firstSeen !== undefined) {
-            updateFields.push('first_seen = ?');
-            values.push(updates.firstSeen.toISOString());
-        }
-        if (updates.lastSeen !== undefined) {
-            updateFields.push('last_seen = ?');
-            values.push(updates.lastSeen.toISOString());
-        }
-        if (updates.scanCount !== undefined) {
-            updateFields.push('scan_count = ?');
-            values.push(updates.scanCount);
-        }
-        if (updates.additionalInfo !== undefined) {
-            updateFields.push('additional_info = ?');
-            values.push(updates.additionalInfo ? JSON.stringify(updates.additionalInfo) : null);
-        }
-        
+
         if (updateFields.length === 0) {
             return existing;
         }
-        
+
         values.push(ip);
         const query = `UPDATE network_scans SET ${updateFields.join(', ')} WHERE ip = ?`;
         const stmt = db.prepare(query);

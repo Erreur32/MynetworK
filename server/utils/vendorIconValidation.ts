@@ -26,7 +26,7 @@ export function isValidVendorIconId(value: unknown): value is string {
     if (value.startsWith('custom:')) {
         const dataUrl = value.slice('custom:'.length);
         if (dataUrl.length > MAX_CUSTOM_ICON_LENGTH) return false;
-        const match = dataUrl.match(CUSTOM_DATA_URL_REGEX);
+        const match = CUSTOM_DATA_URL_REGEX.exec(dataUrl);
         if (!match) return false;
         if (match[1] === 'svg+xml') {
             const base64 = dataUrl.slice(dataUrl.indexOf('base64,') + 'base64,'.length);

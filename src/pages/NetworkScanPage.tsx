@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
-import { MiniBarChart, StackedMiniBarChart } from '../components/widgets/BarChart';
+import { StackedMiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -2288,7 +2288,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                             if (e.key === 'Escape') handleCancelEditVendor();
                                                         }}
                                                         className="px-2 py-1 bg-[#1a1a1a] border border-blue-500 rounded text-gray-200 text-sm focus:outline-none focus:border-blue-400 w-full min-w-[150px]"
-                                                        autoFocus
+                                                        ref={(el) => el?.focus()}
                                                     />
                                                     <button
                                                         onClick={() => handleSaveVendor(scan.ip)}

@@ -248,7 +248,9 @@ export function hasVendorIcon(vendorRaw?: string | null, label?: string | null):
 //   - `custom:<data-url>` → a user-imported icon, resolved by the caller
 
 function slugifyIconTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  // The first replace already collapses any run of non-alnum chars into a single
+  // '-', so at most one leading/trailing '-' can remain — no `+` quantifier needed.
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 const ALL_SIMPLE_ICONS: SimpleIcon[] = Array.from(
