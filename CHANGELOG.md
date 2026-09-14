@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.21] - 2026-09-14
+
+### Fixed
+
+- Vendor icon detection: added VMware brand icon, Reolink and Devolo fallback icons, and fixed Shelly detection (devices run on Espressif chips with no dedicated OUI block, so the icon was matched via hostname instead of the OUI vendor string).
+
+---
+
 ## [0.10.20] - 2026-09-14
 
 ### Changed

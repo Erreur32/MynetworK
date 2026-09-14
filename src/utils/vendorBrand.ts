@@ -69,6 +69,7 @@ import {
   siEsphome,
   siTasmota,
   siZigbee,
+  siVmware,
   type SimpleIcon
 } from 'simple-icons';
 import type { LucideIcon } from 'lucide-react';
@@ -122,6 +123,7 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   { pattern: /motorola/i, icon: siMotorola },
   { pattern: /\bnokia\b|hmd\s*global/i, icon: siNokia },
   { pattern: /ecovacs/i, icon: siEcovacs },
+  { pattern: /\bvmware\b/i, icon: siVmware },
   // Common home-network / IoT hardware brands
   { pattern: /ikea|tradfri/i, icon: siIkea },
   { pattern: /irobot|roomba/i, icon: siIrobot },
@@ -152,6 +154,10 @@ const LABEL_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon }> = [
   // Tapo product line reports under the parent TP-Link OUI; falls back here
   // when the local vendor lookup hasn't caught up with a recent OUI block.
   { pattern: /\btapo\b/i, icon: siTplink },
+  // Shelly devices run on Espressif (ESP8266/32) chips with no dedicated OUI
+  // block of their own, so `vendor` reports "Espressif Inc.": only the
+  // hostname (e.g. "shellyplug-s-...") reveals the actual brand.
+  { pattern: /\bshelly\b/i, icon: siShelly },
   // Home automation hub, runs on generic hardware, identifiable only by hostname.
   { pattern: /home\s*assistant|\bhassio\b|\bhomeassistant\b/i, icon: siHomeassistant },
   // NAS operating systems, often self-built or on generic hardware, no dedicated OUI.
@@ -192,6 +198,9 @@ const VENDOR_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon }
   { pattern: /meross/i, icon: Plug },
   { pattern: /netatmo/i, icon: Thermometer },
   { pattern: /freebox/i, icon: Router },
+  { pattern: /reolink/i, icon: Camera },
+  // Powerline (CPL) and mesh Wi-Fi networking gear, no simple-icons logo.
+  { pattern: /devolo/i, icon: Wifi },
   { pattern: /aqara|lumi\s*united/i, icon: Radio },
   // Tuya: white-label smart-home OEM (plugs, bulbs, sensors, switches) — no simple-icons logo.
   { pattern: /\btuya\b/i, icon: Lightbulb },
