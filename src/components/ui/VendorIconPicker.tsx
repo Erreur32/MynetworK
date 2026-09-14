@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Upload, RotateCcw, Pencil, type LucideIcon } from 'lucide-react';
 import type { SimpleIcon } from 'simple-icons';
 import { useClickOutside } from '../../hooks';
-import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry } from '../../utils/vendorBrand';
+import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry, type ResolvedVendorIcon } from '../../utils/vendorBrand';
 import { BrandSvgIcon } from './VendorIcon';
 
 // Kept in sync with server/utils/vendorIconValidation.ts (MAX_CUSTOM_ICON_LENGTH ~= 200_000
@@ -21,6 +21,14 @@ const CatalogIconPreview: React.FC<VendorIconPreviewProps> = ({ entry, size = 18
   if (entry.kind === 'simple') return <BrandSvgIcon icon={entry.icon as SimpleIcon} size={size} />;
   const Icon = entry.icon as LucideIcon;
   return <Icon size={size} />;
+};
+
+/** Trigger button preview for the currently resolved icon, or an empty placeholder when unset. */
+const ResolvedIconPreview: React.FC<{ resolved: ResolvedVendorIcon | null; size?: number }> = ({ resolved, size = 14 }) => {
+  if (!resolved) return <span className="w-3.5 h-3.5 rounded-full border border-dashed border-gray-600" />;
+  if (resolved.kind === 'simple') return <BrandSvgIcon icon={resolved.icon} size={size} />;
+  if (resolved.kind === 'lucide') return <resolved.icon size={size} />;
+  return <img src={resolved.dataUrl} width={size} height={size} alt="" />;
 };
 
 interface VendorIconPickerProps {
@@ -52,6 +60,7 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const catalog = useMemo(() => getVendorIconCatalog(), []);
   const resolvedValue = resolveVendorIconId(value);
@@ -75,6 +84,12 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
       setImportError(null);
     }
   }, [isOpen]);
+
+  // Focus the search input once the popover has actually mounted (position is only
+  // set after that), rather than relying on the JSX `autoFocus` attribute.
+  useEffect(() => {
+    if (position) searchInputRef.current?.focus();
+  }, [position]);
 
   const closePopover = useCallback(() => setIsOpen(false), []);
   useClickOutside(popoverRef, closePopover, isOpen);
@@ -146,17 +161,7 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
           title={t('networkScan.vendorIconPicker.trigger')}
         >
           <span className="flex items-center justify-center w-4 h-4 text-gray-200">
-            {resolvedValue ? (
-              resolvedValue.kind === 'simple' ? (
-                <BrandSvgIcon icon={resolvedValue.icon} size={14} />
-              ) : resolvedValue.kind === 'lucide' ? (
-                <resolvedValue.icon size={14} />
-              ) : (
-                <img src={resolvedValue.dataUrl} width={14} height={14} alt="" />
-              )
-            ) : (
-              <span className="w-3.5 h-3.5 rounded-full border border-dashed border-gray-600" />
-            )}
+            <ResolvedIconPreview resolved={resolvedValue} />
           </span>
           <ChevronDown size={12} className="text-gray-500" />
         </button>
@@ -168,6 +173,7 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
           className="fixed w-72 max-h-96 flex flex-col bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl z-[9999] overflow-hidden"
           style={{ top: position.top, left: position.left }}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2 border-b border-gray-700">
             <p className="text-xs font-semibold text-gray-300">{t('networkScan.vendorIconPicker.title')}</p>
@@ -175,8 +181,8 @@ export const VendorIconPicker: React.FC<VendorIconPickerProps> = ({ value, onCha
           <div className="p-2 border-b border-gray-700 flex items-center gap-2">
             <Search size={14} className="text-gray-500 flex-shrink-0" />
             <input
+              ref={searchInputRef}
               type="text"
-              autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('networkScan.vendorIconPicker.searchPlaceholder')}

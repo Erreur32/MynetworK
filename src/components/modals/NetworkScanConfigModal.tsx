@@ -277,7 +277,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     protectManual: response.result.protectManual ?? { hostname: true, vendor: true }
                 };
                 setPluginPriorityConfig(result);
-                setInitialPluginPriorityConfig(JSON.parse(JSON.stringify(result))); // Deep copy
+                setInitialPluginPriorityConfig(structuredClone(result));
             }
         } catch (error) {
             console.error('Failed to load plugin priority config:', error);

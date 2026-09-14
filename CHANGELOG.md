@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.20] - 2026-09-14
+
+### Changed
+
+- Network scan insights: extracted the shared `InsightDeviceName` component for the "new devices" and "flaky devices" clickable link rendering, removing duplication.
+- `NetworkScanRepository.update()`: refactored the per-field update branches into a data-driven loop to reduce cognitive complexity.
+- `VendorIconPicker`: extracted the trigger button's resolved-icon preview into a dedicated component, and replaced `autoFocus` on the search input with an imperative focus effect for accessibility.
+- Replaced `JSON.parse(JSON.stringify(...))` deep-clone with `structuredClone()` in `NetworkScanConfigModal`.
+- Replaced array-index React keys with content-derived keys in `BarChart.tsx`.
+
+### Fixed
+
+- `VendorIconPicker`: popover now also stops propagation of keyboard events, fixing a SonarCloud reliability issue (click handler without a matching keyboard listener).
+- Removed an unused `MiniBarChart` import in `NetworkScanPage.tsx`.
+- Simplified `slugifyIconTitle()`'s trailing-dash regex to remove a redundant quantifier.
+
+---
+
 ## [0.10.19] - 2026-09-14
 
 ### Changed

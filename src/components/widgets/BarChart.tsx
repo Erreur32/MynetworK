@@ -365,10 +365,10 @@ export const StackedMiniBarChart: React.FC<StackedMiniBarChartProps> = ({
       <div className="relative flex items-end gap-[2px]" style={{ height: barsHeight }}>
         {totals.map((total, idx) => {
           const barHeightPct = (total / maxTotal) * 100;
-          const label = labels && labels[idx] ? labels[idx] : null;
+          const label = labels?.[idx] || null;
           return (
             <div
-              key={idx}
+              key={label || `bar-${idx}`}
               ref={(el) => { barRefs.current[idx] = el; }}
               className="flex-1 relative group flex flex-col-reverse"
               style={{ height: `${Math.max(barHeightPct, total > 0 ? 5 : 1)}%`, cursor: label ? 'pointer' : 'default' }}
@@ -376,12 +376,12 @@ export const StackedMiniBarChart: React.FC<StackedMiniBarChartProps> = ({
               onMouseLeave={handleLeave}
             >
               <div className="absolute inset-0 flex flex-col-reverse overflow-hidden rounded-t-sm">
-                {series.map((s, sIdx) => {
+                {series.map((s) => {
                   const value = s.data[idx] || 0;
                   const segmentPct = total > 0 ? (value / total) * 100 : 0;
                   return (
                     <div
-                      key={sIdx}
+                      key={s.label}
                       className="w-full transition-transform"
                       style={{
                         height: `${segmentPct}%`,
@@ -404,7 +404,7 @@ export const StackedMiniBarChart: React.FC<StackedMiniBarChartProps> = ({
         </div>
       )}
 
-      {hoveredIndex !== null && tooltipPos && labels && labels[hoveredIndex] && createPortal(
+      {hoveredIndex !== null && tooltipPos && labels?.[hoveredIndex] && createPortal(
         <div
           className="fixed px-2 py-1 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-nowrap z-[9999] pointer-events-none"
           style={{ top: tooltipPos.top, left: tooltipPos.left, transform: 'translate(-50%, -100%)' }}
@@ -413,8 +413,8 @@ export const StackedMiniBarChart: React.FC<StackedMiniBarChartProps> = ({
           {totalLabel && (
             <div className="text-gray-100 font-medium">{totalLabel}: {totals[hoveredIndex]}</div>
           )}
-          {series.map((s, sIdx) => (
-            <div key={sIdx} className="text-gray-300 flex items-center gap-1">
+          {series.map((s) => (
+            <div key={s.label} className="text-gray-300 flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
               {s.label}: {s.data[hoveredIndex] || 0}
             </div>
