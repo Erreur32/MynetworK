@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.22-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.23-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -514,12 +514,14 @@ Voir le [dépôt HA](https://github.com/Erreur32/HA_mynetwork) pour l'installati
 MynetworK embarque un serveur [MCP](https://modelcontextprotocol.io) natif : un client MCP (Claude Desktop, Claude Code...) peut ainsi interroger et piloter directement votre Freebox, votre contrôleur UniFi et le scanner réseau, sans passer par l'interface web.
 
 - **Réseau local uniquement** - non exposé via le reverse proxy ; protégé par une liste blanche d'IP (RFC1918 + loopback) en plus d'un jeton dédié
-- **Jeton dédié** - distinct de la session JWT web, généré uniquement en ligne de commande (jamais depuis le panneau admin, potentiellement exposé sur internet, alors que l'endpoint MCP doit rester strictement local)
-- **Statut en lecture seule dans l'UI admin** - l'onglet "MCP" affiche l'état (activé/désactivé), si un jeton est configuré, l'endpoint et la dernière utilisation, ainsi que ces mêmes instructions de configuration avec copie en un clic ; le jeton lui-même n'est jamais affiché
+- **Jetons nommés, multiples** - distincts de la session JWT web ; créez autant de jetons nommés que nécessaire (un par client/appareil), chacun avec sa propre durée de validité optionnelle, depuis le panneau admin
+- **Gérés depuis l'UI admin** - l'onglet "MCP" permet de créer des jetons (affichés une seule fois), de les révoquer individuellement, et affiche l'état (activé/désactivé), l'endpoint, les clients connectés et le statut/dernière utilisation de chaque jeton
 
-### 1. Générer le jeton d'accès
+### 1. Générer un jeton d'accès
 
-À exécuter sur le serveur. Affiche le jeton une seule fois : il n'est jamais réaffiché, ni stocké quelque part de consultable.
+Depuis le panneau admin : Réglages > MCP > onglet Général > "Nouveau jeton". Donnez-lui un nom, choisissez une durée (ou illimitée), et copiez le jeton affiché : il ne sera plus jamais réaffiché.
+
+Une solution de secours en ligne de commande existe aussi, utile si le panneau admin est inaccessible (voir [Docs/MCP_DEV_SETUP.md](Docs/MCP_DEV_SETUP.md) pour l'explication complète) :
 
 ```bash
 # Docker (production, déploiement par défaut, nom du conteneur : "mynetwork")
@@ -529,7 +531,7 @@ docker exec -it -u node mynetwork node_modules/.bin/tsx scripts/mcp-token.ts
 npm run mcp:token
 ```
 
-Le `-u node` est important : sans lui, `docker exec` s'exécute sous un autre utilisateur que le process de l'appli (qui possède le fichier de base de données), et échoue avec une erreur SQLite "readonly database" (le jeton s'affiche mais n'est en réalité jamais enregistré). Relancer cette commande renouvelle le jeton et révoque immédiatement l'ancien.
+Chaque exécution de cette commande crée un nouveau jeton nommé "CLI", sans expiration, sans toucher aux jetons créés depuis l'UI admin.
 
 ### 2. Connecter un client
 

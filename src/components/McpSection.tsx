@@ -1,9 +1,9 @@
 /**
  * MCP Section Component
  *
- * Read-only status display for the MCP (Model Context Protocol) server.
- * Token generation/rotation is CLI-only (`npm run mcp:token`) since this
- * admin panel is internet-exposed while the MCP endpoint must stay LAN-only.
+ * Status, token management, client setup instructions and exposed-tools
+ * catalog for the MCP (Model Context Protocol) server, split across four
+ * tabs: Overview, Tokens, Connect and Capabilities.
  */
 
 import React, { useEffect, useState } from "react";
@@ -17,6 +17,14 @@ import {
   Copy,
   Check,
   Settings2,
+  Plus,
+  Trash2,
+  KeyRound,
+  ShieldCheck,
+  ArrowRight,
+  RotateCcw,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Section, SettingRow } from "../pages/SettingsPage";
 import { api } from "../api/client";
@@ -27,14 +35,42 @@ interface McpStatus {
   runtimeEnabled: boolean;
   configured: boolean;
   endpoint: string;
-  createdAt: string | null;
-  lastUsedAt: string | null;
   hostIp: string | null;
   dashboardPort: string;
   activeSessions: number;
 }
 
-type McpMainTab = "general" | "setup";
+type McpTokenAccessLevel = "full" | "read_only";
+type McpTokenCategoryStatus = "full" | "none" | "partial";
+
+interface McpTokenSummary {
+  id: number;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  accessLevel: McpTokenAccessLevel;
+  status: "active" | "expired" | "revoked";
+  categories: Record<string, McpTokenCategoryStatus>;
+}
+
+interface McpTool {
+  name: string;
+  category: string;
+  title: string;
+  description: string;
+  readOnly: boolean;
+}
+
+interface McpTokenToolPermission extends McpTool {
+  enabled: boolean;
+  isOverride: boolean;
+}
+
+type DurationPreset = "30" | "90" | "365" | "unlimited" | "custom";
+
+type McpMainTab = "general" | "tokens" | "setup";
 type ClientTab = "claude-code" | "claude-desktop" | "other";
 
 const CodeBlock: React.FC<{ label?: string; code: string }> = ({
@@ -119,10 +155,16 @@ const CodeBlock: React.FC<{ label?: string; code: string }> = ({
   );
 };
 
-const MAIN_TABS: McpMainTab[] = ["general", "setup"];
+const MAIN_TABS: McpMainTab[] = ["general", "tokens", "setup"];
 const MAIN_TAB_LABEL_KEYS: Record<McpMainTab, string> = {
   general: "tabGeneral",
+  tokens: "tabTokens",
   setup: "tabSetup",
+};
+const MAIN_TAB_ICONS: Record<McpMainTab, React.ElementType> = {
+  general: Cable,
+  tokens: KeyRound,
+  setup: Settings2,
 };
 
 const CLIENT_TABS: ClientTab[] = ["claude-code", "claude-desktop", "other"];
@@ -130,6 +172,39 @@ const CLIENT_TAB_LABEL_KEYS: Record<ClientTab, string> = {
   "claude-code": "clientClaudeCode",
   "claude-desktop": "clientClaudeDesktop",
   other: "clientOther",
+};
+
+const DURATION_PRESETS: DurationPreset[] = ["30", "90", "365", "unlimited", "custom"];
+const DURATION_LABEL_KEYS: Record<DurationPreset, string> = {
+  "30": "durationOption30",
+  "90": "durationOption90",
+  "365": "durationOption365",
+  unlimited: "durationOptionUnlimited",
+  custom: "durationOptionCustom",
+};
+
+const STATUS_LABEL_KEYS: Record<McpTokenSummary["status"], string> = {
+  active: "statusActive",
+  expired: "statusExpired",
+  revoked: "statusRevoked",
+};
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  freebox: "capabilitiesCategoryFreebox",
+  unifi: "capabilitiesCategoryUnifi",
+  scan: "capabilitiesCategoryScan",
+};
+
+const CATEGORY_STATUS_LABEL_KEYS: Record<McpTokenCategoryStatus, string> = {
+  full: "categoryToggleAll",
+  partial: "categoryTogglePartial",
+  none: "categoryToggleNone",
+};
+
+const ACCESS_LEVELS: McpTokenAccessLevel[] = ["full", "read_only"];
+const ACCESS_LEVEL_LABEL_KEYS: Record<McpTokenAccessLevel, string> = {
+  full: "accessLevelFull",
+  read_only: "accessLevelReadOnly",
 };
 
 export const McpSection: React.FC<{
@@ -145,6 +220,31 @@ export const McpSection: React.FC<{
   const [isToggling, setIsToggling] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
+  const [tokens, setTokens] = useState<McpTokenSummary[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [purgingId, setPurgingId] = useState<number | null>(null);
+
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newTokenName, setNewTokenName] = useState("");
+  const [newTokenDuration, setNewTokenDuration] = useState<DurationPreset>("90");
+  const [newTokenCustomDays, setNewTokenCustomDays] = useState("30");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [justCreatedToken, setJustCreatedToken] = useState<{
+    name: string;
+    token: string;
+  } | null>(null);
+  const [accessLevelSavingId, setAccessLevelSavingId] = useState<number | null>(null);
+  const [accessLevelError, setAccessLevelError] = useState<string | null>(null);
+
+  const [expandedTokenId, setExpandedTokenId] = useState<number | null>(null);
+  const [tokenPermissions, setTokenPermissions] = useState<McpTokenToolPermission[]>([]);
+  const [tokenPermissionsLoading, setTokenPermissionsLoading] = useState(false);
+  const [tokenPermissionsError, setTokenPermissionsError] = useState<string | null>(null);
+  const [savingToolName, setSavingToolName] = useState<string | null>(null);
+
   const mainTab: McpMainTab = (MAIN_TABS as string[]).includes(
     activeSubTab || "",
   )
@@ -156,7 +256,244 @@ export const McpSection: React.FC<{
 
   useEffect(() => {
     loadStatus();
+    loadTokens();
   }, []);
+
+  useEffect(() => {
+    if (expandedTokenId === null) {
+      setTokenPermissions([]);
+      return;
+    }
+    loadTokenPermissions(expandedTokenId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedTokenId]);
+
+  const loadTokenPermissions = async (tokenId: number) => {
+    setTokenPermissionsLoading(true);
+    setTokenPermissionsError(null);
+    try {
+      const response = await api.get<McpTokenToolPermission[]>(
+        `/api/mcp/tokens/${tokenId}/tools`,
+      );
+      if (response.success && response.result) {
+        setTokenPermissions(response.result);
+      } else {
+        setTokenPermissionsError(t("admin.mcp.capabilitiesLoadError"));
+      }
+    } catch {
+      setTokenPermissionsError(t("admin.mcp.capabilitiesLoadError"));
+    } finally {
+      setTokenPermissionsLoading(false);
+    }
+  };
+
+  const loadTokens = async () => {
+    setTokensLoading(true);
+    setTokensError(null);
+    try {
+      const response = await api.get<McpTokenSummary[]>("/api/mcp/tokens");
+      if (response.success && response.result) {
+        setTokens(response.result);
+      } else {
+        setTokensError(t("admin.mcp.tokensLoadError"));
+      }
+    } catch {
+      setTokensError(t("admin.mcp.tokensLoadError"));
+    } finally {
+      setTokensLoading(false);
+    }
+  };
+
+  const durationToDays = (preset: DurationPreset): number | null => {
+    if (preset === "unlimited") return null;
+    if (preset === "custom") {
+      const parsed = parseInt(newTokenCustomDays, 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+    return parseInt(preset, 10);
+  };
+
+  const handleCreateToken = async () => {
+    if (!newTokenName.trim()) {
+      setCreateError(t("admin.mcp.nameRequired"));
+      return;
+    }
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      const response = await api.post<McpTokenSummary & { token: string }>(
+        "/api/mcp/tokens",
+        {
+          name: newTokenName.trim(),
+          expiresInDays: durationToDays(newTokenDuration),
+          accessLevel: "full",
+        },
+      );
+      if (response.success && response.result) {
+        setJustCreatedToken({
+          name: response.result.name,
+          token: response.result.token,
+        });
+        setShowCreateForm(false);
+        setNewTokenName("");
+        setNewTokenDuration("90");
+        setExpandedTokenId(response.result.id);
+        await Promise.all([loadTokens(), loadStatus()]);
+      } else {
+        setCreateError(t("admin.mcp.createError"));
+      }
+    } catch {
+      setCreateError(t("admin.mcp.createError"));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleRevokeToken = async (tokenToRevoke: McpTokenSummary) => {
+    if (!window.confirm(t("admin.mcp.revokeConfirm", { name: tokenToRevoke.name }))) {
+      return;
+    }
+    setRevokingId(tokenToRevoke.id);
+    setTokensError(null);
+    try {
+      const response = await api.delete<{ id: number }>(
+        `/api/mcp/tokens/${tokenToRevoke.id}`,
+      );
+      if (response.success) {
+        await Promise.all([loadTokens(), loadStatus()]);
+      } else {
+        setTokensError(t("admin.mcp.revokeError"));
+      }
+    } catch {
+      setTokensError(t("admin.mcp.revokeError"));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handlePurgeToken = async (tokenToPurge: McpTokenSummary) => {
+    if (!window.confirm(t("admin.mcp.purgeConfirm", { name: tokenToPurge.name }))) {
+      return;
+    }
+    setPurgingId(tokenToPurge.id);
+    setTokensError(null);
+    try {
+      const response = await api.delete<{ id: number }>(
+        `/api/mcp/tokens/${tokenToPurge.id}/purge`,
+      );
+      if (response.success) {
+        await loadTokens();
+      } else {
+        setTokensError(t("admin.mcp.purgeError"));
+      }
+    } catch {
+      setTokensError(t("admin.mcp.purgeError"));
+    } finally {
+      setPurgingId(null);
+    }
+  };
+
+  const handleChangeAccessLevel = async (
+    tokenToUpdate: McpTokenSummary,
+    accessLevel: McpTokenAccessLevel,
+  ) => {
+    if (accessLevel === tokenToUpdate.accessLevel) return;
+    setAccessLevelSavingId(tokenToUpdate.id);
+    setAccessLevelError(null);
+    try {
+      const response = await api.patch<{ id: number; accessLevel: McpTokenAccessLevel }>(
+        `/api/mcp/tokens/${tokenToUpdate.id}/access-level`,
+        { accessLevel },
+      );
+      if (response.success) {
+        await loadTokens();
+        if (expandedTokenId === tokenToUpdate.id) await loadTokenPermissions(tokenToUpdate.id);
+      } else {
+        setAccessLevelError(t("admin.mcp.accessLevelError"));
+      }
+    } catch {
+      setAccessLevelError(t("admin.mcp.accessLevelError"));
+    } finally {
+      setAccessLevelSavingId(null);
+    }
+  };
+
+  const handleToggleTool = async (tool: McpTokenToolPermission, enabled: boolean) => {
+    if (expandedTokenId === null) return;
+    setSavingToolName(tool.name);
+    setTokenPermissionsError(null);
+    try {
+      const response = await api.put(`/api/mcp/tokens/${expandedTokenId}/tools/${tool.name}`, {
+        enabled,
+      });
+      if (response.success) {
+        setTokenPermissions((prev) =>
+          prev.map((t) => (t.name === tool.name ? { ...t, enabled, isOverride: true } : t)),
+        );
+        loadTokens();
+      } else {
+        setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+      }
+    } catch {
+      setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+    } finally {
+      setSavingToolName(null);
+    }
+  };
+
+  const handleResetTool = async (tool: McpTokenToolPermission) => {
+    if (expandedTokenId === null) return;
+    setSavingToolName(tool.name);
+    setTokenPermissionsError(null);
+    try {
+      const response = await api.delete(`/api/mcp/tokens/${expandedTokenId}/tools/${tool.name}`);
+      if (response.success) {
+        await loadTokenPermissions(expandedTokenId);
+        loadTokens();
+      } else {
+        setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+      }
+    } catch {
+      setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+    } finally {
+      setSavingToolName(null);
+    }
+  };
+
+  const handleToggleCategory = async (categoryTools: McpTokenToolPermission[]) => {
+    if (expandedTokenId === null) return;
+    const allEnabled = categoryTools.every((tool) => tool.enabled);
+    const nextEnabled = !allEnabled;
+    const toolsToUpdate = categoryTools.filter((tool) => tool.enabled !== nextEnabled);
+    if (toolsToUpdate.length === 0) return;
+
+    setSavingToolName(`category:${categoryTools[0]?.category ?? ""}`);
+    setTokenPermissionsError(null);
+    try {
+      const results = await Promise.all(
+        toolsToUpdate.map((tool) =>
+          api.put(`/api/mcp/tokens/${expandedTokenId}/tools/${tool.name}`, {
+            enabled: nextEnabled,
+          }),
+        ),
+      );
+      if (results.every((r) => r.success)) {
+        const updatedNames = new Set(toolsToUpdate.map((tool) => tool.name));
+        setTokenPermissions((prev) =>
+          prev.map((t) =>
+            updatedNames.has(t.name) ? { ...t, enabled: nextEnabled, isOverride: true } : t,
+          ),
+        );
+        loadTokens();
+      } else {
+        setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+      }
+    } catch {
+      setTokenPermissionsError(t("admin.mcp.toolOverrideError"));
+    } finally {
+      setSavingToolName(null);
+    }
+  };
 
   const loadStatus = async () => {
     setIsLoading(true);
@@ -203,6 +540,18 @@ export const McpSection: React.FC<{
     ? `${status.hostIp}:${status.dashboardPort}`
     : "<LAN-IP>:<PORT>";
 
+  const activeTokenCount = tokens.filter((tok) => tok.status === "active").length;
+  const expiredTokenCount = tokens.filter((tok) => tok.status === "expired").length;
+  const revokedTokenCount = tokens.filter((tok) => tok.status === "revoked").length;
+
+  const tokenPermissionsByCategory = tokenPermissions.reduce<
+    Record<string, McpTokenToolPermission[]>
+  >((acc, tool) => {
+    (acc[tool.category] ??= []).push(tool);
+    return acc;
+  }, {});
+  const activeTokens = tokens.filter((tok) => tok.status === "active");
+
   return (
     <div className="space-y-6">
       <Section title={t("admin.mcp.title")} icon={Cable} iconColor="cyan">
@@ -227,21 +576,24 @@ export const McpSection: React.FC<{
             </p>
 
             <div className="flex gap-1.5 flex-wrap mb-4 pb-4 border-b border-theme">
-              {MAIN_TABS.map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setMainTab(tab)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-                    mainTab === tab
-                      ? "bg-cyan-600/30 text-cyan-300 border-cyan-600/50"
-                      : "bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary"
-                  }`}
-                >
-                  {tab === "setup" && <Settings2 size={13} />}
-                  {t(`admin.mcp.${MAIN_TAB_LABEL_KEYS[tab]}`)}
-                </button>
-              ))}
+              {MAIN_TABS.map((tab) => {
+                const TabIcon = MAIN_TAB_ICONS[tab];
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setMainTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                      mainTab === tab
+                        ? "bg-cyan-600/30 text-cyan-300 border-cyan-600/50"
+                        : "bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary"
+                    }`}
+                  >
+                    <TabIcon size={13} />
+                    {t(`admin.mcp.${MAIN_TAB_LABEL_KEYS[tab]}`)}
+                  </button>
+                );
+              })}
             </div>
 
             {mainTab === "general" && (
@@ -287,36 +639,10 @@ export const McpSection: React.FC<{
                   )}
                 </SettingRow>
 
-                <SettingRow label={t("admin.mcp.tokenStatus")}>
-                  {status.configured ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
-                      <CheckCircle size={12} />
-                      {t("admin.mcp.tokenConfigured")}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-medium">
-                      <AlertCircle size={12} />
-                      {t("admin.mcp.tokenNotConfigured")}
-                    </span>
-                  )}
-                </SettingRow>
-
                 <SettingRow label={t("admin.mcp.endpoint")}>
                   <code className="text-xs text-theme-secondary bg-theme-secondary px-2 py-1 rounded">
                     {status.endpoint}
                   </code>
-                </SettingRow>
-
-                <SettingRow label={t("admin.mcp.createdAt")}>
-                  <span className="text-sm text-theme-secondary">
-                    {formatDate(status.createdAt)}
-                  </span>
-                </SettingRow>
-
-                <SettingRow label={t("admin.mcp.lastUsedAt")}>
-                  <span className="text-sm text-theme-secondary">
-                    {formatDate(status.lastUsedAt)}
-                  </span>
                 </SettingRow>
 
                 <SettingRow label={t("admin.mcp.activeSessions")}>
@@ -337,6 +663,458 @@ export const McpSection: React.FC<{
                           })}
                   </span>
                 </SettingRow>
+
+                <button
+                  type="button"
+                  onClick={() => setMainTab("tokens")}
+                  className="w-full flex items-center justify-between gap-3 mt-4 p-3 bg-theme-secondary border border-theme rounded-lg hover:bg-theme-tertiary transition-colors text-left"
+                >
+                  <span className="flex items-center gap-2 text-sm text-theme-primary">
+                    <KeyRound size={15} className="text-cyan-400" />
+                    {tokensLoading
+                      ? t("common.loading")
+                      : t("admin.mcp.tokensQuickSummary", {
+                          active: activeTokenCount,
+                          total: tokens.length,
+                        })}
+                  </span>
+                  <ArrowRight size={14} className="text-theme-secondary flex-shrink-0" />
+                </button>
+
+                <div className="flex items-start gap-2 p-3 mt-6 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                  <ShieldCheck size={16} className="text-cyan-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-theme-primary mb-1">
+                      {t("admin.mcp.securityInfoTitle")}
+                    </p>
+                    <p className="text-xs text-theme-secondary">
+                      {t("admin.mcp.securityInfoBody")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {mainTab === "tokens" && (
+              <div>
+                <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 text-xs text-theme-secondary">
+                    <span className="inline-flex items-center gap-1 text-emerald-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {t("admin.mcp.tokensStatsActive", { count: activeTokenCount })}
+                    </span>
+                    <span>{"·"}</span>
+                    <span className="inline-flex items-center gap-1 text-amber-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      {t("admin.mcp.tokensStatsExpired", { count: expiredTokenCount })}
+                    </span>
+                    <span>{"·"}</span>
+                    <span className="inline-flex items-center gap-1 text-gray-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                      {t("admin.mcp.tokensStatsRevoked", { count: revokedTokenCount })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateForm((v) => !v);
+                      setCreateError(null);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-cyan-600/50 bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 transition-colors flex items-center gap-1.5"
+                  >
+                    <Plus size={13} />
+                    {t("admin.mcp.newTokenButton")}
+                  </button>
+                </div>
+
+                {justCreatedToken && (
+                  <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg space-y-2">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle size={16} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-emerald-400">
+                        {t("admin.mcp.tokenCreatedWarning", { name: justCreatedToken.name })}
+                      </p>
+                    </div>
+                    <CodeBlock code={justCreatedToken.token} />
+                    <button
+                      type="button"
+                      onClick={() => setJustCreatedToken(null)}
+                      className="text-xs font-medium text-theme-secondary hover:text-theme-primary underline"
+                    >
+                      {t("admin.mcp.doneButton")}
+                    </button>
+                  </div>
+                )}
+
+                {showCreateForm && (
+                  <div className="mb-4 p-3 bg-theme-secondary border border-theme rounded-lg space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-theme-secondary block mb-1">
+                        {t("admin.mcp.formNameLabel")}
+                      </label>
+                      <input
+                        type="text"
+                        value={newTokenName}
+                        onChange={(e) => setNewTokenName(e.target.value)}
+                        placeholder={t("admin.mcp.formNamePlaceholder")}
+                        maxLength={100}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-theme-primary border border-theme text-sm text-theme-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-theme-secondary block mb-1">
+                        {t("admin.mcp.formDurationLabel")}
+                      </label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {DURATION_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setNewTokenDuration(preset)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                              newTokenDuration === preset
+                                ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-400"
+                                : "bg-theme-primary border-theme text-theme-secondary hover:bg-theme-tertiary"
+                            }`}
+                          >
+                            {t(`admin.mcp.${DURATION_LABEL_KEYS[preset]}`)}
+                          </button>
+                        ))}
+                      </div>
+                      {newTokenDuration === "custom" && (
+                        <input
+                          type="number"
+                          min={1}
+                          max={3650}
+                          value={newTokenCustomDays}
+                          onChange={(e) => setNewTokenCustomDays(e.target.value)}
+                          className="mt-2 w-28 px-2.5 py-1.5 rounded-lg bg-theme-primary border border-theme text-sm text-theme-primary"
+                        />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-theme-secondary">
+                      {t("admin.mcp.formAccessLevelHint")}
+                    </p>
+                    {createError && <p className="text-xs text-red-400">{createError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCreateToken}
+                        disabled={isCreating}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-600 text-white hover:bg-cyan-500 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                      >
+                        {isCreating && <Loader2 size={12} className="animate-spin" />}
+                        {t("admin.mcp.createButton")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateForm(false)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-theme-secondary hover:text-theme-primary"
+                      >
+                        {t("admin.mcp.cancelButton")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {tokensLoading && (
+                  <div className="flex items-center gap-2 text-theme-secondary py-3">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">{t("common.loading")}</span>
+                  </div>
+                )}
+
+                {!tokensLoading && tokensError && (
+                  <p className="text-xs text-amber-400 py-2">{tokensError}</p>
+                )}
+
+                {!tokensLoading && !tokensError && tokens.length === 0 && (
+                  <p className="text-xs text-theme-secondary py-2">{t("admin.mcp.noTokensYet")}</p>
+                )}
+
+                {accessLevelError && (
+                  <p className="text-xs text-red-400 py-1">{accessLevelError}</p>
+                )}
+
+                {!tokensLoading && !tokensError && tokens.length > 0 && (
+                  <div className="space-y-2">
+                    {tokens.map((tok) => {
+                      const isExpanded = expandedTokenId === tok.id;
+                      return (
+                        <div
+                          key={tok.id}
+                          className="bg-theme-secondary border border-theme rounded-lg overflow-hidden"
+                        >
+                          <div
+                            role={tok.status === "active" ? "button" : undefined}
+                            tabIndex={tok.status === "active" ? 0 : undefined}
+                            onClick={
+                              tok.status === "active"
+                                ? () => setExpandedTokenId(isExpanded ? null : tok.id)
+                                : undefined
+                            }
+                            className={`flex items-center justify-between gap-3 p-2.5 transition-colors ${
+                              tok.status === "active" ? "cursor-pointer hover:bg-theme-tertiary" : ""
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                {tok.status === "active" &&
+                                  (isExpanded ? (
+                                    <ChevronDown
+                                      size={14}
+                                      className="text-theme-secondary flex-shrink-0"
+                                    />
+                                  ) : (
+                                    <ChevronRight
+                                      size={14}
+                                      className="text-theme-secondary flex-shrink-0"
+                                    />
+                                  ))}
+                                <span className="text-sm font-medium text-theme-primary truncate">
+                                  {tok.name}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+                                    tok.status === "active"
+                                      ? "bg-emerald-500/15 text-emerald-400"
+                                      : tok.status === "expired"
+                                        ? "bg-amber-500/15 text-amber-400"
+                                        : "bg-gray-500/15 text-gray-400"
+                                  }`}
+                                >
+                                  {t(`admin.mcp.${STATUS_LABEL_KEYS[tok.status]}`)}
+                                </span>
+                                {tok.status === "active" ? (
+                                  <select
+                                    value={tok.accessLevel}
+                                    disabled={accessLevelSavingId === tok.id}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) =>
+                                      handleChangeAccessLevel(
+                                        tok,
+                                        e.target.value as McpTokenAccessLevel,
+                                      )
+                                    }
+                                    className={`text-[10px] font-medium rounded-full px-1.5 py-0.5 border bg-theme-primary disabled:opacity-50 ${
+                                      tok.accessLevel === "read_only"
+                                        ? "text-emerald-400 border-emerald-500/30"
+                                        : "text-amber-400 border-amber-500/30"
+                                    }`}
+                                  >
+                                    {ACCESS_LEVELS.map((level) => (
+                                      <option key={level} value={level}>
+                                        {t(`admin.mcp.${ACCESS_LEVEL_LABEL_KEYS[level]}`)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/15 text-gray-400">
+                                    {t(`admin.mcp.${ACCESS_LEVEL_LABEL_KEYS[tok.accessLevel]}`)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-theme-secondary mt-0.5">
+                                {t("admin.mcp.createdAt")}:{" "}
+                                <strong className="font-semibold text-theme-primary">
+                                  {formatDate(tok.createdAt)}
+                                </strong>
+                                {" · "}
+                                {t("admin.mcp.lastUsedAt")}:{" "}
+                                <strong className="font-semibold text-theme-primary">
+                                  {formatDate(tok.lastUsedAt)}
+                                </strong>
+                                {" · "}
+                                {t("admin.mcp.expiresAt")}:{" "}
+                                <strong className="font-semibold text-theme-primary">
+                                  {formatDate(tok.expiresAt)}
+                                </strong>
+                              </p>
+                              {Object.keys(tok.categories).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {Object.entries(tok.categories).map(([category, catStatus]) => (
+                                    <span
+                                      key={category}
+                                      title={t(
+                                        `admin.mcp.${CATEGORY_STATUS_LABEL_KEYS[catStatus]}`,
+                                      )}
+                                      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                                        catStatus === "full"
+                                          ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-400"
+                                          : catStatus === "partial"
+                                            ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
+                                            : "bg-theme-primary border-theme text-theme-secondary"
+                                      }`}
+                                    >
+                                      {t(
+                                        `admin.mcp.${CATEGORY_LABEL_KEYS[category] ?? "capabilitiesCategoryOther"}`,
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {tok.status === "active" ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRevokeToken(tok);
+                                }}
+                                disabled={revokingId === tok.id}
+                                title={t("admin.mcp.revokeButton")}
+                                className="flex-shrink-0 p-2 rounded-lg text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                              >
+                                {revokingId === tok.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePurgeToken(tok);
+                                }}
+                                disabled={purgingId === tok.id}
+                                title={t("admin.mcp.purgeButton")}
+                                className="flex-shrink-0 p-2 rounded-lg text-theme-secondary hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50 transition-colors"
+                              >
+                                {purgingId === tok.id ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={14} />
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {isExpanded && (
+                            <div className="border-t border-theme p-3">
+                              {tokenPermissionsLoading && (
+                                <div className="flex items-center gap-2 text-theme-secondary py-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span className="text-sm">{t("common.loading")}</span>
+                                </div>
+                              )}
+
+                              {!tokenPermissionsLoading && tokenPermissionsError && (
+                                <p className="text-xs text-amber-400 py-2">
+                                  {tokenPermissionsError}
+                                </p>
+                              )}
+
+                              {!tokenPermissionsLoading &&
+                                !tokenPermissionsError &&
+                                tokenPermissions.length > 0 && (
+                                  <div className="space-y-4">
+                                    {Object.entries(tokenPermissionsByCategory).map(
+                                      ([category, categoryTools]) => {
+                                        const allEnabled = categoryTools.every(
+                                          (tool) => tool.enabled,
+                                        );
+                                        const someEnabled = categoryTools.some(
+                                          (tool) => tool.enabled,
+                                        );
+                                        const categorySaving =
+                                          savingToolName === `category:${category}`;
+                                        return (
+                                          <div key={category}>
+                                            <div className="flex items-center justify-between mb-2">
+                                              <h5 className="text-xs font-semibold text-theme-primary uppercase tracking-wide">
+                                                {t(
+                                                  `admin.mcp.${CATEGORY_LABEL_KEYS[category] ?? "capabilitiesCategoryOther"}`,
+                                                )}{" "}
+                                                <span className="text-theme-secondary font-normal normal-case">
+                                                  ({categoryTools.length})
+                                                </span>
+                                              </h5>
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-[10px] text-theme-secondary">
+                                                  {someEnabled && !allEnabled
+                                                    ? t("admin.mcp.categoryTogglePartial")
+                                                    : allEnabled
+                                                      ? t("admin.mcp.categoryToggleAll")
+                                                      : t("admin.mcp.categoryToggleNone")}
+                                                </span>
+                                                <Toggle
+                                                  checked={allEnabled}
+                                                  onChange={() =>
+                                                    handleToggleCategory(categoryTools)
+                                                  }
+                                                  disabled={categorySaving}
+                                                  size="sm"
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                              {categoryTools.map((tool) => (
+                                                <div
+                                                  key={tool.name}
+                                                  className="flex items-start justify-between gap-3 p-2 bg-theme-primary border border-theme rounded-lg"
+                                                >
+                                                  <div className="min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                      <span className="text-sm text-theme-primary">
+                                                        {tool.title}
+                                                      </span>
+                                                      <code className="text-[10px] text-theme-secondary bg-theme-secondary px-1.5 py-0.5 rounded">
+                                                        {tool.name}
+                                                      </code>
+                                                      {tool.readOnly && (
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400">
+                                                          {t("admin.mcp.capabilitiesReadOnly")}
+                                                        </span>
+                                                      )}
+                                                      {tool.isOverride && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleResetTool(tool)}
+                                                          disabled={
+                                                            savingToolName === tool.name
+                                                          }
+                                                          title={t(
+                                                            "admin.mcp.toolResetOverride",
+                                                          )}
+                                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500/25 disabled:opacity-50 transition-colors"
+                                                        >
+                                                          <RotateCcw size={10} />
+                                                          {t("admin.mcp.toolOverrideBadge")}
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                    {tool.description && (
+                                                      <p className="text-xs text-theme-secondary mt-0.5">
+                                                        {tool.description}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                  <Toggle
+                                                    checked={tool.enabled}
+                                                    onChange={(enabled) =>
+                                                      handleToggleTool(tool, enabled)
+                                                    }
+                                                    disabled={savingToolName === tool.name}
+                                                    size="sm"
+                                                  />
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -345,42 +1123,10 @@ export const McpSection: React.FC<{
                 <div className="space-y-3">
                   <div>
                     <h5 className="text-sm font-medium text-theme-primary">
-                      {t("admin.mcp.step1Title")}
+                      {t("admin.mcp.connectTitle")}
                     </h5>
                     <p className="text-xs text-theme-secondary mt-0.5">
-                      {t("admin.mcp.step1Intro")}
-                    </p>
-                  </div>
-                  <CodeBlock
-                    label={t("admin.mcp.dockerLabel")}
-                    code="docker exec -it -u node mynetwork npm run mcp:token"
-                  />
-                  {status.configured ? (
-                    <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                      <CheckCircle size={12} />
-                      {t("admin.mcp.tokenAlreadySetHint")}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                      <AlertCircle size={12} />
-                      {t("admin.mcp.tokenNotSetHint")}
-                    </p>
-                  )}
-                  <p className="text-xs text-theme-secondary">
-                    {t("admin.mcp.dockerNote")}{" "}
-                    <strong className="font-semibold text-theme-primary">
-                      {t("admin.mcp.dockerNoteRotate")}
-                    </strong>
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <h5 className="text-sm font-medium text-theme-primary">
-                      {t("admin.mcp.step2Title")}
-                    </h5>
-                    <p className="text-xs text-theme-secondary mt-0.5">
-                      {t("admin.mcp.step2Intro")}
+                      {t("admin.mcp.connectIntro")}
                     </p>
                     {!status.hostIp && (
                       <p className="text-xs text-amber-400 mt-1">
@@ -444,6 +1190,50 @@ export const McpSection: React.FC<{
                       />
                     </div>
                   )}
+
+                  <p className="text-xs text-theme-secondary">
+                    {t("admin.mcp.getTokenHint")}{" "}
+                    <button
+                      type="button"
+                      onClick={() => setMainTab("tokens")}
+                      className="text-cyan-400 hover:text-cyan-300 underline font-medium"
+                    >
+                      {t("admin.mcp.tabTokens")}
+                    </button>
+                    .
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-theme">
+                  <div>
+                    <h5 className="text-sm font-medium text-theme-primary">
+                      {t("admin.mcp.step1Title")}
+                    </h5>
+                    <p className="text-xs text-theme-secondary mt-0.5">
+                      {t("admin.mcp.step1Intro")}
+                    </p>
+                  </div>
+                  <CodeBlock
+                    label={t("admin.mcp.dockerLabel")}
+                    code="docker exec -it -u node mynetwork node_modules/.bin/tsx scripts/mcp-token.ts"
+                  />
+                  {status.configured ? (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle size={12} />
+                      {t("admin.mcp.tokenAlreadySetHint")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                      <AlertCircle size={12} />
+                      {t("admin.mcp.tokenNotSetHint")}
+                    </p>
+                  )}
+                  <p className="text-xs text-theme-secondary">
+                    {t("admin.mcp.dockerNote")}{" "}
+                    <strong className="font-semibold text-theme-primary">
+                      {t("admin.mcp.dockerNoteRotate")}
+                    </strong>
+                  </p>
                 </div>
               </div>
             )}

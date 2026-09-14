@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.23] - 2026-09-14
+
+### Added
+
+- MCP tokens: per-token access level (`full`/`read_only`) with per-tool overrides, so a token can be restricted to read-only tools by default while still allowing (or blocking) specific tools individually.
+- Admin UI: each token row in the MCP Tokens tab now expands inline into a Capabilities panel (per-category and per-tool toggles, override reset), replacing the previous standalone "Capabilities" tab and its token selector dropdown. Category badges on each token row show at a glance whether all, some, or none of a category's tools are enabled.
+- New tokens are now created with full access by default, then the newly created token's Capabilities panel opens automatically so the admin can validate or restrict it as part of the creation flow.
+
+### Changed
+
+- Access level and tool-override changes made from the Capabilities panel now refresh the Tokens list immediately, so its category badges never go stale.
+
+### Security
+
+- MCP Streamable HTTP sessions are now bound to the token that created them: every request against an existing session (`Mcp-Session-Id`) must present that same token. Previously any active MCP token could reuse another token's session id (e.g. one leaked via server logs) and inherit its permissions instead of its own.
+
+### Removed
+
+- Dropped the standalone `GET /api/mcp/tools` endpoint (unused global tool catalog view) and its "Capabilities" quick-link, now that permissions are managed per-token from the Tokens tab.
+
+---
+
 ## [0.10.22] - 2026-09-14
 
 ### Added

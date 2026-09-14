@@ -4,8 +4,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerFreeboxTools } from './tools/freebox.js';
 import { registerUnifiTools } from './tools/unifi.js';
 import { registerScannerTools } from './tools/scanner.js';
+import { applyTokenToolPermissions } from './toolPermissions.js';
 
-export function createMynetworkMcpServer(): McpServer {
+// tokenId is omitted when building the catalog-introspection instance used
+// by server/mcp/toolCatalog.ts (full access, never connected to a transport).
+export function createMynetworkMcpServer(tokenId?: number): McpServer {
   const server = new McpServer({
     name: 'mynetwork',
     version: '1.0.0'
@@ -14,6 +17,10 @@ export function createMynetworkMcpServer(): McpServer {
   registerFreeboxTools(server);
   registerUnifiTools(server);
   registerScannerTools(server);
+
+  if (tokenId !== undefined) {
+    applyTokenToolPermissions(server, tokenId);
+  }
 
   return server;
 }

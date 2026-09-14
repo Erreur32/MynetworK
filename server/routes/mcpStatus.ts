@@ -29,8 +29,6 @@ router.get(
         runtimeEnabled: status.runtimeEnabled,
         configured: status.configured,
         endpoint: "/api/mcp",
-        createdAt: status.createdAt,
-        lastUsedAt: status.lastUsedAt,
         // LAN-reachable host/port, not the container's internal address:
         // same env vars and fallback as scripts/mcp-token.ts and the
         // server startup banner. hostIp is null when HOST_IP isn't set.

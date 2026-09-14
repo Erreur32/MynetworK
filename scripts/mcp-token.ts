@@ -1,16 +1,22 @@
-// CLI: npm run mcp:token
-// Generates (or rotates) the MCP bearer token and prints it once. Re-running
-// this script revokes the previous token and issues a new one.
+// CLI fallback: node_modules/.bin/tsx scripts/mcp-token.ts
+// (`npm run mcp:token` also works outside Docker, where npm is available.)
+//
+// Creates a new, unlimited-duration MCP bearer token named "CLI" and prints
+// it once. This is a fallback for when the admin UI (MCP > General tab) is
+// unavailable: tokens are normally created and revoked from there, with a
+// name and an optional expiry. Existing tokens are never touched by this
+// script; each run adds a new one.
 import { initializeDatabase } from "../server/database/connection.js";
 import { initializeDatabaseConfig } from "../server/database/dbConfig.js";
 import { mcpAuthService } from "../server/services/mcpAuthService.js";
 
 initializeDatabase();
 initializeDatabaseConfig();
+mcpAuthService.migrateLegacyTokenIfNeeded();
 
 let token: string;
 try {
-  token = mcpAuthService.generateToken();
+  ({ token } = mcpAuthService.generateToken("CLI", null));
 } catch (error) {
   console.error("");
   console.error("ERROR: MCP token generation failed.");
@@ -18,7 +24,7 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   console.error("");
   console.error(
-    "If running via `docker exec`, try `docker exec -it -u node <container> npm run mcp:token`: " +
+    "If running via `docker exec`, try `docker exec -it -u node <container> node_modules/.bin/tsx scripts/mcp-token.ts`: " +
       "the app's database file is owned by the `node` user, and `docker exec` without `-u` attaches as a different user by default.",
   );
   console.error("");
@@ -46,7 +52,9 @@ if (lanHost === "<LAN-IP>") {
 }
 console.log("");
 console.log("This endpoint only accepts connections from the local network.");
-console.log("Re-run this script at any time to rotate (and revoke) the token.");
+console.log(
+  "This token has no expiry. Manage it (rename, revoke) from the admin panel's MCP section.",
+);
 console.log("");
 
 process.exit(0);

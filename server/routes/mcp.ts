@@ -4,11 +4,14 @@
 // (no activity for 30 min) are swept periodically so a client that vanishes
 // without sending DELETE doesn't leak memory.
 import { randomUUID } from "crypto";
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createMynetworkMcpServer } from "../mcp/server.js";
-import { mcpAuthMiddleware } from "../middleware/mcpAuthMiddleware.js";
+import {
+  mcpAuthMiddleware,
+  McpAuthenticatedRequest,
+} from "../middleware/mcpAuthMiddleware.js";
 import {
   registerMcpSession,
   unregisterMcpSession,
@@ -21,6 +24,18 @@ const SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
   lastActivity: number;
+  // Token that created this session: every subsequent request against it must
+  // present the same token, so a different (e.g. lower-privileged) valid MCP
+  // token can't inherit this session's permissions just by reusing its id.
+  tokenId: number | undefined;
+}
+
+function sessionOwnershipError(res: Response): void {
+  res.status(401).json({
+    jsonrpc: "2.0",
+    error: { code: -32000, message: "Invalid or missing session ID" },
+    id: null,
+  });
 }
 
 const sessions = new Map<string, SessionEntry>();
@@ -54,19 +69,25 @@ sweepInterval.unref();
 const router = Router();
 router.use(mcpAuthMiddleware);
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", async (req: McpAuthenticatedRequest, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   let transport: StreamableHTTPServerTransport;
 
   if (sessionId && sessions.has(sessionId)) {
+    const entry = sessions.get(sessionId)!;
+    if (entry.tokenId !== req.mcpTokenId) {
+      sessionOwnershipError(res);
+      return;
+    }
     touchSession(sessionId);
-    transport = sessions.get(sessionId)!.transport;
+    transport = entry.transport;
   } else if (!sessionId && isInitializeRequest(req.body)) {
-    const server = createMynetworkMcpServer();
+    const tokenId = req.mcpTokenId;
+    const server = createMynetworkMcpServer(tokenId);
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (newSessionId: string) => {
-        sessions.set(newSessionId, { transport, lastActivity: Date.now() });
+        sessions.set(newSessionId, { transport, lastActivity: Date.now(), tokenId });
         registerMcpSession();
         logger.info("MCP", `Session initialized: ${newSessionId}`);
       },
@@ -92,7 +113,7 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 async function handleSessionRequest(
-  req: Request,
+  req: McpAuthenticatedRequest,
   res: Response,
 ): Promise<void> {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -104,6 +125,11 @@ async function handleSessionRequest(
       error: { code: -32000, message: "Invalid or missing session ID" },
       id: null,
     });
+    return;
+  }
+
+  if (entry.tokenId !== req.mcpTokenId) {
+    sessionOwnershipError(res);
     return;
   }
 

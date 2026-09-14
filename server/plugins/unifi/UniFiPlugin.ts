@@ -195,7 +195,7 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.10.22');
+        super('unifi', 'UniFi Controller', '0.10.23');
         this.apiService = new UniFiApiService();
     }
 

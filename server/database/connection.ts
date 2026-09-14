@@ -319,8 +319,52 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // MCP bearer tokens (named, multi-token, replaces the single mcp_token_hash
+    // AppConfig entry). Revocation is soft (revoked_at) to keep an audit trail.
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS mcp_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME,
+            expires_at DATETIME,
+            revoked_at DATETIME
+        )
+    `);
+
+    // access_level gates which tools a token's MCP session gets: 'full' (default,
+    // matches pre-existing behavior) or 'read_only' (only tools whose live
+    // readOnlyHint annotation is true are exposed, re-evaluated on every new
+    // session so future write tools are blocked automatically).
+    try {
+        database.exec(`
+            ALTER TABLE mcp_tokens ADD COLUMN access_level TEXT NOT NULL DEFAULT 'full';
+        `);
+    } catch (e: any) {
+        if (!e.message?.includes('duplicate column name')) {
+            logger.debug('Database', 'Migration: access_level column may already exist');
+        }
+    }
+
+    // Per-token exceptions layered on top of access_level: an explicit row
+    // wins over the access_level rule for that one tool (e.g. allow a single
+    // write tool on an otherwise read_only token, or block a single tool on
+    // an otherwise full-access token).
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS mcp_token_tool_overrides (
+            token_id INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            enabled INTEGER NOT NULL,
+            PRIMARY KEY (token_id, tool_name),
+            FOREIGN KEY (token_id) REFERENCES mcp_tokens(id) ON DELETE CASCADE
+        )
+    `);
+
     // Create indexes for better performance
     database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mcp_tokens_token_hash ON mcp_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_mcp_token_tool_overrides_token_id ON mcp_token_tool_overrides(token_id);
         CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
         CREATE INDEX IF NOT EXISTS idx_logs_plugin_id ON logs(plugin_id);
         CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);

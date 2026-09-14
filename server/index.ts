@@ -77,6 +77,11 @@ try {
   );
 }
 
+// One-time migration from the old single-token MCP auth store to the
+// named multi-token table (no-op once already migrated).
+import { mcpAuthService } from "./services/mcpAuthService.js";
+mcpAuthService.migrateLegacyTokenIfNeeded();
+
 // Initialize Wireshark vendor database (async, don't block startup)
 import { WiresharkVendorService } from "./services/wiresharkVendorService.js";
 WiresharkVendorService.initialize().catch((error) => {
@@ -340,6 +345,7 @@ import databaseRoutes from "./routes/database.js";
 import topologyRoutes from "./routes/topology.js";
 import mcpRoutes from "./routes/mcp.js";
 import mcpStatusRoutes from "./routes/mcpStatus.js";
+import mcpTokensRoutes from "./routes/mcpTokens.js";
 import { startTopologyScheduler } from "./services/topologyScheduler.js";
 // Import network scan scheduler (initialized automatically when imported)
 // The scheduler loads configs from database, so database must be initialized first
@@ -441,10 +447,11 @@ app.use("/api/database", databaseRoutes);
 app.use("/api/topology", topologyRoutes);
 
 // MCP (Model Context Protocol) - LAN-only, own auth layer (see mcpAuthMiddleware).
-// Status must be mounted before the transport router: mcpRoutes matches any
-// /api/mcp/* subpath, so /api/mcp/status would otherwise never be reached.
+// Status and tokens must be mounted before the transport router: mcpRoutes
+// matches any /api/mcp/* subpath, so these would otherwise never be reached.
 if (config.mcp.enabled) {
   app.use("/api/mcp/status", mcpStatusRoutes);
+  app.use("/api/mcp/tokens", mcpTokensRoutes);
   app.use("/api/mcp", mcpRoutes);
   logger.info("MCP", "MCP server mounted at /api/mcp");
 }

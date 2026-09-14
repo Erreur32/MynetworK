@@ -10,6 +10,10 @@ import { Request, Response, NextFunction } from "express";
 import { mcpAuthService } from "../services/mcpAuthService.js";
 import { isPrivateNetworkIp } from "../utils/networkValidation.js";
 
+export interface McpAuthenticatedRequest extends Request {
+  mcpTokenId?: number;
+}
+
 function jsonRpcError(
   res: Response,
   status: number,
@@ -24,7 +28,7 @@ function jsonRpcError(
 }
 
 export const mcpAuthMiddleware = (
-  req: Request,
+  req: McpAuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ): void => {
@@ -55,7 +59,7 @@ export const mcpAuthMiddleware = (
       res,
       503,
       -32000,
-      "MCP token not configured. Run 'npm run mcp:token' on the server host.",
+      "No MCP token configured. Create one from the admin panel (MCP > Setup).",
     );
     return;
   }
@@ -67,11 +71,13 @@ export const mcpAuthMiddleware = (
   }
 
   const token = authHeader.substring(7);
-  if (!mcpAuthService.verifyToken(token)) {
+  const tokenId = mcpAuthService.verifyToken(token);
+  if (tokenId === null) {
     jsonRpcError(res, 401, -32000, "Invalid bearer token");
     return;
   }
 
-  mcpAuthService.recordUsage();
+  mcpAuthService.recordUsage(tokenId);
+  req.mcpTokenId = tokenId;
   next();
 };

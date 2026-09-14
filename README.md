@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.22-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.23-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -515,12 +515,14 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MCP client (e.g. Claude Desktop, Claude Code) can query and control your Freebox, UniFi controller and network scanner directly, no need to go through the web UI.
 
 - **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback) in addition to a dedicated bearer token
-- **Own auth token** - separate from the JWT web session, generated from the CLI only (never from the admin panel, since that panel may be internet-exposed while the MCP endpoint must stay LAN-only)
-- **Read-only status in the admin UI** - the "MCP" tab shows whether it's enabled, whether a token is configured, the endpoint and last-used time, plus these same setup instructions with a one-click copy; it never displays the token itself
+- **Named, multi-token auth** - separate from the JWT web session; create as many named tokens as you need (one per client/device), each with its own optional expiry, from the admin panel
+- **Managed from the admin UI** - the "MCP" tab lets you create tokens (shown once), revoke them individually, and shows whether MCP is enabled, the endpoint, active sessions and each token's status/last-used time
 
-### 1. Generate the access token
+### 1. Generate an access token
 
-Run on the server host. Prints the token once: it is never shown again, and never stored anywhere you can browse to.
+From the admin panel: Settings > MCP > General tab > "New token". Name it, pick a duration (or unlimited), and copy the token shown: it is never displayed again.
+
+A CLI fallback also exists, for when the admin panel is unreachable (see [Docs/MCP_DEV_SETUP.md](Docs/MCP_DEV_SETUP.md) for the full explanation):
 
 ```bash
 # Docker (production, default deployment, container name is "mynetwork")
@@ -530,7 +532,7 @@ docker exec -it -u node mynetwork node_modules/.bin/tsx scripts/mcp-token.ts
 npm run mcp:token
 ```
 
-The `-u node` matters: `docker exec` without it attaches as a different user than the app's own process, which owns the database file, and fails with a SQLite "readonly database" error (the token would print but never actually save). Re-running this command rotates the token and revokes the previous one immediately.
+Each CLI run creates a new token named "CLI" with no expiry, without touching tokens created from the admin UI.
 
 ### 2. Connect a client
 
