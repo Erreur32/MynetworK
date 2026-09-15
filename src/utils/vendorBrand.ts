@@ -11,7 +11,6 @@ import {
   siSynology,
   siQnap,
   siTplink,
-  siUbiquiti,
   siNetgear,
   siLinksys,
   siMikrotik,
@@ -43,7 +42,6 @@ import {
   siOrange,
   siMitsubishi,
   siProxmox,
-  siVeeam,
   siMotorola,
   siNokia,
   siEcovacs,
@@ -69,7 +67,6 @@ import {
   siEsphome,
   siTasmota,
   siZigbee,
-  siVmware,
   siLinux,
   siAndroid,
   siDenon,
@@ -87,8 +84,18 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Plug, Thermometer, Clock, Router, Radio, Lightbulb, Tv, Monitor,
   Smartphone, Tablet, Laptop, HardDrive, Wifi, Globe, Car, Printer, Camera, Speaker, Gamepad2, Server,
-  AppWindow
+  AppWindow, Layers, Boxes, Network, Antenna, Cable, EthernetPort, Siren, Gauge, Sun
 } from 'lucide-react';
+import netatmoLogo from '../icons/logo_netatmo.svg';
+import vmwareLogo from '../icons/logo_vmware.svg';
+import debianLogo from '../icons/logo_debian.svg';
+import freeboxLogo from '../icons/logo_freebox.svg';
+import unifiLogo from '../icons/logo_unifi.svg';
+import unifiApLogo from '../icons/logo_unifi_ap.png';
+import freeboxUltraLogo from '../icons/logo_freebox_ultra.png';
+import freeboxRevolutionLogo from '../icons/logo_freebox_revolution.png';
+import freeboxPopLogo from '../icons/logo_freebox_pop.png';
+import veeamLogo from '../icons/logo_veeam.svg';
 
 /** Broad device family used to group the icon picker into sections. */
 export type IconCategory =
@@ -101,7 +108,6 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon; category: Icon
   { pattern: /raspberry\s*pi/i, icon: siRaspberrypi, category: 'computer' },
   { pattern: /philips\s*hue|signify/i, icon: siPhilipshue, category: 'smarthome' },
   { pattern: /tp-?link|\btapo\b/i, icon: siTplink, category: 'network' },
-  { pattern: /ubiquiti/i, icon: siUbiquiti, category: 'network' },
   { pattern: /synology/i, icon: siSynology, category: 'storage' },
   { pattern: /qnap/i, icon: siQnap, category: 'storage' },
   { pattern: /netgear/i, icon: siNetgear, category: 'network' },
@@ -140,7 +146,6 @@ const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon; category: Icon
   { pattern: /motorola/i, icon: siMotorola, category: 'mobile' },
   { pattern: /\bnokia\b|hmd\s*global/i, icon: siNokia, category: 'mobile' },
   { pattern: /ecovacs/i, icon: siEcovacs, category: 'smarthome' },
-  { pattern: /\bvmware\b/i, icon: siVmware, category: 'server' },
   // Common home-network / IoT hardware brands
   { pattern: /ikea|tradfri/i, icon: siIkea, category: 'smarthome' },
   { pattern: /irobot|roomba/i, icon: siIrobot, category: 'smarthome' },
@@ -177,7 +182,6 @@ export function getVendorBrand(vendorRaw?: string | null): SimpleIcon | null {
 // whose OUI vendor string isn't yet in the local IEEE database snapshot —
 // detectable only from the device's label/hostname, never from `vendor`.
 const LABEL_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon; category: IconCategory }> = [
-  { pattern: /veeam/i, icon: siVeeam, category: 'server' },
   // Tapo product line reports under the parent TP-Link OUI; falls back here
   // when the local vendor lookup hasn't caught up with a recent OUI block.
   { pattern: /\btapo\b/i, icon: siTplink, category: 'network' },
@@ -211,7 +215,7 @@ const LABEL_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon; category: IconC
   // "iPhone-de-Marie", "raspberrypi.local").
   { pattern: /iphone|ipad|ipod|macbook|imac|mac-?mini|mac-?pro|mac-?studio|\bmacos\b/i, icon: siApple, category: 'mobile' },
   { pattern: /\bandroid\b/i, icon: siAndroid, category: 'mobile' },
-  { pattern: /\blinux\b|\bubuntu\b|\bdebian\b|\bfedora\b|\bcentos\b|\bmanjaro\b|raspbian/i, icon: siLinux, category: 'computer' }
+  { pattern: /\blinux\b|\bubuntu\b|\bfedora\b|\bcentos\b|\bmanjaro\b|raspbian/i, icon: siLinux, category: 'computer' }
 ];
 
 /**
@@ -226,12 +230,66 @@ export function getVendorBrandFromLabel(label?: string | null): SimpleIcon | nul
   return null;
 }
 
+/** A bundled brand logo with no simple-icons equivalent (missing from the pack, or
+ *  whose simple-icons version doesn't match the look we want — e.g. VMware's entry
+ *  there reflects the post-Broadcom rebrand, not the classic logo). */
+export interface LocalBrandIcon {
+  title: string;
+  slug: string;
+  url: string;
+}
+
+const LOCAL_MATCHERS: Array<{ pattern: RegExp; icon: LocalBrandIcon; category: IconCategory }> = [
+  { pattern: /netatmo/i, icon: { title: 'Netatmo', slug: 'netatmo', url: netatmoLogo }, category: 'smarthome' },
+  { pattern: /\bvmware\b/i, icon: { title: 'VMware', slug: 'vmware', url: vmwareLogo }, category: 'server' },
+  { pattern: /freebox/i, icon: { title: 'Freebox', slug: 'freebox', url: freeboxLogo }, category: 'network' },
+  // Ubiquiti's own simple-icons mark differs from the blue "UniFi" logo already used
+  // elsewhere in this app (Header, SearchPage) — reuse that one for consistency.
+  { pattern: /ubiquiti/i, icon: { title: 'UniFi', slug: 'unifi', url: unifiLogo }, category: 'network' }
+];
+
+/** Resolves a raw vendor/manufacturer string to a bundled local brand logo (not from simple-icons). */
+export function getVendorLocalIcon(vendorRaw?: string | null): LocalBrandIcon | null {
+  if (!vendorRaw) return null;
+  for (const { pattern, icon } of LOCAL_MATCHERS) {
+    if (pattern.test(vendorRaw)) return icon;
+  }
+  return null;
+}
+
+// Debian's OUI vendor is almost always the machine's motherboard/chipmaker, never
+// "Debian" itself — only the hostname reveals the distro, like the linux/android
+// entries in LABEL_MATCHERS above. Kept as a local asset (not simple-icons) for its
+// distinctive multi-color swirl rather than a flat brand-color path.
+const LOCAL_LABEL_MATCHERS: Array<{ pattern: RegExp; icon: LocalBrandIcon; category: IconCategory }> = [
+  { pattern: /\bdebian\b/i, icon: { title: 'Debian', slug: 'debian', url: debianLogo }, category: 'computer' },
+  // Backup software, runs on generic server hardware, no dedicated OUI — only
+  // the hostname reveals it, like the other LABEL-based matches above.
+  { pattern: /veeam/i, icon: { title: 'Veeam', slug: 'veeam', url: veeamLogo }, category: 'server' },
+  // UniFi's vendor OUI ("Ubiquiti Networks") can't distinguish an AP from a switch
+  // or gateway — only the device's own model/hostname does (e.g. "U6-Lite",
+  // "UAP-AC-Pro"). Mainly meant to be picked manually from the icon catalog.
+  { pattern: /\bunifi[\s-]?ap\b|\buap-|\bu6[a-z-]*\b|\bu7[a-z-]*\b|nanohd|nanolite/i, icon: { title: 'UniFi AP', slug: 'unifi-ap', url: unifiApLogo }, category: 'network' },
+  // Freebox model-specific product photos, more precise than the generic red
+  // Freebox mark above — matched from the box's own label/model name.
+  { pattern: /freebox.?ultra/i, icon: { title: 'Freebox Ultra', slug: 'freebox-ultra', url: freeboxUltraLogo }, category: 'network' },
+  { pattern: /freebox.?revolution/i, icon: { title: 'Freebox Revolution', slug: 'freebox-revolution', url: freeboxRevolutionLogo }, category: 'network' },
+  { pattern: /freebox.?pop/i, icon: { title: 'Freebox Pop', slug: 'freebox-pop', url: freeboxPopLogo }, category: 'network' }
+];
+
+/** Resolves a device label/hostname to a bundled local brand logo (not from simple-icons). */
+export function getVendorLocalIconFromLabel(label?: string | null): LocalBrandIcon | null {
+  if (!label) return null;
+  for (const { pattern, icon } of LOCAL_LABEL_MATCHERS) {
+    if (pattern.test(label)) return icon;
+  }
+  return null;
+}
+
 // Known vendors without a simple-icons logo — a distinctive lucide icon
 // beats the generic category fallback while we don't vendor a local SVG.
 const VENDOR_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon; category: IconCategory }> = [
   { pattern: /meross/i, icon: Plug, category: 'smarthome' },
-  { pattern: /netatmo/i, icon: Thermometer, category: 'smarthome' },
-  { pattern: /freebox/i, icon: Router, category: 'network' },
   { pattern: /reolink/i, icon: Camera, category: 'camera' },
   // Powerline (CPL) and mesh Wi-Fi networking gear, no simple-icons logo.
   { pattern: /devolo/i, icon: Wifi, category: 'network' },
@@ -305,6 +363,8 @@ export function getVendorIconFallbackFromLabel(label?: string | null): LucideIco
 export function hasVendorIcon(vendorRaw?: string | null, label?: string | null): boolean {
   return getVendorBrand(vendorRaw) !== null
     || getVendorBrandFromLabel(label) !== null
+    || getVendorLocalIcon(vendorRaw) !== null
+    || getVendorLocalIconFromLabel(label) !== null
     || getVendorIconFallback(vendorRaw) !== null
     || getVendorIconFallbackFromLabel(label) !== null;
 }
@@ -313,6 +373,7 @@ export function hasVendorIcon(vendorRaw?: string | null, label?: string | null):
 // Feeds the vendor-icon picker (force a vendor name + pick an icon on a device
 // row). IDs are stable strings persisted in `network_scans.vendor_icon`:
 //   - `simple:<slug>` → a brand logo already bundled above
+//   - `local:<slug>` → a bundled local brand logo (not from simple-icons)
 //   - `lucide:<Name>` → a lucide fallback icon already bundled above
 //   - `custom:<data-url>` → a user-imported icon, resolved by the caller
 
@@ -326,6 +387,10 @@ const ALL_SIMPLE_ICONS: Array<{ icon: SimpleIcon; category: IconCategory }> = Ar
   new Map(
     [...VENDOR_MATCHERS, ...LABEL_MATCHERS].map((m) => [m.icon.title, { icon: m.icon, category: m.category }])
   ).values()
+);
+
+const ALL_LOCAL_ICONS: Array<{ icon: LocalBrandIcon; category: IconCategory }> = [...LOCAL_MATCHERS, ...LOCAL_LABEL_MATCHERS].map(
+  ({ icon, category }) => ({ icon, category })
 );
 
 // Every icon used by the fallback matchers above (Plug, Camera, Printer, HardDrive,
@@ -352,27 +417,64 @@ const ALL_LUCIDE_ICONS: Array<{ name: string; icon: LucideIcon; category: IconCa
   { name: 'Speaker', icon: Speaker, category: 'media' },
   { name: 'Gamepad2', icon: Gamepad2, category: 'gaming' },
   { name: 'Server', icon: Server, category: 'server' },
-  { name: 'AppWindow', icon: AppWindow, category: 'computer' }
+  { name: 'AppWindow', icon: AppWindow, category: 'computer' },
+  // Generic device-family icons for the manual picker (no vendor/brand match needed):
+  // stacked switches, rack bay, hub/switch, wifi antenna/AP, wired uplink, ethernet
+  // port, alarm siren, sensor probe, solar panel.
+  { name: 'Layers', icon: Layers, category: 'network' },
+  { name: 'Boxes', icon: Boxes, category: 'server' },
+  { name: 'Network', icon: Network, category: 'network' },
+  { name: 'Antenna', icon: Antenna, category: 'network' },
+  { name: 'Cable', icon: Cable, category: 'network' },
+  { name: 'EthernetPort', icon: EthernetPort, category: 'network' },
+  { name: 'Siren', icon: Siren, category: 'smarthome' },
+  { name: 'Gauge', icon: Gauge, category: 'smarthome' },
+  { name: 'Sun', icon: Sun, category: 'smarthome' }
 ];
+
+// These brand marks are near-black in simple-icons (their official brand color),
+// which makes them nearly invisible against this app's dark-only themes. Both a
+// white and a black variant are selectable in the picker; auto-detection (no
+// explicit override) always renders white.
+export const FORCE_WHITE_BRAND_TITLES = new Set(['Apple', 'Linksys', 'LIFX', 'Bose', 'Sonos', 'Corsair', 'DJI']);
 
 export interface VendorIconCatalogEntry {
   id: string;
   title: string;
-  kind: 'simple' | 'lucide';
+  kind: 'simple' | 'local' | 'lucide';
   category: IconCategory;
-  icon: SimpleIcon | LucideIcon;
+  icon: SimpleIcon | LocalBrandIcon | LucideIcon;
+  /** For near-black simple-icons brand marks (see `FORCE_WHITE_BRAND_TITLES`):
+   *  which of the two selectable color variants this catalog entry represents. */
+  forceColor?: 'black' | 'white';
 }
 
 /** Full list of built-in icons selectable in the vendor-icon picker. */
 export function getVendorIconCatalog(): VendorIconCatalogEntry[] {
+  const simpleEntries: VendorIconCatalogEntry[] = ALL_SIMPLE_ICONS.flatMap(({ icon, category }) => {
+    const slug = slugifyIconTitle(icon.title);
+    if (FORCE_WHITE_BRAND_TITLES.has(icon.title)) {
+      // Near-black brand mark: offer both color variants, white first (the
+      // auto-detected default) since it's the one visible against this app's
+      // dark-only themes.
+      return [
+        { id: `simple:${slug}`, title: icon.title, kind: 'simple' as const, category, icon, forceColor: 'white' as const },
+        { id: `simple:${slug}-black`, title: `${icon.title} (noir)`, kind: 'simple' as const, category, icon, forceColor: 'black' as const }
+      ];
+    }
+    return [{ id: `simple:${slug}`, title: icon.title, kind: 'simple' as const, category, icon }];
+  });
   return [
-    ...ALL_SIMPLE_ICONS.map(({ icon, category }) => ({ id: `simple:${slugifyIconTitle(icon.title)}`, title: icon.title, kind: 'simple' as const, category, icon })),
+    ...simpleEntries,
+    ...ALL_LOCAL_ICONS.map(({ icon, category }) => ({ id: `local:${icon.slug}`, title: icon.title, kind: 'local' as const, category, icon })),
     ...ALL_LUCIDE_ICONS.map(({ name, icon, category }) => ({ id: `lucide:${name}`, title: name, kind: 'lucide' as const, category, icon }))
   ];
 }
 
 /** Best-guess catalog id for a vendor string, used to prefill the picker. */
 export function suggestVendorIconId(vendorRaw?: string | null): string | null {
+  const local = getVendorLocalIcon(vendorRaw);
+  if (local) return `local:${local.slug}`;
   const brand = getVendorBrand(vendorRaw);
   if (brand) return `simple:${slugifyIconTitle(brand.title)}`;
   const FallbackIcon = getVendorIconFallback(vendorRaw);
@@ -384,7 +486,8 @@ export function suggestVendorIconId(vendorRaw?: string | null): string | null {
 }
 
 export type ResolvedVendorIcon =
-  | { kind: 'simple'; icon: SimpleIcon }
+  | { kind: 'simple'; icon: SimpleIcon; forceColor?: 'black' | 'white' }
+  | { kind: 'local'; icon: LocalBrandIcon }
   | { kind: 'lucide'; icon: LucideIcon }
   | { kind: 'custom'; dataUrl: string };
 
@@ -394,8 +497,22 @@ export function resolveVendorIconId(id?: string | null): ResolvedVendorIcon | nu
 
   if (id.startsWith('simple:')) {
     const slug = id.slice('simple:'.length);
+    let forceColor: 'black' | 'white' | undefined;
+    if (slug.endsWith('-black')) {
+      const base = slug.slice(0, -'-black'.length);
+      const found = ALL_SIMPLE_ICONS.find(({ icon }) => slugifyIconTitle(icon.title) === base && FORCE_WHITE_BRAND_TITLES.has(icon.title));
+      if (found) return { kind: 'simple', icon: found.icon, forceColor: 'black' };
+    }
     const found = ALL_SIMPLE_ICONS.find(({ icon }) => slugifyIconTitle(icon.title) === slug);
-    return found ? { kind: 'simple', icon: found.icon } : null;
+    if (!found) return null;
+    if (FORCE_WHITE_BRAND_TITLES.has(found.icon.title)) forceColor = 'white';
+    return { kind: 'simple', icon: found.icon, forceColor };
+  }
+
+  if (id.startsWith('local:')) {
+    const slug = id.slice('local:'.length);
+    const found = ALL_LOCAL_ICONS.find(({ icon }) => icon.slug === slug);
+    return found ? { kind: 'local', icon: found.icon } : null;
   }
 
   if (id.startsWith('lucide:')) {

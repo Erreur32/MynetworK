@@ -3,6 +3,7 @@
  *
  * Supported formats:
  *   - `simple:<slug>`  — a bundled simple-icons brand (picked from the catalog)
+ *   - `local:<slug>`   — a bundled local brand logo, not from simple-icons (picked from the catalog)
  *   - `lucide:<Name>`  — a bundled lucide-react fallback icon (picked from the catalog)
  *   - `custom:data:image/(png|jpeg|webp|svg+xml);base64,<...>` — user-imported icon
  *
@@ -19,7 +20,7 @@ const SVG_REJECT_PATTERNS = [/<script/i, /\son[a-z]+\s*=/i, /javascript:/i, /<fo
 export function isValidVendorIconId(value: unknown): value is string {
     if (typeof value !== 'string' || value.length === 0) return false;
 
-    if (value.startsWith('simple:') || value.startsWith('lucide:')) {
+    if (value.startsWith('simple:') || value.startsWith('local:') || value.startsWith('lucide:')) {
         return /^[a-z0-9-]{1,50}$/i.test(value.split(':', 2)[1] || '');
     }
 

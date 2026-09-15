@@ -101,34 +101,7 @@ const CopyButton: React.FC<{
     );
 };
 
-/** Calcule left/top du tooltip, centré horizontalement sur l'élément survolé (rect). Au-dessus si possible, sinon en dessous. Horizontalement : centré puis clamp tableau/fenêtre. */
-function getTooltipPosition(
-    rect: { left: number; top: number; bottom: number; right: number },
-    tooltipWidth: number,
-    tooltipHeight: number,
-    options?: TooltipPositionOptions
-): { left: number; top: number } {
-    const tableRect = options?.tableRect ?? null;
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 400;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 300;
-    const margin = 16;
-    let left = (rect.left + rect.right) / 2 - tooltipWidth / 2;
-    if (tableRect != null) {
-        left = Math.max(tableRect.left, Math.min(left, tableRect.right - tooltipWidth));
-    }
-    if (left + tooltipWidth > vw - margin) left = vw - tooltipWidth - margin;
-    if (left < margin) left = margin;
-    const aboveTop = rect.top - tooltipHeight - TOOLTIP_V_GAP;
-    const belowTop = rect.bottom + TOOLTIP_V_GAP;
-    const canAbove = aboveTop >= margin;
-    const canBelow = belowTop + tooltipHeight <= vh - margin;
-    let top = canAbove ? aboveTop : (canBelow ? belowTop : Math.max(margin, vh - margin - tooltipHeight));
-    if (top + tooltipHeight > vh - margin) top = Math.max(margin, vh - margin - tooltipHeight);
-    if (top < margin) top = margin;
-    return { left, top };
-}
-
-/** Variante ancrée par le bas : le bas du tooltip reste toujours juste au-dessus de la ligne survolée (rect.top), quelle que soit la hauteur réelle du contenu (qui grandit alors vers le haut, jamais vers le bas par-dessus la ligne). */
+/** Calcule left/bottom du tooltip, centré horizontalement sur l'élément survolé (rect). Le bas du tooltip reste toujours juste au-dessus de la ligne survolée (rect.top), quelle que soit la hauteur réelle du contenu (qui grandit alors vers le haut, jamais vers le bas par-dessus la ligne). */
 function getTooltipBottomPosition(
     rect: { left: number; top: number; bottom: number; right: number },
     tooltipWidth: number,
@@ -282,9 +255,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ ip: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const TOOLTIP_MAC_W = 320;
-    const TOOLTIP_MAC_H = 100;
     const TOOLTIP_IP_W = 320;
-    const TOOLTIP_IP_H = 100;
     const TOOLTIP_PORTS_W = 640;
     const tooltipHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -312,7 +283,16 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     }, []);
     const getEventRect = useCallback((e: React.MouseEvent) => {
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        return { left: r.left, top: r.top, bottom: r.bottom, right: r.right };
+        // Table cells stretch to the row's full height (tallest sibling cell), so a <td>'s own
+        // rect.top sits at the row's top edge, not near the actual hovered content. Anchoring
+        // tooltips there floats them well above the cursor. Extract a line-sized slice centered
+        // in the element instead, so cell-wide targets (<td>) line up with small ones (buttons).
+        const LINE_H = 20;
+        if (r.height <= LINE_H + 4) {
+            return { left: r.left, top: r.top, bottom: r.bottom, right: r.right };
+        }
+        const top = r.top + (r.height - LINE_H) / 2;
+        return { left: r.left, top, bottom: top + LINE_H, right: r.right };
     }, []);
 
     // Latency monitoring state
@@ -2536,11 +2516,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             {/* Hover tooltips tableau - au-dessus/en dessous de la ligne, horizontalement dans le tableau */}
             {macTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(macTooltip.rect, TOOLTIP_MAC_W, TOOLTIP_MAC_H, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(macTooltip.rect, TOOLTIP_MAC_W, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(340px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                     onMouseEnter={cancelTooltipHide}
                     onMouseLeave={hideAllTooltips}
                     >
@@ -2604,11 +2584,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {actionsTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(actionsTooltip.rect, 280, 104, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(actionsTooltip.rect, 280, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
@@ -2620,11 +2600,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {scatterIconTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(scatterIconTooltip.rect, 260, 70, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(scatterIconTooltip.rect, 260, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(260px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
@@ -2635,11 +2615,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {ipTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(ipTooltip.rect, TOOLTIP_IP_W, TOOLTIP_IP_H, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(ipTooltip.rect, TOOLTIP_IP_W, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(340px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
@@ -2654,11 +2634,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {firstSeenTooltip && (() => {
                 const tr = tableContainerRef.current?.getBoundingClientRect();
-                const pos = getTooltipPosition(firstSeenTooltip.rect, 280, 170, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
+                const pos = getTooltipBottomPosition(firstSeenTooltip.rect, 280, tr ? { tableRect: { left: tr.left, right: tr.right } } : undefined);
                 return (
                     <div
                         className="fixed z-[100] rounded-xl border border-gray-600/80 bg-[#141414] shadow-2xl shadow-black/50 backdrop-blur-sm py-4 px-5 w-[min(280px,calc(100vw-32px))]"
-                        style={{ left: pos.left, top: pos.top }}
+                        style={{ left: pos.left, bottom: pos.bottom }}
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >

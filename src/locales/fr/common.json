@@ -166,6 +166,28 @@
       "stale": "Ghost",
       "staleHint": "Appareils vus uniquement par Freebox alors qu'inactifs — probablement du cache après migration vers UniFi DHCP"
     },
+    "ports": {
+      "down": "Down — pas de lien",
+      "uplinkParent": "Uplink → parent",
+      "uplinkChild": "Uplink ← enfant",
+      "fibre": "Fibre / SFP+",
+      "wiredClient": "Client filaire",
+      "colorSlate": "slate",
+      "colorPurple": "mauve",
+      "colorCyan": "cyan",
+      "colorGreen": "vert",
+      "portLabel": "Port {{idx}}",
+      "poeActive": "• Point ambre = PoE actif",
+      "poeBadge": "PoE actif",
+      "snapshotNote": "• Disposition en cache (appareil hors ligne)",
+      "cachedTooltip": "Disposition des ports rejouée depuis une capture en cache — l'appareil était hors ligne au moment du scan",
+      "cachedBadge": "cache"
+    },
+    "vm": {
+      "activeVms": "VM actives",
+      "inactiveVms": "VM inactives / hors ligne"
+    },
+    "speedBadge": "Débit du port : {{mbps}} Mbps",
     "fitView": "Recentrer",
     "editLayout": "Édition",
     "editLayoutOn": "Édition active",

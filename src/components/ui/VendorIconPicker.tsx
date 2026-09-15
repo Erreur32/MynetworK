@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Upload, RotateCcw, Pencil, type LucideIcon } from 'lucide-react';
 import type { SimpleIcon } from 'simple-icons';
 import { useClickOutside } from '../../hooks';
-import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry, type ResolvedVendorIcon, type IconCategory } from '../../utils/vendorBrand';
+import { getVendorIconCatalog, resolveVendorIconId, type VendorIconCatalogEntry, type ResolvedVendorIcon, type IconCategory, type LocalBrandIcon } from '../../utils/vendorBrand';
 import { BrandSvgIcon } from './VendorIcon';
 
 // Fixed display order for category sections in the picker (most common home-network
@@ -27,7 +27,8 @@ interface VendorIconPreviewProps {
 }
 
 const CatalogIconPreview: React.FC<VendorIconPreviewProps> = ({ entry, size = 18 }) => {
-  if (entry.kind === 'simple') return <BrandSvgIcon icon={entry.icon as SimpleIcon} size={size} />;
+  if (entry.kind === 'simple') return <BrandSvgIcon icon={entry.icon as SimpleIcon} size={size} forceColor={entry.forceColor} />;
+  if (entry.kind === 'local') { const local = entry.icon as LocalBrandIcon; return <img src={local.url} width={size} height={size} alt={local.title} />; }
   const Icon = entry.icon as LucideIcon;
   return <Icon size={size} />;
 };
@@ -35,7 +36,8 @@ const CatalogIconPreview: React.FC<VendorIconPreviewProps> = ({ entry, size = 18
 /** Trigger button preview for the currently resolved icon, or an empty placeholder when unset. */
 const ResolvedIconPreview: React.FC<{ resolved: ResolvedVendorIcon | null; size?: number }> = ({ resolved, size = 14 }) => {
   if (!resolved) return <span className="w-3.5 h-3.5 rounded-full border border-dashed border-gray-600" />;
-  if (resolved.kind === 'simple') return <BrandSvgIcon icon={resolved.icon} size={size} />;
+  if (resolved.kind === 'simple') return <BrandSvgIcon icon={resolved.icon} size={size} forceColor={resolved.forceColor} />;
+  if (resolved.kind === 'local') return <img src={resolved.icon.url} width={size} height={size} alt={resolved.icon.title} />;
   if (resolved.kind === 'lucide') return <resolved.icon size={size} />;
   return <img src={resolved.dataUrl} width={size} height={size} alt="" />;
 };

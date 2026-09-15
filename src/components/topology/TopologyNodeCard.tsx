@@ -4,6 +4,8 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers } from 'lucide-react';
 import {
@@ -208,21 +210,21 @@ function pickPortClass(port: SwitchPort): string {
     return 'bg-emerald-500 text-white border-emerald-300';
 }
 
-function portCategoryLabel(port: SwitchPort): string {
-    if (!port.up) return 'Down — pas de lien (slate)';
-    if (port.localUplink) return 'Uplink → parent (mauve)';
-    if (port.uplink) return 'Uplink ← enfant (mauve)';
-    if (isFibrePort(port)) return 'Fibre / SFP+ (cyan)';
-    return 'Client filaire (vert)';
+function portCategoryLabel(port: SwitchPort, t: TFunction): string {
+    if (!port.up) return `${t('topology.ports.down')} (${t('topology.ports.colorSlate')})`;
+    if (port.localUplink) return `${t('topology.ports.uplinkParent')} (${t('topology.ports.colorPurple')})`;
+    if (port.uplink) return `${t('topology.ports.uplinkChild')} (${t('topology.ports.colorPurple')})`;
+    if (isFibrePort(port)) return `${t('topology.ports.fibre')} (${t('topology.ports.colorCyan')})`;
+    return `${t('topology.ports.wiredClient')} (${t('topology.ports.colorGreen')})`;
 }
 
-function portTooltip(port: SwitchPort): string {
+function portTooltip(port: SwitchPort, t: TFunction): string {
     const name = port.name ? ` — ${port.name}` : '';
-    const category = portCategoryLabel(port);
+    const category = portCategoryLabel(port, t);
     const speedSeg = port.up && port.speed ? ` · ${port.speed} Mbps` : '';
     const mediaSeg = port.media ? ` · ${port.media}` : '';
-    const poeSeg = port.poe && port.up ? '\n• Point ambre = PoE actif' : '';
-    return `Port ${port.idx}${name}\n• ${category}${speedSeg}${mediaSeg}${poeSeg}`;
+    const poeSeg = port.poe && port.up ? `\n${t('topology.ports.poeActive')}` : '';
+    return `${t('topology.ports.portLabel', { idx: port.idx })}${name}\n• ${category}${speedSeg}${mediaSeg}${poeSeg}`;
 }
 
 export const SwitchPortGrid: React.FC<{
@@ -233,26 +235,27 @@ export const SwitchPortGrid: React.FC<{
      *  at scan time). Grid renders dimmed and the tooltip flags it. */
     fromSnapshot?: boolean;
 }> = ({ ports, cellSize = 'sm', wrap = true, fromSnapshot = false }) => {
+    const { t } = useTranslation();
     // xs is used by the infra card's bottom port row. Width MUST match the
     // handle math (`xPx = 20 + gridIdx * 26`) so the edge endpoints land on
     // the centre of each port cell.
     const cls = cellSize === 'sm' ? 'w-[26px] h-[22px] text-[10px]' : 'w-[24px] h-[20px] text-[10px]';
     const wrapClass = wrap ? 'flex-wrap' : 'flex-nowrap';
     const dimClass = fromSnapshot ? 'opacity-50 grayscale' : '';
-    const snapshotNote = fromSnapshot ? '\n• Layout cached (device offline)' : '';
+    const snapshotNote = fromSnapshot ? `\n${t('topology.ports.snapshotNote')}` : '';
     return (
         <div className={`flex ${wrapClass} gap-0.5 ${dimClass}`}>
             {ports.map(p => (
                 <div
                     key={p.idx}
-                    title={portTooltip(p) + snapshotNote}
+                    title={portTooltip(p, t) + snapshotNote}
                     className={`relative flex items-center justify-center rounded-sm border font-mono font-bold leading-none ${cls} ${pickPortClass(p)}`}
                 >
                     {p.idx}
                     {p.poe && p.up && (
                         <span
                             className="absolute -top-1 -right-1 block w-2.5 h-2.5 rounded-full bg-amber-400 ring-1 ring-amber-200 shadow-md pointer-events-none"
-                            aria-label="PoE active"
+                            aria-label={t('topology.ports.poeBadge')}
                         />
                     )}
                 </div>
@@ -315,6 +318,7 @@ function pickRingClass(editingActive: boolean, selected: boolean, styleRing: str
 }
 
 const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
+    const { t } = useTranslation();
     if (d.kind !== 'vm-host') return null;
     const vmCount = d.vmCount ?? 0;
     const activeCount = d.vmActiveCount;
@@ -328,7 +332,7 @@ const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
             {typeof activeCount === 'number' && activeCount > 0 && (
                 <span
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-emerald-500/15 text-emerald-200 border-emerald-400/40 font-mono"
-                    title="Active VMs"
+                    title={t('topology.vm.activeVms')}
                 >
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     {activeCount}
@@ -337,7 +341,7 @@ const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
             {typeof inactiveCount === 'number' && inactiveCount > 0 && (
                 <span
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-rose-500/10 text-rose-200 border-rose-400/30 font-mono"
-                    title="Inactive / offline VMs"
+                    title={t('topology.vm.inactiveVms')}
                 >
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" />
                     {inactiveCount}
@@ -352,14 +356,17 @@ const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
     );
 };
 
-const StatusDot: React.FC<{ inactive: boolean }> = ({ inactive }) => (
-    <div
-        title={inactive ? 'Inactive / offline' : 'Active'}
-        className={`absolute top-1 right-1 z-10 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
-            inactive ? 'bg-rose-500' : 'bg-emerald-500'
-        }`}
-    />
-);
+const StatusDot: React.FC<{ inactive: boolean }> = ({ inactive }) => {
+    const { t } = useTranslation();
+    return (
+        <div
+            title={inactive ? t('topology.status.offline') : t('topology.status.online')}
+            className={`absolute top-1 right-1 z-10 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${
+                inactive ? 'bg-rose-500' : 'bg-emerald-500'
+            }`}
+        />
+    );
+};
 
 // Compact speed badge for wired-client cards — sits in the top-right corner,
 // just left of the StatusDot. Shows the negotiated port speed at a glance
@@ -375,11 +382,12 @@ function formatSpeedBadge(mbps?: number): string | null {
 }
 
 const SpeedBadge: React.FC<{ mbps?: number }> = ({ mbps }) => {
+    const { t } = useTranslation();
     const text = formatSpeedBadge(mbps);
     if (!text) return null;
     return (
         <div
-            title={`Port speed ${mbps} Mbps`}
+            title={t('topology.speedBadge', { mbps })}
             className={`absolute top-1 right-5 z-10 px-1 py-px text-[9px] font-semibold leading-none rounded border ${chipClassForWired(mbps)}`}
         >
             {text}
@@ -388,6 +396,7 @@ const SpeedBadge: React.FC<{ mbps?: number }> = ({ mbps }) => {
 };
 
 export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
+    const { t } = useTranslation();
     const d = data as TopologyNodeData;
     const style = KIND_STYLE[d.kind] ?? KIND_STYLE.unknown;
     const isInfra = INFRA_KINDS_SET.has(d.kind);
@@ -567,9 +576,9 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                     {d.portsFromSnapshot && (
                         <div
                             className="absolute top-0 right-1 -translate-y-1/2 px-1 py-px rounded text-[8px] font-semibold uppercase tracking-wide bg-slate-700 text-slate-300 border border-slate-600 z-10"
-                            title="Port layout replayed from a cached snapshot — device was offline at scan time"
+                            title={t('topology.ports.cachedTooltip')}
                         >
-                            cached
+                            {t('topology.ports.cachedBadge')}
                         </div>
                     )}
                     <SwitchPortGrid

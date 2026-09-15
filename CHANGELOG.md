@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.25] - 2026-09-15
+
+### Added
+
+- Real brand logos for Netatmo, VMware, Debian, Veeam, Freebox (generic + Ultra/Revolution/Pop models) and UniFi (+ dedicated UniFi AP icon), via a new `local:<slug>` bundled-icon tier alongside the existing simple-icons/lucide/custom tiers.
+- Generic device-family icons selectable in the vendor-icon picker: switch stack, rack bay, network hub, Wi-Fi antenna, wired cable/Ethernet port, alarm siren, sensor probe, solar panel.
+- Selectable black/white color variants for near-black brand marks (Apple, Linksys, LIFX, Bose, Sonos, Corsair, DJI) that were nearly invisible against this app's dark-only themes; auto-detection defaults to white.
+
+### Fixed
+
+- `/network-scan` column tooltips (MAC, IP, Actions, monitoring, First seen) are now consistently bottom-anchored to the hovered row, like the existing Latency/Ports tooltips, instead of floating at an inconsistent height above cell-wide hover targets.
+- Vendor-icon picker crash when previewing a `local:` icon (rendered as a Lucide component instead of an `<img>`), which broke the vendor edit overlay on `/network-scan`.
+- Server-side `vendor_icon` validation rejected the new `local:` icon id prefix.
+- Several `/topology` port and VM tooltips were hardcoded in French or English instead of following the selected app language.
+
+---
+
 ## [0.10.24] - 2026-09-15
 
 ### Added
