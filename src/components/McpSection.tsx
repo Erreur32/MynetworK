@@ -30,6 +30,15 @@ import { Section, SettingRow } from "../pages/SettingsPage";
 import { api } from "../api/client";
 import { Toggle } from "./ui/Toggle";
 
+interface McpSessionSummary {
+  tokenId: number | null;
+  tokenName: string | null;
+  ip: string;
+  userAgent: string;
+  connectedAt: string;
+  lastActivity: string;
+}
+
 interface McpStatus {
   enabled: boolean;
   runtimeEnabled: boolean;
@@ -38,6 +47,7 @@ interface McpStatus {
   hostIp: string | null;
   dashboardPort: string;
   activeSessions: number;
+  sessions: McpSessionSummary[];
 }
 
 type McpTokenAccessLevel = "full" | "read_only";
@@ -257,6 +267,11 @@ export const McpSection: React.FC<{
   useEffect(() => {
     loadStatus();
     loadTokens();
+
+    // Active sessions (client connect/disconnect) can change without any
+    // action in this tab, so poll instead of relying on a manual refresh.
+    const interval = setInterval(() => loadStatus({ silent: true }), 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -495,20 +510,20 @@ export const McpSection: React.FC<{
     }
   };
 
-  const loadStatus = async () => {
-    setIsLoading(true);
+  const loadStatus = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setIsLoading(true);
     setError(null);
     try {
       const response = await api.get<McpStatus>("/api/mcp/status");
       if (response.success && response.result) {
         setStatus(response.result);
-      } else {
+      } else if (!options?.silent) {
         setError(t("admin.mcp.loadError"));
       }
     } catch {
-      setError(t("admin.mcp.loadError"));
+      if (!options?.silent) setError(t("admin.mcp.loadError"));
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) setIsLoading(false);
     }
   };
 
@@ -663,6 +678,41 @@ export const McpSection: React.FC<{
                           })}
                   </span>
                 </SettingRow>
+
+                {status.sessions.length > 0 && (
+                  <div className="mb-4 border border-theme rounded-lg divide-y divide-theme overflow-hidden">
+                    {status.sessions.map((session, index) => (
+                      <div
+                        key={`${session.ip}-${session.connectedAt}-${index}`}
+                        className="flex flex-col gap-1 p-3 bg-theme-secondary text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 font-medium text-theme-primary">
+                            <KeyRound size={12} className="text-cyan-400" />
+                            {session.tokenName ??
+                              t("admin.mcp.sessionUnknownToken")}
+                          </span>
+                          <code className="text-theme-secondary bg-theme-tertiary px-1.5 py-0.5 rounded">
+                            {session.ip}
+                          </code>
+                        </div>
+                        <div className="text-theme-secondary truncate" title={session.userAgent}>
+                          {session.userAgent}
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-theme-secondary">
+                          <span>
+                            {t("admin.mcp.sessionConnectedAt")}{" "}
+                            {formatDate(session.connectedAt)}
+                          </span>
+                          <span>
+                            {t("admin.mcp.sessionLastActivity")}{" "}
+                            {formatDate(session.lastActivity)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <button
                   type="button"

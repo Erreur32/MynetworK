@@ -14,21 +14,15 @@ import {
 } from "../middleware/mcpAuthMiddleware.js";
 import {
   registerMcpSession,
+  touchMcpSession,
   unregisterMcpSession,
+  getMcpSessionInfo,
+  getActiveMcpSessions,
 } from "../mcp/sessionRegistry.js";
 import { logger } from "../utils/logger.js";
 
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
-
-interface SessionEntry {
-  transport: StreamableHTTPServerTransport;
-  lastActivity: number;
-  // Token that created this session: every subsequent request against it must
-  // present the same token, so a different (e.g. lower-privileged) valid MCP
-  // token can't inherit this session's permissions just by reusing its id.
-  tokenId: number | undefined;
-}
 
 function sessionOwnershipError(res: Response): void {
   res.status(401).json({
@@ -38,29 +32,27 @@ function sessionOwnershipError(res: Response): void {
   });
 }
 
-const sessions = new Map<string, SessionEntry>();
-
-function touchSession(sessionId: string): void {
-  const entry = sessions.get(sessionId);
-  if (entry) entry.lastActivity = Date.now();
-}
+// Transport objects live only here, never in sessionRegistry: the registry
+// exposes session metadata (token, IP, user-agent, activity) to the admin
+// UI, but transport internals stay private to this router.
+const transports = new Map<string, StreamableHTTPServerTransport>();
 
 function closeSession(sessionId: string): void {
-  const entry = sessions.get(sessionId);
-  if (!entry) return;
-  sessions.delete(sessionId);
-  unregisterMcpSession();
-  entry.transport.close().catch((error: Error) => {
+  const transport = transports.get(sessionId);
+  if (!transport) return;
+  transports.delete(sessionId);
+  unregisterMcpSession(sessionId);
+  transport.close().catch((error: Error) => {
     logger.warn("MCP", `Error closing session ${sessionId}: ${error.message}`);
   });
 }
 
 const sweepInterval = setInterval(() => {
   const now = Date.now();
-  for (const [sessionId, entry] of sessions) {
-    if (now - entry.lastActivity > SESSION_IDLE_TIMEOUT_MS) {
-      logger.debug("MCP", `Closing idle session ${sessionId}`);
-      closeSession(sessionId);
+  for (const info of getActiveMcpSessions()) {
+    if (now - info.lastActivity > SESSION_IDLE_TIMEOUT_MS) {
+      logger.debug("MCP", `Closing idle session ${info.sessionId}`);
+      closeSession(info.sessionId);
     }
   }
 }, SESSION_SWEEP_INTERVAL_MS);
@@ -73,22 +65,24 @@ router.post("/", async (req: McpAuthenticatedRequest, res: Response) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   let transport: StreamableHTTPServerTransport;
 
-  if (sessionId && sessions.has(sessionId)) {
-    const entry = sessions.get(sessionId)!;
-    if (entry.tokenId !== req.mcpTokenId) {
+  if (sessionId && transports.has(sessionId)) {
+    const info = getMcpSessionInfo(sessionId);
+    if (!info || info.tokenId !== req.mcpTokenId) {
       sessionOwnershipError(res);
       return;
     }
-    touchSession(sessionId);
-    transport = entry.transport;
+    touchMcpSession(sessionId);
+    transport = transports.get(sessionId)!;
   } else if (!sessionId && isInitializeRequest(req.body)) {
     const tokenId = req.mcpTokenId;
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const userAgent = req.headers["user-agent"] || "unknown";
     const server = createMynetworkMcpServer(tokenId);
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (newSessionId: string) => {
-        sessions.set(newSessionId, { transport, lastActivity: Date.now(), tokenId });
-        registerMcpSession();
+        transports.set(newSessionId, transport);
+        registerMcpSession(newSessionId, tokenId, ip, userAgent);
         logger.info("MCP", `Session initialized: ${newSessionId}`);
       },
       onsessionclosed: (closedSessionId: string) => {
@@ -117,9 +111,10 @@ async function handleSessionRequest(
   res: Response,
 ): Promise<void> {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  const entry = sessionId ? sessions.get(sessionId) : undefined;
+  const transport = sessionId ? transports.get(sessionId) : undefined;
+  const info = sessionId ? getMcpSessionInfo(sessionId) : undefined;
 
-  if (!entry) {
+  if (!transport || !info) {
     res.status(400).json({
       jsonrpc: "2.0",
       error: { code: -32000, message: "Invalid or missing session ID" },
@@ -128,13 +123,13 @@ async function handleSessionRequest(
     return;
   }
 
-  if (entry.tokenId !== req.mcpTokenId) {
+  if (info.tokenId !== req.mcpTokenId) {
     sessionOwnershipError(res);
     return;
   }
 
-  touchSession(sessionId!);
-  await entry.transport.handleRequest(req, res);
+  touchMcpSession(sessionId!);
+  await transport.handleRequest(req, res);
 }
 
 router.get("/", handleSessionRequest);

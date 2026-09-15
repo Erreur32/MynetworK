@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.24] - 2026-09-15
+
+### Added
+
+- MCP admin panel: connected sessions now show token name, client IP, user-agent, connection time and last activity, instead of a bare count.
+- MCP Overview tab now polls status every 15s so connected sessions update without a manual page refresh.
+
+### Changed
+
+- Session tracking (`server/mcp/sessionRegistry.ts`) moved from a simple counter to per-session metadata, resolved against the owning MCP token.
+
+---
+
 ## [0.10.23] - 2026-09-14
 
 ### Added

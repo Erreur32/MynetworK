@@ -12,7 +12,8 @@ import {
 } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { logger } from "../utils/logger.js";
-import { getActiveMcpSessionCount } from "../mcp/sessionRegistry.js";
+import { getActiveMcpSessions } from "../mcp/sessionRegistry.js";
+import { McpTokenRepository } from "../database/models/McpToken.js";
 
 const router = Router();
 
@@ -22,6 +23,17 @@ router.get(
   requireAdmin,
   asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
     const status = mcpAuthService.getStatus();
+    const sessions = getActiveMcpSessions().map((session) => ({
+      tokenId: session.tokenId ?? null,
+      tokenName: session.tokenId
+        ? (McpTokenRepository.findById(session.tokenId)?.name ?? null)
+        : null,
+      ip: session.ip,
+      userAgent: session.userAgent,
+      connectedAt: new Date(session.connectedAt).toISOString(),
+      lastActivity: new Date(session.lastActivity).toISOString(),
+    }));
+
     res.json({
       success: true,
       result: {
@@ -34,7 +46,8 @@ router.get(
         // server startup banner. hostIp is null when HOST_IP isn't set.
         hostIp: process.env.HOST_IP || null,
         dashboardPort: process.env.DASHBOARD_PORT || "7505",
-        activeSessions: getActiveMcpSessionCount(),
+        activeSessions: sessions.length,
+        sessions,
       },
     });
   }),
