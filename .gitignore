@@ -15,6 +15,7 @@ dist-ssr
 
 # AI tools & dev assistants
 CLAUDE.md
+TODO.md
 .claude/
 .claude.*
 .cursorrules

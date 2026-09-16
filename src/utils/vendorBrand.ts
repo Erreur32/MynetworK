@@ -84,7 +84,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Plug, Thermometer, Clock, Router, Radio, Lightbulb, Tv, Monitor,
   Smartphone, Tablet, Laptop, HardDrive, Wifi, Globe, Car, Printer, Camera, Speaker, Gamepad2, Server,
-  AppWindow, Layers, Boxes, Network, Antenna, Cable, EthernetPort, Siren, Gauge, Sun
+  AppWindow, Layers, Boxes, Network, Antenna, Cable, EthernetPort, Siren, Gauge, Sun, Mouse, Package, BatteryCharging
 } from 'lucide-react';
 import netatmoLogo from '../icons/logo_netatmo.svg';
 import vmwareLogo from '../icons/logo_vmware.svg';
@@ -106,7 +106,9 @@ export type IconCategory =
 // "TP-Link" doesn't get shadowed by a shorter unrelated match.
 const VENDOR_MATCHERS: Array<{ pattern: RegExp; icon: SimpleIcon; category: IconCategory }> = [
   { pattern: /raspberry\s*pi/i, icon: siRaspberrypi, category: 'computer' },
-  { pattern: /philips\s*hue|signify/i, icon: siPhilipshue, category: 'smarthome' },
+  // "Philips Lighting BV" is Signify's legal name before its 2018 rebrand — same
+  // company, same Hue product line, still seen on older device OUI registrations.
+  { pattern: /philips\s*hue|signify|philips\s*lighting/i, icon: siPhilipshue, category: 'smarthome' },
   { pattern: /tp-?link|\btapo\b/i, icon: siTplink, category: 'network' },
   { pattern: /synology/i, icon: siSynology, category: 'storage' },
   { pattern: /qnap/i, icon: siQnap, category: 'storage' },
@@ -311,6 +313,15 @@ const VENDOR_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon; 
   // Amazon has no free-licensed logo in simple-icons (same restriction as Windows/Microsoft).
   { pattern: /amazon.*alexa|\becho\s*dot\b|\becho\s*show\b/i, icon: Speaker, category: 'media' },
   { pattern: /amazon.*fire\s*tv|firetv/i, icon: Tv, category: 'media' },
+  // Catch-all for the plain "Amazon Technologies Inc." OUI vendor string (Kindle,
+  // Fire tablets, other Amazon hardware not caught by the more specific patterns above).
+  { pattern: /\bamazon\b/i, icon: Package, category: 'generic' },
+  // Microsoft has no free-licensed logo in simple-icons either (same restriction);
+  // covers the "Microsoft Corporation" OUI vendor string (Surface, Xbox, generic NICs).
+  { pattern: /\bmicrosoft\b/i, icon: AppWindow, category: 'computer' },
+  { pattern: /\bnintendo\b/i, icon: Gamepad2, category: 'gaming' },
+  { pattern: /\blogitech\b/i, icon: Mouse, category: 'computer' },
+  { pattern: /\becobee\b/i, icon: Thermometer, category: 'smarthome' },
   // Printer brands with no simple-icons logo.
   { pattern: /\bcanon\b/i, icon: Printer, category: 'printer' },
   { pattern: /\bbrother\b/i, icon: Printer, category: 'printer' },
@@ -348,7 +359,10 @@ const LABEL_ICON_FALLBACK_MATCHERS: Array<{ pattern: RegExp; icon: LucideIcon; c
   { pattern: /lametric/i, icon: Clock, category: 'smarthome' },
   // Windows has no free-licensed logo in simple-icons (same restriction as
   // Microsoft/Amazon); only default Windows hostnames reveal the OS.
-  { pattern: /^desktop-|^laptop-|^win-\d|\bwindows\b|\bwin1[01]\b/i, icon: AppWindow, category: 'computer' }
+  { pattern: /^desktop-|^laptop-|^win-\d|\bwindows\b|\bwin1[01]\b/i, icon: AppWindow, category: 'computer' },
+  // Anker (chargers, power banks, accessories) has no registered OUI block of its
+  // own — only the device's hostname/label reveals the brand.
+  { pattern: /\banker\b/i, icon: BatteryCharging, category: 'smarthome' }
 ];
 
 export function getVendorIconFallbackFromLabel(label?: string | null): LucideIcon | null {

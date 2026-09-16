@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.29] - 2026-09-16
+
+### Added
+
+- Vendor icon fallbacks for Microsoft, Amazon (generic catch-all), Nintendo, Logitech and Ecobee OUI vendor strings, and for Anker (label-only, no registered OUI block).
+- Extended the Philips Hue matcher to also cover "Philips Lighting BV" (Signify's legal name before its 2018 rebrand), still seen on older device OUI registrations.
+
+---
+
 ## [0.10.28] - 2026-09-16
 
 ### Fixed
