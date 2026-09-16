@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.27] - 2026-09-16
+
+### Security
+
+- Override `proxy-addr` (transitive dependency of Express) to 2.0.8, fixing a critical user impersonation vulnerability (CVE-2026-90711 / GHSA-jqcg-44mw-7w3h) flagged by Snyk code scanning.
+
+---
+
 ## [0.10.26] - 2026-09-16
 
 ### Added
