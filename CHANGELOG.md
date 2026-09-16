@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.26] - 2026-09-16
+
+### Added
+
+- Freebox OS API version displayed in the Freebox plugin card, next to the Server/Player firmware versions.
+
+### Fixed
+
+- Forcing a Freebox firmware check ("Check now") displayed nothing until navigating away and back: the `force` endpoint returned the scrape result without merging it with the currently installed firmware, so `currentVersion`/`updateAvailable` stayed empty.
+
+---
+
 ## [0.10.25] - 2026-09-15
 
 ### Added

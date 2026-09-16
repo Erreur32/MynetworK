@@ -187,6 +187,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
     // Helpers for Freebox plugin: firmware / update status when exposed by backend
     let freeboxModelName: string | undefined;
+    let freeboxApiVersion: string | undefined;
     let freeboxVersion: string | undefined;
     let freeboxPlayerVersion: string | undefined;
     let freeboxUpdateAvailable: boolean | undefined;
@@ -488,6 +489,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         const sys: any = (stats as any).system;
         // Box model name (e.g. "Freebox Ultra", "Freebox Pop")
         freeboxModelName = sys.boxModelName as string | undefined;
+
+        // Freebox OS API version (e.g. "11.0")
+        freeboxApiVersion = sys.apiVersion as string | undefined;
 
         // Box firmware: prefer normalized field from backend, then raw system fields as fallback
         freeboxVersion =
@@ -1251,10 +1255,15 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 {/* Freebox, Firmware and LAN Network - Labels on first line, data on second line */}
                                 <div className="space-y-1">
                                     {/* First line: Labels */}
-                                    <div className="grid grid-cols-4 gap-4 items-center">
+                                    <div className="grid grid-cols-5 gap-4 items-center">
                                         <div className="flex flex-col">
                                             <span className="text-gray-500 text-[10px] uppercase tracking-wide">Freebox</span>
                                         </div>
+                                        {freeboxApiVersion ? (
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-gray-500 uppercase tracking-wide">API</span>
+                                            </div>
+                                        ) : <div></div>}
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
                                                 <span className="text-[10px] text-gray-500 uppercase tracking-wide">Firmware</span>
@@ -1290,10 +1299,15 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                     
                                     {/* Second line: Data */}
-                                    <div className="grid grid-cols-4 gap-4 items-center">
+                                    <div className="grid grid-cols-5 gap-4 items-center">
                                         <div className="flex flex-col">
                                             <span className="text-gray-400 text-xs">{freeboxModelName || 'Freebox'}</span>
                                         </div>
+                                        {freeboxApiVersion ? (
+                                            <div className="flex flex-col">
+                                                <span className="text-sm text-gray-100 font-semibold">v{freeboxApiVersion}</span>
+                                            </div>
+                                        ) : <div></div>}
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">

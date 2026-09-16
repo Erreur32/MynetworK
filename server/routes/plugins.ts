@@ -185,23 +185,27 @@ router.get('/stats/all', requireAuth, asyncHandler(async (req: AuthenticatedRequ
     }
 }), autoLog('plugin.getAllStats', 'plugin'));
 
-// GET /api/plugins/freebox/firmware-check - Get Freebox firmware update status (from blog scrape)
-router.get('/freebox/firmware-check', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    let currentBoxFirmware: string | undefined;
-    let currentPlayerFirmware: string | undefined;
-
+// Reads the currently installed Freebox Server/Player firmware versions, if the plugin is enabled/connected
+async function getCurrentFreeboxFirmwareVersions(): Promise<{ box?: string; player?: string }> {
     try {
         const stats = await pluginManager.getPluginStats('freebox');
         const sys = (stats as any)?.system;
         if (sys) {
-            currentBoxFirmware = sys.firmware || sys.firmware_version || sys.version;
-            currentPlayerFirmware = sys.playerFirmware || sys.player_firmware || sys.player_firmware_version || sys.player_version;
+            return {
+                box: sys.firmware || sys.firmware_version || sys.version,
+                player: sys.playerFirmware || sys.player_firmware || sys.player_firmware_version || sys.player_version,
+            };
         }
     } catch {
         // Freebox plugin may not be enabled or connected
     }
+    return {};
+}
 
-    const info = freeboxFirmwareCheckService.getLatestFirmwareInfo(currentBoxFirmware, currentPlayerFirmware);
+// GET /api/plugins/freebox/firmware-check - Get Freebox firmware update status (from blog scrape)
+router.get('/freebox/firmware-check', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { box, player } = await getCurrentFreeboxFirmwareVersions();
+    const info = freeboxFirmwareCheckService.getLatestFirmwareInfo(box, player);
     if (!info) {
         return res.json({
             success: true,
@@ -239,7 +243,10 @@ router.post('/freebox/firmware-check/config', requireAuth, requireAdmin, asyncHa
 
 // POST /api/plugins/freebox/firmware-check/force - Force immediate firmware check (admin only)
 router.post('/freebox/firmware-check/force', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const info = await freeboxFirmwareCheckService.forceCheck();
+    await freeboxFirmwareCheckService.forceCheck();
+
+    const { box, player } = await getCurrentFreeboxFirmwareVersions();
+    const info = freeboxFirmwareCheckService.getLatestFirmwareInfo(box, player);
     res.json({ success: true, result: info });
 }));
 
