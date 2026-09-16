@@ -143,7 +143,9 @@ class FreeboxFirmwareCheckService {
       if (!blockTrimmed || blockTrimmed.length < 40) continue;
 
       // Try Server pattern: "Mise à jour du Freebox Server (Revolution/Pop/Delta/Ultra) 4.9.16"
-      const serverMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Server\s{0,5}\([^)]{1,50}\)\s{1,5}(\d{1,5}(?:\.\d{1,5}){1,3})/i); // NOSONAR S5852 bounded quantifiers
+      // The model list in parentheses is omitted for releases shipped to all models (e.g. "Freebox Server 4.13.0"),
+      // so it must stay optional or those posts are silently skipped.
+      const serverMatch = blockTrimmed.match(/Mise\s{1,5}[àa]\s{1,5}jour\s{1,5}du\s{1,5}Freebox\s{1,5}Server(?:\s{0,5}\([^)]{1,50}\))?\s{1,5}(\d{1,5}(?:\.\d{1,5}){1,3})/i); // NOSONAR S5852 bounded quantifiers
       if (serverMatch) {
         const version = serverMatch[1];
         const dateMatch = blockTrimmed.match(DATE_PATTERN);

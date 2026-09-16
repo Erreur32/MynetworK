@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.28] - 2026-09-16
+
+### Fixed
+
+- Freebox firmware check missed general releases shipped to all models (e.g. "Freebox Server 4.13.0"): the blog scraper's regex required a parenthetical model list ("(Pop)", "(Ultra)", ...) that is omitted on those posts, silently skipping them.
+
+---
+
 ## [0.10.27] - 2026-09-16
 
 ### Security
