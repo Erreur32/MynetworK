@@ -124,11 +124,42 @@ function buildPortByChild(edges: Edge[]): Map<string, number> {
   return m;
 }
 
+// Parses a dotted-quad IPv4 string into a comparable 32-bit integer.
+// Returns undefined for anything that isn't a valid IPv4 (missing IP, IPv6,
+// hostname-only entries) so those sort after every valid IP instead of
+// throwing off the comparison.
+function ipv4SortKey(ip: string | undefined): number | undefined {
+  if (!ip) return undefined;
+  const parts = ip.split(".");
+  if (parts.length !== 4) return undefined;
+  let n = 0;
+  for (const part of parts) {
+    const v = Number(part);
+    if (!Number.isInteger(v) || v < 0 || v > 255) return undefined;
+    n = n * 256 + v;
+  }
+  return n;
+}
+
+// Per-child IP (as a sortable integer). Wifi clients and VMs have no
+// physical port to order by, so this is the tie-break that gives them a
+// meaningful order (smallest IP first) instead of arbitrary insertion order.
+function buildIpByChild(clientNodes: Node[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const c of clientNodes) {
+    const ip = (c.data as TopologyNodeData | undefined)?.ip;
+    const key = ipv4SortKey(ip);
+    if (key !== undefined) m.set(c.id, key);
+  }
+  return m;
+}
+
 function bucketChildren(
   clientNodes: Node[],
   parentByClient: Map<string, string>,
   orphanKey: string,
   portByChild: Map<string, number>,
+  ipByChild: Map<string, number>,
 ): Map<string, string[]> {
   const childrenByParent = new Map<string, string[]>();
   for (const c of clientNodes) {
@@ -137,14 +168,20 @@ function bucketChildren(
     if (bucket) bucket.push(c.id);
     else childrenByParent.set(parent, [c.id]);
   }
-  // Order children by their physical switch port (port 1 first → leftmost).
-  // Children without a port number sort AFTER the numbered ones, preserving
-  // their original insertion order (stable sort).
+  // Order children by their physical switch port first (port 1 first →
+  // leftmost) — matches the physical layout of the switch above. Children
+  // without a port number (wifi clients, VMs) are all tied at Infinity, so
+  // the IP tie-break decides their order (smallest IP first). Children with
+  // neither a port nor a valid IP fall back to their original insertion
+  // order (stable sort).
   for (const children of childrenByParent.values()) {
     children.sort((a, b) => {
       const pa = portByChild.get(a) ?? Number.POSITIVE_INFINITY;
       const pb = portByChild.get(b) ?? Number.POSITIVE_INFINITY;
-      return pa - pb;
+      if (pa !== pb) return pa - pb;
+      const ia = ipByChild.get(a) ?? Number.POSITIVE_INFINITY;
+      const ib = ipByChild.get(b) ?? Number.POSITIVE_INFINITY;
+      return ia - ib;
     });
   }
   return childrenByParent;
@@ -784,11 +821,13 @@ function buildHierarchicalLayout(
 
   const parentByClient = buildParentMap(edges, nodeById);
   const portByChild = buildPortByChild(edges);
+  const ipByChild = buildIpByChild(clientNodes);
   const childrenByParent = bucketChildren(
     clientNodes,
     parentByClient,
     ORPHAN,
     portByChild,
+    ipByChild,
   );
   const dims = computeWrappedDims(childrenByParent, nodeById, buildMediumByChild(edges));
   const reservedH = equalizeSiblings(infraNodes, edges, nodeById, dims);

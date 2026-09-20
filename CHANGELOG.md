@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.31] - 2026-09-20
+
+### Changed
+
+- Topology: Wi-Fi and VM client cards inside an accordion (AP or VM-host stack) are now ordered by ascending IP address instead of an arbitrary insertion order. Wired clients keep their existing physical-port ordering; IP is only used as a tie-break when there's no port to sort by.
+
+---
+
 ## [0.10.30] - 2026-09-20
 
 ### Fixed
