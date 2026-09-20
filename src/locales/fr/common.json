@@ -159,6 +159,7 @@
       "activeBadge": "Actif",
       "sources": "Sources",
       "types": "Types",
+      "medium": "Connexion",
       "status": "Statut",
       "reset": "Réinitialiser"
     },

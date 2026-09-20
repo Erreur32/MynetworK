@@ -264,6 +264,14 @@ type Status = "online" | "offline" | "stale";
 const ALL_STATUS: Status[] = ["online", "offline", "stale"];
 const DEFAULT_STATUS: Status[] = ["online"];
 
+// Connection medium a node's own card is attached by (not to be confused
+// with EdgeMedium, which also covers uplink/virtual — those never reach a
+// filterable client-ish node). Infra nodes with no incoming ethernet/wifi
+// edge (gateway/switch/ap/repeater themselves) have no medium and are never
+// filtered out by this dimension — only the leaf cards hanging off them are.
+type ConnMediumFilter = "ethernet" | "wifi";
+const ALL_MEDIA: ConnMediumFilter[] = ["ethernet", "wifi"];
+
 // Bump the storage-key version when the filter shape changes so older saved
 // state is ignored instead of crashing the UI.
 const FILTERS_STORAGE_KEY = "topology.filters.v1";
@@ -274,6 +282,7 @@ interface PersistedFilters {
   sources: SourcePlugin[];
   kinds: NodeKind[];
   statuses: Status[];
+  media: ConnMediumFilter[];
 }
 
 // For multi-toggle filters (sources/kinds), backfill any new union members
@@ -305,12 +314,16 @@ function loadPersistedFilters(): PersistedFilters | null {
     if (persistedStatuses?.includes("online") && persistedStatuses.includes("stale")) {
       persistedStatuses = persistedStatuses.filter((s) => s !== "stale");
     }
+    const persistedMedia = Array.isArray(parsed.media)
+      ? parsed.media.filter((m) => ALL_MEDIA.includes(m))
+      : null;
     return {
       sources: mergeWithDefaults(persistedSources, ALL_SOURCES),
       kinds: mergeWithDefaults(persistedKinds, ALL_KINDS),
       // Statuses use a SUBSET default (online only), so we preserve the
       // user's exact choice rather than backfilling.
       statuses: persistedStatuses ?? [...DEFAULT_STATUS],
+      media: mergeWithDefaults(persistedMedia, ALL_MEDIA),
     };
   } catch {
     return null;
@@ -340,6 +353,20 @@ const STATUS_CHIP: Record<
   stale: {
     icon: CircleOff,
     activeBg: "bg-slate-500/25 border-slate-400/50 text-slate-200",
+  },
+};
+
+const MEDIUM_CHIP: Record<
+  ConnMediumFilter,
+  { icon: React.ElementType; activeBg: string }
+> = {
+  ethernet: {
+    icon: Cable,
+    activeBg: "bg-emerald-500/25 border-emerald-400/50 text-emerald-100",
+  },
+  wifi: {
+    icon: Wifi,
+    activeBg: "bg-sky-500/25 border-sky-400/50 text-sky-100",
   },
 };
 
@@ -1315,6 +1342,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   const [statusFilter, setStatusFilter] = useState<Set<Status>>(
     () => new Set(persistedFilters?.statuses ?? DEFAULT_STATUS),
   );
+  const [mediumFilter, setMediumFilter] = useState<Set<ConnMediumFilter>>(
+    () => new Set(persistedFilters?.media ?? ALL_MEDIA),
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   // The filters panel is an absolute overlay on top of the canvas (top-left),
@@ -1376,11 +1406,25 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       sources: Array.from(sourceFilter),
       kinds: Array.from(kindFilter),
       statuses: Array.from(statusFilter),
+      media: Array.from(mediumFilter),
     });
-  }, [sourceFilter, kindFilter, statusFilter]);
+  }, [sourceFilter, kindFilter, statusFilter, mediumFilter]);
 
-  // Filter the graph before layout: keep nodes matching source/kind/status filters,
-  // and only edges whose both endpoints survive the filter.
+  // Per-node connection medium, for the wired/wifi filter below. Built from
+  // the full graph's ethernet/wifi edges (target = the client-ish node) so
+  // it doesn't depend on the other filters. Infra nodes only ever receive
+  // 'uplink' edges from their parent, so they never get an entry here and
+  // stay exempt from this filter dimension.
+  const mediumByNodeId = useMemo(() => {
+    const m = new Map<string, ConnMediumFilter>();
+    for (const e of graph.edges) {
+      if (e.medium === "ethernet" || e.medium === "wifi") m.set(e.target, e.medium);
+    }
+    return m;
+  }, [graph]);
+
+  // Filter the graph before layout: keep nodes matching source/kind/status/medium
+  // filters, and only edges whose both endpoints survive the filter.
   const filteredGraph = useMemo(() => {
     const visibleIds = new Set<string>();
     const filteredNodes = graph.nodes.filter((n) => {
@@ -1388,7 +1432,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
         n.sources.length === 0 || n.sources.some((s) => sourceFilter.has(s));
       const kindOk = kindFilter.has(n.kind);
       const statusOk = statusFilter.has(classifyStatus(n));
-      const ok = sourceOk && kindOk && statusOk;
+      const medium = mediumByNodeId.get(n.id);
+      const mediumOk = !medium || mediumFilter.has(medium);
+      const ok = sourceOk && kindOk && statusOk && mediumOk;
       if (ok) visibleIds.add(n.id);
       return ok;
     });
@@ -1396,7 +1442,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       (e) => visibleIds.has(e.source) && visibleIds.has(e.target),
     );
     return { nodes: filteredNodes, edges: filteredEdges };
-  }, [graph, sourceFilter, kindFilter, statusFilter]);
+  }, [graph, sourceFilter, kindFilter, statusFilter, mediumFilter, mediumByNodeId]);
 
   // Available kind/source counts (always derived from full graph for the chip badges)
   const sourceCounts = useMemo(() => {
@@ -1428,17 +1474,24 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     for (const n of graph.nodes) counts[classifyStatus(n)]++;
     return counts;
   }, [graph]);
+  const mediumCounts = useMemo(() => {
+    const counts: Record<ConnMediumFilter, number> = { ethernet: 0, wifi: 0 };
+    for (const medium of mediumByNodeId.values()) counts[medium]++;
+    return counts;
+  }, [mediumByNodeId]);
 
   const filtersActive =
     sourceFilter.size !== ALL_SOURCES.length ||
     kindFilter.size !== ALL_KINDS.length ||
     statusFilter.size !== DEFAULT_STATUS.length ||
-    Array.from(statusFilter).some((s) => !DEFAULT_STATUS.includes(s));
+    Array.from(statusFilter).some((s) => !DEFAULT_STATUS.includes(s)) ||
+    mediumFilter.size !== ALL_MEDIA.length;
 
   const resetFilters = useCallback(() => {
     setSourceFilter(new Set(ALL_SOURCES));
     setKindFilter(new Set(ALL_KINDS));
     setStatusFilter(new Set(DEFAULT_STATUS));
+    setMediumFilter(new Set(ALL_MEDIA));
   }, []);
 
   const layouted = useMemo(() => {
@@ -2029,6 +2082,38 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   >
                     <Icon size={11} />
                     <span>{t(`topology.kind.${k}`)}</span>
+                    <span className="opacity-60 font-mono text-[10px]">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-400 pt-1 border-t border-slate-800">
+              <FilterIcon size={11} />
+              <span>{t("topology.filters.medium")}</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {ALL_MEDIA.map((m) => {
+                const count = mediumCounts[m];
+                if (count === 0) return null;
+                const active = mediumFilter.has(m);
+                const chip = MEDIUM_CHIP[m];
+                const Icon = chip.icon;
+                return (
+                  <button
+                    key={m}
+                    onClick={() =>
+                      setMediumFilter((prev) => toggleSet(prev, m))
+                    }
+                    className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded border transition-colors ${
+                      active
+                        ? chip.activeBg
+                        : "border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-600"
+                    }`}
+                  >
+                    <Icon size={11} />
+                    <span>{t(`topology.medium.${m}`)}</span>
                     <span className="opacity-60 font-mono text-[10px]">
                       {count}
                     </span>

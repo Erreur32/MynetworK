@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.32] - 2026-09-20
+
+### Added
+
+- Topology: new "Connection" filter (Ethernet / Wi-Fi) to show only wired or only Wi-Fi clients. Infra devices (gateway/switch/AP/repeater) are exempt from this filter — only client-ish cards (client, VM, grouped-devices) are affected.
+
+---
+
 ## [0.10.31] - 2026-09-20
 
 ### Changed
