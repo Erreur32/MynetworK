@@ -95,6 +95,7 @@
       "ap": "Access point",
       "repeater": "Repeater",
       "vm-host": "VM host",
+      "port-overflow": "Grouped devices",
       "client": "Client",
       "unknown": "Unknown"
     },
@@ -113,7 +114,8 @@
       "wifiClients": "Clients",
       "wifiTotal": "Aggregate",
       "latency": "Latency",
-      "openPorts": "Open ports"
+      "openPorts": "Open ports",
+      "groupedDevices": "Grouped devices"
     },
     "medium": {
       "ethernet": "Ethernet",

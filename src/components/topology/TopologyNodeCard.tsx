@@ -7,7 +7,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers } from 'lucide-react';
+import { Router, Server, Wifi, Repeat, Smartphone, HelpCircle, Cable, Tv, Layers, Boxes } from 'lucide-react';
 import {
     INFRA_CARD_WIDTH,
     VM_HOST_CARD_WIDTH,
@@ -21,7 +21,7 @@ import { getVendorBrand, getVendorBrandFromLabel, getVendorIconFallback, getVend
 import { mapHostTypeToCategory, CATEGORY_ICON } from '../../utils/deviceCategory';
 import { BrandSvgIcon } from '../ui/VendorIcon';
 
-type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'unknown';
+type NodeKind = 'gateway' | 'switch' | 'ap' | 'repeater' | 'client' | 'vm-host' | 'port-overflow' | 'unknown';
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 
 /**
@@ -98,6 +98,12 @@ export interface TopologyNodeData extends Record<string, unknown> {
     vmInactiveCount?: number;
     /** vm-host specific — hypervisor label (proxmox/kvm/vmware/...) */
     hypervisor?: string;
+    /** port-overflow specific — count of devices folded into this card */
+    overflowCount?: number;
+    /** port-overflow specific — how many of the folded devices are active */
+    overflowActiveCount?: number;
+    /** port-overflow specific — labels of the folded devices, for the hover tooltip */
+    overflowLabels?: string[];
 }
 
 function formatConnSpeed(mbps?: number): string | undefined {
@@ -135,6 +141,7 @@ const KIND_STYLE: Record<NodeKind, { icon: React.ElementType; ring: string; tint
     ap:        { icon: Wifi,       ring: 'ring-sky-400/70',     tint: 'from-sky-600/40 to-sky-800/20',         iconColor: 'text-sky-200',     border: 'border-sky-400/40' },
     repeater:  { icon: Repeat,     ring: 'ring-purple-400/70',  tint: 'from-purple-600/40 to-purple-800/20',   iconColor: 'text-purple-200',  border: 'border-purple-400/40' },
     'vm-host': { icon: Layers,     ring: 'ring-fuchsia-400/70', tint: 'from-fuchsia-600/40 to-indigo-800/20',  iconColor: 'text-fuchsia-200', border: 'border-fuchsia-400/40' },
+    'port-overflow': { icon: Boxes, ring: 'ring-gray-400/60',   tint: 'from-gray-600/40 to-gray-800/20',       iconColor: 'text-gray-200',    border: 'border-gray-400/40' },
     client:    { icon: Smartphone, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-200',   border: 'border-slate-500/50' },
     unknown:   { icon: HelpCircle, ring: 'ring-slate-400/50',   tint: 'from-slate-700/60 to-slate-800/40',     iconColor: 'text-slate-300',   border: 'border-slate-500/50' }
 };
@@ -356,6 +363,32 @@ const VmHostInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
     );
 };
 
+const OverflowInfoRow: React.FC<{ d: TopologyNodeData }> = ({ d }) => {
+    if (d.kind !== 'port-overflow') return null;
+    const count = d.overflowCount ?? 0;
+    const activeCount = d.overflowActiveCount ?? 0;
+    const inactiveCount = count - activeCount;
+    const tooltip = d.overflowLabels && d.overflowLabels.length > 0
+        ? d.overflowLabels.join('\n')
+        : undefined;
+    return (
+        <div className="relative px-3 pb-2.5 pt-1 border-t border-white/10 flex items-center gap-1.5 flex-wrap text-[11px]" title={tooltip}>
+            {activeCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-emerald-500/15 text-emerald-200 border-emerald-400/40 font-mono">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {activeCount}
+                </span>
+            )}
+            {inactiveCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border bg-rose-500/10 text-rose-200 border-rose-400/30 font-mono">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400" />
+                    {inactiveCount}
+                </span>
+            )}
+        </div>
+    );
+};
+
 const StatusDot: React.FC<{ inactive: boolean }> = ({ inactive }) => {
     const { t } = useTranslation();
     return (
@@ -571,6 +604,7 @@ export const TopologyNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
                 </div>
             </div>
             <VmHostInfoRow d={d} />
+            <OverflowInfoRow d={d} />
             {bottomPorts && bottomPorts.length > 0 && (
                 <div className="relative px-2 pb-2 pt-0.5 border-t border-white/10">
                     {d.portsFromSnapshot && (

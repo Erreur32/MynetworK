@@ -106,6 +106,7 @@ type NodeKind =
   | "repeater"
   | "client"
   | "vm-host"
+  | "port-overflow"
   | "unknown";
 
 interface TopologyNodeIn {
@@ -138,6 +139,9 @@ interface TopologyNodeIn {
     vmActiveCount?: number;
     vmInactiveCount?: number;
     hypervisor?: string;
+    overflowCount?: number;
+    overflowActiveCount?: number;
+    overflowLabels?: string[];
     hostHostname?: string;
     hostIp?: string;
     hostMac?: string;
@@ -229,6 +233,7 @@ const NODE_KIND_LEGEND: Array<{ id: NodeKind; bar: string }> = [
   { id: "ap", bar: "bg-sky-400" },
   { id: "repeater", bar: "bg-purple-400" },
   { id: "vm-host", bar: "bg-fuchsia-400" },
+  { id: "port-overflow", bar: "bg-gray-400" },
   { id: "client", bar: "bg-slate-400" },
   { id: "unknown", bar: "bg-slate-500" },
 ];
@@ -250,6 +255,7 @@ const ALL_KINDS: NodeKind[] = [
   "ap",
   "repeater",
   "vm-host",
+  "port-overflow",
   "client",
   "unknown",
 ];
@@ -389,6 +395,10 @@ const KIND_CHIP: Record<
   "vm-host": {
     icon: Layers,
     activeBg: "bg-fuchsia-500/25 border-fuchsia-400/50 text-fuchsia-100",
+  },
+  "port-overflow": {
+    icon: Boxes,
+    activeBg: "bg-gray-500/25 border-gray-400/50 text-gray-100",
   },
   client: {
     icon: Smartphone,
@@ -1406,6 +1416,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
       ap: 0,
       repeater: 0,
       "vm-host": 0,
+      "port-overflow": 0,
       client: 0,
       unknown: 0,
     };
@@ -1493,6 +1504,15 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
           typeof n.metadata?.hypervisor === "string"
             ? n.metadata.hypervisor
             : undefined,
+        overflowCount:
+          typeof n.metadata?.overflowCount === "number"
+            ? n.metadata.overflowCount
+            : undefined,
+        overflowActiveCount:
+          typeof n.metadata?.overflowActiveCount === "number"
+            ? n.metadata.overflowActiveCount
+            : undefined,
+        overflowLabels: n.metadata?.overflowLabels,
         modelDisplay:
           typeof n.metadata?.modelDisplay === "string"
             ? n.metadata.modelDisplay
@@ -2269,6 +2289,29 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                     value={String(selectedNode.metadata.model)}
                   />
                 )}
+                {selectedNode.kind === "port-overflow" &&
+                  selectedNode.metadata?.overflowLabels &&
+                  selectedNode.metadata.overflowLabels.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 text-slate-400">
+                        <Boxes size={14} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                          {t("topology.detail.groupedDevices")}
+                        </div>
+                        <ul className="text-slate-200 space-y-0.5">
+                          {selectedNode.metadata.overflowLabels.map(
+                            (label, i) => (
+                              <li key={i} className="truncate">
+                                {label}
+                              </li>
+                            ),
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
                 {selectedNode.metadata?.ssid &&
                   (() => {
                     const band = selectedNode.metadata.band

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.30] - 2026-09-20
+
+### Fixed
+
+- Topology: a switch/gateway port could show more than one duplicate link card for the same physical connection (e.g. Proxmox VMs with randomized MACs that the OUI-based VM detection doesn't recognize as VMs, landing as separate raw client cards on the same port). Any port now caps at 2 link cards; the rest fold into a single "+N devices" summary card, independent of the existing VM-host grouping.
+
+---
+
 ## [0.10.29] - 2026-09-16
 
 ### Added

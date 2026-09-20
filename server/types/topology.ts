@@ -14,6 +14,7 @@ export type NodeKind =
     | 'repeater'
     | 'client'
     | 'vm-host'
+    | 'port-overflow'
     | 'unknown';
 
 export type EdgeMedium = 'ethernet' | 'wifi' | 'uplink' | 'virtual';

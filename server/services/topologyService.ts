@@ -75,7 +75,14 @@ const FREEBOX_BOX_ID = 'freebox:box';
 //      duplicate next to the stack.
 // 18 — vm-host metadata now carries vmActiveCount / vmInactiveCount so the
 //      stack card can show "21 active · 1 offline" at a glance.
-const SCHEMA_VERSION = 18;
+// 19 — Generic port-overflow collapse: a physical switch/gateway port never
+//      shows more than 2 link cards. VM bucketing (above) already folds
+//      recognized hypervisor VMs, but OUI detection misses VMs with
+//      randomized/locally-administered MACs, which used to show up as extra
+//      raw cards on the same port. Whatever's left beyond the first 2 (kept
+//      active-first, then alphabetically) is folded into a single
+//      "+N devices" card, medium-agnostic — same spirit as vm-host.
+const SCHEMA_VERSION = 19;
 
 interface SwitchPort {
     idx: number;
@@ -1280,6 +1287,133 @@ function detectAndGroupVMs(
     for (const bucket of buckets.values()) processBucket(bucket, nodes, edges);
 }
 
+// Cap the number of link cards shown per physical switch/gateway port to 2.
+// bucketVMsByParent/synthesizeOneVmHost above already fold recognized
+// hypervisor VMs (MAC-OUI based) into one vm-host card, but that detection
+// misses VMs with randomized/locally-administered MACs — those still land
+// as raw client cards, one per port, defeating the "one cable, one card"
+// idea. This is a blunt generic backstop, independent of VM detection:
+// whatever ends up sharing a port beyond the first 2 (kept active-first,
+// then alphabetically) is folded into a single "+N devices" card.
+const MAX_CARDS_PER_PORT = 2;
+
+interface PortLinkBucket {
+    parentId: string;
+    portIndex: number;
+    sourcePlugin: SourcePlugin;
+    edgeIds: string[];
+    targetIds: string[];
+}
+
+function bucketEdgesByPort(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): Map<string, PortLinkBucket> {
+    const buckets = new Map<string, PortLinkBucket>();
+    for (const [edgeId, edge] of edges) {
+        if (edge.medium !== 'ethernet') continue;
+        if (typeof edge.portIndex !== 'number') continue;
+        const parent = nodes.get(edge.source);
+        const target = nodes.get(edge.target);
+        if (!parent || !target) continue;
+        if (parent.kind !== 'switch' && parent.kind !== 'gateway') continue;
+        if (target.kind !== 'client' && target.kind !== 'unknown' && target.kind !== 'vm-host') continue;
+        const key = `${parent.id}|p${edge.portIndex}`;
+        let bucket = buckets.get(key);
+        if (!bucket) {
+            bucket = {
+                parentId: parent.id,
+                portIndex: edge.portIndex,
+                sourcePlugin: edge.source_plugin,
+                edgeIds: [],
+                targetIds: []
+            };
+            buckets.set(key, bucket);
+        }
+        bucket.edgeIds.push(edgeId);
+        bucket.targetIds.push(target.id);
+    }
+    return buckets;
+}
+
+interface RankedPortTarget {
+    id: string;
+    edgeId: string;
+    node: TopologyNode;
+}
+
+// Active devices first, then alphabetical — keeps the 2 surviving cards the
+// most useful ones (a named, currently-online device beats a stale/unnamed
+// MAC-labeled entry).
+function rankPortTargets(
+    bucket: PortLinkBucket,
+    nodes: Map<string, TopologyNode>
+): RankedPortTarget[] {
+    return bucket.targetIds
+        .map((id, i) => ({ id, edgeId: bucket.edgeIds[i], node: nodes.get(id) as TopologyNode }))
+        .sort((a, b) => {
+            const activeA = a.node.metadata?.active !== false ? 0 : 1;
+            const activeB = b.node.metadata?.active !== false ? 0 : 1;
+            if (activeA !== activeB) return activeA - activeB;
+            return (a.node.label ?? '').localeCompare(b.node.label ?? '');
+        });
+}
+
+function collapsePortOverflowBucket(
+    bucket: PortLinkBucket,
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    if (bucket.targetIds.length <= MAX_CARDS_PER_PORT) return;
+    const folded = rankPortTargets(bucket, nodes).slice(MAX_CARDS_PER_PORT);
+    if (folded.length === 0) return;
+
+    logger.info(
+        'Topology',
+        `Port overflow collapse: parent=${bucket.parentId} port=${bucket.portIndex} folded=${folded.length} (${folded.map(f => f.node.label).join(', ')})`
+    );
+
+    const overflowId = `portoverflow:${bucket.parentId}:p${bucket.portIndex}`;
+    const activeCount = folded.filter(f => f.node.metadata?.active !== false).length;
+    nodes.set(overflowId, {
+        id: overflowId,
+        kind: 'port-overflow',
+        label: `+${folded.length} device${folded.length > 1 ? 's' : ''}`,
+        sources: [],
+        metadata: {
+            active: activeCount > 0,
+            overflowCount: folded.length,
+            overflowActiveCount: activeCount,
+            overflowLabels: folded.map(f => f.node.label).filter(Boolean).slice(0, 20)
+        }
+    });
+    const overflowEdgeId = `portoverflow-link:${bucket.parentId}:p${bucket.portIndex}`;
+    edges.set(overflowEdgeId, {
+        id: overflowEdgeId,
+        source: bucket.parentId,
+        target: overflowId,
+        medium: 'ethernet',
+        portIndex: bucket.portIndex,
+        source_plugin: bucket.sourcePlugin
+    });
+
+    const dropped = new Set<string>();
+    for (const f of folded) {
+        edges.delete(f.edgeId);
+        nodes.delete(f.id);
+        dropped.add(f.id);
+    }
+    dropEdgesTouching(edges, dropped);
+}
+
+function collapsePortOverflow(
+    nodes: Map<string, TopologyNode>,
+    edges: Map<string, TopologyEdge>
+): void {
+    const buckets = bucketEdgesByPort(nodes, edges);
+    for (const bucket of buckets.values()) collapsePortOverflowBucket(bucket, nodes, edges);
+}
+
 // Belt-and-braces: any non-uplink edge connecting two infra nodes is
 // dropped. Infrastructure should only be wired together via uplinks.
 function pruneNonUplinkInfraEdges(
@@ -1347,6 +1481,7 @@ class TopologyService {
         pruneFreeboxNodesDuplicatingUniFiInfra(nodes, edges);
         pruneNonUplinkInfraEdges(nodes, edges);
         detectAndGroupVMs(nodes, edges);
+        collapsePortOverflow(nodes, edges);
 
         return {
             nodes: Array.from(nodes.values()),

@@ -95,6 +95,7 @@
       "ap": "Point d'accès",
       "repeater": "Répéteur",
       "vm-host": "Hôte VM",
+      "port-overflow": "Appareils groupés",
       "client": "Client",
       "unknown": "Inconnu"
     },
@@ -113,7 +114,8 @@
       "wifiClients": "Clients",
       "wifiTotal": "Débit total",
       "latency": "Latence",
-      "openPorts": "Ports ouverts"
+      "openPorts": "Ports ouverts",
+      "groupedDevices": "Appareils groupés"
     },
     "medium": {
       "ethernet": "Ethernet",
