@@ -850,22 +850,14 @@ export class WiresharkVendorService {
      */
     static async updateDatabase(): Promise<{ source: 'downloaded' | 'local' | 'plugins'; vendorCount: number }> {
         try {
-            // First, check if local file exists and is valid
-            if (fs.existsSync(MANUF_FILE_PATH)) {
-                const localValidation = this.validateManufFile(MANUF_FILE_PATH);
-                if (localValidation.isValid) {
-                    logger.info('WiresharkVendorService', `Local file is valid (${localValidation.fileSize} bytes, ${localValidation.vendorCount} vendors). Using local file instead of downloading.`);
-                    // Use local file directly
-                    await this.parseAndUpdateDatabase();
-                    const now = new Date();
-                    AppConfigRepository.set(LAST_UPDATE_KEY, now.toISOString());
-                    const stats = this.getStats();
-                    logger.info('WiresharkVendorService', `Vendor database updated successfully from local file at ${now.toISOString()}`);
-                    return { source: 'local', vendorCount: stats.totalVendors };
-                } else {
-                    logger.warn('WiresharkVendorService', `Local file exists but is invalid: ${localValidation.reason}. Will download new file.`);
-                }
-            }
+            // This is only called when a refresh from remote is actually due (see
+            // shouldUpdate()'s UPDATE_INTERVAL_DAYS check in the caller) — always
+            // attempt a fresh download here rather than reusing the existing local
+            // file. A structurally "valid" local file just means it parses correctly,
+            // not that its content is still current; treating it as good enough
+            // meant the vendor database was never actually refreshed from IEEE after
+            // the very first successful download, since the same file kept passing
+            // validation on every subsequent scheduled check.
 
             // Download the IEEE OUI database file (saves to data/oui.txt locally)
             try {

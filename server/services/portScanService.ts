@@ -121,6 +121,11 @@ export function requestPortScanAbort(): void {
  * Can be stopped via requestPortScanAbort().
  */
 export async function runPortScanForOnlineHosts(options?: { portRange?: string }): Promise<void> {
+    if (_portScanProgress.active) {
+        logger.warn('PortScanService', 'Port scan already in progress, ignoring concurrent request');
+        return;
+    }
+
     const available = await isNmapAvailable();
     if (!available) {
         logger.warn('PortScanService', 'nmap not available - skipping port scan');
