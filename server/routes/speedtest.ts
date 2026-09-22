@@ -6,9 +6,9 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config.js';
 import { isValidPingTarget } from '../utils/networkValidation.js';
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const execFileAsync = promisify(execFile);
-import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
 router.use(requireAuth);

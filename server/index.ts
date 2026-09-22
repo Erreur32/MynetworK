@@ -790,20 +790,6 @@ function getHostMachineIP(): string | null {
   return null;
 }
 
-// Check JWT secret on startup and notify if default
-const jwtSecret =
-  process.env.JWT_SECRET || "change-me-in-production-please-use-strong-secret";
-if (jwtSecret === "change-me-in-production-please-use-strong-secret") {
-  try {
-    await securityNotificationService.notifyJwtSecretWarning();
-  } catch (err) {
-    logger.error(
-      "Security",
-      "Failed to send JWT secret warning notification:",
-      err,
-    );
-  }
-}
 
 // Helper function to detect if running in Docker
 const isDocker = (): boolean => {
