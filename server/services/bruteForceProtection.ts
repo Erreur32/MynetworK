@@ -86,6 +86,12 @@ class BruteForceProtectionService {
         const now = Date.now();
         const windowMs = this.config.trackingWindow * 60 * 1000;
 
+        // Defense in depth: don't extend an active lockout, in case a future
+        // caller forgets to check isBlocked() before this.
+        if (this.isBlocked(identifier)) {
+            return true;
+        }
+
         let attempt = this.attempts.get(identifier);
         if (!attempt) {
             attempt = { timestamps: [] };

@@ -9,14 +9,21 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
 /**
- * Key generator based on req.ip (governed by the app's `trust proxy` setting,
- * consistent with the rest of the app). CF-Connecting-IP/X-Real-IP are NOT
- * trusted directly here — this app is also reachable on a directly-published
- * Docker port, bypassing Cloudflare/the reverse proxy entirely, so those
- * headers can be forged by any client on that path to rotate rate-limit
- * buckets at will. Wrapped through ipKeyGenerator() so IPv6 addresses are
- * normalised to a /64 prefix — without it, every IPv6 address would have its
- * own bucket, allowing IPv6 users to easily bypass the limit (ERR_ERL_KEY_GEN_IPV6).
+ * Key generator based on req.ip (governed by the app's `trust proxy: 1`
+ * setting). Deliberately NOT the raw socket address: the officially
+ * recommended deployment sits behind a reverse proxy (NPM/Cloudflare, see
+ * docker-compose.yml), where every request's TCP peer is the proxy
+ * container — keying on the socket address would collapse all real clients
+ * into a single rate-limit bucket, letting one abusive client get everyone
+ * else 429'd. CF-Connecting-IP/X-Real-IP are NOT trusted directly (unlike
+ * req.ip, they bypass Express's own trust-proxy validation entirely), since
+ * this app is also reachable on a directly-published Docker port bypassing
+ * the reverse proxy — a real but accepted residual risk for rate-limiting
+ * specifically (unlike the LAN-only auth gates, a spoofed bucket here only
+ * lets an already-LAN-reachable client evade its own rate limit). Wrapped
+ * through ipKeyGenerator() so IPv6 addresses are normalised to a /64 prefix —
+ * without it, every IPv6 address would have its own bucket, allowing IPv6
+ * users to easily bypass the limit (ERR_ERL_KEY_GEN_IPV6).
  */
 const keyGenerator = (req: Request): string => {
     return ipKeyGenerator(req.ip || 'unknown');

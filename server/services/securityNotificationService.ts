@@ -21,8 +21,7 @@ export type SecurityEventType =
     | 'user_deleted'
     | 'user_disabled'
     | 'user_enabled'
-    | 'new_ip_login'
-    | 'jwt_secret_warning';
+    | 'new_ip_login';
 
 export interface SecurityNotification {
     type: SecurityEventType;
@@ -247,18 +246,6 @@ class SecurityNotificationService {
             userId,
             username,
             metadata: { enabled, changedBy }
-        });
-    }
-
-    /**
-     * Notify about JWT secret warning
-     */
-    async notifyJwtSecretWarning(): Promise<void> {
-        await this.notify({
-            type: 'jwt_secret_warning',
-            severity: 'critical',
-            title: 'JWT Secret warning',
-            message: 'Default JWT secret is in use. Change it in production!'
         });
     }
 

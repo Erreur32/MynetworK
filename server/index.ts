@@ -53,7 +53,6 @@ import configRoutes from "./routes/config.js";
 import metricsRoutes from "./routes/metrics.js";
 import apiDocsRoutes from "./routes/api-docs.js";
 import securityRoutes from "./routes/security.js";
-import { securityNotificationService } from "./services/securityNotificationService.js";
 import { logger } from "./utils/logger.js";
 import { logBuffer } from "./utils/logBuffer.js";
 
@@ -788,21 +787,6 @@ function getHostMachineIP(): string | null {
   // Return null to use container IP as fallback
   // Note: The most reliable way is to set HOST_IP environment variable in docker-compose.yml
   return null;
-}
-
-// Check JWT secret on startup and notify if default
-const jwtSecret =
-  process.env.JWT_SECRET || "change-me-in-production-please-use-strong-secret";
-if (jwtSecret === "change-me-in-production-please-use-strong-secret") {
-  try {
-    await securityNotificationService.notifyJwtSecretWarning();
-  } catch (err) {
-    logger.error(
-      "Security",
-      "Failed to send JWT secret warning notification:",
-      err,
-    );
-  }
 }
 
 // Helper function to detect if running in Docker

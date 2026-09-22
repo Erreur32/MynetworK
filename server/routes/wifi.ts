@@ -45,7 +45,7 @@ router.get('/bss', asyncHandler(async (_req, res) => {
 // PUT /api/wifi/bss/:id - Enable/disable a specific BSS
 router.put('/bss/:id', requireAdmin, asyncHandler(async (req, res) => {
   const { enabled } = req.body;
-  logger.debug('WiFi', `Toggle BSS ${req.params.id} -> enabled: ${enabled}`);
+  logger.debug('WiFi', `Toggle BSS ${param(req, 'id')} -> enabled: ${enabled}`);
   const result = await freeboxApi.updateWifiBss(param(req, 'id'), { enabled });
   logger.debug('WiFi', `Toggle BSS result:`, result.success ? 'OK' : 'FAILED');
   res.json(result);

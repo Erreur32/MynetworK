@@ -158,9 +158,10 @@ router.post('/reboot', asyncHandler(async (_req, res) => {
 
 // GET /api/system/security - Get security configuration and status
 router.get('/security', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
-  const jwtSecretIsDefault = jwtSecret === 'change-me-in-production-please-use-strong-secret';
-  
+  // authService now fails fast at startup if JWT_SECRET is unset, so this can
+  // never be true at runtime. Kept as a field for frontend API compatibility.
+  const jwtSecretIsDefault = false;
+
   const config = bruteForceProtection.getConfig();
   
   // Get current session timeout from authService (reads from DB or env var)
