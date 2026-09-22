@@ -10,17 +10,12 @@
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-111827?style=for-the-badge&logo=typescript&logoColor=60a5fa)
 
+![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 [![OSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/Erreur32/MynetworK?style=for-the-badge&label=Scorecard)](https://scorecard.dev/viewer/?uri=github.com/Erreur32/MynetworK)
 [![CodeQL](https://img.shields.io/badge/CodeQL-active-brightgreen?style=for-the-badge&logo=github)](https://github.com/Erreur32/MynetworK/security/code-scanning)
 [![SonarCloud](https://img.shields.io/sonar/quality_gate/Erreur32_MynetworK?server=https%3A%2F%2Fsonarcloud.io&style=for-the-badge&logo=sonarcloud&logoColor=white&label=Sonar)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
-[![Security](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=security_rating)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
-[![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=sqale_rating)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
-[![Tech Debt](https://sonarcloud.io/api/project_badges/measure?project=Erreur32_MynetworK&metric=sqale_index)](https://sonarcloud.io/summary/overall?id=Erreur32_MynetworK)
-[![Build](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/docker-publish.yml?style=for-the-badge&logo=github&logoColor=white&label=Build&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/docker-publish.yml)
-[![Snyk](https://img.shields.io/github/actions/workflow/status/Erreur32/MynetworK/snyk.yml?style=for-the-badge&logo=snyk&logoColor=white&label=Snyk&color=111827)](https://github.com/Erreur32/MynetworK/actions/workflows/snyk.yml)
 
 ![License](https://img.shields.io/badge/License-MIT-111827?style=for-the-badge&color=111827&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Ready-1f2937?style=for-the-badge&logo=docker&logoColor=38bdf8)
 
 
 <h1 align="center">MynetworK</h1>
