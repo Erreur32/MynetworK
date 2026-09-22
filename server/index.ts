@@ -53,7 +53,6 @@ import configRoutes from "./routes/config.js";
 import metricsRoutes from "./routes/metrics.js";
 import apiDocsRoutes from "./routes/api-docs.js";
 import securityRoutes from "./routes/security.js";
-import { securityNotificationService } from "./services/securityNotificationService.js";
 import { logger } from "./utils/logger.js";
 import { logBuffer } from "./utils/logBuffer.js";
 
@@ -789,7 +788,6 @@ function getHostMachineIP(): string | null {
   // Note: The most reliable way is to set HOST_IP environment variable in docker-compose.yml
   return null;
 }
-
 
 // Helper function to detect if running in Docker
 const isDocker = (): boolean => {
