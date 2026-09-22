@@ -125,9 +125,14 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
         logger.warn('PortScanService', 'Port scan already in progress, ignoring concurrent request');
         return;
     }
+    // Set synchronously (no await yet) so a concurrent call sees this before
+    // it can pass the check above — otherwise two near-simultaneous calls
+    // could both slip through before either flips the flag.
+    _portScanProgress.active = true;
 
     const available = await isNmapAvailable();
     if (!available) {
+        _portScanProgress.active = false;
         logger.warn('PortScanService', 'nmap not available - skipping port scan');
         return;
     }
@@ -140,6 +145,7 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
     });
 
     if (online.length === 0) {
+        _portScanProgress.active = false;
         logger.info('PortScanService', 'No online hosts to scan for ports');
         return;
     }

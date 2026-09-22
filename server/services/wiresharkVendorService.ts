@@ -483,6 +483,7 @@ export class WiresharkVendorService {
      * Saves the file locally to data/oui.txt for offline use
      */
     private static async downloadManufFile(): Promise<void> {
+        const tmpPath = `${MANUF_FILE_PATH}.tmp`;
         try {
             // Ensure data directory exists
             const dataDir = path.dirname(MANUF_FILE_PATH);
@@ -503,22 +504,25 @@ export class WiresharkVendorService {
                     // Use curl or fetch to download
                     // Try curl first (more reliable in Docker)
                     try {
+                        // Download to a temp file first — a failed/partial transfer must never
+                        // destroy the previously-good MANUF_FILE_PATH; it's only replaced
+                        // atomically below, once the download is fully validated.
                         // Use curl with proper flags: -L (follow redirects), -f (fail on HTTP errors), -s (silent), --max-time (timeout)
-                        await execFileAsync('curl', ['-f', '-L', '-s', '--max-time', '60', '-o', MANUF_FILE_PATH, url], { timeout: 70000 });
+                        await execFileAsync('curl', ['-f', '-L', '-s', '--max-time', '60', '-o', tmpPath, url], { timeout: 70000 });
                         
                         // Verify file was downloaded
-                        if (!fs.existsSync(MANUF_FILE_PATH)) {
+                        if (!fs.existsSync(tmpPath)) {
                             throw new Error('File was not created after curl download');
                         }
                         
-                        const fileStats = fs.statSync(MANUF_FILE_PATH);
+                        const fileStats = fs.statSync(tmpPath);
                         if (fileStats.size === 0) {
                             throw new Error('Downloaded file is empty');
                         }
                         
                         // Check if file is suspiciously small (likely an error page)
                         if (fileStats.size < 1000) {
-                            const fileContent = fs.readFileSync(MANUF_FILE_PATH, 'utf8');
+                            const fileContent = fs.readFileSync(tmpPath, 'utf8');
                             // Check if it's HTML (error page) - only check first 500 chars to avoid false positives
                             const firstChars = fileContent.substring(0, 500).toLowerCase();
                             if (firstChars.includes('<!doctype') || firstChars.includes('<html') || 
@@ -531,7 +535,7 @@ export class WiresharkVendorService {
                             }
                         }
                         
-                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using curl from ${url}`);
+                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database (${fileStats.size} bytes) using curl from ${url}`);
                         downloadSuccess = true;
                         break; // Success, exit loop
                     } catch (curlError: any) {
@@ -570,10 +574,10 @@ export class WiresharkVendorService {
                             throw new Error(`Fetched content is too small to be valid (${text.length} bytes, expected >100KB)`);
                         }
                         
-                        fs.writeFileSync(MANUF_FILE_PATH, text, 'utf8');
+                        fs.writeFileSync(tmpPath, text, 'utf8');
                         
-                        const fileStats = fs.statSync(MANUF_FILE_PATH);
-                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database to ${MANUF_FILE_PATH} (${fileStats.size} bytes) using fetch from ${url}`);
+                        const fileStats = fs.statSync(tmpPath);
+                        logger.info('WiresharkVendorService', `Downloaded IEEE OUI database (${fileStats.size} bytes) using fetch from ${url}`);
                         downloadSuccess = true;
                         break; // Success, exit loop
                     }
@@ -588,18 +592,28 @@ export class WiresharkVendorService {
                 throw new Error(`Failed to download IEEE OUI database from all URLs. Last error: ${lastError?.message || 'Unknown error'}`);
             }
             
-            // Validate downloaded file using comprehensive validation
-            const validation = this.validateManufFile(MANUF_FILE_PATH);
+            // Validate the downloaded file before it ever replaces the previously-good one
+            const validation = this.validateManufFile(tmpPath);
             if (!validation.isValid) {
                 // Log first 200 chars for debugging
-                const fileContent = fs.readFileSync(MANUF_FILE_PATH, 'utf8');
+                const fileContent = fs.readFileSync(tmpPath, 'utf8');
                 const preview = fileContent.substring(0, 200).replace(/\n/g, '\\n');
                 logger.error('WiresharkVendorService', `Downloaded file validation failed: ${validation.reason}. Preview: ${preview}`);
                 throw new Error(`Downloaded file validation failed: ${validation.reason}`);
             }
+
+            // Validated — now atomically replace the previous file
+            fs.renameSync(tmpPath, MANUF_FILE_PATH);
             
             logger.info('WiresharkVendorService', `Downloaded file validated successfully: ${validation.fileSize} bytes, ${validation.vendorCount} vendors`);
         } catch (error: any) {
+            // Clean up a leftover partial/invalid temp file so it's never mistaken
+            // for the real file and never lingers between attempts
+            try {
+                if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            } catch {
+                // best effort
+            }
             logger.error('WiresharkVendorService', `Failed to download IEEE OUI database: ${error.message || error}`);
             throw error;
         }
@@ -846,9 +860,9 @@ export class WiresharkVendorService {
      * Update the vendor database from IEEE OUI
      * Downloads the IEEE OUI database file, parses it, and stores vendors in local database
      * The file is saved locally in data/oui.txt for offline use
-     * @returns Object with source ('downloaded' | 'local' | 'plugins') and vendor count
+     * @returns Object with source ('downloaded' | 'plugins') and vendor count
      */
-    static async updateDatabase(): Promise<{ source: 'downloaded' | 'local' | 'plugins'; vendorCount: number }> {
+    static async updateDatabase(): Promise<{ source: 'downloaded' | 'plugins'; vendorCount: number }> {
         try {
             // This is only called when a refresh from remote is actually due (see
             // shouldUpdate()'s UPDATE_INTERVAL_DAYS check in the caller) — always
