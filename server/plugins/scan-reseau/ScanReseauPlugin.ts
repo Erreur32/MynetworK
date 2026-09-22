@@ -13,7 +13,7 @@ import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.
 
 export class ScanReseauPlugin extends BasePlugin {
     constructor() {
-        super('scan-reseau', 'Network scan', '0.10.32');
+        super('scan-reseau', 'Network scan', '0.10.33');
     }
 
     async initialize(config: PluginConfig): Promise<void> {

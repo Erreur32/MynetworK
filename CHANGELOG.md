@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.33] - 2026-09-22
+
+### Security
+
+- Fixed a major authentication gap: 16 route files (`auth`, Wi-Fi, LAN, VM, downloads, file manager, parental controls, TV, DHCP, calls, contacts, connection, speedtest, capabilities, latency monitoring, notifications, system info) had no `requireAuth` check at all. Anyone reachable on the API (LAN, or the directly-published Docker port) could manage files on the Freebox storage, disable parental controls, start/stop/delete VMs, change Wi-Fi config and guest keys, etc. without any token. GET routes now require `requireAuth`, write/destructive routes require `requireAuth` + `requireAdmin`, matching the convention already used elsewhere in the codebase.
+- `authService`: fail fast if `JWT_SECRET` is not set instead of silently falling back to a hardcoded default secret.
+- `insecureAgent`: the shared TLS-bypass agent (used for Freebox/UniFi self-signed certs) now refuses to connect, before the TLS handshake, unless the resolved host is private/LAN — closing a possible misuse path if a call site were ever miswired, and a DNS-rebinding TOCTOU window in that same check.
+- `bruteForceProtection`: switched from a fixed window to a sliding window, so pacing login attempts around the window reset no longer avoids the lockout.
+- `mcpAuthMiddleware`/`rateLimiter`: no longer trust the spoofable `X-Forwarded-For`/`CF-Connecting-IP`/`X-Real-IP` headers on the directly-published Docker port.
+- `downloads`: validate `fileBase64`/`filename`/`downloadDir` before use — unescaped quotes/CRLF could break out of the multipart body sent to the Freebox.
+- `networkValidation`: private-IP detection now also covers IPv4 link-local (169.254.0.0/16) and IPv6 (link-local, unique local).
+- Pinned `actions/checkout` in the security-review CI workflow to a commit SHA (GitHub code-scanning alert, OSSF Scorecard Pinned-Dependencies check).
+
+---
+
 ## [0.10.32] - 2026-09-20
 
 ### Added
