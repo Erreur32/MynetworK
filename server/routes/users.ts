@@ -17,7 +17,7 @@ import { getClientIp } from '../utils/getClientIp.js';
 import { metricsCollector } from '../services/metricsCollector.js';
 import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
 import { logger } from '../utils/logger.js';
-import { param } from '../utils/params.js';
+import { param, requireIntParam } from '../utils/params.js';
 
 const router = Router();
 
@@ -242,11 +242,7 @@ router.get('/', requireAuth, requireAdmin, asyncHandler(async (req: Authenticate
 
 // GET /api/users/:id - Get user by ID (admin only)
 router.get('/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(param(req, 'id'), 10);
-    
-    if (isNaN(userId)) {
-        throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
-    }
+    const userId = requireIntParam(req, 'id', 'Invalid user ID', 'INVALID_USER_ID');
 
     const user = UserRepository.findById(userId);
     
@@ -302,11 +298,7 @@ router.post('/', requireAuth, requireAdmin, asyncHandler(async (req: Authenticat
 
 // PUT /api/users/:id - Update user (admin only, or self for non-sensitive fields)
 router.put('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(param(req, 'id'), 10);
-    
-    if (isNaN(userId)) {
-        throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
-    }
+    const userId = requireIntParam(req, 'id', 'Invalid user ID', 'INVALID_USER_ID');
 
     const isAdmin = req.user!.role === 'admin';
     const isSelf = req.user!.userId === userId;
@@ -370,11 +362,7 @@ router.put('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
 
 // DELETE /api/users/:id - Delete user (admin only)
 router.delete('/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const userId = parseInt(param(req, 'id'), 10);
-    
-    if (isNaN(userId)) {
-        throw createError('Invalid user ID', 400, 'INVALID_USER_ID');
-    }
+    const userId = requireIntParam(req, 'id', 'Invalid user ID', 'INVALID_USER_ID');
 
     if (userId === req.user!.userId) {
         throw createError('You cannot delete your own account', 400, 'CANNOT_DELETE_SELF');
