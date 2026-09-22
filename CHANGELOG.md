@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.36] - 2026-09-22
+
+### Fixed
+
+- Hotfix: `insecureAgent`'s LAN-only check (added in 0.10.33) DNS-resolved hostnames like `mafreebox.freebox.fr` to validate them, but Docker's DNS resolver isn't the Freebox itself — the hostname resolved to a public IP (or failed to resolve), so every connection was refused as "non-private", breaking Freebox connectivity entirely in production. Only IP literals are validated against private ranges now; hostnames (admin-configured, not attacker input) are trusted as-is.
+
+---
+
 ## [0.10.35] - 2026-09-22
 
 ### Changed
