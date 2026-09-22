@@ -216,22 +216,35 @@ function findToolName(name: string | string[]): string | undefined {
   return getToolCatalog().find((tool) => tool.name === name)?.name;
 }
 
+/**
+ * Shared id + toolName validation for the /:id/tools/:name routes below.
+ * Writes the 400/404 error response itself and returns null on failure,
+ * mirroring parseStrictIntParam's non-throwing convention.
+ */
+function validateIdAndToolName(req: AuthenticatedRequest, res: Response): { id: number; toolName: string } | null {
+  const id = parseStrictIntParam(req, "id");
+  if (id === null) {
+    res.status(400).json({ success: false, error: "Invalid token id" });
+    return null;
+  }
+
+  const toolName = findToolName(req.params.name);
+  if (!toolName) {
+    res.status(404).json({ success: false, error: "Unknown tool" });
+    return null;
+  }
+
+  return { id, toolName };
+}
+
 router.put(
   "/:id/tools/:name",
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = parseStrictIntParam(req, "id");
-    if (id === null) {
-      res.status(400).json({ success: false, error: "Invalid token id" });
-      return;
-    }
-
-    const toolName = findToolName(req.params.name);
-    if (!toolName) {
-      res.status(404).json({ success: false, error: "Unknown tool" });
-      return;
-    }
+    const validated = validateIdAndToolName(req, res);
+    if (!validated) return;
+    const { id, toolName } = validated;
 
     const { enabled } = req.body as { enabled?: unknown };
     if (typeof enabled !== "boolean") {
@@ -258,17 +271,9 @@ router.delete(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = parseStrictIntParam(req, "id");
-    if (id === null) {
-      res.status(400).json({ success: false, error: "Invalid token id" });
-      return;
-    }
-
-    const toolName = findToolName(req.params.name);
-    if (!toolName) {
-      res.status(404).json({ success: false, error: "Unknown tool" });
-      return;
-    }
+    const validated = validateIdAndToolName(req, res);
+    if (!validated) return;
+    const { id, toolName } = validated;
 
     const cleared = mcpAuthService.clearTokenToolOverride(id, toolName);
     if (!cleared) {
