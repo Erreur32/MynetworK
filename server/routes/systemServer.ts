@@ -731,7 +731,6 @@ async function getHostHostname(defaultHostname: string): Promise<string> {
 
   for (const hostnamePath of hostnameMethods) {
     try {
-      await fs.access(hostnamePath);
       const hostHostname = await fs.readFile(hostnamePath, 'utf8');
       if (hostHostname && hostHostname.trim().length > 0) {
         const trimmedHostname = hostHostname.trim();
@@ -760,7 +759,6 @@ async function getHostHostname(defaultHostname: string): Promise<string> {
 async function getHostUptime(defaultUptime: number): Promise<number> {
   try {
     const hostUptimePath = join(HOST_ROOT_PATH, 'proc', 'uptime');
-    await fs.access(hostUptimePath);
     const uptimeContent = await fs.readFile(hostUptimePath, 'utf8');
     const firstField = uptimeContent.split(' ')[0];
     const hostUptimeSeconds = parseFloat(firstField);
@@ -796,8 +794,10 @@ router.get('/server', async (_req, res) => {
     // hostname and uptime from the host so that the dashboard reflects
     // the real machine instead of the container identity.
     if (isDocker()) {
-      hostname = await getHostHostname(hostname);
-      uptime = await getHostUptime(uptime);
+      [hostname, uptime] = await Promise.all([
+        getHostHostname(hostname),
+        getHostUptime(uptime)
+      ]);
     }
 
     const systemInfo = {
