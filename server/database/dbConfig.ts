@@ -304,7 +304,7 @@ export function runVacuum(): { success: boolean; dbSizeBefore: number; dbSizeAft
 
         logger.success('DatabaseConfig', `VACUUM completed. Freed: ${(freed / 1024 / 1024).toFixed(2)} MB`);
         return { success: true, dbSizeBefore, dbSizeAfter, message: `VACUUM terminé. Espace libéré : ${(freed / 1024 / 1024).toFixed(2)} MB` };
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('DatabaseConfig', 'VACUUM failed:', error);
         throw error;
     }
@@ -325,7 +325,7 @@ export function runIntegrityCheck(): { ok: boolean; messages: string[] } {
 
         logger.info('DatabaseConfig', `Integrity check: ${ok ? 'OK' : 'FAILED'}`);
         return { ok, messages };
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('DatabaseConfig', 'Integrity check failed:', error);
         throw error;
     }

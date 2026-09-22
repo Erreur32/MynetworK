@@ -8,6 +8,7 @@
 import { LatencyMonitoringRepository } from '../database/models/LatencyMonitoring.js';
 import { networkScanService } from './networkScanService.js';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 export class LatencyMonitoringService {
     /**
@@ -17,8 +18,8 @@ export class LatencyMonitoringService {
         try {
             LatencyMonitoringRepository.enableMonitoring(ip);
             logger.info('LatencyMonitoringService', `Started monitoring for IP: ${ip}`);
-        } catch (error: any) {
-            logger.error('LatencyMonitoringService', `Failed to start monitoring for ${ip}:`, error.message || error);
+        } catch (error: unknown) {
+            logger.error('LatencyMonitoringService', `Failed to start monitoring for ${ip}:`, getErrorMessage(error));
             throw error;
         }
     }
@@ -30,8 +31,8 @@ export class LatencyMonitoringService {
         try {
             LatencyMonitoringRepository.disableMonitoring(ip);
             logger.info('LatencyMonitoringService', `Stopped monitoring for IP: ${ip}`);
-        } catch (error: any) {
-            logger.error('LatencyMonitoringService', `Failed to stop monitoring for ${ip}:`, error.message || error);
+        } catch (error: unknown) {
+            logger.error('LatencyMonitoringService', `Failed to stop monitoring for ${ip}:`, getErrorMessage(error));
             throw error;
         }
     }
@@ -79,15 +80,15 @@ export class LatencyMonitoringService {
             if (packetLoss || (latency !== null && latency > 100)) {
                 logger.debug('LatencyMonitoringService', `[${ip}] Ping recorded: ${packetLoss ? 'PACKET LOSS' : latency + 'ms'}`);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Log error but don't throw - we want to continue monitoring other IPs
-            logger.error('LatencyMonitoringService', `Failed to ping and record for ${ip}:`, error.message || error);
+            logger.error('LatencyMonitoringService', `Failed to ping and record for ${ip}:`, getErrorMessage(error));
             
             // Record as packet loss
             try {
                 LatencyMonitoringRepository.createMeasurement(ip, null, true);
-            } catch (recordError: any) {
-                logger.error('LatencyMonitoringService', `Failed to record packet loss for ${ip}:`, recordError.message || recordError);
+            } catch (recordError: unknown) {
+                logger.error('LatencyMonitoringService', `Failed to record packet loss for ${ip}:`, getErrorMessage(recordError));
             }
         }
     }

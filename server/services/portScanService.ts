@@ -10,6 +10,7 @@ import { promisify } from 'util';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
 import { isValidIp, isValidPortRange } from '../utils/networkValidation.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -91,12 +92,15 @@ export async function runPortScan(
         });
         const openPorts = parseNmapOutput(stdout);
         return { openPorts };
-    } catch (err: any) {
-        if (err.stdout) {
-            const openPorts = parseNmapOutput(err.stdout);
+    } catch (err: unknown) {
+        // util.promisify(execFile) attaches stdout/stderr to the rejection when
+        // the process exits non-zero, but they're not part of the Error type
+        const stdout = (err as { stdout?: string } | undefined)?.stdout;
+        if (stdout) {
+            const openPorts = parseNmapOutput(stdout);
             return { openPorts };
         }
-        logger.debug('PortScanService', `nmap failed for ${ip}: ${err.message || err}`);
+        logger.debug('PortScanService', `nmap failed for ${ip}: ${getErrorMessage(err)}`);
         throw err;
     }
 }
@@ -171,8 +175,8 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
                 };
                 NetworkScanRepository.update(host.ip, { additionalInfo: merged });
                 logger.debug('PortScanService', `${host.ip}: ${openPorts.length} open port(s)`);
-            } catch (err: any) {
-                logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${err.message || err}`);
+            } catch (err: unknown) {
+                logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${getErrorMessage(err)}`);
             } finally {
                 activeIps.delete(host.ip);
                 completed++;

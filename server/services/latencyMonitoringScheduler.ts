@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import cron from 'node-cron';
 import { latencyMonitoringService } from './latencyMonitoringService.js';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 class LatencyMonitoringSchedulerService {
     private monitoringTask: ReturnType<typeof cron.schedule> | null = null;
@@ -82,8 +83,8 @@ class LatencyMonitoringSchedulerService {
             if (crypto.randomInt(100) === 0) {
                 logger.debug('LatencyMonitoringScheduler', `Monitoring cycle completed for ${enabledIps.length} IP(s)`);
             }
-        } catch (error: any) {
-            logger.error('LatencyMonitoringScheduler', 'Error in monitoring cycle:', error.message || error);
+        } catch (error: unknown) {
+            logger.error('LatencyMonitoringScheduler', 'Error in monitoring cycle:', getErrorMessage(error));
         }
     }
 

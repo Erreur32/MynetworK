@@ -10,6 +10,7 @@ import { logger } from '../utils/logger.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { param } from '../utils/params.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -41,13 +42,13 @@ router.get('/status', (req, res) => {
             success: true,
             result: enabledIps
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', 'Failed to get monitoring status:', error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', 'Failed to get monitoring status:', getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to get monitoring status',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -79,13 +80,13 @@ router.post('/enable/:ip', requireAdmin, (req, res) => {
                 enabled: true
             }
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to enable monitoring for ${param(req, 'ip')}:`, error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', `Failed to enable monitoring for ${param(req, 'ip')}:`, getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to enable monitoring',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -117,13 +118,13 @@ router.post('/disable/:ip', requireAdmin, (req, res) => {
                 enabled: false
             }
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to disable monitoring for ${param(req, 'ip')}:`, error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', `Failed to disable monitoring for ${param(req, 'ip')}:`, getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to disable monitoring',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -167,13 +168,13 @@ router.get('/measurements/:ip', (req, res) => {
             success: true,
             result: formattedMeasurements
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to get measurements for ${param(req, 'ip')}:`, error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', `Failed to get measurements for ${param(req, 'ip')}:`, getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to get measurements',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -209,13 +210,13 @@ router.get('/stats/:ip', (req, res) => {
                 totalMeasurements: stats.totalMeasurements
             }
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to get stats for ${param(req, 'ip')}:`, error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', `Failed to get stats for ${param(req, 'ip')}:`, getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to get statistics',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -237,13 +238,13 @@ router.post('/stats/batch', (req, res) => {
             success: true,
             result: stats
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', 'Failed to get batch stats:', error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', 'Failed to get batch stats:', getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to get batch statistics',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }
@@ -265,13 +266,13 @@ router.post('/status/batch', (req, res) => {
             success: true,
             result: status
         });
-    } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', 'Failed to get batch status:', error.message || error);
+    } catch (error: unknown) {
+        logger.error('LatencyMonitoringAPI', 'Failed to get batch status:', getErrorMessage(error));
         res.status(500).json({
             success: false,
             error: {
                 message: 'Failed to get batch status',
-                details: error.message || String(error)
+                details: getErrorMessage(error)
             }
         });
     }

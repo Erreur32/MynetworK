@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { config } from '../config.js';
 import { isValidPingTarget } from '../utils/networkValidation.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -158,16 +159,16 @@ router.get('/ping', asyncHandler(async (req, res) => {
         result
       });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Check if response is still writable
     if (res.headersSent || req.socket.destroyed) {
       return;
     }
 
     logger.error('Speedtest', 'Ping failed:', error);
-    
+
     // Handle specific error types
-    const errorMessage = error.message || 'Unable to measure latency';
+    const errorMessage = getErrorMessage(error) || 'Unable to measure latency';
     const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT');
     const isSocketError = errorMessage.includes('socket') || errorMessage.includes('ECONNRESET');
 

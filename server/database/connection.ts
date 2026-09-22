@@ -11,6 +11,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
 import { initializeDatabaseConfig } from './dbConfig.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,9 +110,9 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE users ADD COLUMN last_login_ip TEXT;
         `);
-    } catch (e: any) {
+    } catch (e: unknown) {
         // Column already exists, ignore error
-        if (!e.message?.includes('duplicate column name')) {
+        if (!getErrorMessage(e).includes('duplicate column name')) {
             logger.debug('Database', 'Migration: last_login_ip column may already exist');
         }
     }
@@ -120,9 +121,9 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE users ADD COLUMN avatar TEXT;
         `);
-    } catch (e: any) {
+    } catch (e: unknown) {
         // Column already exists, ignore error
-        if (!e.message?.includes('duplicate column name')) {
+        if (!getErrorMessage(e).includes('duplicate column name')) {
             logger.debug('Database', 'Migration: avatar column may already exist');
         }
     }
@@ -205,9 +206,9 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE network_scans ADD COLUMN hostname_source TEXT;
         `);
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Column already exists, ignore
-        if (!error.message?.includes('duplicate column')) {
+        if (!getErrorMessage(error).includes('duplicate column')) {
             logger.debug('Database', 'Migration: hostname_source column may already exist');
         }
     }
@@ -216,9 +217,9 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE network_scans ADD COLUMN vendor_source TEXT;
         `);
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Column already exists, ignore
-        if (!error.message?.includes('duplicate column')) {
+        if (!getErrorMessage(error).includes('duplicate column')) {
             logger.debug('Database', 'Migration: vendor_source column may already exist');
         }
     }
@@ -228,9 +229,9 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE network_scans ADD COLUMN vendor_icon TEXT;
         `);
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Column already exists, ignore
-        if (!error.message?.includes('duplicate column')) {
+        if (!getErrorMessage(error).includes('duplicate column')) {
             logger.debug('Database', 'Migration: vendor_icon column may already exist');
         }
     }
@@ -341,8 +342,8 @@ export function initializeDatabase(): void {
         database.exec(`
             ALTER TABLE mcp_tokens ADD COLUMN access_level TEXT NOT NULL DEFAULT 'full';
         `);
-    } catch (e: any) {
-        if (!e.message?.includes('duplicate column name')) {
+    } catch (e: unknown) {
+        if (!getErrorMessage(e).includes('duplicate column name')) {
             logger.debug('Database', 'Migration: access_level column may already exist');
         }
     }

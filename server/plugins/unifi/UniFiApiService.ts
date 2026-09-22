@@ -10,6 +10,7 @@
 import type { Agent } from 'undici';
 import { logger } from '../../utils/logger.js';
 import { insecureAgent } from '../../utils/insecureAgent.js';
+import { getErrorMessage } from '../../utils/errorMessage.js';
 
 // Strip trailing '/' characters without using a regex (avoids SonarCloud S5852 ReDoS hotspot)
 const stripTrailingSlashes = (s: string): string => {
@@ -361,10 +362,10 @@ export class UniFiApiService {
             let response: Response;
             try {
                 response = await fetch(unifiosLoginUrl, fetchOptions);
-            } catch (fetchError: any) {
+            } catch (fetchError: unknown) {
                 // Network error during detection - log but don't throw, fall back to classic controller
-                const errorMessage = fetchError.message || String(fetchError);
-                const cause = fetchError.cause;
+                const errorMessage = getErrorMessage(fetchError);
+                const cause = fetchError instanceof Error ? fetchError.cause as { code?: string } | undefined : undefined;
                 const errorCode = cause?.code || '';
                 
                 if (errorCode === 'ECONNREFUSED' || errorMessage.includes('ECONNREFUSED')) {
@@ -393,8 +394,8 @@ export class UniFiApiService {
                     logger.debug('UniFi', `UniFiOS detection failed: ${response.status} ${response.statusText}`);
                 }
             }
-        } catch (error: any) {
-            logger.debug('UniFi', `UniFiOS endpoint failed: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.debug('UniFi', `UniFiOS endpoint failed: ${getErrorMessage(error)}`);
         }
 
         // If UniFiOS failed, assume classic controller
@@ -472,10 +473,10 @@ export class UniFiApiService {
         let response: Response;
         try {
             response = await fetch(loginUrl, fetchOptions);
-        } catch (fetchError: any) {
+        } catch (fetchError: unknown) {
             // Fetch failed - this is a network/connection error, not an HTTP error
-            const errorMessage = fetchError.message || String(fetchError);
-            const cause = fetchError.cause;
+            const errorMessage = getErrorMessage(fetchError);
+            const cause = fetchError instanceof Error ? fetchError.cause as { code?: string; address?: string; port?: number } | undefined : undefined;
             const errorCode = cause?.code || '';
             const errorAddress = cause?.address || '';
             const errorPort = cause?.port || '';
@@ -712,9 +713,9 @@ export class UniFiApiService {
             let response: Response;
             try {
                 response = await fetch(url, fetchOptions);
-            } catch (fetchError: any) {
+            } catch (fetchError: unknown) {
                 // Fetch failed - this is a network/connection error, not an HTTP error
-                const errorMessage = fetchError.message || String(fetchError);
+                const errorMessage = getErrorMessage(fetchError);
                 logger.error('UniFi', `Fetch failed for ${url}:`, fetchError);
                 
                 // Provide more helpful error messages based on common issues
@@ -1457,10 +1458,10 @@ export class UniFiApiService {
                         logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
                         throw new Error(errorMsg);
                     }
-                } catch (loginError: any) {
+                } catch (loginError: unknown) {
                     // Re-throw the exact error message (it already contains helpful details)
                     // This preserves specific error messages like 429 Too Many Requests
-                    if (loginError.message) {
+                    if (loginError instanceof Error && loginError.message) {
                         // Clean up any "[object Object]" strings in the error message
                         let cleanMessage = loginError.message.replace(/\[object Object\]/g, '').trim();
                         // Remove duplicate deployment hints

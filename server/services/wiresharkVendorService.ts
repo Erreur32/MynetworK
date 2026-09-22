@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import { execFile } from 'child_process';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -77,8 +78,8 @@ export class WiresharkVendorService {
                 logger.info('WiresharkVendorService', 'Updating vendor database from Wireshark...');
                 try {
                     await this.updateDatabase();
-                } catch (error: any) {
-                    logger.error('WiresharkVendorService', `Failed to update from remote: ${error.message}`);
+                } catch (error: unknown) {
+                    logger.error('WiresharkVendorService', `Failed to update from remote: ${getErrorMessage(error)}`);
                     
                     // If update fails but local file exists, try to use it
                     if (fs.existsSync(MANUF_FILE_PATH)) {
@@ -88,8 +89,8 @@ export class WiresharkVendorService {
                             // Update timestamp to today even if using local file
                             AppConfigRepository.set(LAST_UPDATE_KEY, new Date().toISOString());
                             logger.info('WiresharkVendorService', 'Successfully loaded vendors from local file');
-                        } catch (parseError: any) {
-                            logger.error('WiresharkVendorService', `Failed to parse local file: ${parseError.message}`);
+                        } catch (parseError: unknown) {
+                            logger.error('WiresharkVendorService', `Failed to parse local file: ${getErrorMessage(parseError)}`);
                             // If parsing fails, load default vendors
                             await this.loadDefaultVendors();
                         }
@@ -117,8 +118,8 @@ export class WiresharkVendorService {
                             } else {
                                 logger.info('WiresharkVendorService', `Successfully loaded ${newStats.totalVendors} vendors from local file`);
                             }
-                        } catch (parseError: any) {
-                            logger.error('WiresharkVendorService', `Failed to parse local file: ${parseError.message}`);
+                        } catch (parseError: unknown) {
+                            logger.error('WiresharkVendorService', `Failed to parse local file: ${getErrorMessage(parseError)}`);
                             // If parsing fails, load default vendors
                             await this.loadDefaultVendors();
                         }
@@ -259,10 +260,10 @@ export class WiresharkVendorService {
                 try {
                     insertStmt.run(oui.toLowerCase(), vendor);
                     inserted++;
-                } catch (error: any) {
+                } catch (error: unknown) {
                     // Skip duplicates
-                    if (!error.message?.includes('UNIQUE constraint')) {
-                        logger.debug('WiresharkVendorService', `Failed to insert default vendor ${oui}: ${error.message}`);
+                    if (!getErrorMessage(error).includes('UNIQUE constraint')) {
+                        logger.debug('WiresharkVendorService', `Failed to insert default vendor ${oui}: ${getErrorMessage(error)}`);
                     }
                 }
             }
@@ -395,8 +396,8 @@ export class WiresharkVendorService {
 
             logger.info('WiresharkVendorService', `File validation passed: ${vendorCount} vendors found, ${fileSize} bytes`);
             return { isValid: true, vendorCount, fileSize };
-        } catch (error: any) {
-            return { isValid: false, reason: `Validation error: ${error.message || error}` };
+        } catch (error: unknown) {
+            return { isValid: false, reason: `Validation error: ${getErrorMessage(error)}` };
         }
     }
 
@@ -432,8 +433,8 @@ export class WiresharkVendorService {
                         logger.info('WiresharkVendorService', `Collected ${vendors.size} vendors from Freebox plugin`);
                     }
                 }
-            } catch (error: any) {
-                logger.debug('WiresharkVendorService', `Failed to get vendors from Freebox: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('WiresharkVendorService', `Failed to get vendors from Freebox: ${getErrorMessage(error)}`);
             }
 
             // Try UniFi plugin
@@ -462,8 +463,8 @@ export class WiresharkVendorService {
                         logger.info('WiresharkVendorService', `Collected ${unifiCount} additional vendors from UniFi plugin (total: ${vendors.size})`);
                     }
                 }
-            } catch (error: any) {
-                logger.debug('WiresharkVendorService', `Failed to get vendors from UniFi: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('WiresharkVendorService', `Failed to get vendors from UniFi: ${getErrorMessage(error)}`);
             }
 
             if (vendors.size > 0) {
@@ -471,8 +472,8 @@ export class WiresharkVendorService {
             } else {
                 logger.warn('WiresharkVendorService', 'No vendors collected from plugins (plugins may be disabled or have no devices)');
             }
-        } catch (error: any) {
-            logger.error('WiresharkVendorService', `Failed to get vendors from plugins: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('WiresharkVendorService', `Failed to get vendors from plugins: ${getErrorMessage(error)}`);
         }
 
         return vendors;
@@ -495,7 +496,7 @@ export class WiresharkVendorService {
             // Try IEEE OUI official database (primary source)
             const urlsToTry = [IEEE_OUI_URL];
             let downloadSuccess = false;
-            let lastError: Error | null = null;
+            let lastError: unknown = null;
             
             for (const url of urlsToTry) {
                 try {
@@ -538,9 +539,9 @@ export class WiresharkVendorService {
                         logger.info('WiresharkVendorService', `Downloaded IEEE OUI database (${fileStats.size} bytes) using curl from ${url}`);
                         downloadSuccess = true;
                         break; // Success, exit loop
-                    } catch (curlError: any) {
+                    } catch (curlError: unknown) {
                         // Fallback to Node.js fetch if curl fails
-                        logger.warn('WiresharkVendorService', `curl failed for ${url}: ${curlError.message}, trying fetch...`);
+                        logger.warn('WiresharkVendorService', `curl failed for ${url}: ${getErrorMessage(curlError)}, trying fetch...`);
                         
                         const response = await fetch(url, {
                             redirect: 'follow',
@@ -581,15 +582,15 @@ export class WiresharkVendorService {
                         downloadSuccess = true;
                         break; // Success, exit loop
                     }
-                } catch (error: any) {
+                } catch (error: unknown) {
                     lastError = error;
-                    logger.warn('WiresharkVendorService', `Failed to download from ${url}: ${error.message || error}`);
+                    logger.warn('WiresharkVendorService', `Failed to download from ${url}: ${getErrorMessage(error)}`);
                     // Continue to next URL
                 }
             }
             
             if (!downloadSuccess) {
-                throw new Error(`Failed to download IEEE OUI database from all URLs. Last error: ${lastError?.message || 'Unknown error'}`);
+                throw new Error(`Failed to download IEEE OUI database from all URLs. Last error: ${lastError ? getErrorMessage(lastError) : 'Unknown error'}`);
             }
             
             // Validate the downloaded file before it ever replaces the previously-good one
@@ -606,7 +607,7 @@ export class WiresharkVendorService {
             fs.renameSync(tmpPath, MANUF_FILE_PATH);
             
             logger.info('WiresharkVendorService', `Downloaded file validated successfully: ${validation.fileSize} bytes, ${validation.vendorCount} vendors`);
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Clean up a leftover partial/invalid temp file so it's never mistaken
             // for the real file and never lingers between attempts
             try {
@@ -614,7 +615,7 @@ export class WiresharkVendorService {
             } catch {
                 // best effort
             }
-            logger.error('WiresharkVendorService', `Failed to download IEEE OUI database: ${error.message || error}`);
+            logger.error('WiresharkVendorService', `Failed to download IEEE OUI database: ${getErrorMessage(error)}`);
             throw error;
         }
     }
@@ -660,9 +661,9 @@ export class WiresharkVendorService {
                     db.exec('COMMIT');
                     logger.info('WiresharkVendorService', `Successfully loaded ${pluginVendors.size} vendors from plugins`);
                     return;
-                } catch (error: any) {
+                } catch (error: unknown) {
                     db.exec('ROLLBACK');
-                    throw new Error(`Failed to insert plugin vendors: ${error.message || error}`);
+                    throw new Error(`Failed to insert plugin vendors: ${getErrorMessage(error)}`);
                 }
             } else {
                 throw new Error(`File validation failed: ${validation.reason}. No vendors available from plugins.`);
@@ -702,9 +703,9 @@ export class WiresharkVendorService {
                             if (sampleLines.length < 5) {
                                 sampleLines.push(`Entry ending at line ${i}: OUI: ${currentOui}, Vendor: ${currentVendor}`);
                             }
-                        } catch (error: any) {
-                            if (!error.message?.includes('UNIQUE constraint')) {
-                                logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
+                        } catch (error: unknown) {
+                            if (!getErrorMessage(error).includes('UNIQUE constraint')) {
+                                logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${getErrorMessage(error)}`);
                             }
                             skipped++;
                         }
@@ -742,9 +743,9 @@ export class WiresharkVendorService {
                                 if (sampleLines.length < 5) {
                                     sampleLines.push(`Entry at line ${i}: OUI: ${currentOui}, Vendor: ${currentVendor}`);
                                 }
-                            } catch (error: any) {
-                                if (!error.message?.includes('UNIQUE constraint')) {
-                                    logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
+                            } catch (error: unknown) {
+                                if (!getErrorMessage(error).includes('UNIQUE constraint')) {
+                                    logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${getErrorMessage(error)}`);
                                 }
                                 skipped++;
                             }
@@ -776,9 +777,9 @@ export class WiresharkVendorService {
                     if (sampleLines.length < 5) {
                         sampleLines.push(`Last entry: OUI: ${currentOui}, Vendor: ${currentVendor}`);
                     }
-                } catch (error: any) {
-                    if (!error.message?.includes('UNIQUE constraint')) {
-                        logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${error.message}`);
+                } catch (error: unknown) {
+                    if (!getErrorMessage(error).includes('UNIQUE constraint')) {
+                        logger.debug('WiresharkVendorService', `Failed to insert ${currentOui}: ${getErrorMessage(error)}`);
                     }
                     skipped++;
                 }
@@ -818,9 +819,9 @@ export class WiresharkVendorService {
                         }
                         db.exec('COMMIT');
                         logger.info('WiresharkVendorService', `Added ${pluginInserted} additional vendors from plugins (total: ${inserted + pluginInserted})`);
-                    } catch (error: any) {
+                    } catch (error: unknown) {
                         db.exec('ROLLBACK');
-                        logger.warn('WiresharkVendorService', `Failed to add plugin vendors: ${error.message || error}`);
+                        logger.warn('WiresharkVendorService', `Failed to add plugin vendors: ${getErrorMessage(error)}`);
                     }
                 }
             }
@@ -843,13 +844,13 @@ export class WiresharkVendorService {
                         db.exec('COMMIT');
                         logger.info('WiresharkVendorService', `Successfully loaded ${pluginVendors.size} vendors from plugins after parsing failure`);
                         return; // Success with plugins, don't throw error
-                    } catch (pluginError: any) {
+                    } catch (pluginError: unknown) {
                         db.exec('ROLLBACK');
-                        throw new Error(`Parsing failed and plugin fallback failed: ${error}. Plugin error: ${pluginError.message || pluginError}`);
+                        throw new Error(`Parsing failed and plugin fallback failed: ${error}. Plugin error: ${getErrorMessage(pluginError)}`);
                     }
                 }
-            } catch (pluginError: any) {
-                logger.error('WiresharkVendorService', `Plugin fallback also failed: ${pluginError.message || pluginError}`);
+            } catch (pluginError: unknown) {
+                logger.error('WiresharkVendorService', `Plugin fallback also failed: ${getErrorMessage(pluginError)}`);
             }
             
             throw error;
@@ -876,8 +877,8 @@ export class WiresharkVendorService {
             // Download the IEEE OUI database file (saves to data/oui.txt locally)
             try {
                 await this.downloadManufFile();
-            } catch (downloadError: any) {
-                logger.error('WiresharkVendorService', `Failed to download manuf file: ${downloadError.message || downloadError}`);
+            } catch (downloadError: unknown) {
+                logger.error('WiresharkVendorService', `Failed to download manuf file: ${getErrorMessage(downloadError)}`);
                 
                 // Try to use plugins as fallback
                 logger.info('WiresharkVendorService', 'Download failed, attempting to load vendors from plugins...');
@@ -902,12 +903,12 @@ export class WiresharkVendorService {
                         AppConfigRepository.set(LAST_UPDATE_KEY, now.toISOString());
                         logger.info('WiresharkVendorService', `Successfully loaded ${pluginVendors.size} vendors from plugins at ${now.toISOString()}`);
                         return { source: 'plugins', vendorCount: pluginVendors.size };
-                    } catch (error: any) {
+                    } catch (error: unknown) {
                         db.exec('ROLLBACK');
-                        throw new Error(`Failed to insert plugin vendors: ${error.message || error}`);
+                        throw new Error(`Failed to insert plugin vendors: ${getErrorMessage(error)}`);
                     }
                 } else {
-                    throw new Error(`Download failed and no vendors available from plugins: ${downloadError.message || downloadError}`);
+                    throw new Error(`Download failed and no vendors available from plugins: ${getErrorMessage(downloadError)}`);
                 }
             }
             
@@ -934,8 +935,8 @@ export class WiresharkVendorService {
             const stats = this.getStats();
             logger.info('WiresharkVendorService', `Vendor database updated successfully at ${now.toISOString()}`);
             return { source: 'downloaded', vendorCount: stats.totalVendors };
-        } catch (error: any) {
-            logger.error('WiresharkVendorService', `Failed to update database: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('WiresharkVendorService', `Failed to update database: ${getErrorMessage(error)}`);
             throw error;
         }
     }
