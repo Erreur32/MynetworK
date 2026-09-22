@@ -7,6 +7,7 @@
 
 import { logger } from '../utils/logger.js';
 import { WiresharkVendorService } from './wiresharkVendorService.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 /**
  * OUI Database - Common vendor prefixes
@@ -685,8 +686,8 @@ export class VendorDetectionService {
                 } else {
                     logger.debug('VendorDetection', `macvendors.com API returned status ${response.status} for MAC ${mac}`);
                 }
-            } catch (error: any) {
-                logger.debug('VendorDetection', `macvendors.com API failed for MAC ${mac}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('VendorDetection', `macvendors.com API failed for MAC ${mac}: ${getErrorMessage(error)}`);
             }
             
             // API 2: macaddress.io (alternative, requires API key but has free tier)
@@ -710,12 +711,12 @@ export class VendorDetectionService {
                         return vendor;
                     }
                 }
-            } catch (error: any) {
-                logger.debug('VendorDetection', `maclookup.app API failed for MAC ${mac}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('VendorDetection', `maclookup.app API failed for MAC ${mac}: ${getErrorMessage(error)}`);
             }
-            
-        } catch (error: any) {
-            logger.debug('VendorDetection', `API lookup failed for MAC ${mac}: ${error.message || error}`);
+
+        } catch (error: unknown) {
+            logger.debug('VendorDetection', `API lookup failed for MAC ${mac}: ${getErrorMessage(error)}`);
         }
         
         return null;

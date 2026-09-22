@@ -15,6 +15,7 @@ import { pluginManager } from '../services/pluginManager.js';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { networkScanService } from '../services/networkScanService.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const router = Router();
 
@@ -83,12 +84,12 @@ router.post('/', requireAuth, autoLog('search', 'search'), asyncHandler(async (r
                 results
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Search', 'Search failed:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Search failed',
+                message: getErrorMessage(error) || 'Search failed',
                 code: 'SEARCH_ERROR'
             }
         });
@@ -143,8 +144,8 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                 currentStatus = 'offline';
                 logger.debug('Search', `IP ${ip} is currently offline`);
             }
-        } catch (error: any) {
-            logger.debug('Search', `Failed to ping IP ${ip} for real-time status check:`, error.message);
+        } catch (error: unknown) {
+            logger.debug('Search', `Failed to ping IP ${ip} for real-time status check:`, getErrorMessage(error));
             // Keep existing status if ping fails
         }
         
@@ -288,12 +289,12 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                             }));
                         }
                     }
-                } catch (portForwardError: any) {
-                    logger.debug('Search', `Failed to get port forwarding rules for IP ${ip}:`, portForwardError.message);
+                } catch (portForwardError: unknown) {
+                    logger.debug('Search', `Failed to get port forwarding rules for IP ${ip}:`, getErrorMessage(portForwardError));
                 }
             }
-        } catch (error: any) {
-            logger.debug('Search', `Failed to get Freebox data for IP ${ip}:`, error.message);
+        } catch (error: unknown) {
+            logger.debug('Search', `Failed to get Freebox data for IP ${ip}:`, getErrorMessage(error));
         }
 
         // Get UniFi data
@@ -350,8 +351,8 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                                 });
                             }
                         }
-                    } catch (error: any) {
-                        logger.debug('Search', `Failed to get fresh UniFi stats:`, error.message);
+                    } catch (error: unknown) {
+                        logger.debug('Search', `Failed to get fresh UniFi stats:`, getErrorMessage(error));
                     }
                 }
                 
@@ -550,20 +551,20 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
                     }
                 }
             }
-        } catch (error: any) {
-            logger.debug('Search', `Failed to get UniFi data for IP ${ip}:`, error.message);
+        } catch (error: unknown) {
+            logger.debug('Search', `Failed to get UniFi data for IP ${ip}:`, getErrorMessage(error));
         }
 
         res.json({
             success: true,
             result: aggregatedData
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Search', `Failed to get IP details for ${ip}:`, error);
         return res.status(500).json({
             success: false,
             error: {
-                message: error.message || 'Failed to get IP details',
+                message: getErrorMessage(error) || 'Failed to get IP details',
                 code: 'IP_DETAILS_ERROR'
             }
         });

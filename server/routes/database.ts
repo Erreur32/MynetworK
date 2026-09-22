@@ -19,6 +19,7 @@ import {
 } from '../database/dbConfig.js';
 import { checkpointWAL } from '../database/connection.js';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const router = Router();
 
@@ -33,9 +34,9 @@ router.get('/config', requireAuth, requireAdmin, asyncHandler(async (req: Authen
             success: true,
             result: config
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Failed to get database config:', error);
-        throw createError(error.message || 'Failed to get database config', 500, 'DB_CONFIG_ERROR');
+        throw createError(getErrorMessage(error) || 'Failed to get database config', 500, 'DB_CONFIG_ERROR');
     }
 }));
 
@@ -74,7 +75,7 @@ router.post('/config', requireAuth, requireAdmin, autoLog('database', 'update-co
             result: updatedConfig,
             message: 'Database configuration updated successfully'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Failed to update database config:', error);
         throw error;
     }
@@ -92,9 +93,9 @@ router.get('/stats', requireAuth, asyncHandler(async (req: AuthenticatedRequest,
             success: true,
             result: stats
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Failed to get database stats:', error);
-        throw createError(error.message || 'Failed to get database stats', 500, 'DB_STATS_ERROR');
+        throw createError(getErrorMessage(error) || 'Failed to get database stats', 500, 'DB_STATS_ERROR');
     }
 }));
 
@@ -109,9 +110,9 @@ router.post('/apply-config', requireAuth, requireAdmin, autoLog('database', 'app
             success: true,
             message: 'Database configuration applied successfully'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Failed to apply database config:', error);
-        throw createError(error.message || 'Failed to apply database config', 500, 'DB_CONFIG_APPLY_ERROR');
+        throw createError(getErrorMessage(error) || 'Failed to apply database config', 500, 'DB_CONFIG_APPLY_ERROR');
     }
 }));
 
@@ -123,9 +124,9 @@ router.get('/health', requireAuth, requireAdmin, asyncHandler(async (req: Authen
     try {
         const health = getDatabaseHealth();
         res.json({ success: true, result: health });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Failed to get health report:', error);
-        throw createError(error.message || 'Failed to get database health', 500, 'DB_HEALTH_ERROR');
+        throw createError(getErrorMessage(error) || 'Failed to get database health', 500, 'DB_HEALTH_ERROR');
     }
 }));
 
@@ -137,9 +138,9 @@ router.post('/vacuum', requireAuth, requireAdmin, autoLog('database', 'vacuum'),
     try {
         const result = runVacuum();
         res.json({ success: true, result });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'VACUUM failed:', error);
-        throw createError(error.message || 'VACUUM failed', 500, 'DB_VACUUM_ERROR');
+        throw createError(getErrorMessage(error) || 'VACUUM failed', 500, 'DB_VACUUM_ERROR');
     }
 }));
 
@@ -151,9 +152,9 @@ router.post('/integrity-check', requireAuth, requireAdmin, autoLog('database', '
     try {
         const result = runIntegrityCheck();
         res.json({ success: true, result });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'Integrity check failed:', error);
-        throw createError(error.message || 'Integrity check failed', 500, 'DB_INTEGRITY_ERROR');
+        throw createError(getErrorMessage(error) || 'Integrity check failed', 500, 'DB_INTEGRITY_ERROR');
     }
 }));
 
@@ -165,9 +166,9 @@ router.post('/wal-checkpoint', requireAuth, requireAdmin, autoLog('database', 'w
     try {
         checkpointWAL();
         res.json({ success: true, message: 'WAL checkpoint effectué avec succès' });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error('Database', 'WAL checkpoint failed:', error);
-        throw createError(error.message || 'WAL checkpoint failed', 500, 'DB_CHECKPOINT_ERROR');
+        throw createError(getErrorMessage(error) || 'WAL checkpoint failed', 500, 'DB_CHECKPOINT_ERROR');
     }
 }));
 

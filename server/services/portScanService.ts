@@ -5,11 +5,12 @@
  * in NetworkScan.additionalInfo. Used after full scan when portScanEnabled is ON.
  */
 
-import { execFile } from 'child_process';
+import { execFile, type ExecFileException } from 'child_process';
 import { promisify } from 'util';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
 import { isValidIp, isValidPortRange } from '../utils/networkValidation.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -91,12 +92,15 @@ export async function runPortScan(
         });
         const openPorts = parseNmapOutput(stdout);
         return { openPorts };
-    } catch (err: any) {
-        if (err.stdout) {
-            const openPorts = parseNmapOutput(err.stdout);
+    } catch (err: unknown) {
+        // util.promisify(execFile) rejects with an ExecFileException that includes
+        // stdout/stderr when the process exits non-zero
+        const stdout = (err as ExecFileException)?.stdout;
+        if (stdout) {
+            const openPorts = parseNmapOutput(stdout);
             return { openPorts };
         }
-        logger.debug('PortScanService', `nmap failed for ${ip}: ${err.message || err}`);
+        logger.debug('PortScanService', `nmap failed for ${ip}: ${getErrorMessage(err)}`);
         throw err;
     }
 }
@@ -171,8 +175,8 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
                 };
                 NetworkScanRepository.update(host.ip, { additionalInfo: merged });
                 logger.debug('PortScanService', `${host.ip}: ${openPorts.length} open port(s)`);
-            } catch (err: any) {
-                logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${err.message || err}`);
+            } catch (err: unknown) {
+                logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${getErrorMessage(err)}`);
             } finally {
                 activeIps.delete(host.ip);
                 completed++;

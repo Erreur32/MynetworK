@@ -11,6 +11,7 @@ import { networkScanService } from './networkScanService.js';
 import { logger } from '../utils/logger.js';
 import { pluginManager } from './pluginManager.js';
 import { metricsCollector } from './metricsCollector.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 interface AutoScanConfig {
     enabled: boolean;
@@ -282,8 +283,8 @@ class NetworkScanSchedulerService {
                             const unified: UnifiedAutoScanConfig = JSON.parse(unifiedStr);
                             if (unified.fullScan?.portScanEnabled === true) {
                                 const { portScanService } = await import('./portScanService.js');
-                                portScanService.runPortScanForOnlineHosts().catch((err: any) => {
-                                    logger.error('NetworkScanScheduler', 'Background port scan failed:', err?.message || err);
+                                portScanService.runPortScanForOnlineHosts().catch((err: unknown) => {
+                                    logger.error('NetworkScanScheduler', 'Background port scan failed:', getErrorMessage(err));
                                 });
                             }
                         } catch (_e) {
@@ -291,8 +292,8 @@ class NetworkScanSchedulerService {
                         }
                     }
                 }
-            } catch (error: any) {
-                logger.error('NetworkScanScheduler', 'Scheduled scan failed:', error.message || error);
+            } catch (error: unknown) {
+                logger.error('NetworkScanScheduler', 'Scheduled scan failed:', getErrorMessage(error));
                 logger.error('NetworkScanScheduler', 'Scan error details:', error);
             }
         }, {
@@ -372,8 +373,8 @@ class NetworkScanSchedulerService {
                 }));
                 
                 logger.info('NetworkScanScheduler', 'Scheduled refresh completed successfully');
-            } catch (error: any) {
-                logger.error('NetworkScanScheduler', 'Scheduled refresh failed:', error.message || error);
+            } catch (error: unknown) {
+                logger.error('NetworkScanScheduler', 'Scheduled refresh failed:', getErrorMessage(error));
                 logger.error('NetworkScanScheduler', 'Refresh error details:', error);
             }
         }, {
@@ -624,10 +625,10 @@ class NetworkScanSchedulerService {
             const result = await networkScanService.refreshExistingIps('quick');
             
             logger.info('NetworkScanScheduler', `Startup refresh completed: ${result.online} online, ${result.offline} offline, ${result.scanned} scanned in ${result.duration}ms`);
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Don't fail startup if refresh fails - just log the error
-            logger.error('NetworkScanScheduler', `Failed to trigger startup refresh: ${error.message || error}`);
-            logger.debug('NetworkScanScheduler', `Startup refresh error stack: ${error.stack || 'N/A'}`);
+            logger.error('NetworkScanScheduler', `Failed to trigger startup refresh: ${getErrorMessage(error)}`);
+            logger.debug('NetworkScanScheduler', `Startup refresh error stack: ${error instanceof Error ? error.stack : 'N/A'}`);
         }
     }
 

@@ -13,6 +13,7 @@
 
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 
 const BLACKLIST_CONFIG_KEY = 'network_scan_blacklist';
 
@@ -40,8 +41,8 @@ function loadBlacklist(): string[] {
             .filter((ip: string) => ip.length > 0);
 
         return Array.from(new Set(normalized));
-    } catch (error: any) {
-        logger.error('IpBlacklistService', `Failed to parse blacklist config: ${error.message || error}`);
+    } catch (error: unknown) {
+        logger.error('IpBlacklistService', `Failed to parse blacklist config: ${getErrorMessage(error)}`);
         return [];
     }
 }
@@ -54,8 +55,8 @@ function saveBlacklist(ips: string[]): boolean {
     try {
         const uniqueIps = Array.from(new Set(ips.map((ip) => ip.trim()).filter((ip) => ip.length > 0)));
         return AppConfigRepository.set(BLACKLIST_CONFIG_KEY, JSON.stringify(uniqueIps));
-    } catch (error: any) {
-        logger.error('IpBlacklistService', `Failed to save blacklist config: ${error.message || error}`);
+    } catch (error: unknown) {
+        logger.error('IpBlacklistService', `Failed to save blacklist config: ${getErrorMessage(error)}`);
         return false;
     }
 }
