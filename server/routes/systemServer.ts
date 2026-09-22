@@ -719,6 +719,62 @@ const getDiskUsage = async (): Promise<{ total: number; free: number; used: numb
 };
 
 /**
+ * Try multiple host-mounted paths to read the real host hostname, falling
+ * back to the container hostname if none work or the result still looks
+ * like a container ID (12 hex chars).
+ */
+async function getHostHostname(defaultHostname: string): Promise<string> {
+  const hostnameMethods = [
+    join(HOST_ROOT_PATH, 'proc', 'sys', 'kernel', 'hostname'), // Try /proc first (now mounted separately)
+    join(HOST_ROOT_PATH, 'etc', 'hostname'),
+  ];
+
+  for (const hostnamePath of hostnameMethods) {
+    try {
+      await fs.access(hostnamePath);
+      const hostHostname = await fs.readFile(hostnamePath, 'utf8');
+      if (hostHostname && hostHostname.trim().length > 0) {
+        const trimmedHostname = hostHostname.trim();
+        // Only use if it's not a container ID (container IDs are usually 12 hex chars)
+        if (trimmedHostname.length > 12 || !/^[a-f0-9]+$/.test(trimmedHostname)) {
+          debugLog(`[SystemServer] ✓ Read host hostname from ${hostnamePath}: ${trimmedHostname}`);
+          return trimmedHostname;
+        }
+        debugLog(`[SystemServer] Hostname from ${hostnamePath} looks like container ID, trying next method`);
+      }
+    } catch (error) {
+      debugLog(`[SystemServer] Cannot read hostname from ${hostnamePath}: ${error}`);
+    }
+  }
+
+  if (defaultHostname.length === 12 && /^[a-f0-9]+$/.test(defaultHostname)) {
+    debugLog(`[SystemServer] ⚠ Hostname appears to be container ID (${defaultHostname}), but could not read host hostname`);
+  }
+  return defaultHostname;
+}
+
+/**
+ * Read the real host uptime from the host-mounted /proc/uptime, falling
+ * back to the container's own uptime if unavailable.
+ */
+async function getHostUptime(defaultUptime: number): Promise<number> {
+  try {
+    const hostUptimePath = join(HOST_ROOT_PATH, 'proc', 'uptime');
+    await fs.access(hostUptimePath);
+    const uptimeContent = await fs.readFile(hostUptimePath, 'utf8');
+    const firstField = uptimeContent.split(' ')[0];
+    const hostUptimeSeconds = parseFloat(firstField);
+    if (!Number.isNaN(hostUptimeSeconds) && hostUptimeSeconds > 0) {
+      debugLog(`[SystemServer] Read host uptime from ${hostUptimePath}: ${Math.floor(hostUptimeSeconds / 3600)}h`);
+      return hostUptimeSeconds;
+    }
+  } catch (error) {
+    debugLog(`[SystemServer] Cannot read host uptime: ${error}`);
+  }
+  return defaultUptime;
+}
+
+/**
  * GET /api/system/server
  * Get server system information
  */
@@ -740,57 +796,8 @@ router.get('/server', async (_req, res) => {
     // hostname and uptime from the host so that the dashboard reflects
     // the real machine instead of the container identity.
     if (isDocker()) {
-      // Try multiple methods to get host hostname
-      const hostnameMethods = [
-        join(HOST_ROOT_PATH, 'proc', 'sys', 'kernel', 'hostname'), // Try /proc first (now mounted separately)
-        join(HOST_ROOT_PATH, 'etc', 'hostname'),
-      ];
-      
-      for (const hostnamePath of hostnameMethods) {
-        try {
-          await fs.access(hostnamePath);
-          const hostHostname = await fs.readFile(hostnamePath, 'utf8');
-          if (hostHostname && hostHostname.trim().length > 0) {
-            const trimmedHostname = hostHostname.trim();
-            // Only use if it's not a container ID (container IDs are usually 12 hex chars)
-            if (trimmedHostname.length > 12 || !/^[a-f0-9]+$/.test(trimmedHostname)) {
-              hostname = trimmedHostname;
-              debugLog(`[SystemServer] ✓ Read host hostname from ${hostnamePath}: ${hostname}`);
-              break;
-            } else {
-              debugLog(`[SystemServer] Hostname from ${hostnamePath} looks like container ID, trying next method`);
-            }
-          }
-        } catch (error) {
-          debugLog(`[SystemServer] Cannot read hostname from ${hostnamePath}: ${error}`);
-          // Try next method
-          continue;
-        }
-      }
-      
-      if (hostname === os.hostname() && hostname.length === 12 && /^[a-f0-9]+$/.test(hostname)) {
-        debugLog(`[SystemServer] ⚠ Hostname appears to be container ID (${hostname}), but could not read host hostname`);
-      }
-
-      // Try to read host uptime
-      try {
-        const hostUptimePath = join(HOST_ROOT_PATH, 'proc', 'uptime');
-        try {
-          await fs.access(hostUptimePath);
-          const uptimeContent = await fs.readFile(hostUptimePath, 'utf8');
-          const firstField = uptimeContent.split(' ')[0];
-          const hostUptimeSeconds = parseFloat(firstField);
-          if (!Number.isNaN(hostUptimeSeconds) && hostUptimeSeconds > 0) {
-            uptime = hostUptimeSeconds;
-            debugLog(`[SystemServer] Read host uptime from ${hostUptimePath}: ${Math.floor(uptime / 3600)}h`);
-          }
-        } catch (accessError) {
-          debugLog(`[SystemServer] Cannot access host uptime file at ${hostUptimePath}`);
-        }
-      } catch (error) {
-        debugLog(`[SystemServer] Error reading host uptime: ${error}`);
-      }
-
+      hostname = await getHostHostname(hostname);
+      uptime = await getHostUptime(uptime);
     }
 
     const systemInfo = {
