@@ -846,7 +846,7 @@ export class WiresharkVendorService {
                         return; // Success with plugins, don't throw error
                     } catch (pluginError: unknown) {
                         db.exec('ROLLBACK');
-                        throw new Error(`Parsing failed and plugin fallback failed: ${error}. Plugin error: ${getErrorMessage(pluginError)}`);
+                        throw new Error(`Parsing failed and plugin fallback failed: ${getErrorMessage(error)}. Plugin error: ${getErrorMessage(pluginError)}`);
                     }
                 }
             } catch (pluginError: unknown) {

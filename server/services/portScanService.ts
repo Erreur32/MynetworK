@@ -5,7 +5,7 @@
  * in NetworkScan.additionalInfo. Used after full scan when portScanEnabled is ON.
  */
 
-import { execFile } from 'child_process';
+import { execFile, type ExecFileException } from 'child_process';
 import { promisify } from 'util';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
@@ -93,9 +93,9 @@ export async function runPortScan(
         const openPorts = parseNmapOutput(stdout);
         return { openPorts };
     } catch (err: unknown) {
-        // util.promisify(execFile) attaches stdout/stderr to the rejection when
-        // the process exits non-zero, but they're not part of the Error type
-        const stdout = (err as { stdout?: string } | undefined)?.stdout;
+        // util.promisify(execFile) rejects with an ExecFileException that includes
+        // stdout/stderr when the process exits non-zero
+        const stdout = (err as ExecFileException)?.stdout;
         if (stdout) {
             const openPorts = parseNmapOutput(stdout);
             return { openPorts };
