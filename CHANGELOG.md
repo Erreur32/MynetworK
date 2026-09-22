@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.35] - 2026-09-22
+
+### Changed
+
+- Backend code quality cleanup, no functional change:
+  - `catch (error: any)` replaced with `catch (error: unknown)` across 14 backend files, narrowing with a new shared `getErrorMessage()` helper instead of unchecked `.message` access
+  - Duplicated route ID parsing/validation (`parseInt` + `isNaN` + throw, or `Number.isInteger` + manual 400 response) extracted into shared `requireIntParam()`/`parseStrictIntParam()` helpers, applied across `downloads.ts`, `mcpTokens.ts`, `auth.ts`, `users.ts`, and `vm.ts`
+  - Same error messages/codes and validation semantics preserved everywhere
+
+---
+
 ## [0.10.34] - 2026-09-22
 
 ### Fixed
