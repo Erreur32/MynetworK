@@ -1,45 +1,29 @@
 import { Agent, buildConnector } from 'undici';
-import * as dns from 'node:dns/promises';
 import { isPrivateNetworkIp, isValidIp } from './networkValidation.js';
 
 const baseConnector = buildConnector({ rejectUnauthorized: false });
 
-// Resolves the hostname once and returns the address to connect to if it's
-// private/LAN, or null otherwise. Resolving once and reusing that address for
-// the actual connection (rather than checking, then letting the real connector
-// re-resolve the same hostname) avoids a DNS-rebinding TOCTOU window where a
-// malicious/compromised DNS answer could differ between the check and the
-// connect.
-async function resolvePrivateAddress(hostname: string): Promise<string | null> {
-    if (hostname === 'localhost') return '127.0.0.1';
-    if (isValidIp(hostname)) return isPrivateNetworkIp(hostname) ? hostname : null;
-    try {
-        const { address } = await dns.lookup(hostname);
-        return isPrivateNetworkIp(address) ? address : null;
-    } catch {
-        return null;
-    }
-}
-
-// Refuses to connect (even before the TLS handshake) unless the target resolves to a
-// private/LAN address — the actual safeguard against this agent being misused against
-// a non-LAN host (e.g. a copy-pasted fetch call or a misconfigured controller URL),
-// enforced centrally instead of relying on discipline at each call site.
+// Refuses to connect (before the TLS handshake) when the target is an IP
+// literal outside private/LAN ranges — catches a copy-pasted fetch call or a
+// hardcoded external IP being pointed at this insecure agent by mistake.
+// Hostnames (e.g. mafreebox.freebox.fr, a custom UniFi domain) are trusted
+// as-is: they're admin-configured, not attacker input, and DNS-resolving
+// them here to validate is unreliable in Docker — the container's resolver
+// isn't necessarily the LAN device itself, so a legitimate local hostname
+// can resolve to a public IP (or fail to resolve at all), incorrectly
+// blocking a valid connection. This previously broke Freebox connectivity
+// in production for exactly that reason.
 const lanOnlyConnector: buildConnector.connector = (options, callback) => {
-    resolvePrivateAddress(options.hostname)
-        .then((address) => {
-            if (!address) {
-                callback(
-                    new Error(
-                        `insecureAgent: refusing to disable certificate verification for non-private host "${options.hostname}"`
-                    ),
-                    null
-                );
-                return;
-            }
-            baseConnector({ ...options, hostname: address }, callback);
-        })
-        .catch((err) => callback(err, null));
+    if (isValidIp(options.hostname) && !isPrivateNetworkIp(options.hostname)) {
+        callback(
+            new Error(
+                `insecureAgent: refusing to disable certificate verification for non-private IP "${options.hostname}"`
+            ),
+            null
+        );
+        return;
+    }
+    baseConnector(options, callback);
 };
 
 // Shared HTTPS agent with disabled certificate verification, for LAN devices
