@@ -13,6 +13,7 @@ import {
 } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { logger } from "../utils/logger.js";
+import { parseStrictIntParam } from "../utils/params.js";
 
 const router = Router();
 
@@ -107,8 +108,8 @@ router.delete(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
@@ -132,8 +133,8 @@ router.delete(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
@@ -161,8 +162,8 @@ router.patch(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
@@ -195,8 +196,8 @@ router.get(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
@@ -220,8 +221,8 @@ router.put(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
@@ -257,8 +258,8 @@ router.delete(
   requireAuth,
   requireAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const id = parseStrictIntParam(req, "id");
+    if (id === null) {
       res.status(400).json({ success: false, error: "Invalid token id" });
       return;
     }
