@@ -42,7 +42,11 @@ export const mcpAuthMiddleware = (
     return;
   }
 
-  const clientIp = req.ip || req.socket.remoteAddress || "";
+  // Use the actual TCP peer address, not req.ip (derived from the spoofable
+  // X-Forwarded-For header via trust proxy) — this app is also reachable on a
+  // directly-published Docker port, bypassing the reverse proxy entirely, so
+  // an attacker on that path could set X-Forwarded-For to any private IP.
+  const clientIp = req.socket.remoteAddress || "";
 
   if (!isPrivateNetworkIp(clientIp)) {
     jsonRpcError(

@@ -3,10 +3,12 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { param } from '../utils/params.js';
 
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+
 const router = Router();
 
 // GET /api/fs/list - List files in directory
-router.get('/list', asyncHandler(async (req, res) => {
+router.get('/list', requireAuth, asyncHandler(async (req, res) => {
   // If no path provided, list root directory
   // If path provided, it's already base64 encoded from Freebox API
   const path = req.query.path ? decodeURIComponent(req.query.path as string) : '/';
@@ -26,7 +28,7 @@ router.get('/list', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/fs/info - Get file info
-router.get('/info', asyncHandler(async (req, res) => {
+router.get('/info', requireAuth, asyncHandler(async (req, res) => {
   const encodedPath = req.query.path as string;
   if (!encodedPath) {
     return res.status(400).json({ success: false, error: { message: 'Path required' } });
@@ -37,7 +39,7 @@ router.get('/info', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fs/mkdir - Create directory
-router.post('/mkdir', asyncHandler(async (req, res) => {
+router.post('/mkdir', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { parent, dirname } = req.body;
   // parent may be URL-encoded, decode it
   const decodedParent = parent ? decodeURIComponent(parent) : parent;
@@ -46,7 +48,7 @@ router.post('/mkdir', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fs/rename - Rename file/folder
-router.post('/rename', asyncHandler(async (req, res) => {
+router.post('/rename', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { src, dst } = req.body;
   // Decode URL-encoded paths
   const decodedSrc = src ? decodeURIComponent(src) : src;
@@ -56,7 +58,7 @@ router.post('/rename', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fs/remove - Delete files
-router.post('/remove', asyncHandler(async (req, res) => {
+router.post('/remove', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { files } = req.body;
   // Decode URL-encoded file paths
   const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
@@ -65,7 +67,7 @@ router.post('/remove', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fs/copy - Copy files
-router.post('/copy', asyncHandler(async (req, res) => {
+router.post('/copy', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { files, dst, mode } = req.body;
   // Decode URL-encoded paths
   const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
@@ -75,7 +77,7 @@ router.post('/copy', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fs/move - Move files
-router.post('/move', asyncHandler(async (req, res) => {
+router.post('/move', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { files, dst, mode } = req.body;
   // Decode URL-encoded paths
   const decodedFiles = files ? files.map((f: string) => decodeURIComponent(f)) : files;
@@ -85,13 +87,13 @@ router.post('/move', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/fs/storage - Get storage info
-router.get('/storage', asyncHandler(async (_req, res) => {
+router.get('/storage', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getStorageInfo();
   res.json(result);
 }));
 
 // GET /api/fs/disks - Get disk list
-router.get('/disks', asyncHandler(async (_req, res) => {
+router.get('/disks', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getDisks();
   res.json(result);
 }));
@@ -99,20 +101,20 @@ router.get('/disks', asyncHandler(async (_req, res) => {
 // ==================== FILE SHARING ====================
 
 // GET /api/fs/share - Get all share links
-router.get('/share', asyncHandler(async (_req, res) => {
+router.get('/share', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getShareLinks();
   res.json(result);
 }));
 
 // GET /api/fs/share/:token - Get share link by token
-router.get('/share/:token', asyncHandler(async (req, res) => {
+router.get('/share/:token', requireAuth, asyncHandler(async (req, res) => {
   const token = param(req, 'token');
   const result = await freeboxApi.getShareLink(token);
   res.json(result);
 }));
 
 // POST /api/fs/share - Create share link
-router.post('/share', asyncHandler(async (req, res) => {
+router.post('/share', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { path, expire } = req.body;
   // path should be base64 encoded (as returned by Freebox API)
   const decodedPath = path ? decodeURIComponent(path) : path;
@@ -121,7 +123,7 @@ router.post('/share', asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/fs/share/:token - Delete share link
-router.delete('/share/:token', asyncHandler(async (req, res) => {
+router.delete('/share/:token', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const token = param(req, 'token');
   const result = await freeboxApi.deleteShareLink(token);
   res.json(result);

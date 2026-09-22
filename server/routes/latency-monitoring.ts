@@ -8,6 +8,9 @@ import { Router } from 'express';
 import { latencyMonitoringService } from '../services/latencyMonitoringService.js';
 import { logger } from '../utils/logger.js';
 
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+import { param } from '../utils/params.js';
+
 const router = Router();
 const isValidIpv4 = (ip: string | undefined): ip is string =>
     !!ip && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip);
@@ -30,7 +33,7 @@ const validateIpBatch = (ips: unknown, res: any): boolean => {
  * GET /api/latency-monitoring/status
  * Get list of all IPs with monitoring enabled
  */
-router.get('/status', (req, res) => {
+router.get('/status', requireAuth, (req, res) => {
     try {
         const enabledIps = latencyMonitoringService.getMonitoringStatus();
         res.json({
@@ -53,9 +56,9 @@ router.get('/status', (req, res) => {
  * POST /api/latency-monitoring/enable/:ip
  * Enable monitoring for an IP address
  */
-router.post('/enable/:ip', (req, res) => {
+router.post('/enable/:ip', requireAuth, requireAdmin, (req, res) => {
     try {
-        const ip = req.params.ip;
+        const ip = param(req, 'ip');
         
         if (!isValidIpv4(ip)) {
             return res.status(400).json({
@@ -76,7 +79,7 @@ router.post('/enable/:ip', (req, res) => {
             }
         });
     } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to enable monitoring for ${req.params.ip}:`, error.message || error);
+        logger.error('LatencyMonitoringAPI', `Failed to enable monitoring for ${param(req, 'ip')}:`, error.message || error);
         res.status(500).json({
             success: false,
             error: {
@@ -91,9 +94,9 @@ router.post('/enable/:ip', (req, res) => {
  * POST /api/latency-monitoring/disable/:ip
  * Disable monitoring for an IP address
  */
-router.post('/disable/:ip', (req, res) => {
+router.post('/disable/:ip', requireAuth, requireAdmin, (req, res) => {
     try {
-        const ip = req.params.ip;
+        const ip = param(req, 'ip');
         
         if (!isValidIpv4(ip)) {
             return res.status(400).json({
@@ -114,7 +117,7 @@ router.post('/disable/:ip', (req, res) => {
             }
         });
     } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to disable monitoring for ${req.params.ip}:`, error.message || error);
+        logger.error('LatencyMonitoringAPI', `Failed to disable monitoring for ${param(req, 'ip')}:`, error.message || error);
         res.status(500).json({
             success: false,
             error: {
@@ -130,9 +133,9 @@ router.post('/disable/:ip', (req, res) => {
  * Get measurements for an IP address
  * Query params: ?days=30 (default: 30)
  */
-router.get('/measurements/:ip', (req, res) => {
+router.get('/measurements/:ip', requireAuth, (req, res) => {
     try {
-        const ip = req.params.ip;
+        const ip = param(req, 'ip');
         const days = parseInt(req.query.days as string) || 30;
         const maxPoints = Math.min(5000, Math.max(200, parseInt(req.query.maxPoints as string) || 2000));
 
@@ -164,7 +167,7 @@ router.get('/measurements/:ip', (req, res) => {
             result: formattedMeasurements
         });
     } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to get measurements for ${req.params.ip}:`, error.message || error);
+        logger.error('LatencyMonitoringAPI', `Failed to get measurements for ${param(req, 'ip')}:`, error.message || error);
         res.status(500).json({
             success: false,
             error: {
@@ -179,9 +182,9 @@ router.get('/measurements/:ip', (req, res) => {
  * GET /api/latency-monitoring/stats/:ip
  * Get statistics for an IP address (Avg1h, Max)
  */
-router.get('/stats/:ip', (req, res) => {
+router.get('/stats/:ip', requireAuth, (req, res) => {
     try {
-        const ip = req.params.ip;
+        const ip = param(req, 'ip');
         
         if (!isValidIpv4(ip)) {
             return res.status(400).json({
@@ -206,7 +209,7 @@ router.get('/stats/:ip', (req, res) => {
             }
         });
     } catch (error: any) {
-        logger.error('LatencyMonitoringAPI', `Failed to get stats for ${req.params.ip}:`, error.message || error);
+        logger.error('LatencyMonitoringAPI', `Failed to get stats for ${param(req, 'ip')}:`, error.message || error);
         res.status(500).json({
             success: false,
             error: {
@@ -222,7 +225,7 @@ router.get('/stats/:ip', (req, res) => {
  * Get statistics for multiple IPs in batch
  * Body: { ips: string[] }
  */
-router.post('/stats/batch', (req, res) => {
+router.post('/stats/batch', requireAuth, (req, res) => {
     try {
         const { ips } = req.body;
         if (!validateIpBatch(ips, res)) return;
@@ -250,7 +253,7 @@ router.post('/stats/batch', (req, res) => {
  * Get monitoring status for multiple IPs in batch
  * Body: { ips: string[] }
  */
-router.post('/status/batch', (req, res) => {
+router.post('/status/batch', requireAuth, (req, res) => {
     try {
         const { ips } = req.body;
         if (!validateIpBatch(ips, res)) return;

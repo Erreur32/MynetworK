@@ -9,18 +9,17 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
 /**
- * Key generator that uses CF-Connecting-IP (Cloudflare) or X-Real-IP
- * before falling back to req.ip. Wrapped through ipKeyGenerator() so
- * IPv6 addresses are normalised to a /64 prefix — without it, every
- * IPv6 address would have its own bucket, allowing IPv6 users to
- * easily bypass the limit (ERR_ERL_KEY_GEN_IPV6).
+ * Key generator based on req.ip (governed by the app's `trust proxy` setting,
+ * consistent with the rest of the app). CF-Connecting-IP/X-Real-IP are NOT
+ * trusted directly here — this app is also reachable on a directly-published
+ * Docker port, bypassing Cloudflare/the reverse proxy entirely, so those
+ * headers can be forged by any client on that path to rotate rate-limit
+ * buckets at will. Wrapped through ipKeyGenerator() so IPv6 addresses are
+ * normalised to a /64 prefix — without it, every IPv6 address would have its
+ * own bucket, allowing IPv6 users to easily bypass the limit (ERR_ERL_KEY_GEN_IPV6).
  */
 const keyGenerator = (req: Request): string => {
-    const raw = (req.headers['cf-connecting-ip'] as string)
-        || (req.headers['x-real-ip'] as string)
-        || req.ip
-        || 'unknown';
-    return ipKeyGenerator(raw);
+    return ipKeyGenerator(req.ip || 'unknown');
 };
 
 /** General API rate limiter — 300 requests per minute per IP */

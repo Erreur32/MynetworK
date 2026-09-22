@@ -5,13 +5,12 @@
  * in NetworkScan.additionalInfo. Used after full scan when portScanEnabled is ON.
  */
 
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { NetworkScanRepository } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
 import { isValidIp, isValidPortRange } from '../utils/networkValidation.js';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_PORT_RANGE = '1-10000';

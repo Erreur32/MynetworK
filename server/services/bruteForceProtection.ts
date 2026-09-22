@@ -8,9 +8,7 @@
 import { logger } from '../utils/logger.js';
 
 interface FailedAttempt {
-    count: number;
-    firstAttempt: number;
-    lastAttempt: number;
+    timestamps: number[];   // failed-attempt times within the sliding tracking window
     blockedUntil?: number;
 }
 
@@ -49,39 +47,16 @@ class BruteForceProtectionService {
     }
 
     /**
-     * Check if an IP or username is currently blocked
+     * Check if an IP or username is currently blocked.
+     * Pure read — does not mutate state (previously reset block/count as a side
+     * effect here, which was unsafe to call from getStats() and other read paths).
      */
     isBlocked(identifier: string): boolean {
         const attempt = this.attempts.get(identifier);
-        if (!attempt) {
+        if (!attempt || !attempt.blockedUntil) {
             return false;
         }
-
-        // Clean up expired entries
-        const now = Date.now();
-        const windowMs = this.config.trackingWindow * 60 * 1000;
-        
-        // If outside tracking window, reset
-        if (now - attempt.firstAttempt > windowMs) {
-            this.attempts.delete(identifier);
-            return false;
-        }
-
-        // Check if currently blocked
-        if (attempt.blockedUntil && now < attempt.blockedUntil) {
-            return true;
-        }
-
-        // If block expired but still in tracking window, reset block but keep tracking
-        if (attempt.blockedUntil && now >= attempt.blockedUntil) {
-            attempt.blockedUntil = undefined;
-            // Reset count if block expired
-            if (now - attempt.lastAttempt > this.config.lockoutDuration * 60 * 1000) {
-                attempt.count = 0;
-            }
-        }
-
-        return false;
+        return Date.now() < attempt.blockedUntil;
     }
 
     /**
@@ -101,48 +76,34 @@ class BruteForceProtectionService {
     /**
      * Record a failed login attempt
      * Returns true if the identifier should now be blocked
+     *
+     * Uses a sliding window (timestamps of individual attempts) rather than a
+     * fixed window with a single reset point — a fixed window lets an attacker
+     * pace attempts around the reset boundary to never accumulate enough
+     * failures in a single window to trigger a lockout.
      */
     recordFailedAttempt(identifier: string, ipAddress?: string): boolean {
         const now = Date.now();
         const windowMs = this.config.trackingWindow * 60 * 1000;
 
         let attempt = this.attempts.get(identifier);
-        
         if (!attempt) {
-            // First failed attempt
-            attempt = {
-                count: 1,
-                firstAttempt: now,
-                lastAttempt: now
-            };
+            attempt = { timestamps: [] };
             this.attempts.set(identifier, attempt);
-            logger.warn('BruteForce', `Failed login attempt #1 for ${identifier}${ipAddress ? ` from ${ipAddress}` : ''}`);
-            return false;
         }
 
-        // Check if outside tracking window
-        if (now - attempt.firstAttempt > windowMs) {
-            // Reset tracking
-            attempt.count = 1;
-            attempt.firstAttempt = now;
-            attempt.lastAttempt = now;
-            attempt.blockedUntil = undefined;
-            logger.warn('BruteForce', `Failed login attempt #1 for ${identifier}${ipAddress ? ` from ${ipAddress}` : ''} (window reset)`);
-            return false;
-        }
+        // Drop attempts outside the sliding window before counting
+        attempt.timestamps = attempt.timestamps.filter(t => now - t <= windowMs);
+        attempt.timestamps.push(now);
 
-        // Increment count
-        attempt.count++;
-        attempt.lastAttempt = now;
+        const count = attempt.timestamps.length;
+        logger.warn('BruteForce', `Failed login attempt #${count} for ${identifier}${ipAddress ? ` from ${ipAddress}` : ''}`);
 
-        logger.warn('BruteForce', `Failed login attempt #${attempt.count} for ${identifier}${ipAddress ? ` from ${ipAddress}` : ''}`);
-
-        // Check if we should block
-        if (attempt.count >= this.config.maxAttempts) {
+        if (count >= this.config.maxAttempts) {
             const lockoutMs = this.config.lockoutDuration * 60 * 1000;
             attempt.blockedUntil = now + lockoutMs;
-            
-            logger.error('BruteForce', `BLOCKED ${identifier}${ipAddress ? ` from ${ipAddress}` : ''} for ${this.config.lockoutDuration} minutes after ${attempt.count} failed attempts`);
+
+            logger.error('BruteForce', `BLOCKED ${identifier}${ipAddress ? ` from ${ipAddress}` : ''} for ${this.config.lockoutDuration} minutes after ${count} failed attempts`);
             return true;
         }
 
@@ -154,7 +115,7 @@ class BruteForceProtectionService {
      */
     recordSuccessfulAttempt(identifier: string): void {
         const attempt = this.attempts.get(identifier);
-        if (attempt && attempt.count > 0) {
+        if (attempt && attempt.timestamps.length > 0) {
             logger.info('BruteForce', `Successful login for ${identifier}, resetting failed attempt counter`);
             this.attempts.delete(identifier);
         }
@@ -171,7 +132,7 @@ class BruteForceProtectionService {
         lastAttempt: number | null;
     } {
         const attempt = this.attempts.get(identifier);
-        if (!attempt) {
+        if (!attempt || attempt.timestamps.length === 0) {
             return {
                 count: 0,
                 isBlocked: false,
@@ -182,11 +143,11 @@ class BruteForceProtectionService {
         }
 
         return {
-            count: attempt.count,
+            count: attempt.timestamps.length,
             isBlocked: this.isBlocked(identifier),
             remainingLockoutTime: this.getRemainingLockoutTime(identifier),
-            firstAttempt: attempt.firstAttempt,
-            lastAttempt: attempt.lastAttempt
+            firstAttempt: attempt.timestamps[0],
+            lastAttempt: attempt.timestamps[attempt.timestamps.length - 1]
         };
     }
 
@@ -225,7 +186,7 @@ class BruteForceProtectionService {
             if (attempt.blockedUntil && now < attempt.blockedUntil) {
                 blocked.push({
                     identifier,
-                    count: attempt.count,
+                    count: attempt.timestamps.length,
                     blockedUntil: attempt.blockedUntil,
                     remainingTime: Math.ceil((attempt.blockedUntil - now) / 1000)
                 });
@@ -236,7 +197,10 @@ class BruteForceProtectionService {
     }
 
     /**
-     * Clean up old entries (should be called periodically)
+     * Clean up old entries (should be called periodically).
+     * Also bounds the Map's size over time by pruning stale timestamps —
+     * without this, entries lingered indefinitely since isBlocked() no longer
+     * deletes them as a read side effect.
      */
     cleanup(): void {
         const now = Date.now();
@@ -244,12 +208,15 @@ class BruteForceProtectionService {
         let cleaned = 0;
 
         for (const [identifier, attempt] of this.attempts.entries()) {
-            // Remove if outside tracking window and not blocked
-            if (now - attempt.firstAttempt > windowMs) {
-                if (!attempt.blockedUntil || now >= attempt.blockedUntil) {
-                    this.attempts.delete(identifier);
-                    cleaned++;
-                }
+            if (attempt.blockedUntil && now < attempt.blockedUntil) {
+                continue; // still actively blocked, keep as-is
+            }
+
+            attempt.timestamps = attempt.timestamps.filter(t => now - t <= windowMs);
+
+            if (attempt.timestamps.length === 0) {
+                this.attempts.delete(identifier);
+                cleaned++;
             }
         }
 

@@ -5,7 +5,7 @@
  */
 
 import crypto from 'node:crypto';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
 import * as fs from 'fs';
@@ -20,36 +20,6 @@ import { PluginPriorityConfigService } from './pluginPriorityConfig.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { ipBlacklistService } from './ipBlacklistService.js';
 import { extractMac, escapeRegex, normalizeMac } from '../utils/networkValidation.js';
-
-// Custom execAsync that doesn't reject on non-zero exit codes (needed for ping)
-// ping returns non-zero exit code on packet loss, which is normal for offline hosts
-const execAsync = (command: string, options?: { timeout?: number }): Promise<{ stdout: string; stderr: string }> => {
-    return new Promise((resolve, reject) => {
-        const childProcess = exec(command, {
-            timeout: options?.timeout,
-            killSignal: 'SIGTERM'
-        }, (error, stdout, stderr) => {
-            // Don't reject on non-zero exit code - ping returns non-zero on packet loss
-            // Only reject on real errors (timeout, spawn errors, etc.)
-            if (error) {
-                // Check if it's a real error (timeout, spawn error) or just exit code
-                // error.code can be a number (exit code) or string (system error code like 'ENOENT')
-                const errorCode = error.code;
-                if (error.signal === 'SIGTERM' || 
-                    error.message?.includes('timeout') ||
-                    (typeof errorCode === 'string' && errorCode === 'ENOENT') ||
-                    error.message?.includes('spawn')) {
-                    reject(error);
-                } else {
-                    // Non-zero exit code but command executed - this is normal for ping
-                    resolve({ stdout: stdout || '', stderr: stderr || '' });
-                }
-            } else {
-                resolve({ stdout: stdout || '', stderr: stderr || '' });
-            }
-        });
-    });
-};
 
 const dnsReverseAsync = promisify(dns.reverse);
 

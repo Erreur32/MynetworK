@@ -20,9 +20,8 @@ import { AppConfigRepository } from '../database/models/AppConfig.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // IEEE OUI Official Database (primary source)

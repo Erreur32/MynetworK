@@ -13,6 +13,7 @@ import fsSync from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
+import { requireAuth } from '../middleware/authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -720,7 +721,7 @@ const getDiskUsage = async (): Promise<{ total: number; free: number; used: numb
  * GET /api/system/server
  * Get server system information
  */
-router.get('/server', async (_req, res) => {
+router.get('/server', requireAuth, async (_req, res) => {
   try {
     const cpuUsage = await getCpuUsage();
     const ramUsage = {
@@ -956,7 +957,7 @@ const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } |
  * GET /api/system/server/network
  * Get system network traffic statistics from host machine
  */
-router.get('/network', async (_req, res) => {
+router.get('/network', requireAuth, async (_req, res) => {
   try {
     const currentStats = await getNetworkStats();
     const now = Date.now();

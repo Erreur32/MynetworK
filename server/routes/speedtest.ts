@@ -8,6 +8,8 @@ import { config } from '../config.js';
 import { isValidPingTarget } from '../utils/networkValidation.js';
 
 const execFileAsync = promisify(execFile);
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+
 const router = Router();
 
 const isWindows = process.platform === 'win32';
@@ -105,7 +107,7 @@ function parsePingOutput(output: string, times?: number[]): { avg: number; mdev:
 }
 
 // GET /api/speedtest/ping - Run ping test to measure latency and jitter
-router.get('/ping', asyncHandler(async (req, res) => {
+router.get('/ping', requireAuth, asyncHandler(async (req, res) => {
   const target = (req.query.target as string) || config.defaultPingTarget;
   const count = Math.min(parseInt(req.query.count as string) || 10, 20);
 
@@ -179,7 +181,7 @@ router.get('/ping', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/speedtest/bandwidth - Get current bandwidth from Freebox API
-router.get('/bandwidth', asyncHandler(async (_req, res) => {
+router.get('/bandwidth', requireAuth, asyncHandler(async (_req, res) => {
   try {
     const connectionResult = await freeboxApi.getConnectionStatus();
 
@@ -222,7 +224,7 @@ router.get('/bandwidth', asyncHandler(async (_req, res) => {
 }));
 
 // POST /api/speedtest/run - Run a full speedtest
-router.post('/run', asyncHandler(async (req, res) => {
+router.post('/run', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { pingTarget = config.defaultPingTarget, samples = 10 } = req.body;
 
   if (!isValidPingTarget(pingTarget)) {

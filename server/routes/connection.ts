@@ -3,28 +3,30 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { param } from '../utils/params.js';
 
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+
 const router = Router();
 
 // GET /api/connection - Get connection status
-router.get('/', asyncHandler(async (_req, res) => {
+router.get('/', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getConnectionStatus();
   res.json(result);
 }));
 
 // GET /api/connection/config - Get connection config
-router.get('/config', asyncHandler(async (_req, res) => {
+router.get('/config', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getConnectionConfig();
   res.json(result);
 }));
 
 // GET /api/connection/ipv6 - Get IPv6 config
-router.get('/ipv6', asyncHandler(async (_req, res) => {
+router.get('/ipv6', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getIpv6Config();
   res.json(result);
 }));
 
 // GET /api/connection/history - Get bandwidth history (RRD)
-router.get('/history', asyncHandler(async (req, res) => {
+router.get('/history', requireAuth, asyncHandler(async (req, res) => {
   const { start, end } = req.query;
   const dateStart = start ? parseInt(start as string, 10) : undefined;
   const dateEnd = end ? parseInt(end as string, 10) : undefined;
@@ -36,7 +38,7 @@ router.get('/history', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/connection/temp-history - Get temperature history (RRD)
-router.get('/temp-history', asyncHandler(async (req, res) => {
+router.get('/temp-history', requireAuth, asyncHandler(async (req, res) => {
   const { start, end } = req.query;
   const dateStart = start ? parseInt(start as string, 10) : undefined;
   const dateEnd = end ? parseInt(end as string, 10) : undefined;
@@ -47,13 +49,13 @@ router.get('/temp-history', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/connection/logs - Get connection logs
-router.get('/logs', asyncHandler(async (_req, res) => {
+router.get('/logs', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getConnectionLogs();
   res.json(result);
 }));
 
 // PUT /api/connection/config - Update connection config
-router.put('/config', asyncHandler(async (req, res) => {
+router.put('/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateConnectionConfig(req.body);
   res.json(result);
 }));
@@ -61,7 +63,7 @@ router.put('/config', asyncHandler(async (req, res) => {
 // ===== DynDNS =====
 
 // GET /api/connection/ddns/:provider - Get DynDNS config
-router.get('/ddns/:provider', asyncHandler(async (req, res) => {
+router.get('/ddns/:provider', requireAuth, asyncHandler(async (req, res) => {
   const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({
@@ -75,7 +77,7 @@ router.get('/ddns/:provider', asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/connection/ddns/:provider - Update DynDNS config
-router.put('/ddns/:provider', asyncHandler(async (req, res) => {
+router.put('/ddns/:provider', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({
@@ -89,7 +91,7 @@ router.put('/ddns/:provider', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/connection/ddns/:provider/status - Get DynDNS status
-router.get('/ddns/:provider/status', asyncHandler(async (req, res) => {
+router.get('/ddns/:provider/status', requireAuth, asyncHandler(async (req, res) => {
   const provider = param(req, 'provider');
   if (!['ovh', 'dyndns', 'noip'].includes(provider)) {
     return res.status(400).json({

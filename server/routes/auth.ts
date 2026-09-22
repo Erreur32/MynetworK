@@ -7,8 +7,13 @@ import { pluginManager } from '../services/pluginManager.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
+
+// All routes here manage the Freebox device pairing/session (not the MyNetwork
+// user login handled in users.ts) — admin-only configuration.
+router.use(requireAuth, requireAdmin);
 
 // POST /api/auth/register - Start app registration
 router.post('/register', asyncHandler(async (_req, res) => {

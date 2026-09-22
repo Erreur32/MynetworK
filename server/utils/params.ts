@@ -12,5 +12,9 @@ import type { Request } from 'express';
  */
 export function param(req: Request, key: string): string {
     const value = req.params[key];
-    return Array.isArray(value) ? value[0] : value;
+    const result = Array.isArray(value) ? value[0] : value;
+    if (result === undefined) {
+        throw new Error(`Missing required route param "${key}"`);
+    }
+    return result;
 }

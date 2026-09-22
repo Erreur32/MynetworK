@@ -26,13 +26,14 @@ export class AuthService {
     private jwtExpiresIn: string;
 
     constructor() {
-        this.jwtSecret = process.env.JWT_SECRET || 'change-me-in-production-please-use-strong-secret';
+        if (!process.env.JWT_SECRET) {
+            throw new Error(
+                'JWT_SECRET environment variable is required. Generate one with: openssl rand -base64 32'
+            );
+        }
+        this.jwtSecret = process.env.JWT_SECRET;
         // Load JWT expiration from database, fallback to environment variable, then default
         this.jwtExpiresIn = this.getJwtExpiresIn();
-        
-        if (this.jwtSecret === 'change-me-in-production-please-use-strong-secret') {
-            logger.warn('Auth', '⚠️  Using default JWT secret. Please set JWT_SECRET environment variable in production!');
-        }
     }
 
     /**

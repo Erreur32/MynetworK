@@ -5,42 +5,44 @@ import { modelDetection } from '../services/modelDetection.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
 
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+
 const router = Router();
 
 // GET /api/wifi/config - Get global WiFi config
-router.get('/config', asyncHandler(async (_req, res) => {
+router.get('/config', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiConfig();
   res.json(result);
 }));
 
 // PUT /api/wifi/config - Enable/disable WiFi
-router.put('/config', asyncHandler(async (req, res) => {
+router.put('/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { enabled } = req.body;
   const result = await freeboxApi.setWifiConfig(enabled);
   res.json(result);
 }));
 
 // GET /api/wifi/aps - Get all access points
-router.get('/aps', asyncHandler(async (_req, res) => {
+router.get('/aps', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiAps();
   res.json(result);
 }));
 
 // GET /api/wifi/aps/:id/stations - Get stations for specific AP
-router.get('/aps/:id/stations', asyncHandler(async (req, res) => {
+router.get('/aps/:id/stations', requireAuth, asyncHandler(async (req, res) => {
   const apId = parseInt(param(req, 'id'), 10);
   const result = await freeboxApi.getWifiApStations(apId);
   res.json(result);
 }));
 
 // GET /api/wifi/bss - Get all BSS (SSIDs)
-router.get('/bss', asyncHandler(async (_req, res) => {
+router.get('/bss', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiBss();
   res.json(result);
 }));
 
 // PUT /api/wifi/bss/:id - Enable/disable a specific BSS
-router.put('/bss/:id', asyncHandler(async (req, res) => {
+router.put('/bss/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { enabled } = req.body;
   logger.debug('WiFi', `Toggle BSS ${req.params.id} -> enabled: ${enabled}`);
   const result = await freeboxApi.updateWifiBss(param(req, 'id'), { enabled });
@@ -61,7 +63,7 @@ interface WifiLanDevice {
 }
 
 // GET /api/wifi/full - Get complete WiFi status (APs + BSS combined)
-router.get('/full', asyncHandler(async (_req, res) => {
+router.get('/full', requireAuth, asyncHandler(async (_req, res) => {
   // Fetch all WiFi data in parallel, plus LAN devices for WiFi count
   const [config, aps, bss, lanDevices] = await Promise.allSettled([
     freeboxApi.getWifiConfig(),
@@ -135,37 +137,37 @@ router.get('/full', asyncHandler(async (_req, res) => {
 }));
 
 // GET /api/wifi/stations - Get all WiFi stations (connected devices)
-router.get('/stations', asyncHandler(async (_req, res) => {
+router.get('/stations', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiStations();
   res.json(result);
 }));
 
 // GET /api/wifi/mac-filter - Get MAC filtering rules
-router.get('/mac-filter', asyncHandler(async (_req, res) => {
+router.get('/mac-filter', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiMacFilter();
   res.json(result);
 }));
 
 // PUT /api/wifi/mac-filter - Update MAC filtering rules
-router.put('/mac-filter', asyncHandler(async (req, res) => {
+router.put('/mac-filter', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.setWifiMacFilter(req.body);
   res.json(result);
 }));
 
 // GET /api/wifi/planning - Get WiFi scheduling/planning
-router.get('/planning', asyncHandler(async (_req, res) => {
+router.get('/planning', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiPlanning();
   res.json(result);
 }));
 
 // PUT /api/wifi/planning - Update WiFi scheduling/planning
-router.put('/planning', asyncHandler(async (req, res) => {
+router.put('/planning', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateWifiPlanning(req.body);
   res.json(result);
 }));
 
 // POST /api/wifi/wps/start - Start WPS session
-router.post('/wps/start', asyncHandler(async (_req, res) => {
+router.post('/wps/start', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   // Check if we have settings permission (required for WPS)
   const permissions = freeboxApi.getPermissions();
   logger.debug('WiFi WPS', 'Current permissions:', permissions);
@@ -218,13 +220,13 @@ router.post('/wps/start', asyncHandler(async (_req, res) => {
 }));
 
 // POST /api/wifi/wps/stop - Stop WPS session
-router.post('/wps/stop', asyncHandler(async (_req, res) => {
+router.post('/wps/stop', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.stopWps();
   res.json(result);
 }));
 
 // GET /api/wifi/wps/status - Get WPS status
-router.get('/wps/status', asyncHandler(async (_req, res) => {
+router.get('/wps/status', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWpsStatus();
   res.json(result);
 }));
@@ -232,20 +234,20 @@ router.get('/wps/status', asyncHandler(async (_req, res) => {
 // ==================== WiFi Temporary Disable (v13.0+) ====================
 
 // GET /api/wifi/temp-disable - Get temporary disable status
-router.get('/temp-disable', asyncHandler(async (_req, res) => {
+router.get('/temp-disable', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiTempDisableStatus();
   res.json(result);
 }));
 
 // POST /api/wifi/temp-disable - Temporarily disable WiFi
-router.post('/temp-disable', asyncHandler(async (req, res) => {
+router.post('/temp-disable', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const { duration } = req.body; // Duration in seconds
   const result = await freeboxApi.setWifiTempDisable(duration);
   res.json(result);
 }));
 
 // DELETE /api/wifi/temp-disable - Cancel temporary disable
-router.delete('/temp-disable', asyncHandler(async (_req, res) => {
+router.delete('/temp-disable', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.cancelWifiTempDisable();
   res.json(result);
 }));
@@ -253,31 +255,31 @@ router.delete('/temp-disable', asyncHandler(async (_req, res) => {
 // ==================== WiFi Guest Network (v14.0+) ====================
 
 // GET /api/wifi/guest/config - Get guest network config
-router.get('/guest/config', asyncHandler(async (_req, res) => {
+router.get('/guest/config', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiCustomKeyConfig();
   res.json(result);
 }));
 
 // PUT /api/wifi/guest/config - Update guest network config
-router.put('/guest/config', asyncHandler(async (req, res) => {
+router.put('/guest/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateWifiCustomKeyConfig(req.body);
   res.json(result);
 }));
 
 // GET /api/wifi/guest/keys - Get guest network keys
-router.get('/guest/keys', asyncHandler(async (_req, res) => {
+router.get('/guest/keys', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiCustomKeys();
   res.json(result);
 }));
 
 // POST /api/wifi/guest/keys - Create guest network key
-router.post('/guest/keys', asyncHandler(async (req, res) => {
+router.post('/guest/keys', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createWifiCustomKey(req.body);
   res.json(result);
 }));
 
 // DELETE /api/wifi/guest/keys/:id - Delete guest network key
-router.delete('/guest/keys/:id', asyncHandler(async (req, res) => {
+router.delete('/guest/keys/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const id = parseInt(param(req, 'id'), 10);
   const result = await freeboxApi.deleteWifiCustomKey(id);
   res.json(result);
@@ -286,13 +288,13 @@ router.delete('/guest/keys/:id', asyncHandler(async (req, res) => {
 // ==================== WiFi MLO - Multi Link Operation (v14.0+ WiFi 7) ====================
 
 // GET /api/wifi/mlo/config - Get MLO config
-router.get('/mlo/config', asyncHandler(async (_req, res) => {
+router.get('/mlo/config', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getWifiMloConfig();
   res.json(result);
 }));
 
 // PUT /api/wifi/mlo/config - Update MLO config
-router.put('/mlo/config', asyncHandler(async (req, res) => {
+router.put('/mlo/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateWifiMloConfig(req.body);
   res.json(result);
 }));
