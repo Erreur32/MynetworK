@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.34] - 2026-09-22
+
+### Fixed
+
+- The Wireshark/IEEE vendor database was never actually refreshed from the remote source after the very first successful download: `updateDatabase()` always reused the existing local file as long as it was structurally valid, even when called specifically because the weekly refresh interval had elapsed. Now always attempts a fresh download when called. Since this path now runs on every scheduled refresh instead of effectively once, the download is written to a temp file and only swapped in atomically once validated, so a failed/partial transfer can no longer destroy the previously-good local database.
+- Port scanning had no guard against concurrent runs, letting two overlapping scans corrupt each other's shared progress/abort tracking. Added a reentrance guard (closing a TOCTOU in the check itself) wrapped in try/finally, so a scan can no longer get permanently stuck as "in progress" after an unexpected error.
+- `GET /api/system/server`: reduced cognitive complexity (it was blocking SonarCloud's quality gate) by extracting host hostname/uptime detection into dedicated helpers; also dropped a redundant `fs.access` check before `fs.readFile` and parallelized the two lookups.
+
+---
+
 ## [0.10.33] - 2026-09-22
 
 ### Security
