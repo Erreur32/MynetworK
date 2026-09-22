@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { createError } from '../middleware/errorHandler.js';
 
 /**
  * Get a route param as a plain string.
@@ -17,4 +18,31 @@ export function param(req: Request, key: string): string {
         throw new Error(`Missing required route param "${key}"`);
     }
     return result;
+}
+
+/**
+ * Parse a route param as an integer ID (parseInt semantics — "5abc" parses
+ * as 5), throwing a 400 ApiError if it isn't a valid number. Replaces the
+ * repeated `parseInt(param(req, key), 10); if (isNaN(id)) throw ...` pattern.
+ */
+export function requireIntParam(req: Request, key: string, errorMessage = 'Invalid ID', errorCode = 'INVALID_ID'): number {
+    const id = parseInt(param(req, key), 10);
+    if (isNaN(id)) {
+        throw createError(errorMessage, 400, errorCode);
+    }
+    return id;
+}
+
+/**
+ * Parse a route param as a strict integer ID (Number.isInteger semantics —
+ * "5.5" is rejected, unlike parseInt). Never throws, even if the param is
+ * missing (unlike param()) — returns null instead, for routes that build
+ * their own error response rather than using asyncHandler + createError.
+ */
+export function parseStrictIntParam(req: Request, key: string): number | null {
+    const value = req.params[key];
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (raw === undefined) return null;
+    const id = Number(raw);
+    return Number.isInteger(id) ? id : null;
 }
