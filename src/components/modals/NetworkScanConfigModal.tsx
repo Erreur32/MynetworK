@@ -54,7 +54,7 @@ interface DatabaseConfig {
 }
 
 interface VendorUpdateResponse {
-    updateSource?: 'downloaded' | 'local' | 'plugins';
+    updateSource?: 'downloaded' | 'plugins';
     vendorCount?: number;
     stats?: {
         totalVendors: number;
@@ -235,8 +235,6 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 let message = '';
                 if (source === 'downloaded') {
                     message = `Base téléchargée depuis IEEE OUI : ${vendorCount} vendors chargés`;
-                } else if (source === 'local') {
-                    message = `Base chargée depuis le fichier local : ${vendorCount} vendors chargés`;
                 } else if (source === 'plugins') {
                     message = `Base chargée depuis les plugins : ${vendorCount} vendors chargés`;
                 } else {
