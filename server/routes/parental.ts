@@ -6,35 +6,36 @@ import { param } from '../utils/params.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
+router.use(requireAuth);
 
 // ===== Profiles =====
 
 // GET /api/parental/profiles - Get all profiles
-router.get('/profiles', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/profiles', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getProfiles();
   res.json(result);
 }));
 
 // GET /api/parental/profiles/:id - Get specific profile
-router.get('/profiles/:id', requireAuth, asyncHandler(async (req, res) => {
+router.get('/profiles/:id', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getProfile(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // POST /api/parental/profiles - Create profile
-router.post('/profiles', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/profiles', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createProfile(req.body);
   res.json(result);
 }));
 
 // PUT /api/parental/profiles/:id - Update profile
-router.put('/profiles/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/profiles/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateProfile(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/parental/profiles/:id - Delete profile
-router.delete('/profiles/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.delete('/profiles/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deleteProfile(parseInt(param(req, 'id')));
   res.json(result);
 }));
@@ -42,19 +43,19 @@ router.delete('/profiles/:id', requireAuth, requireAdmin, asyncHandler(async (re
 // ===== Network Control =====
 
 // GET /api/parental/network-control - Get network control for all profiles
-router.get('/network-control', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/network-control', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getNetworkControl();
   res.json(result);
 }));
 
 // GET /api/parental/network-control/:profileId - Get network control for a specific profile
-router.get('/network-control/:profileId', requireAuth, asyncHandler(async (req, res) => {
+router.get('/network-control/:profileId', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getNetworkControlForProfile(parseInt(param(req, 'profileId')));
   res.json(result);
 }));
 
 // PUT /api/parental/network-control/:profileId - Update network control for a profile
-router.put('/network-control/:profileId', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/network-control/:profileId', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateNetworkControlForProfile(parseInt(param(req, 'profileId')), req.body);
   res.json(result);
 }));
@@ -62,31 +63,31 @@ router.put('/network-control/:profileId', requireAuth, requireAdmin, asyncHandle
 // ===== Network Control Rules =====
 
 // GET /api/parental/network-control/:profileId/rules - Get rules for a profile
-router.get('/network-control/:profileId/rules', requireAuth, asyncHandler(async (req, res) => {
+router.get('/network-control/:profileId/rules', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getNetworkControlRules(parseInt(param(req, 'profileId')));
   res.json(result);
 }));
 
 // GET /api/parental/network-control/:profileId/rules/:ruleId - Get a specific rule
-router.get('/network-control/:profileId/rules/:ruleId', requireAuth, asyncHandler(async (req, res) => {
+router.get('/network-control/:profileId/rules/:ruleId', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getNetworkControlRule(parseInt(param(req, 'profileId')), parseInt(param(req, 'ruleId')));
   res.json(result);
 }));
 
 // POST /api/parental/network-control/:profileId/rules - Create a rule
-router.post('/network-control/:profileId/rules', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/network-control/:profileId/rules', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createNetworkControlRule(parseInt(param(req, 'profileId')), req.body);
   res.json(result);
 }));
 
 // PUT /api/parental/network-control/:profileId/rules/:ruleId - Update a rule
-router.put('/network-control/:profileId/rules/:ruleId', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/network-control/:profileId/rules/:ruleId', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateNetworkControlRule(parseInt(param(req, 'profileId')), parseInt(param(req, 'ruleId')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/parental/network-control/:profileId/rules/:ruleId - Delete a rule
-router.delete('/network-control/:profileId/rules/:ruleId', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.delete('/network-control/:profileId/rules/:ruleId', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deleteNetworkControlRule(parseInt(param(req, 'profileId')), parseInt(param(req, 'ruleId')));
   res.json(result);
 }));
@@ -94,13 +95,13 @@ router.delete('/network-control/:profileId/rules/:ruleId', requireAuth, requireA
 // ===== Parental Config =====
 
 // GET /api/parental/config - Get parental config
-router.get('/config', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/config', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getParentalConfig();
   res.json(result);
 }));
 
 // PUT /api/parental/config - Update parental config
-router.put('/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/config', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateParentalConfig(req.body);
   res.json(result);
 }));
@@ -108,43 +109,43 @@ router.put('/config', requireAuth, requireAdmin, asyncHandler(async (req, res) =
 // ===== Parental Filters (CRUD) =====
 
 // GET /api/parental/filters - Get all parental filters
-router.get('/filters', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/filters', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getParentalFilters();
   res.json(result);
 }));
 
 // GET /api/parental/filters/:id - Get specific filter
-router.get('/filters/:id', requireAuth, asyncHandler(async (req, res) => {
+router.get('/filters/:id', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getParentalFilter(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // POST /api/parental/filters - Create new filter
-router.post('/filters', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/filters', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createParentalFilter(req.body);
   res.json(result);
 }));
 
 // PUT /api/parental/filters/:id - Update filter
-router.put('/filters/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/filters/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateParentalFilter(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/parental/filters/:id - Delete filter
-router.delete('/filters/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.delete('/filters/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deleteParentalFilter(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // GET /api/parental/filters/:id/planning - Get filter planning
-router.get('/filters/:id/planning', requireAuth, asyncHandler(async (req, res) => {
+router.get('/filters/:id/planning', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getParentalFilterPlanning(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // PUT /api/parental/filters/:id/planning - Update filter planning
-router.put('/filters/:id/planning', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/filters/:id/planning', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateParentalFilterPlanning(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));

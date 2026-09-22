@@ -6,6 +6,7 @@ import { param } from '../utils/params.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
+router.use(requireAuth);
 
 // ===== EPG Cache =====
 // Cache EPG results server-side to avoid rate limiting
@@ -35,13 +36,13 @@ function cleanEpgCache() {
 // ===== TV Channels =====
 
 // GET /api/tv/channels - Get all channels
-router.get('/channels', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/channels', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getTvChannels();
   res.json(result);
 }));
 
 // GET /api/tv/bouquets - Get channel bouquets
-router.get('/bouquets', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/bouquets', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getTvBouquets();
   res.json(result);
 }));
@@ -49,7 +50,7 @@ router.get('/bouquets', requireAuth, asyncHandler(async (_req, res) => {
 // ===== EPG (Electronic Program Guide) =====
 
 // GET /api/tv/epg/by_time/:timestamp - Get EPG for all channels at a given time
-router.get('/epg/by_time/:timestamp', requireAuth, asyncHandler(async (req, res) => {
+router.get('/epg/by_time/:timestamp', asyncHandler(async (req, res) => {
   const rawTimestamp = parseInt(param(req, 'timestamp')) || Math.floor(Date.now() / 1000);
 
   // Normalize timestamp to fixed 2-hour intervals
@@ -83,43 +84,43 @@ router.get('/epg/by_time/:timestamp', requireAuth, asyncHandler(async (req, res)
 // ===== PVR (Recordings) =====
 
 // GET /api/tv/recordings - Get finished recordings
-router.get('/recordings', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/recordings', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getPvrFinished();
   res.json(result);
 }));
 
 // GET /api/tv/programmed - Get programmed recordings
-router.get('/programmed', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/programmed', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getPvrProgrammed();
   res.json(result);
 }));
 
 // POST /api/tv/programmed - Create new recording
-router.post('/programmed', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/programmed', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createPvrProgrammed(req.body);
   res.json(result);
 }));
 
 // DELETE /api/tv/programmed/:id - Delete programmed recording
-router.delete('/programmed/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.delete('/programmed/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deletePvrProgrammed(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // DELETE /api/tv/recordings/:id - Delete finished recording
-router.delete('/recordings/:id', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.delete('/recordings/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deletePvrFinished(parseInt(param(req, 'id')));
   res.json(result);
 }));
 
 // GET /api/tv/pvr/config - Get PVR config
-router.get('/pvr/config', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/pvr/config', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getPvrConfig();
   res.json(result);
 }));
 
 // PUT /api/tv/pvr/config - Update PVR config
-router.put('/pvr/config', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.put('/pvr/config', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updatePvrConfig(req.body);
   res.json(result);
 }));

@@ -6,21 +6,22 @@ import { param } from '../utils/params.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
+router.use(requireAuth);
 
 // GET /api/lan/config - Get LAN config
-router.get('/config', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/config', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getLanConfig();
   res.json(result);
 }));
 
 // GET /api/lan/interfaces - Get all LAN interfaces
-router.get('/interfaces', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/interfaces', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getLanBrowserInterfaces();
   res.json(result);
 }));
 
 // GET /api/lan/devices - Get all devices on all interfaces
-router.get('/devices', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/devices', asyncHandler(async (_req, res) => {
   // First get interfaces
   const interfaces = await freeboxApi.getLanBrowserInterfaces();
 
@@ -50,14 +51,14 @@ router.get('/devices', requireAuth, asyncHandler(async (_req, res) => {
 }));
 
 // GET /api/lan/devices/:interface - Get devices on specific interface
-router.get('/devices/:interface', requireAuth, asyncHandler(async (req, res) => {
+router.get('/devices/:interface', asyncHandler(async (req, res) => {
   const interfaceName = param(req, 'interface');
   const result = await freeboxApi.getLanHosts(interfaceName);
   res.json(result);
 }));
 
 // POST /api/lan/wol - Wake on LAN
-router.post('/wol', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/wol', requireAdmin, asyncHandler(async (req, res) => {
   const { interface: interfaceName, mac, password } = req.body;
 
   if (!interfaceName || !mac) {

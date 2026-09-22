@@ -8,13 +8,14 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = Router();
+router.use(requireAuth);
 
 /**
  * GET /api/capabilities
  * Returns the detected Freebox capabilities
  * This endpoint can be called without prior detection - it will auto-detect
  */
-router.get('/', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/', asyncHandler(async (_req, res) => {
   const capabilities = await modelDetection.detectModel();
 
   res.json({
@@ -28,7 +29,7 @@ router.get('/', requireAuth, asyncHandler(async (_req, res) => {
  * Forces a refresh of the model detection
  * Useful after reconnection or when capabilities might have changed
  */
-router.post('/refresh', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
+router.post('/refresh', requireAdmin, asyncHandler(async (_req, res) => {
   const capabilities = await modelDetection.refreshCapabilities();
 
   res.json({
@@ -42,7 +43,7 @@ router.post('/refresh', requireAuth, requireAdmin, asyncHandler(async (_req, res
  * Returns a simplified feature availability object
  * Useful for quick UI checks
  */
-router.get('/features', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/features', asyncHandler(async (_req, res) => {
   const capabilities = await modelDetection.detectModel();
 
   res.json({
