@@ -127,78 +127,81 @@ export async function runPortScanForOnlineHosts(options?: { portRange?: string }
     }
     // Set synchronously (no await yet) so a concurrent call sees this before
     // it can pass the check above — otherwise two near-simultaneous calls
-    // could both slip through before either flips the flag.
+    // could both slip through before either flips the flag. The try/finally
+    // below guarantees this is reset even on an unexpected error (this runs
+    // fire-and-forget from callers, which only log a rejection).
     _portScanProgress.active = true;
+    try {
+        const available = await isNmapAvailable();
+        if (!available) {
+            logger.warn('PortScanService', 'nmap not available - skipping port scan');
+            return;
+        }
 
-    const available = await isNmapAvailable();
-    if (!available) {
-        _portScanProgress.active = false;
-        logger.warn('PortScanService', 'nmap not available - skipping port scan');
-        return;
-    }
+        const online = NetworkScanRepository.find({
+            status: 'online',
+            limit: MAX_ONLINE_HOSTS,
+            sortBy: 'last_seen',
+            sortOrder: 'desc'
+        });
 
-    const online = NetworkScanRepository.find({
-        status: 'online',
-        limit: MAX_ONLINE_HOSTS,
-        sortBy: 'last_seen',
-        sortOrder: 'desc'
-    });
+        if (online.length === 0) {
+            logger.info('PortScanService', 'No online hosts to scan for ports');
+            return;
+        }
 
-    if (online.length === 0) {
-        _portScanProgress.active = false;
-        logger.info('PortScanService', 'No online hosts to scan for ports');
-        return;
-    }
+        _portScanAbortRequested = false;
+        const activeIps = new Set<string>();
+        let completed = 0;
+        _portScanProgress = { active: true, current: 0, total: online.length, currentIps: [] };
+        logger.info('PortScanService', `Starting background port scan for ${online.length} online host(s) (concurrency: ${PORT_SCAN_CONCURRENCY})`);
 
-    _portScanAbortRequested = false;
-    const activeIps = new Set<string>();
-    let completed = 0;
-    _portScanProgress = { active: true, current: 0, total: online.length, currentIps: [] };
-    logger.info('PortScanService', `Starting background port scan for ${online.length} online host(s) (concurrency: ${PORT_SCAN_CONCURRENCY})`);
-
-    let nextIndex = 0;
-    const scanHost = async (host: (typeof online)[number]): Promise<void> => {
-        activeIps.add(host.ip);
-        _portScanProgress.currentIps = Array.from(activeIps);
-
-        try {
-            const { openPorts } = await runPortScan(host.ip, options);
-            const existing = host.additionalInfo || {};
-            const merged: Record<string, unknown> = {
-                ...existing,
-                openPorts,
-                lastPortScan: new Date().toISOString()
-            };
-            NetworkScanRepository.update(host.ip, { additionalInfo: merged });
-            logger.debug('PortScanService', `${host.ip}: ${openPorts.length} open port(s)`);
-        } catch (err: any) {
-            logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${err.message || err}`);
-        } finally {
-            activeIps.delete(host.ip);
-            completed++;
-            _portScanProgress.current = completed;
+        let nextIndex = 0;
+        const scanHost = async (host: (typeof online)[number]): Promise<void> => {
+            activeIps.add(host.ip);
             _portScanProgress.currentIps = Array.from(activeIps);
+
+            try {
+                const { openPorts } = await runPortScan(host.ip, options);
+                const existing = host.additionalInfo || {};
+                const merged: Record<string, unknown> = {
+                    ...existing,
+                    openPorts,
+                    lastPortScan: new Date().toISOString()
+                };
+                NetworkScanRepository.update(host.ip, { additionalInfo: merged });
+                logger.debug('PortScanService', `${host.ip}: ${openPorts.length} open port(s)`);
+            } catch (err: any) {
+                logger.warn('PortScanService', `Port scan failed for ${host.ip}: ${err.message || err}`);
+            } finally {
+                activeIps.delete(host.ip);
+                completed++;
+                _portScanProgress.current = completed;
+                _portScanProgress.currentIps = Array.from(activeIps);
+            }
+        };
+
+        const worker = async (): Promise<void> => {
+            while (nextIndex < online.length && !_portScanAbortRequested) {
+                const host = online[nextIndex++];
+                await scanHost(host);
+            }
+        };
+
+        const workerCount = Math.min(PORT_SCAN_CONCURRENCY, online.length);
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+        if (_portScanAbortRequested) {
+            logger.info('PortScanService', `Background port scan stopped by user at ${completed}/${online.length}`);
+            _portScanProgress = { active: false, current: completed, total: online.length };
+            return;
         }
-    };
 
-    const worker = async (): Promise<void> => {
-        while (nextIndex < online.length && !_portScanAbortRequested) {
-            const host = online[nextIndex++];
-            await scanHost(host);
-        }
-    };
-
-    const workerCount = Math.min(PORT_SCAN_CONCURRENCY, online.length);
-    await Promise.all(Array.from({ length: workerCount }, () => worker()));
-
-    if (_portScanAbortRequested) {
-        logger.info('PortScanService', `Background port scan stopped by user at ${completed}/${online.length}`);
-        _portScanProgress = { active: false, current: completed, total: online.length };
-        return;
+        _portScanProgress = { active: false, current: online.length, total: online.length };
+        logger.info('PortScanService', 'Background port scan completed');
+    } finally {
+        _portScanProgress.active = false;
     }
-
-    _portScanProgress = { active: false, current: online.length, total: online.length };
-    logger.info('PortScanService', 'Background port scan completed');
 }
 
 export const portScanService = {
