@@ -16,6 +16,7 @@ import { usePolling } from '../../hooks/usePolling';
 import { VendorIcon } from '../ui/VendorIcon';
 import { hasVendorIcon } from '../../utils/vendorBrand';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
+import { TrafficPeriodToggle, type TrafficPeriod } from '../ui/TrafficPeriodToggle';
 
 interface NetworkScanWidgetProps {
     onViewDetails?: () => void;
@@ -38,8 +39,6 @@ interface TopTrafficClient {
     rxBytes: number;
     txBytes: number;
 }
-
-type TrafficPeriod = 'live' | 'today' | 'alltime';
 
 // Persist the "Volume de données" tab choice across reloads (per browser).
 const TRAFFIC_PERIOD_STORAGE_KEY = 'mynetwork_traffic_period';
@@ -521,29 +520,15 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                         <span className={`w-1.5 h-1.5 rounded-full ${unifiWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
                                     )}
                                 </div>
-                                <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px]">
-                                    <button
-                                        type="button"
-                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'live' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                        onClick={() => setTrafficPeriod('live')}
-                                    >
-                                        {t('networkScan.widget.trafficLive')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'today' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                        onClick={() => setTrafficPeriod('today')}
-                                    >
-                                        {t('networkScan.widget.trafficToday')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'alltime' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                        onClick={() => setTrafficPeriod('alltime')}
-                                    >
-                                        {t('networkScan.widget.trafficAllTime')}
-                                    </button>
-                                </span>
+                                <TrafficPeriodToggle
+                                    period={trafficPeriod}
+                                    onChange={setTrafficPeriod}
+                                    labels={{
+                                        live: t('networkScan.widget.trafficLive'),
+                                        today: t('networkScan.widget.trafficToday'),
+                                        alltime: t('networkScan.widget.trafficAllTime')
+                                    }}
+                                />
                             </div>
                             {(() => {
                                 if (topTrafficLoading && trafficRows.length === 0) {

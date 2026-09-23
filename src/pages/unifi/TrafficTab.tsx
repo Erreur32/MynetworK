@@ -14,9 +14,9 @@ import { api } from '../../api/client';
 import { formatBytes, formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
 import { getClientRateBytesPerSec } from '../../utils/unifiClientRate';
 import { usePolling } from '../../hooks/usePolling';
+import { TrafficPeriodToggle, type TrafficPeriod } from '../../components/ui/TrafficPeriodToggle';
 
 type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800;
-type TrafficPeriod = 'live' | 'today' | 'alltime';
 
 // Persist this page's own graph period + "Volume de données" tab choice across reloads (per browser).
 const TRAFFIC_TAB_RANGE_STORAGE_KEY = 'mynetwork_traffictab_range';
@@ -729,29 +729,15 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                                 <Gauge size={14} className="text-cyan-400" />
                                                 {t('unifi.topTraffic')}
                                             </h3>
-                                            <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px]">
-                                                <button
-                                                    type="button"
-                                                    className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'live' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                                    onClick={() => setTrafficPeriod('live')}
-                                                >
-                                                    {t('unifi.trafficLive')}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'today' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                                    onClick={() => setTrafficPeriod('today')}
-                                                >
-                                                    {t('unifi.trafficToday')}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'alltime' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
-                                                    onClick={() => setTrafficPeriod('alltime')}
-                                                >
-                                                    {t('unifi.trafficAllTime')}
-                                                </button>
-                                            </span>
+                                            <TrafficPeriodToggle
+                                                period={trafficPeriod}
+                                                onChange={setTrafficPeriod}
+                                                labels={{
+                                                    live: t('unifi.trafficLive'),
+                                                    today: t('unifi.trafficToday'),
+                                                    alltime: t('unifi.trafficAllTime')
+                                                }}
+                                            />
                                         </div>
                                         {(() => {
                                             if (isLoadingTopTraffic && trafficRows.length === 0) {
