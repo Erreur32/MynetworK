@@ -3,7 +3,7 @@ import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { modelDetection } from '../services/modelDetection.js';
 import { logger } from '../utils/logger.js';
-import { param } from '../utils/params.js';
+import { param, requireIntParam } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -31,7 +31,7 @@ router.get('/aps', asyncHandler(async (_req, res) => {
 
 // GET /api/wifi/aps/:id/stations - Get stations for specific AP
 router.get('/aps/:id/stations', asyncHandler(async (req, res) => {
-  const apId = parseInt(param(req, 'id'), 10);
+  const apId = requireIntParam(req, 'id');
   const result = await freeboxApi.getWifiApStations(apId);
   res.json(result);
 }));
@@ -281,7 +281,7 @@ router.post('/guest/keys', requireAdmin, asyncHandler(async (req, res) => {
 
 // DELETE /api/wifi/guest/keys/:id - Delete guest network key
 router.delete('/guest/keys/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const id = parseInt(param(req, 'id'), 10);
+  const id = requireIntParam(req, 'id');
   const result = await freeboxApi.deleteWifiCustomKey(id);
   res.json(result);
 }));
