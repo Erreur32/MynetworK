@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.38] - 2026-09-23
+
+### Changes
+
+- feat: UniFi traffic/overview UX pass and no-gateway empty states
+- fix: round kb/s speed display in unifi traffic table
+
+---
+
 ## [0.10.37] - 2026-09-23
 
 ### Added
