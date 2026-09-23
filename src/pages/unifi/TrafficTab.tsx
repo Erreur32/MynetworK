@@ -1,14 +1,53 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDown, ArrowUp, RefreshCw, BarChart2, Activity, Users, Server, Link2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, RefreshCw, BarChart2, Activity, Users, Server, Link2, Gauge, Router } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
+import { VendorIcon } from '../../components/ui/VendorIcon';
+import { hasVendorIcon } from '../../utils/vendorBrand';
+import { SortableTh } from '../../components/ui/SortableTh';
+import { useSortableTable } from '../../hooks/useSortableTable';
 import { BandwidthPoint } from './types';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { api } from '../../api/client';
+import { formatBytes, formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
+import { getClientRateBytesPerSec } from '../../utils/unifiClientRate';
+import { usePolling } from '../../hooks/usePolling';
+import { TrafficPeriodToggle, type TrafficPeriod } from '../../components/ui/TrafficPeriodToggle';
 
 type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800;
+
+// Persist this page's own graph period + "Volume de données" tab choice across reloads (per browser).
+const TRAFFIC_TAB_RANGE_STORAGE_KEY = 'mynetwork_traffictab_range';
+const TRAFFIC_TAB_PERIOD_STORAGE_KEY = 'mynetwork_traffictab_period';
+const VALID_TRAFFIC_TAB_RANGES: BandwidthRange[] = [0, 3600, 21600, 86400, 604800];
+
+function readStoredTrafficTabRange(fallback: BandwidthRange): BandwidthRange {
+    try {
+        const v = localStorage.getItem(TRAFFIC_TAB_RANGE_STORAGE_KEY);
+        const n = v !== null ? Number(v) : Number.NaN;
+        if ((VALID_TRAFFIC_TAB_RANGES as number[]).includes(n)) return n as BandwidthRange;
+    } catch { /* ignore */ }
+    return fallback;
+}
+
+function readStoredTrafficTabPeriod(fallback: TrafficPeriod): TrafficPeriod {
+    try {
+        const v = localStorage.getItem(TRAFFIC_TAB_PERIOD_STORAGE_KEY);
+        if (v === 'live' || v === 'today' || v === 'alltime') return v;
+    } catch { /* ignore */ }
+    return fallback;
+}
+
+interface TopTrafficClient {
+    mac: string;
+    name: string;
+    ip?: string;
+    vendor?: string | null;
+    rxBytes: number;
+    txBytes: number;
+}
 
 interface TrafficTabProps {
     unifiStats: any;
@@ -36,11 +75,77 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     onNavigateToSearch,
 }) => {
     const { t } = useTranslation();
-    const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected } = useUnifiRealtimeStore();
-    const [selectedRange, setSelectedRange] = useState<BandwidthRange>(0);
+    const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected, topClients: liveTopClients } = useUnifiRealtimeStore();
+    const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredTrafficTabRange(0));
+    const selectedRange = selectedRangeState;
+    const setSelectedRange = (range: BandwidthRange) => {
+        setSelectedRangeState(range);
+        try { localStorage.setItem(TRAFFIC_TAB_RANGE_STORAGE_KEY, String(range)); } catch { /* ignore */ }
+    };
     const [rangeHistory, setRangeHistory] = useState<BandwidthPoint[]>([]);
     const [isLoadingRange, setIsLoadingRange] = useState(false);
     const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+    const [trafficPeriodState, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficTabPeriod('today'));
+    const trafficPeriod = trafficPeriodState;
+    const setTrafficPeriod = (period: TrafficPeriod) => {
+        setTrafficPeriodState(period);
+        try { localStorage.setItem(TRAFFIC_TAB_PERIOD_STORAGE_KEY, period); } catch { /* ignore */ }
+    };
+    const [topTraffic, setTopTraffic] = useState<TopTrafficClient[]>([]);
+    const [isLoadingTopTraffic, setIsLoadingTopTraffic] = useState(false);
+
+    const fetchTopTraffic = useCallback(async () => {
+        if (trafficPeriod === 'live') return;
+        setIsLoadingTopTraffic(true);
+        try {
+            const res = await api.get<TopTrafficClient[]>(`/api/plugins/unifi/top-clients-history?period=${trafficPeriod}&limit=10`);
+            if (res.success && Array.isArray(res.result)) {
+                setTopTraffic(res.result);
+            }
+        } catch { /* ignore */ } finally {
+            setIsLoadingTopTraffic(false);
+        }
+    }, [trafficPeriod]);
+
+    useEffect(() => {
+        fetchTopTraffic();
+        const interval = setInterval(fetchTopTraffic, 60000);
+        return () => clearInterval(interval);
+    }, [fetchTopTraffic]);
+
+    // Sortable "Volume de données" table. Live mode reads straight from the WebSocket-fed
+    // realtime store (no REST call); today/all-time read from topTraffic (fetched above).
+    const trafficRows: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; volumeValue: number; volumeText: string }> =
+        trafficPeriod === 'live'
+            ? liveTopClients.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeValue: c.download + c.upload, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
+            : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeValue: c.rxBytes + c.txBytes, volumeText: formatBytes(c.rxBytes + c.txBytes) }));
+
+    const topTrafficSort = useSortableTable<typeof trafficRows[number], 'name' | 'ip' | 'volume'>(
+        trafficRows,
+        (c, key) => {
+            if (key === 'name') return c.name.toLowerCase();
+            if (key === 'ip') return c.ip || '';
+            return c.volumeValue;
+        },
+        'volume'
+    );
+
+    // Sort state for the other two tables — their source data (topClients/topDevices) is
+    // recomputed each render from unifiStats inside the JSX below, so sorting is applied
+    // there with a plain array sort rather than via useSortableTable.
+    const [clientsSortKey, setClientsSortKey] = useState<'name' | 'ip' | 'ap' | 'speed' | 'signal'>('speed');
+    const [clientsSortDir, setClientsSortDir] = useState<'asc' | 'desc'>('desc');
+    const toggleClientsSort = (key: typeof clientsSortKey) => {
+        if (key === clientsSortKey) setClientsSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+        else { setClientsSortKey(key); setClientsSortDir('desc'); }
+    };
+
+    const [apSortKey, setApSortKey] = useState<'name' | 'throughput'>('throughput');
+    const [apSortDir, setApSortDir] = useState<'asc' | 'desc'>('desc');
+    const toggleApSort = (key: typeof apSortKey) => {
+        if (key === apSortKey) setApSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+        else { setApSortKey(key); setApSortDir('desc'); }
+    };
 
     // Fetch historical data when range > 0
     const fetchRangeHistory = useCallback(async () => {
@@ -61,6 +166,13 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
             fetchRangeHistory();
         }
     }, [selectedRange, selectedWan, fetchRangeHistory]);
+
+    // Same auto-refresh as the home page's BandwidthHistoryWidget — without this, 1h/6h/24h/7j
+    // only ever showed data as of the moment the range was picked, requiring a manual refresh click.
+    usePolling(fetchRangeHistory, {
+        enabled: selectedRange > 0,
+        interval: POLLING_INTERVALS.system
+    });
 
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
         if (!ip || ip === '-' || ip === 'N/A') {
@@ -323,19 +435,8 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                         const devices = unifiStats.devices as any[];
                         const clients = devices.filter((d: any) => (d.type || '').toLowerCase() === 'client');
 
-                        const getSpeed = (c: any): number => {
-                            const rate =
-                                c.tx_rate ||
-                                c.rx_rate ||
-                                c.phy_tx_rate ||
-                                c.phy_rx_rate ||
-                                c.sw_tx_rate ||
-                                c.sw_rx_rate ||
-                                c.current_speed ||
-                                c.speed ||
-                                0;
-                            return typeof rate === 'number' ? rate : 0;
-                        };
+                        // Kbps, to match the arithmetic below (formatBitsPerSecond, trafficByDevice aggregation).
+                        const getSpeed = (c: any): number => (getClientRateBytesPerSec(c).total * 8) / 1000;
 
                         const formatBitsPerSecond = (bps: number | null | undefined): string => {
                             if (!bps || bps <= 0) return '-';
@@ -385,6 +486,22 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                             ? sortedTrafficClients
                             : sortedTrafficClients.slice(0, 16);
 
+                        // Re-order the already-selected top clients by whichever column was clicked
+                        const displayClients = [...topClients].sort((a, b) => {
+                            const getVal = (c: any): string | number => {
+                                if (clientsSortKey === 'name') return ((c.name || c.hostname || c.ip || '').toString()).toLowerCase();
+                                if (clientsSortKey === 'ip') return (c.ip || '').toString();
+                                if (clientsSortKey === 'ap') return getApNameForClient(c) || '';
+                                if (clientsSortKey === 'signal') return getSignalInfoTraffic(c).rssi ?? -999;
+                                return getSpeed(c);
+                            };
+                            const av = getVal(a);
+                            const bv = getVal(b);
+                            if (av < bv) return clientsSortDir === 'asc' ? -1 : 1;
+                            if (av > bv) return clientsSortDir === 'asc' ? 1 : -1;
+                            return 0;
+                        });
+
                         const trafficByDevice = new Map<string, { down: number; up: number; ref: any }>();
                         for (const c of clients) {
                             const speed = getSpeed(c);
@@ -400,6 +517,13 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                         const topDevices = Array.from(trafficByDevice.entries())
                             .sort((a, b) => b[1].down - a[1].down)
                             .slice(0, 8);
+
+                        const displayDevices = [...topDevices].sort((a, b) => {
+                            if (apSortKey === 'name') {
+                                return apSortDir === 'asc' ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0]);
+                            }
+                            return apSortDir === 'asc' ? a[1].down - b[1].down : b[1].down - a[1].down;
+                        });
 
                         const activeClientsCount = clients.length;
 
@@ -474,15 +598,15 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                             <table className="min-w-full text-[12px] text-gray-200">
                                                 <thead className="bg-theme-card text-gray-300 text-xs">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left">{t('unifi.tableName')}</th>
-                                                        <th className="px-2 py-1 text-left">IP</th>
-                                                        <th className="px-2 py-1 text-left">AP</th>
-                                                        <th className="px-2 py-1 text-right">{t('unifi.speed')}</th>
-                                                        <th className="px-2 py-1 text-left">{t('unifi.signalPort').split(' / ')[0]}</th>
+                                                        <SortableTh label={t('unifi.tableName')} active={clientsSortKey === 'name'} dir={clientsSortDir} onClick={() => toggleClientsSort('name')} />
+                                                        <SortableTh label="IP" active={clientsSortKey === 'ip'} dir={clientsSortDir} onClick={() => toggleClientsSort('ip')} />
+                                                        <SortableTh label="AP" active={clientsSortKey === 'ap'} dir={clientsSortDir} onClick={() => toggleClientsSort('ap')} />
+                                                        <SortableTh label={t('unifi.speed')} align="right" active={clientsSortKey === 'speed'} dir={clientsSortDir} onClick={() => toggleClientsSort('speed')} />
+                                                        <SortableTh label={t('unifi.signalPort').split(' / ')[0]} active={clientsSortKey === 'signal'} dir={clientsSortDir} onClick={() => toggleClientsSort('signal')} />
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {topClients.map((c: any, idx: number) => (
+                                                    {displayClients.map((c: any, idx: number) => (
                                                         <tr
                                                             key={c.id || c.mac || idx}
                                                             className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
@@ -490,11 +614,17 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                                             <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
                                                                 {(() => {
                                                                     const name = (c.name || c.hostname || '').toString().trim();
-                                                                    if (name) return name;
+                                                                    const label = name || (c.ip || '').toString() || (c.mac || '').toString();
+                                                                    const icon = hasVendorIcon(undefined, label)
+                                                                        ? <VendorIcon label={label} size={13} />
+                                                                        : <Router size={13} className="text-gray-400 shrink-0" />;
+                                                                    if (name) {
+                                                                        return <span className="inline-flex items-center gap-1.5">{icon}<span className="truncate">{name}</span></span>;
+                                                                    }
                                                                     const ip = (c.ip || '').toString();
                                                                     const mac = (c.mac || '').toString();
-                                                                    if (ip) return renderClickableIp(ip, 'text-gray-200', 8);
-                                                                    if (mac) return mac;
+                                                                    if (ip) return <span className="inline-flex items-center gap-1.5">{icon}{renderClickableIp(ip, 'text-gray-200', 8)}</span>;
+                                                                    if (mac) return <span className="inline-flex items-center gap-1.5">{icon}{mac}</span>;
                                                                     return '-';
                                                                 })()}
                                                             </td>
@@ -548,6 +678,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                         )}
                                     </div>
 
+                                    <div className="space-y-4">
                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800">
                                         <div className="flex items-center justify-between mb-2">
                                             <h3 className="text-sm font-semibold text-white">
@@ -565,18 +696,21 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                             <table className="min-w-full text-[12px] text-gray-200">
                                                 <thead className="bg-theme-card text-gray-300 text-xs">
                                                     <tr>
-                                                        <th className="px-2 py-1 text-left">{t('unifi.apSwitchCol')}</th>
-                                                        <th className="px-2 py-1 text-right">{t('unifi.totalThroughput')}</th>
+                                                        <SortableTh label={t('unifi.apSwitchCol')} active={apSortKey === 'name'} dir={apSortDir} onClick={() => toggleApSort('name')} />
+                                                        <SortableTh label={t('unifi.totalThroughput')} align="right" active={apSortKey === 'throughput'} dir={apSortDir} onClick={() => toggleApSort('throughput')} />
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {topDevices.map(([name, info], idx) => (
+                                                    {displayDevices.map(([name, info], idx) => (
                                                         <tr
                                                             key={name}
                                                             className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
                                                         >
                                                             <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
-                                                                {name}
+                                                                <span className="inline-flex items-center gap-1.5">
+                                                                    <Server size={13} className="text-gray-400 shrink-0" />
+                                                                    <span className="truncate">{name}</span>
+                                                                </span>
                                                             </td>
                                                             <td className="px-2 py-1 text-right text-xs font-mono">
                                                                 {formatBitsPerSecond(info.down * 1_000)} {/* approx bits/s */}
@@ -587,6 +721,70 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                             </table>
                                         )}
                                     </div>
+
+                                    {/* Volume de données (today / all-time) — UniFi only, Freebox has no per-host counters */}
+                                    <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+                                                <Gauge size={14} className="text-cyan-400" />
+                                                {t('unifi.topTraffic')}
+                                            </h3>
+                                            <TrafficPeriodToggle
+                                                period={trafficPeriod}
+                                                onChange={setTrafficPeriod}
+                                                labels={{
+                                                    live: t('unifi.trafficLive'),
+                                                    today: t('unifi.trafficToday'),
+                                                    alltime: t('unifi.trafficAllTime')
+                                                }}
+                                            />
+                                        </div>
+                                        {(() => {
+                                            if (isLoadingTopTraffic && trafficRows.length === 0) {
+                                                return <p className="text-xs text-gray-500">{t('unifi.loading')}</p>;
+                                            }
+                                            if (trafficRows.length === 0) {
+                                                return <p className="text-xs text-gray-500">{t('unifi.noTrafficDataYet')}</p>;
+                                            }
+                                            return (
+                                                <table className="min-w-full text-[12px] text-gray-200">
+                                                    <thead className="bg-theme-card text-gray-300 text-xs">
+                                                        <tr>
+                                                            <th className="px-2 py-1 text-left">#</th>
+                                                            <SortableTh label={t('unifi.deviceCol')} active={topTrafficSort.sortKey === 'name'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('name')} />
+                                                            <SortableTh label="IP" active={topTrafficSort.sortKey === 'ip'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('ip')} />
+                                                            <SortableTh label={t('unifi.totalVolume')} align="right" active={topTrafficSort.sortKey === 'volume'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('volume')} />
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {topTrafficSort.sorted.map((c, idx) => (
+                                                            <tr
+                                                                key={c.mac}
+                                                                className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
+                                                            >
+                                                                <td className="px-2 py-1 text-left text-gray-500">{idx + 1}</td>
+                                                                <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
+                                                                    <span className="inline-flex items-center gap-1.5">
+                                                                        {hasVendorIcon(c.vendor, c.name)
+                                                                            ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
+                                                                            : <Router size={13} className="text-gray-400" />}
+                                                                        {c.name}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-2 py-1 text-left text-xs font-mono text-sky-300">
+                                                                    {renderClickableIp(c.ip, 'text-sky-300 font-mono text-xs', 8)}
+                                                                </td>
+                                                                <td className="px-2 py-1 text-right text-xs font-mono text-cyan-400 font-semibold">
+                                                                    {c.volumeText}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
                                 </div>
                             </div>
                         );

@@ -16,6 +16,7 @@ import { param } from '../utils/params.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
+import { UniFiClientTrafficRepository } from '../database/models/UniFiClientTraffic.js';
 
 const router = Router();
 
@@ -762,6 +763,25 @@ router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: Aut
         logger.error('UniFi', 'Failed to get bandwidth history:', error);
         res.json({ success: true, result: [] });
     }
+}));
+
+/**
+ * GET /api/plugins/unifi/top-clients-history?period=today|alltime&limit=10
+ * Returns the top N clients by accumulated traffic (rx+tx bytes), either for
+ * today (resets daily) or all-time (since the tracking service started).
+ * Backed by unifi_client_traffic_daily / unifi_client_traffic_totals, fed by
+ * unifiTrafficHistoryService.ts (independent of the live WebSocket badges).
+ */
+router.get('/unifi/top-clients-history', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const period = req.query.period === 'alltime' ? 'alltime' : 'today';
+    const limit = Math.min(50, Math.max(1, Number.parseInt((req.query.limit as string) || '10', 10) || 10));
+
+    const result = period === 'alltime'
+        ? UniFiClientTrafficRepository.getTopAllTime(limit)
+        : UniFiClientTrafficRepository.getTopToday(limit);
+
+    res.setHeader('Cache-Control', 'private, max-age=30');
+    res.json({ success: true, result });
 }));
 
 /**

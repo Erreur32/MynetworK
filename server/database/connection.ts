@@ -307,6 +307,40 @@ export function initializeDatabase(): void {
         )
     `);
 
+    // UniFi per-client traffic — today's accumulated bytes, one row per (mac, date).
+    // Fed by a background poller that adds the positive delta between consecutive
+    // stat/sta polls (see unifiTrafficHistoryService.ts). Purged after N days —
+    // unlike unifi_client_traffic_totals, this table only needs to answer "today".
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS unifi_client_traffic_daily (
+            mac TEXT NOT NULL,
+            date TEXT NOT NULL,
+            name TEXT,
+            ip TEXT,
+            vendor TEXT,
+            rx_bytes INTEGER NOT NULL DEFAULT 0,
+            tx_bytes INTEGER NOT NULL DEFAULT 0,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (mac, date)
+        )
+    `);
+
+    // UniFi per-client traffic — running total since tracking started (never purged).
+    // Same accumulation source as unifi_client_traffic_daily, kept in a separate
+    // table so purging daily rows for space never affects the all-time ranking.
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS unifi_client_traffic_totals (
+            mac TEXT PRIMARY KEY,
+            name TEXT,
+            ip TEXT,
+            vendor TEXT,
+            rx_bytes INTEGER NOT NULL DEFAULT 0,
+            tx_bytes INTEGER NOT NULL DEFAULT 0,
+            first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     // Token blacklist table (persists revoked JWT tokens across restarts)
     database.exec(`
         CREATE TABLE IF NOT EXISTS token_blacklist (
@@ -386,6 +420,7 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_latency_measurements_ip_measured_at ON latency_measurements(ip, measured_at);
         CREATE INDEX IF NOT EXISTS idx_token_blacklist_token_hash ON token_blacklist(token_hash);
         CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires_at ON token_blacklist(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_unifi_client_traffic_daily_date ON unifi_client_traffic_daily(date);
     `);
 
     logger.success('Database', 'Schema initialized');

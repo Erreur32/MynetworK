@@ -62,8 +62,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
           upload: Math.round(status.rate_up / 1024)
         };
 
-        // Keep last 300 points (5 minutes at 1s interval)
-        const newHistory = [...history.slice(-299), newPoint];
+        // Keep last 60 points (60 seconds at 1s interval) — short live window
+        const newHistory = [...history.slice(-59), newPoint];
         set({ history: newHistory });
       }
     } catch {
@@ -157,8 +157,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       download,
       upload
     };
-    // Keep last 300 points (5 minutes at 1s interval)
-    const newHistory = [...history.slice(-299), newPoint];
+    // Keep last 60 points (60 seconds at 1s interval) — short live window
+    const newHistory = [...history.slice(-59), newPoint];
     set({ history: newHistory });
   },
 

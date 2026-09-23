@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useUnifiRealtimeStore } from '../stores/unifiRealtimeStore';
+import { useUnifiRealtimeStore, type UnifiTopClient } from '../stores/unifiRealtimeStore';
 import { useUserAuthStore } from '../stores/userAuthStore';
 import { getBasePath } from '../utils/ingress';
 
@@ -10,6 +10,7 @@ interface UnifiBandwidthMessage {
     download: number;
     upload: number;
     wans: Record<string, { download: number; upload: number }>;
+    topClients?: UnifiTopClient[];
   };
 }
 
@@ -84,7 +85,7 @@ export function useUnifiWebSocket(options: UseUnifiWebSocketOptions = {}) {
       try {
         const message: UnifiBandwidthMessage = JSON.parse(event.data);
         if (message.type === 'unifi_bandwidth' && message.data) {
-          pushPoint(message.data.download, message.data.upload);
+          pushPoint(message.data.download, message.data.upload, message.data.topClients);
         }
       } catch (error) {
         console.error('[WS-UniFi] Parse error:', error);

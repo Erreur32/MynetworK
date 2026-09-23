@@ -65,6 +65,12 @@
       "reconnectFreebox": "Tenter de se reconnecter à la Freebox",
       "collectingData": "Collecte des données en cours...",
       "chartWillFill": "Le graphique se remplira automatiquement.",
+      "viewDevice": "Voir la fiche de l'appareil",
+      "paused": "Pause",
+      "hideIcons": "Masquer les icônes",
+      "showIcons": "Afficher les icônes",
+      "clickToPause": "Cliquer pour mettre en pause",
+      "clickToResume": "Cliquer pour reprendre",
       "tooltip": {
         "title": "Historique bande passante",
         "desc": "Débit entrant (download) et sortant (upload) mesuré sur la période sélectionnée. Les données sont issues de la Freebox (RRD) ou de l'API UniFi selon la source active.",

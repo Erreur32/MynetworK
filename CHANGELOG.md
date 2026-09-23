@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.37] - 2026-09-23
+
+### Added
+
+- Per-device traffic monitoring for UniFi clients, across the home dashboard, `unifi/traffic` and `unifi/analyse`: live top consumers, plus "today" and "all-time" accumulated volume backed by two new SQLite tables (`unifi_client_traffic_daily`, purged after 30 days; `unifi_client_traffic_totals`, never purged) fed by a new background poller independent of the dashboard being open.
+- Live device icons on the UniFi bandwidth graph: a small cluster of the current top consumers anchored near the live edge, click-to-pause (freezes the graph so there's time to hover a tooltip), and a toggle to hide them.
+- Sortable columns on the traffic tables in `unifi/analyse` and `unifi/traffic` (shared `useSortableTable` hook).
+- Device vendor icons on every UniFi client table that was missing one.
+- 5/10 result toggle for "Top Pire Latence" on the home dashboard.
+- Graph source/period choices (Freebox/UniFi, Live/1h/6h/24h/7j, Live/Today/All-time) now persist per browser across reloads.
+- Auto-refresh (30s) for the `unifi/traffic` page's historical bandwidth ranges — previously required a manual refresh click.
+
+### Fixed
+
+- UniFi per-client throughput was read from the wrong fields (`rx_rate`/`tx_rate`/`phy_*_rate`/`sw_*_rate`), which are the negotiated WiFi PHY rate or Ethernet port speed, not actual traffic — confirmed by two unrelated IoT devices showing the exact same fabricated rate simultaneously. Now reads the controller's real instantaneous rate fields (`rx_bytes-r`/`tx_bytes-r`) everywhere this was used (live ranking, "Clients by throughput", "Analyse trafic UniFi").
+- UniFi controller session could be destabilized (temporary lockout) by too-frequent client-list polling from the live WebSocket feed; throttled to every 3rd tick.
+
+### Changed
+
+- Live bandwidth graph window shortened from 5 minutes to 60 seconds for both Freebox and UniFi, for a more readable "what's happening right now" view.
+- "Volume de données" section moved above "Top Pire Latence" on the home dashboard.
+
+---
+
 ## [0.10.36] - 2026-09-22
 
 ### Fixed
