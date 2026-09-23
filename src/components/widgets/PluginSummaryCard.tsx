@@ -19,7 +19,7 @@ import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { api } from '../../api/client';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { decodeHtmlEntities } from '../../utils/textUtils';
-import { Server, Wifi, Activity, ArrowRight, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
+import { Server, Wifi, Activity, ArrowRight, ArrowDown, ArrowUp, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
 import type { SystemSensor, SystemFan } from '../../types/api';
 
 interface PluginSummaryCardProps {
@@ -653,7 +653,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {/* Devices (generic counter: total number of devices reported by the plugin)
                             For Freebox, we hide this counter to keep the card focused on WAN / DHCP / NAT summary. */}
 
-                        {/* UniFi controller / version / IP / type — mirrors Freebox firmware header */}
+                        {/* UniFi controller / version / IP / type, mirrors Freebox firmware header */}
                         {pluginId === 'unifi' && (unifiControllerVersion || unifiControllerIp) && (() => {
                             const deploymentType = (stats as any)?.system?.deploymentType as string | undefined;
                             const deploymentLabel = deploymentType === 'unifios' ? 'CloudGateway'
@@ -665,7 +665,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     {unifiControllerUpdateAvailable && (
                                         <div className="w-full flex items-center justify-end px-2 py-1 rounded bg-amber-900/40 border border-amber-600 text-amber-300 text-[10px]">
                                             {t('admin.updateCheck.newVersionAvailable')}
-                                            {unifiControllerVersion && <> — v{unifiControllerVersion}</>}
+                                            {unifiControllerVersion && <> (v{unifiControllerVersion})</>}
                                         </div>
                                     )}
                                     <div className="space-y-1">
@@ -688,7 +688,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             );
                         })()}
 
-                        {/* UniFi DHCP info — below firmware, same style as Freebox */}
+                        {/* UniFi DHCP info, below firmware, same style as Freebox */}
                         {pluginId === 'unifi' && isActive && stats.system && (stats.system as any).dhcpEnabled !== undefined && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
                                 <div className="grid grid-cols-2 gap-3">
@@ -712,8 +712,10 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             </div>
                         )}
 
-                        {/* UniFi bandwidth sparklines — same style as Freebox */}
-                        {pluginId === 'unifi' && isActive && (() => {
+                        {/* UniFi bandwidth sparklines, same style as Freebox. Hidden on the Analyse tab
+                            (showDeviceTables): only the current values are shown there, as colored
+                            arrow badges next to System State below. */}
+                        {pluginId === 'unifi' && isActive && !showDeviceTables && (() => {
                             if (unifiHistory.length > 1) {
                                 const last = unifiHistory[unifiHistory.length - 1];
                                 const currentDl = last ? formatSpeed(last.download * 1024) : '-- kb/s';
@@ -760,16 +762,38 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             );
                         })()}
 
-                        {/* UniFi system state — temperature badge (when gateway exposes it, e.g. UDM Pro/SE/Dream Router) */}
-                        {pluginId === 'unifi' && isActive && typeof (stats.system as any)?.temperature === 'number' && (
+                        {/* UniFi system state: temperature badge (when gateway exposes it, e.g. UDM Pro/SE/Dream Router)
+                            + bandwidth badges (Analyse tab only, replacing the sparklines hidden above). */}
+                        {pluginId === 'unifi' && isActive && (showDeviceTables || typeof (stats.system as any)?.temperature === 'number') && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
                                 <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <StatusBadge
-                                        icon={<Cpu size={14} />}
-                                        value={`${(stats.system as any).temperature}°C`}
-                                        color="text-emerald-400"
-                                    />
+                                    {typeof (stats.system as any)?.temperature === 'number' && (
+                                        <StatusBadge
+                                            icon={<Cpu size={14} />}
+                                            value={`${(stats.system as any).temperature}°C`}
+                                            color="text-emerald-400"
+                                        />
+                                    )}
+                                    {showDeviceTables && (() => {
+                                        const last = unifiHistory.length > 0 ? unifiHistory[unifiHistory.length - 1] : undefined;
+                                        const currentDl = last ? formatSpeed(last.download * 1024) : '-- kb/s';
+                                        const currentUl = last ? formatSpeed(last.upload * 1024) : '-- kb/s';
+                                        return (
+                                            <>
+                                                <StatusBadge
+                                                    icon={<ArrowDown size={14} />}
+                                                    value={currentDl}
+                                                    color="text-blue-400"
+                                                />
+                                                <StatusBadge
+                                                    icon={<ArrowUp size={14} />}
+                                                    value={currentUl}
+                                                    color="text-emerald-400"
+                                                />
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
@@ -1369,7 +1393,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                             </div>
                         )}
 
-                        {/* Freebox DHCP + NAT — standalone block, same position as UniFi DHCP */}
+                        {/* Freebox DHCP + NAT, standalone block, same position as UniFi DHCP */}
                         {pluginId === 'freebox' && isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding) && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
                                 <div className="grid grid-cols-2 gap-3">

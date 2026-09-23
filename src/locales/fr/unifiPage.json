@@ -14,13 +14,13 @@
       "debug": "Debug",
       "desc": {
         "overview": "État du contrôleur, équipements en ligne, sites UniFi, alertes actives et journal des événements réseau.",
-        "traffic": "Historique de bande passante WAN — débit entrant/sortant par interface sur 1h / 24h / 7j.",
-        "threats": "IDS/IPS — flux réseau bloqués, niveaux de risque (Low/Suspicious/Concerning) et origines géographiques des attaques.",
-        "analyse": "Détail des points d'accès — SSIDs diffusés, canaux, puissance radio et clients connectés par bande (2.4 / 5 / 6 GHz).",
-        "nat": "Passerelle UniFi — ports WAN/LAN et règles NAT de redirection de ports (port forwarding).",
-        "clients": "Appareils réseau connectés — filtrage par type (Wi-Fi / Ethernet), statut (actif/inactif) et recherche par IP, nom ou MAC.",
-        "switches": "Ports des switches UniFi — vitesse de liaison, état POE, erreurs RX/TX et nom de port.",
-        "debug": "Données brutes de l'API UniFi — utilisé pour le diagnostic technique et le développement."
+        "traffic": "Historique de bande passante WAN, débit entrant/sortant par interface sur 1h / 24h / 7j.",
+        "threats": "Nécessite une passerelle UniFi avec moteur IDS/IPS (Cloud Gateway, Dream Machine, USG). Indisponible sur une installation composée uniquement de bornes/switches.",
+        "analyse": "Détail des points d'accès, SSIDs diffusés, canaux, puissance radio et clients connectés par bande (2.4 / 5 / 6 GHz).",
+        "nat": "Passerelle UniFi, ports WAN/LAN et règles NAT de redirection de ports (port forwarding).",
+        "clients": "Appareils réseau connectés, filtrage par type (Wi-Fi / Ethernet), statut (actif/inactif) et recherche par IP, nom ou MAC.",
+        "switches": "Ports des switches UniFi, vitesse de liaison, état POE, erreurs RX/TX et nom de port.",
+        "debug": "Données brutes de l'API UniFi, utilisé pour le diagnostic technique et le développement."
       }
     },
     "threats": {
@@ -37,7 +37,7 @@
       "unavailable": "Données indisponibles",
       "unavailableDesc": "Le contrôleur UniFi ne retourne pas de données de menaces.",
       "requiresIps": "Cette fonctionnalité nécessite que la détection d'intrusions (IDS/IPS) soit activée dans UniFi.",
-      "noThreatsInRange": "Aucune menace détectée — base IPS vide.",
+      "noThreatsInRange": "Aucune menace détectée, base IPS vide.",
       "noThreatsHint": "L'IPS est actif mais aucun événement n'a été généré.",
       "ipsEmptyTitle": "L'IPS UniFi n'a loggé aucun événement",
       "ipsEmptyHint1": "Vérifier que l'IPS est en mode Block (pas seulement Detect) : Network → Security → Threat Management",
@@ -68,7 +68,15 @@
       "chartTitle": "Bande passante WAN",
       "loading": "Collecte des données en cours...",
       "noData": "Données insuffisantes",
-      "noDataHint": "Les données s'accumulent à chaque actualisation (~30s). Revenez dans quelques minutes."
+      "noDataHint": "Les données s'accumulent à chaque actualisation (~30s). Revenez dans quelques minutes.",
+      "noGateway": "Aucune passerelle UniFi détectée",
+      "noGatewayHint": "Le débit WAN nécessite une passerelle UniFi (Cloud Gateway, Dream Machine, USG). Avec des bornes/switches seuls, cette donnée n'est pas mesurable.",
+      "tooltipTitle": "Graphique bande passante WAN",
+      "tooltipDesc": "Débit calculé par delta entre deux mesures successives des compteurs cumulatifs WAN du gateway UniFi.",
+      "tooltipDownload": "Octets reçus depuis Internet (KB/s)",
+      "tooltipUpload": "Octets envoyés vers Internet (KB/s)",
+      "tooltipFooterLive": "WebSocket temps réel (~3s)",
+      "tooltipFooterPolling": "Polling toutes les ~30s"
     },
     "pluginNotInstalled": "Le plugin UniFi n'est pas installé ou configuré.",
     "pluginNotConnectedDescription": "Le plugin UniFi n'est pas activé ou connecté.",
@@ -91,7 +99,7 @@
     "filterAll": "Tous",
     "gatewayLabel": "Gateway :",
     "wan": "WAN",
-    "lan": "LAN",
+    "lanLabel": "LAN",
     "portCountEthernet": "{{count}} port(s) Ethernet",
     "debugInfo": "Debug Info :"
   }

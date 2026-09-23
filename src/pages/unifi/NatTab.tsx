@@ -80,7 +80,7 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
     return (
         <div className="col-span-full space-y-6">
             {/* Gateway & WAN/LAN ports summary */}
-            {hasGatewaySummary && (
+            {hasGatewaySummary ? (
                 <Card
                     title={<span className="flex items-center gap-1.5">{t('unifi.gatewayAndPorts')}<RichTooltip title={t('unifi.tooltip.gateway.title')} description={t('unifi.tooltip.gateway.desc')} position="bottom" width={280} iconSize={12} /></span>}
                     className="bg-unifi-card border border-gray-800 rounded-xl"
@@ -97,7 +97,7 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
                                         <li key={i} className="flex items-center justify-between text-xs bg-gray-800/50 rounded px-2 py-1.5">
                                             <span className="text-gray-300">{p.name}</span>
                                             <span className="font-mono text-cyan-300 truncate max-w-[140px]" title={p.ip || ''}>
-                                                {p.ip || (p.up ? t('network.connected') : '—')}
+                                                {p.ip || (p.up ? t('network.connected') : '-')}
                                             </span>
                                         </li>
                                     ))}
@@ -109,7 +109,7 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
                         <div className="space-y-3">
                             <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
                                 <Link2 size={16} />
-                                {t('unifi.lan')}
+                                {t('unifi.lanLabel')}
                             </div>
                             {gSummary.lanPorts && gSummary.lanPorts.length > 0 ? (
                                 <ul className="space-y-1.5">
@@ -145,6 +145,17 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
                                 {t('unifi.natRules')}: <span className="text-purple-300 font-mono">{natRulesCount}</span>
                             </span>
                         )}
+                    </div>
+                </Card>
+            ) : (
+                <Card
+                    title={t('unifi.gatewayAndPorts')}
+                    className="bg-unifi-card border border-gray-800 rounded-xl"
+                >
+                    <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                        <Router size={36} className="mb-3 opacity-30" />
+                        <p className="text-sm font-medium">{t('unifi.bandwidth.noGateway')}</p>
+                        <p className="text-xs mt-1 text-gray-600 max-w-sm text-center">{t('unifi.noGatewayPortsHint')}</p>
                     </div>
                 </Card>
             )}

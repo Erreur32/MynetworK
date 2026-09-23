@@ -29,6 +29,14 @@
     "deviceCol": "Device",
     "totalVolume": "Total volume",
     "loading": "Loading...",
+    "lan": {
+      "chartTitle": "LAN Traffic (estimate)",
+      "tooltipTitle": "LAN traffic estimate",
+      "tooltipDesc": "Approximation computed by subtraction: total traffic across all clients minus the measured WAN traffic. UniFi has no single LAN counter, so this value may contain some noise from the timing gap between the two measurements.",
+      "tooltipDownload": "Estimated incoming local traffic (excluding Internet)",
+      "tooltipUpload": "Estimated outgoing local traffic (excluding Internet)",
+      "tooltipFooter": "LAN ≈ total client traffic − WAN"
+    },
     "connectionLabel": "Connection:",
     "controllerUpdateAvailable": "Controller update available",
     "currentVersion": "Current version",
@@ -43,6 +51,7 @@
     "noFirmwareInfo": "No firmware information detected in devices (check fields",
     "noWanInfo": "No WAN info (network_table not available)",
     "noLanInfo": "No LAN info",
+    "noGatewayPortsHint": "WAN/LAN port info requires a UniFi gateway (Cloud Gateway, Dream Machine, USG). With APs/switches only, this info isn't available.",
     "noNatRuleConfigured": "No NAT rule configured",
     "noRuleForFilter": "No rule for this filter. Try \"All\" to see all rules.",
     "updatesAvailable": "Updates available",
@@ -173,15 +182,15 @@
       },
       "levelLow": {
         "title": "Level LOW",
-        "desc": "Slightly suspicious traffic — abnormal activity detected but limited risk. E.g.: port scan, isolated connection attempts."
+        "desc": "Slightly suspicious traffic, abnormal activity detected but limited risk. E.g.: port scan, isolated connection attempts."
       },
       "levelSuspicious": {
         "title": "Level SUSPICIOUS",
-        "desc": "Suspicious traffic — potentially malicious behavior. E.g.: negative IP reputation, known attack patterns."
+        "desc": "Suspicious traffic, potentially malicious behavior. E.g.: negative IP reputation, known attack patterns."
       },
       "levelConcerning": {
         "title": "Level CONCERNING",
-        "desc": "Concerning traffic — active attack or confirmed intrusion. E.g.: known exploit, C2 botnet, malware signature."
+        "desc": "Concerning traffic, active attack or confirmed intrusion. E.g.: known exploit, C2 botnet, malware signature."
       },
       "topPolicies": {
         "title": "Triggered IPS Policies",
@@ -213,7 +222,7 @@
       },
       "poe": {
         "title": "Power over Ethernet",
-        "desc": "Electrical power via the network cable — allows connecting devices (AP, camera, phone) without a power adapter.",
+        "desc": "Electrical power via the network cable, allows connecting devices (AP, camera, phone) without a power adapter.",
         "autoValue": "PoE 802.3af/at active",
         "v24Value": "Passive PoE 24V (proprietary)",
         "offValue": "PoE disabled"
@@ -222,14 +231,14 @@
         "title": "Network errors",
         "desc": "Total RX (receive) + TX (transmit) errors on this port since last switch reboot.",
         "noneValue": "No error detected",
-        "presentValue": "Errors present — cable or duplex mismatch?"
+        "presentValue": "Errors present, cable or duplex mismatch?"
       },
       "gateway": {
         "title": "Gateway & network ports",
         "desc": "UniFi gateway summary: WAN ports (internet connection) and LAN ports (local network). WAN ports show the public IP or link status."
       },
       "natRules": {
-        "title": "NAT Rules — Port Forwarding",
+        "title": "NAT Rules, Port Forwarding",
         "desc": "NAT (Network Address Translation) redirects incoming ports from your public IP to internal machines. Example: port 443 → local web server.",
         "activeValue": "Rule currently applied",
         "inactiveValue": "Rule disabled (not applied)"
@@ -239,8 +248,8 @@
         "desc": "Unique hardware identifier of the network card (48 bits). The first 3 bytes (OUI) identify the manufacturer. E.g.: DC:A6:32 = Raspberry Pi, 00:50:F2 = Microsoft."
       },
       "rssi": {
-        "title": "RSSI — Wi-Fi Signal Quality",
-        "desc": "Received Signal Strength Indicator — signal strength in dBm. The closer to 0, the better the signal.",
+        "title": "RSSI, Wi-Fi Signal Quality",
+        "desc": "Received Signal Strength Indicator, signal strength in dBm. The closer to 0, the better the signal.",
         "excellent": "Excellent ≥ -60 dBm",
         "good": "Good  -60 to -70 dBm",
         "fair": "Fair  -70 to -80 dBm",

@@ -8,6 +8,7 @@ import { RichTooltip } from '../ui/RichTooltip';
 import { VendorIcon } from '../ui/VendorIcon';
 import { hasVendorIcon } from '../../utils/vendorBrand';
 import { useConnectionStore } from '../../stores/connectionStore';
+import { usePluginStore } from '../../stores/pluginStore';
 import { formatSpeed, POLLING_INTERVALS } from '../../utils/constants';
 import { usePolling } from '../../hooks/usePolling';
 import { api } from '../../api/client';
@@ -18,7 +19,7 @@ const COLORS = {
     green: '#10b981'
 };
 
-const LIVE_ICON_MIN_KBPS = 50; // ignore noise — same bar as the backend live ranking
+const LIVE_ICON_MIN_KBPS = 50; // ignore noise, same bar as the backend live ranking
 const MAX_LIVE_ICONS = 4; // cap how many devices show simultaneously in the cluster
 
 type BandwidthRange = 0 | 3600 | 21600 | 86400 | 604800; // 0 = temps réel (live)
@@ -81,9 +82,13 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
     };
     const [unifiData, setUnifiData] = useState<BandwidthPoint[]>([]);
     const { history: unifiRealtimeHistory, download: unifiRealtimeDl, upload: unifiRealtimeUl, isConnected: unifiWsConnected, topClients } = useUnifiRealtimeStore();
+    // No UniFi gateway device (UDM/USG/Cloud Gateway) detected: WAN throughput isn't measurable
+    // (APs/switches-only setups). Same signal as unifi/traffic, see TrafficTab.tsx.
+    const unifiPluginStats = usePluginStore(s => s.pluginStats['unifi']) as any;
+    const hasUnifiGateway = !!unifiPluginStats?.system?.gatewaySummary;
 
     // Live mode only: click the graph to freeze it in place (curve + device icons) so there's
-    // enough time to hover an icon and read its tooltip — the live data keeps scrolling
+    // enough time to hover an icon and read its tooltip, the live data keeps scrolling
     // underneath otherwise, moving the icon out from under the cursor.
     const [isPaused, setIsPaused] = useState(false);
     const [frozenUnifiHistory, setFrozenUnifiHistory] = useState<typeof unifiRealtimeHistory | null>(null);
@@ -107,7 +112,7 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
         }
     };
 
-    // Leaving live mode (or switching source) always resumes — a frozen snapshot of a
+    // Leaving live mode (or switching source) always resumes, a frozen snapshot of a
     // range/source you're no longer looking at would be confusing.
     useEffect(() => {
         setIsPaused(false);
@@ -125,7 +130,7 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
 
     // Live device icons: show the current top consumers side by side near the live edge, straight
     // from the already-ranked topClients list. Deliberately not tied to a specific point on the
-    // curve — an earlier version tried to caption individual historical peaks along the curve
+    // curve, an earlier version tried to caption individual historical peaks along the curve
     // (per-point "who was #1 at that instant"), but that only ever tracked a single device per
     // point, so a client that was consistently-but-narrowly #1 (e.g. a phone) hid every other
     // heavy device (e.g. a PC) that never got to be #1 even once. Showing the top N simultaneously
@@ -256,7 +261,7 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
                             </span>
                         </span>
                     )}
-                    {source === 'unifi' && (() => {
+                    {source === 'unifi' && hasUnifiGateway && (() => {
                         // Use realtime WebSocket data when in live mode and connected
                         const useRealtime = selectedRange === 0 && unifiWsConnected && unifiRealtimeHistory.length > 0;
                         const dlKBs = useRealtime ? unifiRealtimeDl : (unifiData[unifiData.length - 1]?.download ?? 0);
@@ -367,7 +372,13 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
                         ))}
                     </div>
                 )}
-                {chartData.length > 0 ? (
+                {source === 'unifi' && !hasUnifiGateway ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                        <Router className="w-10 h-10 mb-3 opacity-30" />
+                        <p className="text-sm font-medium">{t('unifi.bandwidth.noGateway')}</p>
+                        <p className="text-xs mt-1 text-gray-600 max-w-sm text-center">{t('unifi.bandwidth.noGatewayHint')}</p>
+                    </div>
+                ) : chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={256} minWidth={0} minHeight={256} debounce={100}>
                         <AreaChart data={chartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />

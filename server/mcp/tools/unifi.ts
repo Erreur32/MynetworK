@@ -1,19 +1,24 @@
-// UniFi MCP tools (phase 2) — read + a few non-destructive write actions.
+// UniFi MCP tools (phase 2): read + a few non-destructive write actions.
 // Each tool wraps existing/new UniFiApiService methods; no business logic lives here.
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { pluginManager } from '../../services/pluginManager.js';
 import type { UniFiPlugin } from '../../plugins/unifi/UniFiPlugin.js';
 import type { UniFiApiService } from '../../plugins/unifi/UniFiApiService.js';
+import { UniFiClientTrafficRepository } from '../../database/models/UniFiClientTraffic.js';
 import { wrapAsync } from './shared.js';
 import { isValidMac } from '../../utils/networkValidation.js';
 
-function getUnifiApiService(): UniFiApiService {
+function getUnifiPlugin(): UniFiPlugin {
   const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
   if (!plugin) {
     throw new Error('UniFi plugin is not available (not configured or not enabled).');
   }
-  return plugin.getApiService();
+  return plugin;
+}
+
+function getUnifiApiService(): UniFiApiService {
+  return getUnifiPlugin().getApiService();
 }
 
 function assertValidMac(mac: string): void {
@@ -41,6 +46,30 @@ export function registerUnifiTools(server: McpServer): void {
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
     async () => wrapAsync(() => getUnifiApiService().getClients())
+  );
+
+  server.registerTool(
+    'unifi_get_top_traffic',
+    {
+      title: 'UniFi top traffic consumers',
+      description:
+        "List the UniFi clients using the most traffic, ranked by combined download+upload. mode='live' returns instantaneous throughput right now, straight from the controller's own real-time rate fields (not the negotiated WiFi/port link speed, that's a different, unrelated number). mode='today' or 'alltime' return accumulated data volume (bytes) since midnight or since tracking started, from the background history service.",
+      inputSchema: {
+        mode: z.enum(['live', 'today', 'alltime']).default('live').describe(
+          "'live' = instantaneous rate right now; 'today' = volume accumulated since midnight; 'alltime' = volume accumulated since the tracking service started (no retroactive history)"
+        ),
+        limit: z.number().int().positive().max(50).optional().describe('Max number of clients to return (default 10)')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ mode, limit }) =>
+      wrapAsync(async () => {
+        const resolvedLimit = limit ?? 10;
+        if (mode === 'live') return getUnifiPlugin().fetchTopClients(resolvedLimit);
+        return mode === 'alltime'
+          ? UniFiClientTrafficRepository.getTopAllTime(resolvedLimit)
+          : UniFiClientTrafficRepository.getTopToday(resolvedLimit);
+      })
   );
 
   server.registerTool(

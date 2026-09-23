@@ -54,8 +54,9 @@ export const ThreatsTab: React.FC<ThreatsTabProps> = ({
                             { label: t('unifi.tooltip.idsIps.cacheLabel'), value: t('unifi.tooltip.idsIps.cacheValue'), color: 'gray', dot: true },
                         ]}
                         footer={t('unifi.tooltip.idsIps.footer')}
+                        footerVariant="warning"
                         position="bottom"
-                        width={280}
+                        width={360}
                     />
                     {/* Source badge based on deployment type */}
                     {threatDebug?.deploymentType && (

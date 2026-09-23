@@ -125,12 +125,18 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
 
   if (!data) return null;
 
+  // UniFi role without a detected gateway device (APs/switches-only): gateway/subnet stay 'N/A'
+  // server-side, legitimately (nothing to deduce them from), not an error.
+  const unifiNoGateway = data.role === 'unifi' && !data.unifi?.gatewayIp;
+
   const roleLabel =
     data.role === 'freebox'
       ? t('network.roleFreebox')
       : data.role === 'unifi_via_dmz'
         ? t('network.roleUnifiDmz')
-        : t('network.roleUnifiCloud');
+        : unifiNoGateway
+          ? t('network.roleUnifiNoGateway')
+          : t('network.roleUnifiCloud');
 
   return (
     <Card title={t('network.summary')}>
@@ -148,6 +154,9 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
           <span className="text-gray-400 text-sm">{t('network.subnet')}</span>
           <span className="text-gray-300 font-mono text-sm">{data.subnet}</span>
         </div>
+        {unifiNoGateway && (
+          <p className="text-xs text-gray-600">{t('network.noGatewaySubnetHint')}</p>
+        )}
 
         {/* Freebox section (if present) */}
         {data.freebox && (

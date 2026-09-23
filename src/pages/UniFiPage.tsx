@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, Router, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, ShieldAlert } from 'lucide-react';
 import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
@@ -16,14 +16,12 @@ import { usePolling } from '../hooks/usePolling';
 import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
-import { OverviewTab } from './unifi/OverviewTab';
+import { OverviewTab, type OverviewSubTab } from './unifi/OverviewTab';
 import { SwitchesTab } from './unifi/SwitchesTab';
 import { AnalyseTab } from './unifi/AnalyseTab';
 import { ClientsTab } from './unifi/ClientsTab';
 import { TrafficTab } from './unifi/TrafficTab';
 import { ThreatsTab } from './unifi/ThreatsTab';
-import { DebugTab } from './unifi/DebugTab';
-import { NatTab } from './unifi/NatTab';
 import type { BandwidthPoint, ThreatRange, ThreatSeverity, ThreatSortKey, ThreatData, ThreatDebug, AlertFilter, EventFilter, ClientSortKey, TabType } from './unifi/types';
 
 interface UniFiPageProps {
@@ -31,7 +29,8 @@ interface UniFiPageProps {
     onNavigateToSearch?: (ip: string) => void;
 }
 
-const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'nat', 'analyse', 'clients', 'traffic', 'threats', 'debug', 'switches']);
+// 'nat' and 'debug' are intentionally excluded: they moved to Overview sub-tabs (see redirect effect below).
+const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'analyse', 'clients', 'traffic', 'threats', 'switches']);
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
@@ -47,9 +46,9 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     }, [navigate]);
 
     // Derive overview sub-tab from URL: /unifi/overview/events → 'events'
-    const urlSubTab = location.pathname.split('/')[3] as 'info' | 'events' | undefined;
-    const overviewSubTab: 'info' | 'events' = urlSubTab === 'events' ? 'events' : 'info';
-    const setOverviewSubTab = useCallback((sub: 'info' | 'events') => {
+    const urlSubTab = location.pathname.split('/')[3] as OverviewSubTab | undefined;
+    const overviewSubTab: OverviewSubTab = urlSubTab === 'events' || urlSubTab === 'nat' || urlSubTab === 'debug' ? urlSubTab : 'info';
+    const setOverviewSubTab = useCallback((sub: OverviewSubTab) => {
         navigate(`/unifi/overview/${sub}`);
     }, [navigate]);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -121,6 +120,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         }
     }, [activeTab]);
 
+    // NAT and Debug used to be top-level tabs, now Overview sub-tabs: redirect old bookmarks/links.
+    useEffect(() => {
+        if (urlTab === 'nat' || urlTab === 'debug') {
+            navigate(`/unifi/overview/${urlTab}`, { replace: true });
+        }
+    }, [urlTab, navigate]);
+
     useEffect(() => {
         if (isActive) {
             fetchPluginStats('unifi');
@@ -137,7 +143,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         interval: POLLING_INTERVALS.system
     });
 
-    // Fetch WAN interfaces once when plugin becomes active (not per tab — quasi-static data)
+    // Fetch WAN interfaces once when plugin becomes active (not per tab, quasi-static data)
     useEffect(() => {
         if (!isActive || wanInterfaces.length > 0) return; // already loaded
         api.get<Array<{ id: string; name: string; ip?: string }>>('/api/plugins/unifi/wan-interfaces').then(res => {
@@ -223,37 +229,34 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         setTimeout(() => setIsRefreshing(false), 1000);
     };
 
+    // NAT and Debug moved into the Overview tab as sub-tabs (see OverviewTab.tsx), no longer top-level tabs.
     const tabs: { id: TabType; label: string; desc: string; icon: React.ElementType }[] = [
         { id: 'overview', label: t('unifi.tabs.overview'), desc: t('unifi.tabs.desc.overview'), icon: Activity },
         { id: 'traffic',  label: t('unifi.tabs.traffic'),  desc: t('unifi.tabs.desc.traffic'),  icon: TrendingUp },
         { id: 'threats',  label: t('unifi.tabs.threats'),  desc: t('unifi.tabs.desc.threats'),  icon: ShieldAlert },
         { id: 'analyse',  label: t('unifi.tabs.analyse'),  desc: t('unifi.tabs.desc.analyse'),  icon: Activity },
-        { id: 'nat',      label: t('unifi.tabs.nat'),      desc: t('unifi.tabs.desc.nat'),      icon: Router },
         { id: 'clients',  label: t('unifi.tabs.clients'),  desc: t('unifi.tabs.desc.clients'),  icon: Users },
         { id: 'switches', label: t('unifi.tabs.switches'), desc: t('unifi.tabs.desc.switches'), icon: Network },
-        ...(import.meta.env.DEV ? [{ id: 'debug' as TabType, label: t('unifi.tabs.debug'), desc: t('unifi.tabs.desc.debug'), icon: AlertCircle }] : [])
     ];
 
     if (!unifiPlugin) {
         return (
             <div className="text-gray-300">
-                <div className="max-w-7xl mx-auto">
-                    <div className="flex items-center gap-4 mb-6">
-                        <button
-                            onClick={onBack}
-                            className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
-                        >
-                            <ArrowLeft size={20} />
-                        </button>
-                        <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
-                    </div>
-                    <Card title={t('unifi.pluginUnavailable')} className="bg-unifi-card border border-gray-800 rounded-xl">
-                        <div className="text-center py-8 text-gray-500">
-                            <AlertCircle size={32} className="mx-auto mb-2" />
-                            <p>{t('unifi.pluginNotInstalled')}</p>
-                        </div>
-                    </Card>
+                <div className="flex items-center gap-4 mb-6">
+                    <button
+                        onClick={onBack}
+                        className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
                 </div>
+                <Card title={t('unifi.pluginUnavailable')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                    <div className="text-center py-8 text-gray-500">
+                        <AlertCircle size={32} className="mx-auto mb-2" />
+                        <p>{t('unifi.pluginNotInstalled')}</p>
+                    </div>
+                </Card>
             </div>
         );
     }
@@ -261,33 +264,31 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     if (!isActive) {
         return (
             <div className="text-gray-300">
-                <div className="max-w-7xl mx-auto">
-                    <div className="flex items-center gap-4 mb-6">
-                        <button
-                            onClick={onBack}
-                            className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
-                        >
-                            <ArrowLeft size={20} />
-                        </button>
-                        <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
-                    </div>
-                    <Card title={t('unifi.pluginNotConnected')} className="bg-unifi-card border border-gray-800 rounded-xl">
-                        <div className="text-center py-8 text-gray-500">
-                            <XCircle size={32} className="mx-auto mb-2 text-yellow-400" />
-                            <p className="mb-2">{t('unifi.pluginNotConnectedDescription')}</p>
-                            <p className="text-sm text-gray-600">
-                                {t('unifi.configureFromPlugins')}
-                            </p>
-                        </div>
-                    </Card>
+                <div className="flex items-center gap-4 mb-6">
+                    <button
+                        onClick={onBack}
+                        className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <h1 className="text-2xl font-semibold">{t('unifi.pageTitle')}</h1>
                 </div>
+                <Card title={t('unifi.pluginNotConnected')} className="bg-unifi-card border border-gray-800 rounded-xl">
+                    <div className="text-center py-8 text-gray-500">
+                        <XCircle size={32} className="mx-auto mb-2 text-yellow-400" />
+                        <p className="mb-2">{t('unifi.pluginNotConnectedDescription')}</p>
+                        <p className="text-sm text-gray-600">
+                            {t('unifi.configureFromPlugins')}
+                        </p>
+                    </div>
+                </Card>
             </div>
         );
     }
 
     return (
         <div className="text-gray-300">
-            <div className="max-w-[96rem] mx-auto">
+            <div>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                     <div className="flex items-center gap-2 sm:gap-4">
@@ -424,6 +425,12 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         const isTabActive = activeTab === tab.id;
+                        const tabLabel = (
+                            <span className="flex items-center gap-2 pointer-events-none">
+                                <Icon size={16} />
+                                {tab.label}
+                            </span>
+                        );
                         return (
                             <button
                                 key={tab.id}
@@ -434,12 +441,13 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                                         : 'border-transparent text-gray-400 hover:text-white hover:border-unifi-accent'
                                 }`}
                             >
-                                <RichTooltip title={tab.label} description={tab.desc} position="bottom" width={240}>
-                                    <span className="flex items-center gap-2 pointer-events-none">
-                                        <Icon size={16} />
-                                        {tab.label}
-                                    </span>
-                                </RichTooltip>
+                                {tab.id === 'threats' ? (
+                                    <RichTooltip title={tab.label} description={tab.desc} position="bottom" width={280}>
+                                        {tabLabel}
+                                    </RichTooltip>
+                                ) : (
+                                    tabLabel
+                                )}
                             </button>
                         );
                     })}
@@ -460,6 +468,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             eventFilter={eventFilter}
                             setEventFilter={setEventFilter}
                             onNavigateToSearch={onNavigateToSearch}
+                            isActive={isActive}
+                            pluginStats={pluginStats}
+                            isRefreshing={isRefreshing}
+                            handleRefresh={handleRefresh}
                         />
                     )}
 
@@ -507,10 +519,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         />
                     )}
 
-                    {activeTab === 'nat' && (
-                        <NatTab isActive={activeTab === 'nat'} systemStats={unifiStats?.system as any} />
-                    )}
-
                     {activeTab === 'threats' && (
                         <ThreatsTab
                             threatRange={threatRange}
@@ -527,16 +535,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                         />
                     )}
 
-                    {activeTab === 'debug' && (
-                        <DebugTab
-                            unifiPlugin={unifiPlugin}
-                            unifiStats={unifiStats}
-                            pluginStats={pluginStats}
-                            isActive={isActive}
-                            isRefreshing={isRefreshing}
-                            handleRefresh={handleRefresh}
-                        />
-                    )}
                 </div>
             </div>
         </div>
