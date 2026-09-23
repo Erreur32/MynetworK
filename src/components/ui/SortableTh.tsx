@@ -11,7 +11,7 @@ interface SortableThProps {
     style?: React.CSSProperties;
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+function SortIcon({ active, dir }: Readonly<{ active: boolean; dir: 'asc' | 'desc' }>) {
     if (!active) return <ArrowUpDown size={11} className="opacity-30" />;
     if (dir === 'asc') return <ArrowUp size={11} />;
     return <ArrowDown size={11} />;
