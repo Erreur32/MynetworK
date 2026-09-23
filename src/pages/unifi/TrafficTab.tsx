@@ -75,7 +75,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     onNavigateToSearch,
 }) => {
     const { t } = useTranslation();
-    const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected, topClients: liveTopClients } = useUnifiRealtimeStore();
+    const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected, topClients: liveTopClients, lanDownload: liveLanDl, lanUpload: liveLanUl } = useUnifiRealtimeStore();
     const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredTrafficTabRange(0));
     const selectedRange = selectedRangeState;
     const setSelectedRange = (range: BandwidthRange) => {
@@ -85,6 +85,23 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     const [rangeHistory, setRangeHistory] = useState<BandwidthPoint[]>([]);
     const [isLoadingRange, setIsLoadingRange] = useState(false);
     const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+    // Shared props for the toggleable Legend on both the WAN and LAN charts below: click a
+    // series name to hide/show it (struck through + greyed out while hidden).
+    const toggleableLegendProps = {
+        onClick: (e: { dataKey?: unknown }) => {
+            const key = e.dataKey as string;
+            setHiddenSeries((prev) => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key); else next.add(key);
+                return next;
+            });
+        },
+        formatter: (value: string, entry: { dataKey?: unknown; color?: string }) => (
+            <span style={{ color: hiddenSeries.has(entry.dataKey as string) ? '#6b7280' : entry.color, cursor: 'pointer', textDecoration: hiddenSeries.has(entry.dataKey as string) ? 'line-through' : 'none' }}>
+                {value}
+            </span>
+        ),
+    };
     const [trafficPeriodState, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficTabPeriod('today'));
     const trafficPeriod = trafficPeriodState;
     const setTrafficPeriod = (period: TrafficPeriod) => {
@@ -130,7 +147,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
         'volume'
     );
 
-    // Sort state for the other two tables — their source data (topClients/topDevices) is
+    // Sort state for the other two tables, their source data (topClients/topDevices) is
     // recomputed each render from unifiStats inside the JSX below, so sorting is applied
     // there with a plain array sort rather than via useSortableTable.
     const [clientsSortKey, setClientsSortKey] = useState<'name' | 'ip' | 'ap' | 'speed' | 'signal'>('speed');
@@ -167,7 +184,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
         }
     }, [selectedRange, selectedWan, fetchRangeHistory]);
 
-    // Same auto-refresh as the home page's BandwidthHistoryWidget — without this, 1h/6h/24h/7j
+    // Same auto-refresh as the home page's BandwidthHistoryWidget: without this, 1h/6h/24h/7j
     // only ever showed data as of the moment the range was picked, requiring a manual refresh click.
     usePolling(fetchRangeHistory, {
         enabled: selectedRange > 0,
@@ -211,6 +228,11 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     const wanLabel = activeWan ? activeWan.name : selectedWan.toUpperCase();
     const wanIp = activeWan?.ip;
 
+    // No UniFi gateway device (UDM/USG/Cloud Gateway) detected on the network: WAN throughput
+    // isn't measurable (APs/switches-only setups). Set server-side once a gateway device is
+    // found among devices, null otherwise (see buildGatewayNatSummary in UniFiPlugin.ts).
+    const hasGateway = !!unifiStats?.system?.gatewaySummary;
+
     // Chart data: Live = WebSocket realtime, other ranges = HTTP fetched history
     const chartHistory = selectedRange === 0
         ? (wsConnected && realtimeHistory.length > 1 ? realtimeHistory : bandwidthHistory)
@@ -230,7 +252,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                             {t('system.download')}
                             <span className="ml-2 text-blue-600/70 normal-case">{wanLabel}{wanIp ? ` · ${wanIp}` : ''}</span>
                         </div>
-                        <div className="text-3xl font-bold text-blue-300 font-mono">{fmtKB(dl)}</div>
+                        <div className="text-3xl font-bold text-blue-300 font-mono">{hasGateway ? fmtKB(dl) : '-'}</div>
                     </div>
                 </div>
                 {/* Upload card */}
@@ -243,7 +265,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                             {t('system.upload')}
                             <span className="ml-2 text-emerald-600/70 normal-case">{wanLabel}{wanIp ? ` · ${wanIp}` : ''}</span>
                         </div>
-                        <div className="text-3xl font-bold text-emerald-300 font-mono">{fmtKB(ul)}</div>
+                        <div className="text-3xl font-bold text-emerald-300 font-mono">{hasGateway ? fmtKB(ul) : '-'}</div>
                     </div>
                 </div>
             </div>
@@ -253,22 +275,29 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                 title={
                     <span className="flex items-center gap-1.5">
                         {t('unifi.bandwidth.chartTitle')}
-                        {selectedRange === 0 && wsConnected && (
-                            <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full animate-pulse">
-                                LIVE
-                            </span>
-                        )}
                         <RichTooltip
-                            title="Graphique bande passante WAN"
-                            description="Débit calculé par delta entre deux mesures successives des compteurs cumulatifs WAN du gateway UniFi."
+                            title={t('unifi.bandwidth.tooltipTitle')}
+                            description={t('unifi.bandwidth.tooltipDesc')}
                             rows={[
-                                { label: 'Download', value: 'Octets reçus depuis Internet (KB/s)', color: 'blue', dot: true },
-                                { label: 'Upload', value: 'Octets envoyés vers Internet (KB/s)', color: 'emerald', dot: true },
+                                { label: 'Download', value: t('unifi.bandwidth.tooltipDownload'), color: 'blue', dot: true },
+                                { label: 'Upload', value: t('unifi.bandwidth.tooltipUpload'), color: 'emerald', dot: true },
                             ]}
-                            footer={selectedRange === 0 && wsConnected ? "WebSocket temps réel (~3s)" : "Polling toutes les ~30s"}
+                            footer={selectedRange === 0 && wsConnected ? t('unifi.bandwidth.tooltipFooterLive') : t('unifi.bandwidth.tooltipFooterPolling')}
                             position="bottom"
-                            width={280}
+                            width={380}
                         />
+                    </span>
+                }
+                actions={
+                    <span className="flex items-center gap-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                            <ArrowDown size={13} className="text-blue-400" />
+                            <span className="font-medium text-gray-300">{hasGateway ? fmtKB(dl) : '-'}</span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <ArrowUp size={13} className="text-green-400" />
+                            <span className="font-medium text-gray-300">{hasGateway ? fmtKB(ul) : '-'}</span>
+                        </span>
                     </span>
                 }
                 className="bg-unifi-card border border-gray-800 rounded-xl"
@@ -332,7 +361,13 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                     </div>
                 </div>
 
-                {chartHistory.length >= 2 ? (
+                {!hasGateway ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                        <Router size={40} className="mb-3 opacity-30" />
+                        <p className="text-sm font-medium">{t('unifi.bandwidth.noGateway')}</p>
+                        <p className="text-xs mt-1 text-gray-600 max-w-sm text-center">{t('unifi.bandwidth.noGatewayHint')}</p>
+                    </div>
+                ) : chartHistory.length >= 2 ? (
                     <ResponsiveContainer width="100%" height={320}>
                         <AreaChart data={chartHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                             <defs>
@@ -370,21 +405,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                     return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
                                 }}
                             />
-                            <Legend
-                                onClick={(e) => {
-                                    const key = e.dataKey as string;
-                                    setHiddenSeries((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(key)) next.delete(key); else next.add(key);
-                                        return next;
-                                    });
-                                }}
-                                formatter={(value, entry) => (
-                                    <span style={{ color: hiddenSeries.has((entry as any).dataKey) ? '#6b7280' : (entry as any).color, cursor: 'pointer', textDecoration: hiddenSeries.has((entry as any).dataKey) ? 'line-through' : 'none' }}>
-                                        {value}
-                                    </span>
-                                )}
-                            />
+                            <Legend {...toggleableLegendProps} />
                             <Area
                                 type="monotone"
                                 dataKey="download"
@@ -428,6 +449,112 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                     </div>
                 )}
             </Card>
+
+            {wsConnected && realtimeHistory.length >= 2 && (
+                <Card
+                    title={
+                        <span className="flex items-center gap-1.5">
+                            {t('unifi.lan.chartTitle')}
+                            <RichTooltip
+                                title={t('unifi.lan.tooltipTitle')}
+                                description={t('unifi.lan.tooltipDesc')}
+                                rows={[
+                                    { label: 'Download', value: t('unifi.lan.tooltipDownload'), color: 'blue', dot: true },
+                                    { label: 'Upload', value: t('unifi.lan.tooltipUpload'), color: 'emerald', dot: true },
+                                ]}
+                                footer={t('unifi.lan.tooltipFooter')}
+                                position="bottom"
+                                width={380}
+                            />
+                        </span>
+                    }
+                    actions={
+                        <span className="flex items-center gap-3 text-xs text-gray-500">
+                            <span className="flex items-center gap-1">
+                                <ArrowDown size={13} className="text-blue-400" />
+                                <span className="font-medium text-gray-300">{formatSpeed(liveLanDl * 1024)}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <ArrowUp size={13} className="text-green-400" />
+                                <span className="font-medium text-gray-300">{formatSpeed(liveLanUl * 1024)}</span>
+                            </span>
+                        </span>
+                    }
+                    className="bg-unifi-card border border-gray-800 rounded-xl"
+                >
+                    <div className="flex items-center gap-3 flex-wrap mb-4">
+                        <div className="flex items-center gap-1 bg-gray-900/80 border border-gray-700 rounded-lg p-0.5">
+                            <span className="px-2.5 py-1 text-xs font-medium rounded-md bg-blue-600/80 text-white whitespace-nowrap">
+                                LAN
+                            </span>
+                        </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                        <AreaChart data={realtimeHistory} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                            <defs>
+                                <linearGradient id="gradDlLan" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
+                                </linearGradient>
+                                <linearGradient id="gradUlLan" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                            <XAxis
+                                dataKey="time"
+                                stroke="#374151"
+                                tick={{ fill: '#6b7280', fontSize: 10 }}
+                                interval="preserveStartEnd"
+                                tickLine={false}
+                            />
+                            <YAxis
+                                stroke="#374151"
+                                tick={{ fill: '#6b7280', fontSize: 10 }}
+                                tickLine={false}
+                                axisLine={false}
+                                tickFormatter={(v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v}K`}
+                            />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '10px 14px' }}
+                                labelStyle={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}
+                                formatter={(value: number, name: string) => {
+                                    const kb = value;
+                                    const fmt = kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB/s` : `${kb} KB/s`;
+                                    const color = name === t('system.download') ? '#60a5fa' : '#34d399';
+                                    return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
+                                }}
+                            />
+                            <Legend {...toggleableLegendProps} />
+                            <Area
+                                type="monotone"
+                                dataKey="lanDownload"
+                                name={t('system.download')}
+                                stroke="#3b82f6"
+                                strokeWidth={2}
+                                fill="url(#gradDlLan)"
+                                dot={false}
+                                activeDot={{ r: 4, fill: '#3b82f6' }}
+                                isAnimationActive={false}
+                                hide={hiddenSeries.has('lanDownload')}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="lanUpload"
+                                name={t('system.upload')}
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                fill="url(#gradUlLan)"
+                                dot={false}
+                                activeDot={{ r: 4, fill: '#10b981' }}
+                                isAnimationActive={false}
+                                hide={hiddenSeries.has('lanUpload')}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </Card>
+            )}
 
             <Card title={t('unifi.trafficNetwork')} className="bg-unifi-card border border-gray-800 rounded-xl">
                 {unifiStats?.devices ? (
@@ -722,7 +849,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                         )}
                                     </div>
 
-                                    {/* Volume de données (today / all-time) — UniFi only, Freebox has no per-host counters */}
+                                    {/* Volume de données (today / all-time), UniFi only, Freebox has no per-host counters */}
                                     <div className="bg-unifi-card rounded-xl px-4 py-3 border border-gray-800">
                                         <div className="flex items-center justify-between mb-2">
                                             <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">

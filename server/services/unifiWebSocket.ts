@@ -6,8 +6,8 @@ import { applyWsRateLimit } from './wsRateLimiter.js';
 
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
-const UNIFI_POLLING_INTERVAL = 1000; // 1 second — live mode
-const TOP_CLIENTS_EVERY_N_TICKS = 3; // stat/sta is extra load on top of the existing WAN poll — throttle to ~3s
+const UNIFI_POLLING_INTERVAL = 1000; // 1 second, live mode
+const TOP_CLIENTS_EVERY_N_TICKS = 3; // stat/sta is extra load on top of the existing WAN poll, throttle to ~3s
 
 class UnifiWebSocketService {
   private wss: WebSocketServer | null = null;
@@ -15,6 +15,7 @@ class UnifiWebSocketService {
   private pingInterval: NodeJS.Timeout | null = null;
   private topClientsTick = 0;
   private lastTopClients: unknown[] = [];
+  private lastTotalClientTraffic: { download: number; upload: number } = { download: 0, upload: 0 };
 
   getWss(): WebSocketServer | null { return this.wss; }
 
@@ -24,7 +25,7 @@ class UnifiWebSocketService {
     logger.info('WS-UniFi', 'Initializing UniFi WebSocket server...');
 
     // Start background bandwidth sampling immediately so data is ready when the first client connects.
-    // This runs every 3s regardless of WebSocket clients — keeps _bandwidthHistories warm.
+    // This runs every 3s regardless of WebSocket clients, keeps _bandwidthHistories warm.
     this.startBackgroundSampling();
 
     this.wss = new WebSocketServer({
@@ -88,7 +89,7 @@ class UnifiWebSocketService {
 
   /**
    * Background sampling: runs from server start so _bandwidthHistories is always warm.
-   * When a WebSocket client connects, data is instantly available — no cold start.
+   * When a WebSocket client connects, data is instantly available, no cold start.
    */
   private startBackgroundSampling() {
     // Wait a few seconds for plugins to finish initializing
@@ -105,7 +106,7 @@ class UnifiWebSocketService {
           await pluginAny.getStats();
           logger.debug('WS-UniFi', 'Gateway device cache primed via getStats()');
         }
-      } catch { /* ignore — getStats may fail if controller not ready */ }
+      } catch { /* ignore, getStats may fail if controller not ready */ }
 
       // Two rapid fetches to prime the delta-based rate computation
       try {
@@ -130,7 +131,7 @@ class UnifiWebSocketService {
   private startPolling() {
     if (this.pollingInterval) return;
 
-    // Stop background sampling — WebSocket polling takes over to avoid interleaving
+    // Stop background sampling, WebSocket polling takes over to avoid interleaving
     if (this.backgroundInterval) {
       clearInterval(this.backgroundInterval);
       this.backgroundInterval = null;
@@ -140,7 +141,7 @@ class UnifiWebSocketService {
       this.fetchAndBroadcast();
     }, UNIFI_POLLING_INTERVAL);
 
-    // Broadcast immediately — data is already primed by background sampling
+    // Broadcast immediately, data is already primed by background sampling
     this.fetchAndBroadcast();
   }
 
@@ -178,13 +179,27 @@ class UnifiWebSocketService {
 
       const primaryWan = wanData['wan1'] || { download: 0, upload: 0 };
 
-      // getClients() is extra load on top of the WAN poll already happening every tick —
+      // getClients() is extra load on top of the WAN poll already happening every tick,
       // only refresh it every TOP_CLIENTS_EVERY_N_TICKS, reuse the last value in between.
       this.topClientsTick = (this.topClientsTick + 1) % TOP_CLIENTS_EVERY_N_TICKS;
-      if (this.topClientsTick === 0 && typeof pluginAny.fetchTopClients === 'function') {
-        this.lastTopClients = await pluginAny.fetchTopClients(10).catch(() => this.lastTopClients);
+      if (this.topClientsTick === 0) {
+        if (typeof pluginAny.fetchTopClients === 'function') {
+          this.lastTopClients = await pluginAny.fetchTopClients(10).catch(() => this.lastTopClients);
+        }
+        if (typeof pluginAny.fetchTotalClientTraffic === 'function') {
+          this.lastTotalClientTraffic = await pluginAny.fetchTotalClientTraffic().catch(() => this.lastTotalClientTraffic);
+        }
       }
       const topClients = this.lastTopClients;
+      const totalClientTraffic = this.lastTotalClientTraffic;
+
+      // LAN ≈ total client traffic − WAN. An approximation (independently-sampled sources,
+      // no single "LAN interface" counter exists on UniFi), clamped to 0 since sampling
+      // jitter between the two sources can otherwise produce a small negative value.
+      const lan = {
+        download: Math.max(0, totalClientTraffic.download - primaryWan.download),
+        upload: Math.max(0, totalClientTraffic.upload - primaryWan.upload),
+      };
 
       const message = JSON.stringify({
         type: 'unifi_bandwidth',
@@ -194,6 +209,8 @@ class UnifiWebSocketService {
           upload: primaryWan.upload,     // KB/s
           wans: wanData,
           topClients,
+          totalClientTraffic,
+          lan,
         }
       });
 

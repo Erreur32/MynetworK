@@ -14,13 +14,13 @@
       "debug": "Debug",
       "desc": {
         "overview": "Controller status, online devices, UniFi sites, active alerts and network event log.",
-        "traffic": "WAN bandwidth history — inbound/outbound throughput per interface over 1h / 24h / 7d.",
-        "threats": "IDS/IPS — blocked network flows, risk levels (Low/Suspicious/Concerning) and geographic attack origins.",
-        "analyse": "Access point details — broadcasted SSIDs, channels, radio power and connected clients per band (2.4 / 5 / 6 GHz).",
-        "nat": "UniFi gateway — WAN/LAN ports and NAT port forwarding rules.",
-        "clients": "Connected network devices — filter by type (Wi-Fi / Ethernet), status (active/idle) and search by IP, name or MAC.",
-        "switches": "UniFi switch ports — link speed, POE status, RX/TX errors and port name.",
-        "debug": "Raw UniFi API data — used for technical diagnostics and development."
+        "traffic": "WAN bandwidth history, inbound/outbound throughput per interface over 1h / 24h / 7d.",
+        "threats": "Requires a UniFi gateway with an IDS/IPS engine (Cloud Gateway, Dream Machine, USG). Unavailable on AP/switch-only setups.",
+        "analyse": "Access point details, broadcasted SSIDs, channels, radio power and connected clients per band (2.4 / 5 / 6 GHz).",
+        "nat": "UniFi gateway, WAN/LAN ports and NAT port forwarding rules.",
+        "clients": "Connected network devices, filter by type (Wi-Fi / Ethernet), status (active/idle) and search by IP, name or MAC.",
+        "switches": "UniFi switch ports, link speed, POE status, RX/TX errors and port name.",
+        "debug": "Raw UniFi API data, used for technical diagnostics and development."
       }
     },
     "threats": {
@@ -37,7 +37,7 @@
       "unavailable": "Data unavailable",
       "unavailableDesc": "The UniFi controller returned no threat data.",
       "requiresIps": "This feature requires Intrusion Detection (IDS/IPS) to be enabled in UniFi.",
-      "noThreatsInRange": "No threats detected — IPS database is empty.",
+      "noThreatsInRange": "No threats detected, IPS database is empty.",
       "noThreatsHint": "IPS is enabled but no events have been generated.",
       "ipsEmptyTitle": "UniFi IPS has not logged any events",
       "ipsEmptyHint1": "Make sure IPS is set to Block mode (not just Detect): Network → Security → Threat Management",
@@ -68,7 +68,15 @@
       "chartTitle": "WAN Bandwidth",
       "loading": "Collecting data...",
       "noData": "Not enough data yet",
-      "noDataHint": "Data accumulates with each poll (~30s). Check back in a few minutes."
+      "noDataHint": "Data accumulates with each poll (~30s). Check back in a few minutes.",
+      "noGateway": "No UniFi gateway detected",
+      "noGatewayHint": "WAN throughput requires a UniFi gateway (Cloud Gateway, Dream Machine, USG). With APs/switches only, this data isn't measurable.",
+      "tooltipTitle": "WAN bandwidth chart",
+      "tooltipDesc": "Throughput computed by delta between two successive readings of the UniFi gateway's cumulative WAN counters.",
+      "tooltipDownload": "Bytes received from the Internet (KB/s)",
+      "tooltipUpload": "Bytes sent to the Internet (KB/s)",
+      "tooltipFooterLive": "Real-time WebSocket (~3s)",
+      "tooltipFooterPolling": "Polling every ~30s"
     },
     "pluginNotInstalled": "UniFi plugin is not installed or configured.",
     "pluginNotConnectedDescription": "UniFi plugin is not enabled or connected.",
@@ -91,7 +99,7 @@
     "filterAll": "All",
     "gatewayLabel": "Gateway:",
     "wan": "WAN",
-    "lan": "LAN",
+    "lanLabel": "LAN",
     "portCountEthernet": "{{count}} Ethernet port(s)",
     "debugInfo": "Debug Info:"
   }

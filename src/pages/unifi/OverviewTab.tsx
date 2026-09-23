@@ -3,20 +3,28 @@ import { useTranslation } from 'react-i18next';
 import { Wifi, Server, CheckCircle, XCircle, AlertCircle, Link2 } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
+import { NatTab } from './NatTab';
+import { DebugTab } from './DebugTab';
 import { AlertFilter, EventFilter } from './types';
+
+export type OverviewSubTab = 'info' | 'events' | 'nat' | 'debug';
 
 interface OverviewTabProps {
     unifiPlugin: any;
     unifiStats: any;
     systemInfo: any;
     devicesArr: any[];
-    overviewSubTab: 'info' | 'events';
-    setOverviewSubTab: (v: 'info' | 'events') => void;
+    overviewSubTab: OverviewSubTab;
+    setOverviewSubTab: (v: OverviewSubTab) => void;
     alertsFilter: AlertFilter;
     setAlertsFilter: (v: AlertFilter) => void;
     eventFilter: EventFilter;
     setEventFilter: (v: EventFilter) => void;
     onNavigateToSearch?: (ip: string) => void;
+    isActive?: boolean;
+    pluginStats: Record<string, any>;
+    isRefreshing: boolean;
+    handleRefresh: () => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -31,6 +39,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     eventFilter,
     setEventFilter,
     onNavigateToSearch,
+    isActive,
+    pluginStats,
+    isRefreshing,
+    handleRefresh,
 }) => {
     const { t } = useTranslation();
 
@@ -103,7 +115,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <div className="flex gap-1 border-b border-gray-800 mb-4">
                 {([
                     { id: 'info' as const, label: t('unifi.tabs.overview') },
-                    { id: 'events' as const, label: t('unifi.tabs.events') }
+                    { id: 'events' as const, label: t('unifi.tabs.events') },
+                    { id: 'nat' as const, label: t('unifi.tabs.nat') },
+                    ...(import.meta.env.DEV ? [{ id: 'debug' as const, label: t('unifi.tabs.debug') }] : [])
                 ]).map(sub => (
                     <button
                         key={sub.id}
@@ -121,7 +135,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
 
             {/* Info sub-tab */}
-            <div className={`space-y-6 ${overviewSubTab === 'events' ? 'hidden' : ''}`}>
+            <div className={`space-y-6 ${overviewSubTab !== 'info' ? 'hidden' : ''}`}>
                 {/* Ligne 1 : Info Système / Alertes Réseau */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Card
@@ -138,6 +152,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                         { label: 'Firmware', value: 'Version du contrôleur UniFiOS', color: 'gray', dot: true },
                                     ]}
                                     position="bottom"
+                                    width={400}
                                 />
                             </span>
                         }
@@ -271,7 +286,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                                         <div key={i} className="flex justify-between text-xs">
                                                             <span className="text-cyan-400/90">{p.name}</span>
                                                             <span className="text-white font-mono truncate ml-1" title={p.ip || ''}>
-                                                                {p.ip ? (p.ip.length > 12 ? `${p.ip.slice(0, 10)}…` : p.ip) : (p.up ? 'OK' : '—')}
+                                                                {p.ip ? (p.ip.length > 12 ? `${p.ip.slice(0, 10)}…` : p.ip) : (p.up ? 'OK' : '-')}
                                                             </span>
                                                         </div>
                                                     ))}
@@ -286,7 +301,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                                             {p.ip && <span className="text-white font-mono text-[11px] truncate">{p.ip}</span>}
                                                         </div>
                                                     )) : (
-                                                        <span className="text-white text-xs">{portCount != null ? `${portCount} port(s)` : '—'}</span>
+                                                        <span className="text-white text-xs">{portCount != null ? `${portCount} port(s)` : '-'}</span>
                                                     )}
                                                 </div>
                                             )}
@@ -372,8 +387,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                     description="Alertes générées par l'état des équipements et du contrôleur."
                                     rows={[
                                         { label: 'Info', value: 'Informatif, aucune action requise', color: 'blue', dot: true },
-                                        { label: 'Warning', value: 'Attention — équipement hors ligne ou mise à jour', color: 'amber', dot: true },
-                                        { label: 'Critical', value: 'Problème sérieux — équipement non supporté', color: 'red', dot: true },
+                                        { label: 'Warning', value: 'Attention : équipement hors ligne ou mise à jour', color: 'amber', dot: true },
+                                        { label: 'Critical', value: 'Problème sérieux : équipement non supporté', color: 'red', dot: true },
                                     ]}
                                     footer="Mis à jour à chaque polling (30s)"
                                     position="bottom"
@@ -1237,6 +1252,23 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                         )}
                     </Card>
                 </div>
+            )}
+
+            {/* NAT sub-tab */}
+            {overviewSubTab === 'nat' && (
+                <NatTab isActive={!!isActive} systemStats={unifiStats?.system} />
+            )}
+
+            {/* Debug sub-tab (DEV only) */}
+            {overviewSubTab === 'debug' && import.meta.env.DEV && (
+                <DebugTab
+                    unifiPlugin={unifiPlugin}
+                    unifiStats={unifiStats}
+                    pluginStats={pluginStats}
+                    isActive={isActive}
+                    isRefreshing={isRefreshing}
+                    handleRefresh={handleRefresh}
+                />
             )}
         </>
     );

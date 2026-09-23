@@ -29,6 +29,14 @@
     "deviceCol": "Appareil",
     "totalVolume": "Volume total",
     "loading": "Chargement...",
+    "lan": {
+      "chartTitle": "Trafic LAN (estimation)",
+      "tooltipTitle": "Estimation du trafic LAN",
+      "tooltipDesc": "Approximation calculée par soustraction : trafic total de tous les clients moins le trafic WAN mesuré. UniFi n'expose pas de compteur LAN unique, cette valeur peut donc contenir un peu de bruit dû au décalage entre les deux mesures.",
+      "tooltipDownload": "Estimation du trafic entrant local (hors Internet)",
+      "tooltipUpload": "Estimation du trafic sortant local (hors Internet)",
+      "tooltipFooter": "LAN ≈ trafic total clients − WAN"
+    },
     "connectionLabel": "Connexion :",
     "controllerUpdateAvailable": "Mise à jour du contrôleur disponible",
     "currentVersion": "Version actuelle",
@@ -43,6 +51,7 @@
     "noFirmwareInfo": "Aucune information de firmware détectée dans les devices (vérifiez les champs",
     "noWanInfo": "Aucune info WAN (network_table non disponible)",
     "noLanInfo": "Aucune info LAN",
+    "noGatewayPortsHint": "Les ports WAN/LAN nécessitent une passerelle UniFi (Cloud Gateway, Dream Machine, USG). Avec des bornes/switches seuls, cette info n'est pas disponible.",
     "noNatRuleConfigured": "Aucune règle NAT configurée",
     "noRuleForFilter": "Aucune règle pour ce filtre. Essayez \"Tous\" pour voir toutes les règles.",
     "updatesAvailable": "Mises à jour disponibles",
@@ -173,15 +182,15 @@
       },
       "levelLow": {
         "title": "Niveau LOW",
-        "desc": "Trafic légèrement suspect — activité anormale détectée mais risque limité. Ex: scan de ports, tentatives de connexion isolées."
+        "desc": "Trafic légèrement suspect, activité anormale détectée mais risque limité. Ex: scan de ports, tentatives de connexion isolées."
       },
       "levelSuspicious": {
         "title": "Niveau SUSPICIOUS",
-        "desc": "Trafic suspect — comportement potentiellement malveillant. Ex: réputation IP négative, patterns d'attaque connus."
+        "desc": "Trafic suspect, comportement potentiellement malveillant. Ex: réputation IP négative, patterns d'attaque connus."
       },
       "levelConcerning": {
         "title": "Niveau CONCERNING",
-        "desc": "Trafic préoccupant — attaque active ou intrusion confirmée. Ex: exploit connu, C2 botnet, malware signature."
+        "desc": "Trafic préoccupant, attaque active ou intrusion confirmée. Ex: exploit connu, C2 botnet, malware signature."
       },
       "topPolicies": {
         "title": "Politiques IPS déclenchées",
@@ -213,7 +222,7 @@
       },
       "poe": {
         "title": "Power over Ethernet",
-        "desc": "Alimentation électrique via le câble réseau — permet de brancher des appareils (AP, caméra, téléphone) sans adaptateur secteur.",
+        "desc": "Alimentation électrique via le câble réseau, permet de brancher des appareils (AP, caméra, téléphone) sans adaptateur secteur.",
         "autoValue": "PoE 802.3af/at actif",
         "v24Value": "PoE passif 24V (propriétaire)",
         "offValue": "PoE désactivé"
@@ -222,14 +231,14 @@
         "title": "Erreurs réseau",
         "desc": "Total des erreurs RX (réception) + TX (émission) sur ce port depuis le dernier redémarrage du switch.",
         "noneValue": "Pas d'erreur détectée",
-        "presentValue": "Erreurs présentes — câble ou duplex mismatch ?"
+        "presentValue": "Erreurs présentes, câble ou duplex mismatch ?"
       },
       "gateway": {
         "title": "Passerelle & ports réseau",
         "desc": "Résumé de la gateway UniFi : ports WAN (connexion internet) et ports LAN (réseau local). Les WAN affichent l'IP publique ou le statut de liaison."
       },
       "natRules": {
-        "title": "Règles NAT — Port Forwarding",
+        "title": "Règles NAT, Port Forwarding",
         "desc": "Le NAT (Network Address Translation) redirige des ports entrants de votre IP publique vers des machines internes. Exemple : port 443 → serveur web local.",
         "activeValue": "Règle en cours d'application",
         "inactiveValue": "Règle désactivée (non appliquée)"
@@ -239,8 +248,8 @@
         "desc": "Identifiant matériel unique de la carte réseau (48 bits). Les 3 premiers octets (OUI) identifient le fabricant. Ex: DC:A6:32 = Raspberry Pi, 00:50:F2 = Microsoft."
       },
       "rssi": {
-        "title": "RSSI — Qualité du signal Wi-Fi",
-        "desc": "Received Signal Strength Indicator — intensité du signal en dBm. Plus la valeur est proche de 0, meilleur est le signal.",
+        "title": "RSSI, Qualité du signal Wi-Fi",
+        "desc": "Received Signal Strength Indicator, intensité du signal en dBm. Plus la valeur est proche de 0, meilleur est le signal.",
         "excellent": "Excellent ≥ -60 dBm",
         "good": "Bon  -60 à -70 dBm",
         "fair": "Passable  -70 à -80 dBm",

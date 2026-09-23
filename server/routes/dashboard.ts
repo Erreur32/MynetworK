@@ -246,6 +246,10 @@ router.get(
           subnet = `${base}.0/24`;
         }
       }
+    } else if (hasUniFi && !hasFreebox) {
+      // UniFi present but no gateway device found (APs/switches-only setup) and no Freebox:
+      // role is still 'unifi', just without a measurable gateway/subnet (both stay 'N/A').
+      role = 'unifi';
     } else if (hasFreebox) {
       role = 'freebox';
       if (freebox.ip) gateway = freebox.ip;

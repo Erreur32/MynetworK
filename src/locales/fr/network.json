@@ -25,6 +25,8 @@
     "roleFreebox": "Freebox",
     "roleUnifiDmz": "UniFi (via DMZ Freebox)",
     "roleUnifiCloud": "UniFi (Cloud Gateway)",
+    "roleUnifiNoGateway": "UniFi (sans passerelle)",
+    "noGatewaySubnetHint": "Aucune passerelle UniFi détectée (bornes/switches seuls), gateway et sous-réseau non déductibles.",
     "freeboxLabel": "Freebox:",
     "modeLabel": "Mode:",
     "bridge": "Bridge",

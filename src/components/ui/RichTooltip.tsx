@@ -18,6 +18,8 @@ export interface RichTooltipProps {
   iconSize?: number;
   iconClass?: string;
   width?: number;
+  /** 'warning' renders the footer in amber/yellow, for prerequisites or caveats. */
+  footerVariant?: 'default' | 'warning';
 }
 
 const COLOR_MAP: Record<NonNullable<TooltipRow['color']>, { dot: string; label: string; value: string }> = {
@@ -43,6 +45,7 @@ export const RichTooltip: React.FC<RichTooltipProps> = ({
   iconSize = 13,
   iconClass = 'text-gray-500 hover:text-gray-300 cursor-help',
   width = 240,
+  footerVariant = 'default',
 }) => {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -132,7 +135,7 @@ export const RichTooltip: React.FC<RichTooltipProps> = ({
                           {row.dot && colors && (
                             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors.dot}`} />
                           )}
-                          <span className={`text-[11px] truncate ${colors ? colors.label : 'text-gray-400'}`}>
+                          <span className={`text-[11px] ${colors ? colors.label : 'text-gray-400'}`}>
                             {row.label}
                           </span>
                         </div>
@@ -150,8 +153,8 @@ export const RichTooltip: React.FC<RichTooltipProps> = ({
 
             {/* Footer */}
             {footer && (
-              <div className="px-3 py-1.5 border-t border-gray-700/60 bg-gray-900/40">
-                <p className="text-[10px] text-gray-500 italic">{footer}</p>
+              <div className={`px-3 py-1.5 border-t border-gray-700/60 ${footerVariant === 'warning' ? 'bg-amber-900/20' : 'bg-gray-900/40'}`}>
+                <p className={`text-[10px] italic ${footerVariant === 'warning' ? 'text-amber-400' : 'text-gray-500'}`}>{footer}</p>
               </div>
             )}
           </div>

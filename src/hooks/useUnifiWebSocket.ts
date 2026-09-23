@@ -11,6 +11,7 @@ interface UnifiBandwidthMessage {
     upload: number;
     wans: Record<string, { download: number; upload: number }>;
     topClients?: UnifiTopClient[];
+    lan?: { download: number; upload: number };
   };
 }
 
@@ -85,7 +86,7 @@ export function useUnifiWebSocket(options: UseUnifiWebSocketOptions = {}) {
       try {
         const message: UnifiBandwidthMessage = JSON.parse(event.data);
         if (message.type === 'unifi_bandwidth' && message.data) {
-          pushPoint(message.data.download, message.data.upload, message.data.topClients);
+          pushPoint(message.data.download, message.data.upload, message.data.topClients, message.data.lan);
         }
       } catch (error) {
         console.error('[WS-UniFi] Parse error:', error);

@@ -220,10 +220,10 @@ export class UniFiPlugin extends BasePlugin {
         if (!last) {
             history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
         } else if (rxBytes < last.rx_bytes || txBytes < last.tx_bytes) {
-            // Counter reset (reboot) – clear history and start fresh
+            // Counter reset (reboot), clear history and start fresh
             this._bandwidthHistories.set(wanId, [{ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes }]);
         } else if (rxBytes > last.rx_bytes || txBytes > last.tx_bytes) {
-            // Only push when bytes actually changed — avoids zero-rate entries
+            // Only push when bytes actually changed, avoids zero-rate entries
             // when the controller hasn't updated its counters yet
             history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
             if (history.length > this.BANDWIDTH_MAX) history.shift();
@@ -245,7 +245,7 @@ export class UniFiPlugin extends BasePlugin {
                 filtered = idxFirst > 0 ? history.slice(idxFirst - 1) : history;
             }
         } else {
-            // Live: last 10 points (~5 min at 30s polling) — keeps it visually distinct from 1h range
+            // Live: last 10 points (~5 min at 30s polling), keeps it visually distinct from 1h range
             filtered = history.slice(-10);
         }
 
@@ -286,7 +286,7 @@ export class UniFiPlugin extends BasePlugin {
 
     /**
      * Lightweight WAN bandwidth fetch for real-time WebSocket polling.
-     * Only calls getNetworkStats() (stat/dashboard) — much lighter than full getStats().
+     * Only calls getNetworkStats() (stat/dashboard), much lighter than full getStats().
      * Pushes new byte counters to history and returns computed KB/s rates for each WAN.
      */
     async fetchWanBandwidth(): Promise<Record<string, { download: number; upload: number }> | null> {
@@ -307,7 +307,7 @@ export class UniFiPlugin extends BasePlugin {
                     return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
                         || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
                 });
-            } catch { /* ignore — will fall back to networkStats */ }
+            } catch { /* ignore, will fall back to networkStats */ }
 
             for (const wan of wans) {
                 const wanIdx = (parseInt(wan.id.replace('wan', ''), 10) || 1) as 1 | 2;
@@ -323,7 +323,7 @@ export class UniFiPlugin extends BasePlugin {
                     }
                 }
 
-                // Priority 2: networkStats (dashboard API — works on some controllers)
+                // Priority 2: networkStats (dashboard API, works on some controllers)
                 if (rxBytes === 0 && txBytes === 0) {
                     try {
                         const stats = await this.apiService.getNetworkStats();
@@ -370,10 +370,10 @@ export class UniFiPlugin extends BasePlugin {
     /**
      * Live "top talkers": per-client throughput, from the controller's own instantaneous rate
      * fields ('rx_bytes-r' / 'tx_bytes-r' / 'wired-rx_bytes-r' / 'wired-tx_bytes-r', in
-     * bytes/sec). No minimum threshold — filtering happens purely on whether these fields are
+     * bytes/sec). No minimum threshold, filtering happens purely on whether these fields are
      * present and non-zero. A client with none of these fields simply won't show up; that's
      * preferable to guessing from a link-capability field and showing a fabricated rate (see the
-     * git history for why — 'rx_rate'/'tx_rate'/'phy_*_rate'/'sw_*_rate' are NOT throughput, they
+     * git history for why, 'rx_rate'/'tx_rate'/'phy_*_rate'/'sw_*_rate' are NOT throughput, they
      * are the negotiated WiFi PHY rate or Ethernet port speed).
      */
     async fetchTopClients(limit = 10): Promise<Array<{ mac: string; name: string; ip?: string; vendor?: string | null; download: number; upload: number }>> {
@@ -389,9 +389,9 @@ export class UniFiPlugin extends BasePlugin {
 
                 // Only '*_bytes-r' fields are an actual measured rate (bytes/sec, computed by the
                 // controller). 'rx_rate' / 'tx_rate' / 'phy_*_rate' / 'sw_*_rate' are NOT
-                // throughput — they're the negotiated WiFi PHY rate or Ethernet port speed (link
+                // throughput, they're the negotiated WiFi PHY rate or Ethernet port speed (link
                 // capability, not usage). Confirmed the hard way: two different IoT devices both
-                // showed exactly "307 Mb/s" simultaneously — a real traffic rate would never
+                // showed exactly "307 Mb/s" simultaneously, a real traffic rate would never
                 // coincidentally match another device's to the Mb/s, that's a fixed link-rate
                 // constant. Those fields must never be used here again.
                 const rxBytesPerSec = Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
@@ -423,6 +423,37 @@ export class UniFiPlugin extends BasePlugin {
         } catch (error) {
             logger.debug('UniFiPlugin', 'fetchTopClients failed:', error);
             return [];
+        }
+    }
+
+    /**
+     * Sum of every currently-connected client's real-time rate (same 'rx_bytes-r' / 'tx_bytes-r'
+     * fields as fetchTopClients, just totalled across ALL clients instead of ranking the top N).
+     * Used as the "total_clients" side of the LAN estimate: LAN ≈ total_clients − WAN. This is an
+     * approximation, not a direct measurement, UniFi has no single "LAN interface" counter the
+     * way it has one clear WAN interface, and this total includes internet-bound traffic too
+     * (subtracting WAN accounts for that, imperfectly, since the two are sampled independently).
+     */
+    async fetchTotalClientTraffic(): Promise<{ download: number; upload: number }> {
+        if (!this.isEnabled() || !this.config) return { download: 0, upload: 0 };
+
+        try {
+            const clients = await this.apiService.getClients();
+            let totalRxBytesPerSec = 0;
+            let totalTxBytesPerSec = 0;
+
+            for (const client of clients) {
+                totalRxBytesPerSec += Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
+                totalTxBytesPerSec += Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
+            }
+
+            return {
+                download: Math.round(totalRxBytesPerSec / 1024),
+                upload: Math.round(totalTxBytesPerSec / 1024)
+            };
+        } catch (error) {
+            logger.debug('UniFiPlugin', 'fetchTotalClientTraffic failed:', error);
+            return { download: 0, upload: 0 };
         }
     }
 
@@ -784,7 +815,7 @@ export class UniFiPlugin extends BasePlugin {
                 }
             }
 
-            // Normalize network stats — download/upload in bytes/s for formatSpeed compatibility
+            // Normalize network stats, download/upload in bytes/s for formatSpeed compatibility
             const networkStats = {
                 download: downloadBytesPerSec,
                 upload: uploadBytesPerSec,
