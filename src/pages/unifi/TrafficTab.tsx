@@ -102,6 +102,37 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
             </span>
         ),
     };
+    // Shared axes/grid/tooltip for both the WAN and LAN charts below: identical styling,
+    // only the Area series (dataKey/color) differ per chart.
+    const sharedChartAxes = (
+        <>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+            <XAxis
+                dataKey="time"
+                stroke="#374151"
+                tick={{ fill: '#6b7280', fontSize: 10 }}
+                interval="preserveStartEnd"
+                tickLine={false}
+            />
+            <YAxis
+                stroke="#374151"
+                tick={{ fill: '#6b7280', fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v}K`}
+            />
+            <Tooltip
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '10px 14px' }}
+                labelStyle={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}
+                formatter={(value: number, name: string) => {
+                    const kb = value;
+                    const fmt = kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB/s` : `${kb} KB/s`;
+                    const color = name === t('system.download') ? '#60a5fa' : '#34d399';
+                    return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
+                }}
+            />
+        </>
+    );
     const [trafficPeriodState, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficTabPeriod('today'));
     const trafficPeriod = trafficPeriodState;
     const setTrafficPeriod = (period: TrafficPeriod) => {
@@ -380,31 +411,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                            <XAxis
-                                dataKey="time"
-                                stroke="#374151"
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                interval="preserveStartEnd"
-                                tickLine={false}
-                            />
-                            <YAxis
-                                stroke="#374151"
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v}K`}
-                            />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '10px 14px' }}
-                                labelStyle={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}
-                                formatter={(value: number, name: string) => {
-                                    const kb = value;
-                                    const fmt = kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB/s` : `${kb} KB/s`;
-                                    const color = name === t('system.download') ? '#60a5fa' : '#34d399';
-                                    return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
-                                }}
-                            />
+                            {sharedChartAxes}
                             <Legend {...toggleableLegendProps} />
                             <Area
                                 type="monotone"
@@ -501,31 +508,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                            <XAxis
-                                dataKey="time"
-                                stroke="#374151"
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                interval="preserveStartEnd"
-                                tickLine={false}
-                            />
-                            <YAxis
-                                stroke="#374151"
-                                tick={{ fill: '#6b7280', fontSize: 10 }}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v}K`}
-                            />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '10px', padding: '10px 14px' }}
-                                labelStyle={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}
-                                formatter={(value: number, name: string) => {
-                                    const kb = value;
-                                    const fmt = kb >= 1024 ? `${(kb / 1024).toFixed(2)} MB/s` : `${kb} KB/s`;
-                                    const color = name === t('system.download') ? '#60a5fa' : '#34d399';
-                                    return [<span key="v" style={{ color, fontWeight: 600 }}>{fmt}</span>, name];
-                                }}
-                            />
+                            {sharedChartAxes}
                             <Legend {...toggleableLegendProps} />
                             <Area
                                 type="monotone"
