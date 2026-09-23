@@ -40,7 +40,7 @@ function readStoredSource(fallback: BandwidthSource): BandwidthSource {
 function readStoredRange(fallback: BandwidthRange): BandwidthRange {
     try {
         const v = localStorage.getItem(RANGE_STORAGE_KEY);
-        const n = v !== null ? Number(v) : NaN;
+        const n = v !== null ? Number(v) : Number.NaN;
         if ((VALID_RANGES as number[]).includes(n)) return n as BandwidthRange;
     } catch { /* ignore */ }
     return fallback;
@@ -66,8 +66,10 @@ export const BandwidthHistoryWidget: React.FC<BandwidthHistoryWidgetProps> = ({
     const extendedHistory = useConnectionStore(s => s.extendedHistory);
     const fetchExtendedHistory = useConnectionStore(s => s.fetchExtendedHistory);
     const status = useConnectionStore(s => s.status);
-const [selectedRange, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredRange(freeboxAvailable ? 3600 : 0));
-    const [source, setSourceState] = useState<BandwidthSource>(() => readStoredSource(freeboxAvailable ? 'freebox' : 'unifi'));
+const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredRange(freeboxAvailable ? 3600 : 0));
+    const selectedRange = selectedRangeState;
+    const [sourceState, setSourceState] = useState<BandwidthSource>(() => readStoredSource(freeboxAvailable ? 'freebox' : 'unifi'));
+    const source = sourceState;
 
     const setSelectedRange = (range: BandwidthRange) => {
         setSelectedRangeState(range);
@@ -96,6 +98,13 @@ const [selectedRange, setSelectedRangeState] = useState<BandwidthRange>(() => re
             setFrozenTopClients(topClients);
         }
         setIsPaused(p => !p);
+    };
+    const handleGraphKeyDown = (e: React.KeyboardEvent) => {
+        if (selectedRange !== 0) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleGraphPause();
+        }
     };
 
     // Leaving live mode (or switching source) always resumes — a frozen snapshot of a
@@ -179,14 +188,14 @@ const [selectedRange, setSelectedRangeState] = useState<BandwidthRange>(() => re
         interval: POLLING_INTERVALS.system
     });
 
-    const freeboxChartData =
-        selectedRange === 0
-            ? effectiveFreeboxHistory
-            : (extendedHistory.length > 0 ? extendedHistory : history);
+    let freeboxChartData = extendedHistory.length > 0 ? extendedHistory : history;
+    if (selectedRange === 0) freeboxChartData = effectiveFreeboxHistory;
 
-    const chartData = source === 'unifi'
-        ? (selectedRange === 0 ? effectiveUnifiHistory : unifiData)
-        : freeboxChartData;
+    let chartData = freeboxChartData;
+    if (source === 'unifi') chartData = selectedRange === 0 ? effectiveUnifiHistory : unifiData;
+
+    let liveGraphTitle: string | undefined;
+    if (selectedRange === 0) liveGraphTitle = isPaused ? t('dashboard.bandwidth.clickToResume') : t('dashboard.bandwidth.clickToPause');
 
     const showSourceToggle = freeboxAvailable && unifiAvailable;
 
@@ -324,7 +333,10 @@ const [selectedRange, setSelectedRangeState] = useState<BandwidthRange>(() => re
                 className="w-full relative"
                 style={{ height: '256px', minHeight: '256px', cursor: selectedRange === 0 ? 'pointer' : 'default' }}
                 onClick={selectedRange === 0 ? toggleGraphPause : undefined}
-                title={selectedRange === 0 ? (isPaused ? t('dashboard.bandwidth.clickToResume') : t('dashboard.bandwidth.clickToPause')) : undefined}
+                onKeyDown={selectedRange === 0 ? handleGraphKeyDown : undefined}
+                role={selectedRange === 0 ? 'button' : undefined}
+                tabIndex={selectedRange === 0 ? 0 : undefined}
+                title={liveGraphTitle}
             >
                 {source === 'unifi' && selectedRange === 0 && liveIcons.length > 0 && (
                     <div className="absolute top-2 right-3 z-10 flex items-center gap-1.5">

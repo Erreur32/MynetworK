@@ -11,6 +11,12 @@ interface SortableThProps {
     style?: React.CSSProperties;
 }
 
+function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+    if (!active) return <ArrowUpDown size={11} className="opacity-30" />;
+    if (dir === 'asc') return <ArrowUp size={11} />;
+    return <ArrowDown size={11} />;
+}
+
 /** Clickable table header with a sort direction indicator — used by any sortable table. */
 export const SortableTh: React.FC<SortableThProps> = ({ label, active, dir, onClick, align = 'left', className = '', style }) => (
     <th
@@ -20,9 +26,7 @@ export const SortableTh: React.FC<SortableThProps> = ({ label, active, dir, onCl
     >
         <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
             {label}
-            {active
-                ? (dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)
-                : <ArrowUpDown size={11} className="opacity-30" />}
+            <SortIcon active={active} dir={dir} />
         </span>
     </th>
 );

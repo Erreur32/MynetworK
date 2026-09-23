@@ -26,7 +26,7 @@ const VALID_TRAFFIC_TAB_RANGES: BandwidthRange[] = [0, 3600, 21600, 86400, 60480
 function readStoredTrafficTabRange(fallback: BandwidthRange): BandwidthRange {
     try {
         const v = localStorage.getItem(TRAFFIC_TAB_RANGE_STORAGE_KEY);
-        const n = v !== null ? Number(v) : NaN;
+        const n = v !== null ? Number(v) : Number.NaN;
         if ((VALID_TRAFFIC_TAB_RANGES as number[]).includes(n)) return n as BandwidthRange;
     } catch { /* ignore */ }
     return fallback;
@@ -76,7 +76,8 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
 }) => {
     const { t } = useTranslation();
     const { history: realtimeHistory, download: realtimeDl, upload: realtimeUl, isConnected: wsConnected, topClients: liveTopClients } = useUnifiRealtimeStore();
-    const [selectedRange, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredTrafficTabRange(0));
+    const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() => readStoredTrafficTabRange(0));
+    const selectedRange = selectedRangeState;
     const setSelectedRange = (range: BandwidthRange) => {
         setSelectedRangeState(range);
         try { localStorage.setItem(TRAFFIC_TAB_RANGE_STORAGE_KEY, String(range)); } catch { /* ignore */ }
@@ -84,7 +85,8 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     const [rangeHistory, setRangeHistory] = useState<BandwidthPoint[]>([]);
     const [isLoadingRange, setIsLoadingRange] = useState(false);
     const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
-    const [trafficPeriod, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficTabPeriod('today'));
+    const [trafficPeriodState, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficTabPeriod('today'));
+    const trafficPeriod = trafficPeriodState;
     const setTrafficPeriod = (period: TrafficPeriod) => {
         setTrafficPeriodState(period);
         try { localStorage.setItem(TRAFFIC_TAB_PERIOD_STORAGE_KEY, period); } catch { /* ignore */ }
@@ -751,46 +753,50 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                                                 </button>
                                             </span>
                                         </div>
-                                        {isLoadingTopTraffic && trafficRows.length === 0 ? (
-                                            <p className="text-xs text-gray-500">{t('unifi.loading')}</p>
-                                        ) : trafficRows.length === 0 ? (
-                                            <p className="text-xs text-gray-500">{t('unifi.noTrafficDataYet')}</p>
-                                        ) : (
-                                            <table className="min-w-full text-[12px] text-gray-200">
-                                                <thead className="bg-theme-card text-gray-300 text-xs">
-                                                    <tr>
-                                                        <th className="px-2 py-1 text-left">#</th>
-                                                        <SortableTh label={t('unifi.deviceCol')} active={topTrafficSort.sortKey === 'name'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('name')} />
-                                                        <SortableTh label="IP" active={topTrafficSort.sortKey === 'ip'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('ip')} />
-                                                        <SortableTh label={t('unifi.totalVolume')} align="right" active={topTrafficSort.sortKey === 'volume'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('volume')} />
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {topTrafficSort.sorted.map((c, idx) => (
-                                                        <tr
-                                                            key={c.mac}
-                                                            className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
-                                                        >
-                                                            <td className="px-2 py-1 text-left text-gray-500">{idx + 1}</td>
-                                                            <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
-                                                                <span className="inline-flex items-center gap-1.5">
-                                                                    {hasVendorIcon(c.vendor, c.name)
-                                                                        ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
-                                                                        : <Router size={13} className="text-gray-400" />}
-                                                                    {c.name}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-2 py-1 text-left text-xs font-mono text-sky-300">
-                                                                {renderClickableIp(c.ip, 'text-sky-300 font-mono text-xs', 8)}
-                                                            </td>
-                                                            <td className="px-2 py-1 text-right text-xs font-mono text-cyan-400 font-semibold">
-                                                                {c.volumeText}
-                                                            </td>
+                                        {(() => {
+                                            if (isLoadingTopTraffic && trafficRows.length === 0) {
+                                                return <p className="text-xs text-gray-500">{t('unifi.loading')}</p>;
+                                            }
+                                            if (trafficRows.length === 0) {
+                                                return <p className="text-xs text-gray-500">{t('unifi.noTrafficDataYet')}</p>;
+                                            }
+                                            return (
+                                                <table className="min-w-full text-[12px] text-gray-200">
+                                                    <thead className="bg-theme-card text-gray-300 text-xs">
+                                                        <tr>
+                                                            <th className="px-2 py-1 text-left">#</th>
+                                                            <SortableTh label={t('unifi.deviceCol')} active={topTrafficSort.sortKey === 'name'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('name')} />
+                                                            <SortableTh label="IP" active={topTrafficSort.sortKey === 'ip'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('ip')} />
+                                                            <SortableTh label={t('unifi.totalVolume')} align="right" active={topTrafficSort.sortKey === 'volume'} dir={topTrafficSort.sortDir} onClick={() => topTrafficSort.toggleSort('volume')} />
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        )}
+                                                    </thead>
+                                                    <tbody>
+                                                        {topTrafficSort.sorted.map((c, idx) => (
+                                                            <tr
+                                                                key={c.mac}
+                                                                className={idx % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
+                                                            >
+                                                                <td className="px-2 py-1 text-left text-gray-500">{idx + 1}</td>
+                                                                <td className="px-2 py-1 text-left text-sm font-medium text-gray-200">
+                                                                    <span className="inline-flex items-center gap-1.5">
+                                                                        {hasVendorIcon(c.vendor, c.name)
+                                                                            ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
+                                                                            : <Router size={13} className="text-gray-400" />}
+                                                                        {c.name}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-2 py-1 text-left text-xs font-mono text-sky-300">
+                                                                    {renderClickableIp(c.ip, 'text-sky-300 font-mono text-xs', 8)}
+                                                                </td>
+                                                                <td className="px-2 py-1 text-right text-xs font-mono text-cyan-400 font-semibold">
+                                                                    {c.volumeText}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                                 </div>

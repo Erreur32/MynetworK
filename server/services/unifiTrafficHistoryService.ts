@@ -22,7 +22,7 @@ const PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 class UniFiTrafficHistoryService {
     private pollInterval: NodeJS.Timeout | null = null;
     private purgeInterval: NodeJS.Timeout | null = null;
-    private baselines: Map<string, { rxBytes: number; txBytes: number }> = new Map();
+    private readonly baselines: Map<string, { rxBytes: number; txBytes: number }> = new Map();
 
     start(): void {
         if (this.pollInterval) return;
@@ -45,46 +45,15 @@ class UniFiTrafficHistoryService {
 
     private async poll(): Promise<void> {
         const unifiPlugin = pluginManager.getPlugin('unifi') as any;
-        if (!unifiPlugin || !unifiPlugin.isEnabled?.() || typeof unifiPlugin.getApiService !== 'function') return;
+        if (!unifiPlugin?.isEnabled?.() || typeof unifiPlugin.getApiService !== 'function') return;
 
         try {
             const clients = await unifiPlugin.getApiService().getClients();
             const seenMacs = new Set<string>();
 
             for (const client of clients) {
-                const mac = (client.mac || '').toString().toLowerCase();
-                if (!mac) continue;
-                seenMacs.add(mac);
-
-                // Some controllers report wired clients' cumulative counters under
-                // 'wired-rx_bytes'/'wired-tx_bytes' instead of the plain fields — fall back to
-                // those when present so wired devices aren't silently excluded from tracking.
-                const rxBytes = Number(client.rx_bytes) || Number(client['wired-rx_bytes']) || 0;
-                const txBytes = Number(client.tx_bytes) || Number(client['wired-tx_bytes']) || 0;
-                if (rxBytes === 0 && txBytes === 0) continue;
-
-                const baseline = this.baselines.get(mac);
-                if (!baseline || rxBytes < baseline.rxBytes || txBytes < baseline.txBytes) {
-                    // First sighting or counter reset (reconnect/roam) — establish a fresh
-                    // baseline, no delta this tick (avoids counting pre-existing session bytes).
-                    this.baselines.set(mac, { rxBytes, txBytes });
-                    continue;
-                }
-
-                const deltaRx = rxBytes - baseline.rxBytes;
-                const deltaTx = txBytes - baseline.txBytes;
-                this.baselines.set(mac, { rxBytes, txBytes });
-                if (deltaRx <= 0 && deltaTx <= 0) continue;
-
-                const vendor = mac.length >= 8 ? WiresharkVendorService.lookupVendor(mac.slice(0, 8)) : null;
-                UniFiClientTrafficRepository.addDelta({
-                    mac,
-                    name: client.name || client.hostname || client.ip || mac,
-                    ip: client.ip,
-                    vendor,
-                    deltaRx,
-                    deltaTx
-                });
+                const mac = this.accumulateClient(client);
+                if (mac) seenMacs.add(mac);
             }
 
             // Forget baselines for clients no longer seen — avoids unbounded growth over time
@@ -94,6 +63,47 @@ class UniFiTrafficHistoryService {
         } catch (error) {
             logger.debug('UniFiTrafficHistory', 'poll failed:', error);
         }
+    }
+
+    /**
+     * Updates the delta baseline for one client and records its accumulated traffic, if any.
+     * Returns the client's MAC (so the caller can track which clients are still around), or
+     * null when the client has no usable MAC.
+     */
+    private accumulateClient(client: any): string | null {
+        const mac = (client.mac || '').toString().toLowerCase();
+        if (!mac) return null;
+
+        // Some controllers report wired clients' cumulative counters under
+        // 'wired-rx_bytes'/'wired-tx_bytes' instead of the plain fields — fall back to
+        // those when present so wired devices aren't silently excluded from tracking.
+        const rxBytes = Number(client.rx_bytes) || Number(client['wired-rx_bytes']) || 0;
+        const txBytes = Number(client.tx_bytes) || Number(client['wired-tx_bytes']) || 0;
+        if (rxBytes === 0 && txBytes === 0) return mac;
+
+        const baseline = this.baselines.get(mac);
+        if (!baseline || rxBytes < baseline.rxBytes || txBytes < baseline.txBytes) {
+            // First sighting or counter reset (reconnect/roam) — establish a fresh
+            // baseline, no delta this tick (avoids counting pre-existing session bytes).
+            this.baselines.set(mac, { rxBytes, txBytes });
+            return mac;
+        }
+
+        const deltaRx = rxBytes - baseline.rxBytes;
+        const deltaTx = txBytes - baseline.txBytes;
+        this.baselines.set(mac, { rxBytes, txBytes });
+        if (deltaRx <= 0 && deltaTx <= 0) return mac;
+
+        const vendor = mac.length >= 8 ? WiresharkVendorService.lookupVendor(mac.slice(0, 8)) : null;
+        UniFiClientTrafficRepository.addDelta({
+            mac,
+            name: client.name || client.hostname || client.ip || mac,
+            ip: client.ip,
+            vendor,
+            deltaRx,
+            deltaTx
+        });
+        return mac;
     }
 }
 

@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
-import { Network, ArrowRight, Activity, CheckCircle, Gauge, Router, Info } from 'lucide-react';
+import { Network, ArrowRight, Activity, Gauge, Router, Info } from 'lucide-react';
 import { usePluginStore } from '../../stores/pluginStore';
 import { api } from '../../api/client';
 import { formatBytes, formatSpeed } from '../../utils/constants';
@@ -105,7 +105,8 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     const navigate = useNavigate();
     const { plugins } = usePluginStore();
     const hasUniFi = plugins.some(p => p.id === 'unifi' && p.enabled && p.connectionStatus);
-    const [trafficPeriod, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficPeriod('today'));
+    const [trafficPeriodState, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficPeriod('today'));
+    const trafficPeriod = trafficPeriodState;
     const setTrafficPeriod = (period: TrafficPeriod) => {
         setTrafficPeriodState(period);
         try { localStorage.setItem(TRAFFIC_PERIOD_STORAGE_KEY, period); } catch { /* ignore */ }
@@ -544,34 +545,38 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     </button>
                                 </span>
                             </div>
-                            {topTrafficLoading && trafficRows.length === 0 ? (
-                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
-                            ) : trafficRows.length > 0 ? (
-                                <div className="space-y-1 max-h-80 overflow-y-auto">
-                                    {trafficRows.map((c, i) => (
-                                        <button
-                                            key={c.mac}
-                                            type="button"
-                                            onClick={() => navigate(`/search?s=${encodeURIComponent(c.ip || c.mac)}`)}
-                                            className="w-full flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] hover:bg-[#232323] rounded border border-gray-800 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span className="text-gray-500 w-4 text-right shrink-0">{i + 1}</span>
-                                                {hasVendorIcon(c.vendor, c.name)
-                                                    ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
-                                                    : <Router size={13} className="text-gray-400 shrink-0" />}
-                                                <span className="text-gray-300 truncate">{c.name}</span>
-                                                {c.ip && <span className="text-gray-500 font-mono shrink-0">({c.ip})</span>}
-                                            </div>
-                                            <span className="text-cyan-400 font-semibold shrink-0 ml-2">
-                                                {c.volumeText}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noTrafficData')}</div>
-                            )}
+                            {(() => {
+                                if (topTrafficLoading && trafficRows.length === 0) {
+                                    return <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>;
+                                }
+                                if (trafficRows.length === 0) {
+                                    return <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noTrafficData')}</div>;
+                                }
+                                return (
+                                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                                        {trafficRows.map((c, i) => (
+                                            <button
+                                                key={c.mac}
+                                                type="button"
+                                                onClick={() => navigate(`/search?s=${encodeURIComponent(c.ip || c.mac)}`)}
+                                                className="w-full flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] hover:bg-[#232323] rounded border border-gray-800 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-gray-500 w-4 text-right shrink-0">{i + 1}</span>
+                                                    {hasVendorIcon(c.vendor, c.name)
+                                                        ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
+                                                        : <Router size={13} className="text-gray-400 shrink-0" />}
+                                                    <span className="text-gray-300 truncate">{c.name}</span>
+                                                    {c.ip && <span className="text-gray-500 font-mono shrink-0">({c.ip})</span>}
+                                                </div>
+                                                <span className="text-cyan-400 font-semibold shrink-0 ml-2">
+                                                    {c.volumeText}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
 
