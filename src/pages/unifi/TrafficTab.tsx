@@ -458,7 +458,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
                             if (s >= 1_000) {
                                 return `${(s / 1_000).toFixed(2)} Mb/s`;
                             }
-                            return `${s} kb/s`;
+                            return `${s.toFixed(2)} kb/s`;
                         };
 
                         const getApNameForClient = (c: any): string => {
