@@ -7,6 +7,7 @@
 import { BasePlugin } from '../base/BasePlugin.js';
 import { UniFiApiService } from './UniFiApiService.js';
 import { logger } from '../../utils/logger.js';
+import { WiresharkVendorService } from '../../services/wiresharkVendorService.js';
 import type { PluginConfig, PluginStats, Device } from '../base/PluginInterface.js';
 
 /**
@@ -195,7 +196,7 @@ export class UniFiPlugin extends BasePlugin {
     private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.10.36');
+        super('unifi', 'UniFi Controller', '0.10.37');
         this.apiService = new UniFiApiService();
     }
 
@@ -363,6 +364,65 @@ export class UniFiPlugin extends BasePlugin {
         } catch (error) {
             logger.debug('UniFiPlugin', 'fetchWanBandwidth failed:', error);
             return null;
+        }
+    }
+
+    /**
+     * Live "top talkers": per-client throughput, from the controller's own instantaneous rate
+     * fields ('rx_bytes-r' / 'tx_bytes-r' / 'wired-rx_bytes-r' / 'wired-tx_bytes-r', in
+     * bytes/sec). No minimum threshold — filtering happens purely on whether these fields are
+     * present and non-zero. A client with none of these fields simply won't show up; that's
+     * preferable to guessing from a link-capability field and showing a fabricated rate (see the
+     * git history for why — 'rx_rate'/'tx_rate'/'phy_*_rate'/'sw_*_rate' are NOT throughput, they
+     * are the negotiated WiFi PHY rate or Ethernet port speed).
+     */
+    async fetchTopClients(limit = 10): Promise<Array<{ mac: string; name: string; ip?: string; vendor?: string | null; download: number; upload: number }>> {
+        if (!this.isEnabled() || !this.config) return [];
+
+        try {
+            const clients = await this.apiService.getClients();
+            const rates: Array<{ mac: string; name: string; ip?: string; download: number; upload: number }> = [];
+
+            for (const client of clients) {
+                const mac = (client.mac || '').toString().toLowerCase();
+                if (!mac) continue;
+
+                // Only '*_bytes-r' fields are an actual measured rate (bytes/sec, computed by the
+                // controller). 'rx_rate' / 'tx_rate' / 'phy_*_rate' / 'sw_*_rate' are NOT
+                // throughput — they're the negotiated WiFi PHY rate or Ethernet port speed (link
+                // capability, not usage). Confirmed the hard way: two different IoT devices both
+                // showed exactly "307 Mb/s" simultaneously — a real traffic rate would never
+                // coincidentally match another device's to the Mb/s, that's a fixed link-rate
+                // constant. Those fields must never be used here again.
+                const rxBytesPerSec = Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
+                const txBytesPerSec = Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
+
+                const download = Math.round(rxBytesPerSec / 1024);
+                const upload = Math.round(txBytesPerSec / 1024);
+
+                if (download === 0 && upload === 0) continue;
+
+                rates.push({
+                    mac,
+                    name: client.name || client.hostname || client.ip || mac,
+                    ip: client.ip,
+                    download,
+                    upload
+                });
+            }
+
+            if (rates.length === 0) return [];
+
+            rates.sort((a, b) => (b.download + b.upload) - (a.download + a.upload));
+            const result = rates.slice(0, limit);
+
+            return result.map(r => ({
+                ...r,
+                vendor: r.mac.length >= 8 ? WiresharkVendorService.lookupVendor(r.mac.slice(0, 8)) : null
+            }));
+        } catch (error) {
+            logger.debug('UniFiPlugin', 'fetchTopClients failed:', error);
+            return [];
         }
     }
 

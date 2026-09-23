@@ -1,16 +1,21 @@
 import React from 'react';
-import { Activity, Wifi, AlertCircle, Link2 } from 'lucide-react';
+import { Activity, Wifi, AlertCircle, Link2, Router } from 'lucide-react';
 import { Card } from './Card';
 import { usePluginStore } from '../../stores/pluginStore';
 import { formatSpeed } from '../../utils/constants';
+import { VendorIcon } from '../ui/VendorIcon';
+import { hasVendorIcon } from '../../utils/vendorBrand';
+import { SortableTh } from '../ui/SortableTh';
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { getClientRateBytesPerSec } from '../../utils/unifiClientRate';
 
 interface TrafficClient {
     id: string;
     name: string;
     ip?: string;
     ssid?: string;
-    uploadKbps: number;
-    downloadKbps: number;
+    uploadBytesPerSec: number;
+    downloadBytesPerSec: number;
     rssi?: number;
     connectionTime?: number; // Connection time in seconds
 }
@@ -72,8 +77,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
             const ssid = (c.ssid || c.essid || '') as string;
             const mac = (c.mac || c._id || '') as string;
 
-            const uploadKbps = typeof c.tx_rate === 'number' ? c.tx_rate : 0;
-            const downloadKbps = typeof c.rx_rate === 'number' ? c.rx_rate : 0;
+            const { rx: downloadBytesPerSec, tx: uploadBytesPerSec } = getClientRateBytesPerSec(c);
             let rssi: number | undefined = undefined;
             if (typeof c.rssi === 'number') {
                 // Some controllers expose RSSI as positive value; normalize to negative dBm-style range.
@@ -97,8 +101,8 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                 name: hostname || ip || 'Client réseau',
                 ip,
                 ssid,
-                uploadKbps,
-                downloadKbps,
+                uploadBytesPerSec,
+                downloadBytesPerSec,
                 rssi,
                 connectionTime
             };
@@ -106,12 +110,12 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
     }, [unifiStats]);
 
     const topUpload = React.useMemo(
-        () => clients.filter(c => c.uploadKbps > 0).sort((a, b) => b.uploadKbps - a.uploadKbps).slice(0, 5),
+        () => clients.filter(c => c.uploadBytesPerSec > 0).sort((a, b) => b.uploadBytesPerSec - a.uploadBytesPerSec).slice(0, 5),
         [clients]
     );
 
     const topDownload = React.useMemo(
-        () => clients.filter(c => c.downloadKbps > 0).sort((a, b) => b.downloadKbps - a.downloadKbps).slice(0, 5),
+        () => clients.filter(c => c.downloadBytesPerSec > 0).sort((a, b) => b.downloadBytesPerSec - a.downloadBytesPerSec).slice(0, 5),
         [clients]
     );
 
@@ -127,6 +131,32 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
     );
 
     const hasAnyData = topUpload.length > 0 || topDownload.length > 0 || worstSignal.length > 0 || topConnectionTime.length > 0;
+
+    type RateKey = 'name' | 'ip' | 'ssid' | 'value';
+    const getRateValue = (c: TrafficClient, key: RateKey, rateField: 'uploadBytesPerSec' | 'downloadBytesPerSec'): string | number => {
+        if (key === 'name') return c.name.toLowerCase();
+        if (key === 'ip') return c.ip || '';
+        if (key === 'ssid') return c.ssid || '';
+        return c[rateField];
+    };
+    const uploadSort = useSortableTable<TrafficClient, RateKey>(topUpload, (c, key) => getRateValue(c, key, 'uploadBytesPerSec'), 'value');
+    const downloadSort = useSortableTable<TrafficClient, RateKey>(topDownload, (c, key) => getRateValue(c, key, 'downloadBytesPerSec'), 'value');
+
+    type SignalKey = 'name' | 'ip' | 'ssid' | 'rssi';
+    const signalSort = useSortableTable<TrafficClient, SignalKey>(worstSignal, (c, key) => {
+        if (key === 'name') return c.name.toLowerCase();
+        if (key === 'ip') return c.ip || '';
+        if (key === 'ssid') return c.ssid || '';
+        return c.rssi ?? -999;
+    }, 'rssi', 'asc');
+
+    type TimeKey = 'name' | 'ip' | 'ssid' | 'time';
+    const timeSort = useSortableTable<TrafficClient, TimeKey>(topConnectionTime, (c, key) => {
+        if (key === 'name') return c.name.toLowerCase();
+        if (key === 'ip') return c.ip || '';
+        if (key === 'ssid') return c.ssid || '';
+        return c.connectionTime ?? 0;
+    }, 'time');
 
     // Helper function to render clickable IP addresses
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
@@ -156,7 +186,19 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
         return <span className={className}>{ip}</span>;
     };
 
-    const formatRate = (kbps: number) => formatSpeed(kbps * 1024);
+    // Renders the device icon + name cell shared by all four tables below.
+    // No vendor OUI data is available client-side here — VendorIcon falls back
+    // to a label-based match (e.g. "iPhone", "Samsung-...") or a generic icon.
+    const renderClientCell = (name: string) => (
+        <span className="inline-flex items-center gap-1.5 min-w-0">
+            {hasVendorIcon(undefined, name)
+                ? <VendorIcon label={name} size={13} />
+                : <Router size={13} className="text-gray-400 shrink-0" />}
+            <span className="truncate">{name}</span>
+        </span>
+    );
+
+    const formatRate = (bytesPerSec: number) => formatSpeed(bytesPerSec);
 
     // Helper to format connection time (seconds to human readable)
     const formatConnectionTime = (seconds: number): string => {
@@ -206,16 +248,16 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                 <table className="w-full text-[11px] text-gray-300 table-fixed">
                                     <thead className="bg-[#181818] text-gray-400">
                                         <tr>
-                                            <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Client</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '22%' }}>SSID</th>
-                                            <th className="px-2 py-1 text-right" style={{ width: '25%' }}>Up</th>
+                                            <SortableTh label="Client" style={{ width: '25%' }} active={uploadSort.sortKey === 'name'} dir={uploadSort.sortDir} onClick={() => uploadSort.toggleSort('name')} />
+                                            <SortableTh label="IP" style={{ width: '28%' }} active={uploadSort.sortKey === 'ip'} dir={uploadSort.sortDir} onClick={() => uploadSort.toggleSort('ip')} />
+                                            <SortableTh label="SSID" style={{ width: '22%' }} active={uploadSort.sortKey === 'ssid'} dir={uploadSort.sortDir} onClick={() => uploadSort.toggleSort('ssid')} />
+                                            <SortableTh label="Up" align="right" style={{ width: '25%' }} active={uploadSort.sortKey === 'value'} dir={uploadSort.sortDir} onClick={() => uploadSort.toggleSort('value')} />
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {topUpload.map((c, idx) => (
+                                        {uploadSort.sorted.map((c, idx) => (
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
-                                                <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
+                                                <td className="px-2 py-1 text-gray-200 truncate">{renderClientCell(c.name)}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                     {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
@@ -229,7 +271,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                                     )}
                                                 </td>
                                                 <td className="px-2 py-1 text-right text-emerald-300 font-semibold">
-                                                    {formatRate(c.uploadKbps)}
+                                                    {formatRate(c.uploadBytesPerSec)}
                                                 </td>
                                             </tr>
                                         ))}
@@ -247,16 +289,16 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                 <table className="w-full text-[11px] text-gray-300 table-fixed">
                                     <thead className="bg-[#181818] text-gray-400">
                                         <tr>
-                                            <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Client</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '22%' }}>SSID</th>
-                                            <th className="px-2 py-1 text-right" style={{ width: '25%' }}>Down</th>
+                                            <SortableTh label="Client" style={{ width: '25%' }} active={downloadSort.sortKey === 'name'} dir={downloadSort.sortDir} onClick={() => downloadSort.toggleSort('name')} />
+                                            <SortableTh label="IP" style={{ width: '28%' }} active={downloadSort.sortKey === 'ip'} dir={downloadSort.sortDir} onClick={() => downloadSort.toggleSort('ip')} />
+                                            <SortableTh label="SSID" style={{ width: '22%' }} active={downloadSort.sortKey === 'ssid'} dir={downloadSort.sortDir} onClick={() => downloadSort.toggleSort('ssid')} />
+                                            <SortableTh label="Down" align="right" style={{ width: '25%' }} active={downloadSort.sortKey === 'value'} dir={downloadSort.sortDir} onClick={() => downloadSort.toggleSort('value')} />
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {topDownload.map((c, idx) => (
+                                        {downloadSort.sorted.map((c, idx) => (
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
-                                                <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
+                                                <td className="px-2 py-1 text-gray-200 truncate">{renderClientCell(c.name)}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                     {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
@@ -270,7 +312,7 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                                     )}
                                                 </td>
                                                 <td className="px-2 py-1 text-right text-sky-300 font-semibold">
-                                                    {formatRate(c.downloadKbps)}
+                                                    {formatRate(c.downloadBytesPerSec)}
                                                 </td>
                                             </tr>
                                         ))}
@@ -291,17 +333,17 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                 <table className="w-full text-[11px] text-gray-300 table-fixed">
                                     <thead className="bg-[#181818] text-gray-400">
                                         <tr>
-                                            <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Client</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '22%' }}>SSID</th>
-                                            <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>RSSI</th>
+                                            <SortableTh label="Client" style={{ width: '25%' }} active={signalSort.sortKey === 'name'} dir={signalSort.sortDir} onClick={() => signalSort.toggleSort('name')} />
+                                            <SortableTh label="IP" style={{ width: '28%' }} active={signalSort.sortKey === 'ip'} dir={signalSort.sortDir} onClick={() => signalSort.toggleSort('ip')} />
+                                            <SortableTh label="SSID" style={{ width: '22%' }} active={signalSort.sortKey === 'ssid'} dir={signalSort.sortDir} onClick={() => signalSort.toggleSort('ssid')} />
+                                            <SortableTh label="RSSI" align="right" style={{ width: '12.5%' }} active={signalSort.sortKey === 'rssi'} dir={signalSort.sortDir} onClick={() => signalSort.toggleSort('rssi')} />
                                             <th className="px-2 py-1 text-right" style={{ width: '12.5%' }}>Qualité</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {worstSignal.map((c, idx) => (
+                                        {signalSort.sorted.map((c, idx) => (
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
-                                                <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
+                                                <td className="px-2 py-1 text-gray-200 truncate">{renderClientCell(c.name)}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                     {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
@@ -345,16 +387,16 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
                                 <table className="w-full text-[11px] text-gray-300 table-fixed">
                                     <thead className="bg-[#181818] text-gray-400">
                                         <tr>
-                                            <th className="px-2 py-1 text-left" style={{ width: '25%' }}>Client</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '28%' }}>IP</th>
-                                            <th className="px-2 py-1 text-left" style={{ width: '22%' }}>SSID</th>
-                                            <th className="px-2 py-1 text-right" style={{ width: '25%' }}>Temps</th>
+                                            <SortableTh label="Client" style={{ width: '25%' }} active={timeSort.sortKey === 'name'} dir={timeSort.sortDir} onClick={() => timeSort.toggleSort('name')} />
+                                            <SortableTh label="IP" style={{ width: '28%' }} active={timeSort.sortKey === 'ip'} dir={timeSort.sortDir} onClick={() => timeSort.toggleSort('ip')} />
+                                            <SortableTh label="SSID" style={{ width: '22%' }} active={timeSort.sortKey === 'ssid'} dir={timeSort.sortDir} onClick={() => timeSort.toggleSort('ssid')} />
+                                            <SortableTh label="Temps" align="right" style={{ width: '25%' }} active={timeSort.sortKey === 'time'} dir={timeSort.sortDir} onClick={() => timeSort.toggleSort('time')} />
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {topConnectionTime.map((c, idx) => (
+                                        {timeSort.sorted.map((c, idx) => (
                                             <tr key={c.id} className={idx % 2 === 0 ? 'bg-[#101010]' : 'bg-[#141414]'}>
-                                                <td className="px-2 py-1 text-gray-200 truncate">{c.name}</td>
+                                                <td className="px-2 py-1 text-gray-200 truncate">{renderClientCell(c.name)}</td>
                                                 <td className="px-2 py-1 text-gray-400 whitespace-nowrap">
                                                     {renderClickableIp(c.ip, 'text-gray-400 whitespace-nowrap', 8)}
                                                 </td>
@@ -389,4 +431,3 @@ export const NetworkEventsWidget: React.FC<NetworkEventsWidgetProps> = ({ twoCol
         </Card>
     );
 }
-

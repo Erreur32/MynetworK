@@ -301,7 +301,13 @@
       "loading": "Chargement...",
       "noOfflineRecent": "Aucune IP offline récente",
       "topWorstLatency": "Top Pire Latence",
-      "noLatencyMeasured": "Aucune latence mesurée"
+      "noLatencyMeasured": "Aucune latence mesurée",
+      "topTraffic": "Volume de données",
+      "trafficLive": "Live",
+      "trafficToday": "Aujourd'hui",
+      "trafficAllTime": "Depuis toujours",
+      "noTrafficData": "Aucune donnée de trafic pour le moment",
+      "trafficFreeboxUnavailable": "Le suivi du trafic par appareil nécessite UniFi (bornes/switch) — l'API Freebox ne fournit aucun compteur de trafic par appareil."
     },
     "vendorIconPicker": {
       "title": "Choisir l'icône du vendeur",

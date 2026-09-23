@@ -5,11 +5,17 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
-import { Network, ArrowRight, Activity, CheckCircle } from 'lucide-react';
+import { Network, ArrowRight, Activity, CheckCircle, Gauge, Router, Info } from 'lucide-react';
 import { usePluginStore } from '../../stores/pluginStore';
 import { api } from '../../api/client';
+import { formatBytes, formatSpeed } from '../../utils/constants';
+import { usePolling } from '../../hooks/usePolling';
+import { VendorIcon } from '../ui/VendorIcon';
+import { hasVendorIcon } from '../../utils/vendorBrand';
+import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 
 interface NetworkScanWidgetProps {
     onViewDetails?: () => void;
@@ -22,6 +28,28 @@ interface NetworkScanItem {
     hostname?: string;
     status: 'online' | 'offline' | 'unknown';
     pingLatency?: number;
+}
+
+interface TopTrafficClient {
+    mac: string;
+    name: string;
+    ip?: string;
+    vendor?: string | null;
+    rxBytes: number;
+    txBytes: number;
+}
+
+type TrafficPeriod = 'live' | 'today' | 'alltime';
+
+// Persist the "Volume de données" tab choice across reloads (per browser).
+const TRAFFIC_PERIOD_STORAGE_KEY = 'mynetwork_traffic_period';
+
+function readStoredTrafficPeriod(fallback: TrafficPeriod): TrafficPeriod {
+    try {
+        const v = localStorage.getItem(TRAFFIC_PERIOD_STORAGE_KEY);
+        if (v === 'live' || v === 'today' || v === 'alltime') return v;
+    } catch { /* ignore */ }
+    return fallback;
 }
 
 interface AutoStatus {
@@ -68,10 +96,53 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
 
     const [offlineIpsList, setOfflineIpsList] = useState<NetworkScanItem[]>([]);
     const [worstLatencyIps, setWorstLatencyIps] = useState<NetworkScanItem[]>([]);
+    const [latencyLimit, setLatencyLimit] = useState<5 | 10>(5);
     const [loading, setLoading] = useState(false);
     const [autoStatus, setAutoStatus] = useState<AutoStatus | null>(null);
     const [autoStatusLoading, setAutoStatusLoading] = useState(true);
     const [scanRange, setScanRange] = useState<string>('192.168.1.0/24');
+
+    const navigate = useNavigate();
+    const { plugins } = usePluginStore();
+    const hasUniFi = plugins.some(p => p.id === 'unifi' && p.enabled && p.connectionStatus);
+    const [trafficPeriod, setTrafficPeriodState] = useState<TrafficPeriod>(() => readStoredTrafficPeriod('today'));
+    const setTrafficPeriod = (period: TrafficPeriod) => {
+        setTrafficPeriodState(period);
+        try { localStorage.setItem(TRAFFIC_PERIOD_STORAGE_KEY, period); } catch { /* ignore */ }
+    };
+    const [topTraffic, setTopTraffic] = useState<TopTrafficClient[]>([]);
+    const [topTrafficLoading, setTopTrafficLoading] = useState(false);
+    const { topClients: liveTopClients, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
+
+    // Fetch top traffic consumers (UniFi only — see feasibility notes: no per-host counters on Freebox)
+    // Live mode reads straight from the WebSocket-fed realtime store, no REST call needed.
+    const fetchTopTraffic = async () => {
+        if (!hasUniFi || trafficPeriod === 'live') return;
+        setTopTrafficLoading(true);
+        try {
+            const response = await api.get<TopTrafficClient[]>(`/api/plugins/unifi/top-clients-history?period=${trafficPeriod}&limit=10`);
+            if (response.success && response.result) {
+                setTopTraffic(response.result);
+            }
+        } catch {
+            // ignore
+        } finally {
+            setTopTrafficLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchTopTraffic();
+    }, [hasUniFi, trafficPeriod]);
+
+    usePolling(fetchTopTraffic, {
+        enabled: hasUniFi && trafficPeriod !== 'live',
+        interval: 60000
+    });
+
+    const trafficRows = trafficPeriod === 'live'
+        ? liveTopClients.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
+        : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatBytes(c.rxBytes + c.txBytes) }));
 
     // Fetch default scan range
     useEffect(() => {
@@ -426,17 +497,113 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                         </div>
                     )}
 
+                    {/* Top traffic consumers — UniFi only (Freebox API has no per-host byte counters) */}
+                    {!hasUniFi && (
+                        <div className="pt-2 border-t border-gray-800">
+                            <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-2">
+                                <Gauge size={13} className="text-gray-600" />
+                                {t('networkScan.widget.topTraffic')}
+                            </div>
+                            <div className="text-[11px] text-gray-500 py-2 flex items-start gap-2">
+                                <Info size={14} className="text-gray-600 shrink-0 mt-0.5" />
+                                <span>{t('networkScan.widget.trafficFreeboxUnavailable')}</span>
+                            </div>
+                        </div>
+                    )}
+                    {hasUniFi && (
+                        <div className="pt-2 border-t border-gray-800">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5">
+                                    <Gauge size={13} className="text-cyan-400" />
+                                    {t('networkScan.widget.topTraffic')} ({trafficRows.length > 0 ? trafficRows.length : '--'})
+                                    {trafficPeriod === 'live' && (
+                                        <span className={`w-1.5 h-1.5 rounded-full ${unifiWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
+                                    )}
+                                </div>
+                                <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px]">
+                                    <button
+                                        type="button"
+                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'live' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                        onClick={() => setTrafficPeriod('live')}
+                                    >
+                                        {t('networkScan.widget.trafficLive')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'today' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                        onClick={() => setTrafficPeriod('today')}
+                                    >
+                                        {t('networkScan.widget.trafficToday')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`px-2 py-0.5 rounded-full ${trafficPeriod === 'alltime' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                        onClick={() => setTrafficPeriod('alltime')}
+                                    >
+                                        {t('networkScan.widget.trafficAllTime')}
+                                    </button>
+                                </span>
+                            </div>
+                            {topTrafficLoading && trafficRows.length === 0 ? (
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
+                            ) : trafficRows.length > 0 ? (
+                                <div className="space-y-1 max-h-80 overflow-y-auto">
+                                    {trafficRows.map((c, i) => (
+                                        <button
+                                            key={c.mac}
+                                            type="button"
+                                            onClick={() => navigate(`/search?s=${encodeURIComponent(c.ip || c.mac)}`)}
+                                            className="w-full flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] hover:bg-[#232323] rounded border border-gray-800 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-gray-500 w-4 text-right shrink-0">{i + 1}</span>
+                                                {hasVendorIcon(c.vendor, c.name)
+                                                    ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
+                                                    : <Router size={13} className="text-gray-400 shrink-0" />}
+                                                <span className="text-gray-300 truncate">{c.name}</span>
+                                                {c.ip && <span className="text-gray-500 font-mono shrink-0">({c.ip})</span>}
+                                            </div>
+                                            <span className="text-cyan-400 font-semibold shrink-0 ml-2">
+                                                {c.volumeText}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noTrafficData')}</div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Worst latency IPs */}
                     {onlineIps > 0 && (
                         <div className="pt-2 border-t border-gray-800">
-                            <div className="text-xs text-gray-400 mb-2 font-medium">
-                                {t('networkScan.widget.topWorstLatency')} ({worstLatencyIps.length > 0 ? worstLatencyIps.length : '--'})
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs text-gray-400 font-medium">
+                                    {t('networkScan.widget.topWorstLatency')} ({worstLatencyIps.length > 0 ? Math.min(worstLatencyIps.length, latencyLimit) : '--'})
+                                </div>
+                                <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px]">
+                                    <button
+                                        type="button"
+                                        className={`px-2 py-0.5 rounded-full ${latencyLimit === 5 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                        onClick={() => setLatencyLimit(5)}
+                                    >
+                                        5
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`px-2 py-0.5 rounded-full ${latencyLimit === 10 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}
+                                        onClick={() => setLatencyLimit(10)}
+                                    >
+                                        10
+                                    </button>
+                                </span>
                             </div>
                             {loading && worstLatencyIps.length === 0 ? (
                                 <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
                             ) : worstLatencyIps.length > 0 ? (
                                 <div className="space-y-1">
-                                    {worstLatencyIps.map((item) => (
+                                    {worstLatencyIps.slice(0, latencyLimit).map((item) => (
                                         <div 
                                             key={item.id} 
                                             className="flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] rounded border border-gray-800"
@@ -461,6 +628,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             )}
                         </div>
                     )}
+
                 </div>
             )}
         </Card>

@@ -5,6 +5,8 @@ import { Card } from '../../components/widgets/Card';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 import { VendorIcon } from '../../components/ui/VendorIcon';
 import { ClientSortKey } from './types';
+import { getClientRateBytesPerSec } from '../../utils/unifiClientRate';
+import { formatSpeed } from '../../utils/constants';
 
 interface ClientsTabProps {
     unifiStats: any;
@@ -89,19 +91,7 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                             return ((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
                         };
 
-                        const getSpeed = (c: any): number => {
-                            const rate =
-                                c.tx_rate ||
-                                c.rx_rate ||
-                                c.phy_tx_rate ||
-                                c.phy_rx_rate ||
-                                c.sw_tx_rate ||
-                                c.sw_rx_rate ||
-                                c.current_speed ||
-                                c.speed ||
-                                0;
-                            return typeof rate === 'number' ? rate : 0;
-                        };
+                        const getSpeed = (c: any): number => getClientRateBytesPerSec(c).total;
 
                         const getTypeLabel = (c: any): string => {
                             if (c.is_wired === true) return 'WIRED';
@@ -253,17 +243,7 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                             </button>
                         );
 
-                        const formatSpeedDisplay = (c: any): string => {
-                            const s = getSpeed(c);
-                            if (!s || s <= 0) return '-';
-                            if (s >= 1_000_000) {
-                                return `${(s / 1_000_000).toFixed(2)} Gb/s`;
-                            }
-                            if (s >= 1_000) {
-                                return `${(s / 1_000).toFixed(2)} Mb/s`;
-                            }
-                            return `${s} kb/s`;
-                        };
+                        const formatSpeedDisplay = (c: any): string => formatSpeed(getSpeed(c));
 
                         const getSsidBadgeClass = (ssid: string): string => {
                             if (!ssid || ssid === '-') return 'text-gray-300';

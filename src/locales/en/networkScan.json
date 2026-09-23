@@ -301,7 +301,13 @@
       "loading": "Loading...",
       "noOfflineRecent": "No recent offline IPs",
       "topWorstLatency": "Top worst latency",
-      "noLatencyMeasured": "No latency measured"
+      "noLatencyMeasured": "No latency measured",
+      "topTraffic": "Data volume",
+      "trafficLive": "Live",
+      "trafficToday": "Today",
+      "trafficAllTime": "All-time",
+      "noTrafficData": "No traffic data yet",
+      "trafficFreeboxUnavailable": "Per-device traffic tracking requires UniFi (APs/switches) — the Freebox API provides no per-device traffic counters."
     },
     "vendorIconPicker": {
       "title": "Choose a vendor icon",

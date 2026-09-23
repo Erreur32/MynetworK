@@ -7,11 +7,14 @@ import { applyWsRateLimit } from './wsRateLimiter.js';
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
 const UNIFI_POLLING_INTERVAL = 1000; // 1 second — live mode
+const TOP_CLIENTS_EVERY_N_TICKS = 3; // stat/sta is extra load on top of the existing WAN poll — throttle to ~3s
 
 class UnifiWebSocketService {
   private wss: WebSocketServer | null = null;
   private pollingInterval: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
+  private topClientsTick = 0;
+  private lastTopClients: unknown[] = [];
 
   getWss(): WebSocketServer | null { return this.wss; }
 
@@ -175,6 +178,14 @@ class UnifiWebSocketService {
 
       const primaryWan = wanData['wan1'] || { download: 0, upload: 0 };
 
+      // getClients() is extra load on top of the WAN poll already happening every tick —
+      // only refresh it every TOP_CLIENTS_EVERY_N_TICKS, reuse the last value in between.
+      this.topClientsTick = (this.topClientsTick + 1) % TOP_CLIENTS_EVERY_N_TICKS;
+      if (this.topClientsTick === 0 && typeof pluginAny.fetchTopClients === 'function') {
+        this.lastTopClients = await pluginAny.fetchTopClients(10).catch(() => this.lastTopClients);
+      }
+      const topClients = this.lastTopClients;
+
       const message = JSON.stringify({
         type: 'unifi_bandwidth',
         data: {
@@ -182,6 +193,7 @@ class UnifiWebSocketService {
           download: primaryWan.download, // KB/s
           upload: primaryWan.upload,     // KB/s
           wans: wanData,
+          topClients,
         }
       });
 

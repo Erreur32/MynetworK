@@ -15,6 +15,7 @@ import { connectionWebSocket } from "./services/connectionWebSocket.js";
 import { freeboxNativeWebSocket } from "./services/freeboxNativeWebSocket.js";
 import { logsWebSocket } from "./services/logsWebSocket.js";
 import { unifiWebSocket } from "./services/unifiWebSocket.js";
+import { unifiTrafficHistoryService } from "./services/unifiTrafficHistoryService.js";
 
 // Database
 import { initializeDatabase, getDatabase } from "./database/connection.js";
@@ -550,6 +551,7 @@ const server = http.createServer(app);
 connectionWebSocket.init(server);
 logsWebSocket.init(server);
 unifiWebSocket.init(server);
+unifiTrafficHistoryService.start();
 
 // Verify JWT token from WebSocket upgrade request (query param or Authorization header)
 async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
