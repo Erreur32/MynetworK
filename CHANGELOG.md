@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.39] - 2026-09-23
+
+### Changes
+
+- chore: remove dead disk/docker code and validate wifi.ts route IDs
+- fix: extract shared chart axes/tooltip in TrafficTab to fix SonarCloud duplication
+
+---
+
 ## [0.10.38] - 2026-09-23
 
 ### Changes
