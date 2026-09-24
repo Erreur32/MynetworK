@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.41] - 2026-09-24
+
+### Added
+
+- Opt-in "Live traffic" toggle on the network-scan table (off by default, never persisted across reloads): reuses the existing UniFi WebSocket feed to pulse the Download/Upload cells (with an amber dot) for whichever devices are currently in the live top 10 by throughput, with the live rate shown in the cell's tooltip alongside the existing "today" total. Icons added to the Download/Upload columns in the top-traffic overlay's sortable table.
+
+### Changed
+
+- Online/Offline counts moved from separate badges into the status filter buttons themselves ("Online 40", "Offline 5"), removing the now-redundant standalone badges.
+
+### Refactor
+
+- Deduplicated the Download/Upload table cell rendering (today's total, live pulse, tooltip) into a single `renderTrafficCell()` helper.
+
+---
+
 ## [0.10.40] - 2026-09-24
 
 ### Added

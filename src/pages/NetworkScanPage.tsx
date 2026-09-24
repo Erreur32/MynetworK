@@ -6,12 +6,14 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, Download, Upload, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, Download, Upload, Radio, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { StackedMiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { useTimeFormat } from '../hooks/useTimeFormat';
+import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
+import { useUnifiRealtimeStore } from '../stores/unifiRealtimeStore';
 import { POLLING_INTERVALS, formatBytes } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
@@ -291,12 +293,13 @@ const TopTrafficOverlay: React.FC<{
         else { setSortBy(col); setSortOrder(col === 'name' ? 'asc' : 'desc'); }
     };
 
-    const SortHeader: React.FC<{ col: TopTrafficSortBy; label: string; align?: 'left' | 'right' }> = ({ col, label, align = 'right' }) => (
+    const SortHeader: React.FC<{ col: TopTrafficSortBy; label: string; align?: 'left' | 'right'; icon?: React.ReactNode }> = ({ col, label, align = 'right', icon }) => (
         <th
             className={`py-2 px-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}
             onClick={() => toggleSort(col)}
         >
             <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+                {icon}
                 <span>{label}</span>
                 {sortBy === col && (
                     sortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-400" /> : <ArrowDown size={11} className="text-blue-400" />
@@ -330,8 +333,8 @@ const TopTrafficOverlay: React.FC<{
                             <thead className="sticky top-0 bg-[#121212]">
                                 <tr className="border-b border-gray-800">
                                     <SortHeader col="name" label={t('networkScan.table.headers.hostname')} align="left" />
-                                    <SortHeader col="download" label={t('networkScan.table.headers.download')} />
-                                    <SortHeader col="upload" label={t('networkScan.table.headers.upload')} />
+                                    <SortHeader col="download" label={t('networkScan.table.headers.download')} icon={<Download size={12} className="text-blue-400/70" />} />
+                                    <SortHeader col="upload" label={t('networkScan.table.headers.upload')} icon={<Upload size={12} className="text-emerald-400/70" />} />
                                     <SortHeader col="total" label={t('networkScan.stats.total')} />
                                 </tr>
                             </thead>
@@ -531,6 +534,35 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         const key = mac?.trim().toLowerCase();
         return key ? trafficStats[key] : undefined;
     }, [trafficStats]);
+
+    // Live UniFi traffic (top 10 devices by current throughput), opt-in via the "Live" toggle:
+    // keeps the UniFi controller in fast polling (~1-3s) for as long as this page stays open
+    // and this is on, so it defaults to off and is never persisted across reloads.
+    const [liveTrafficEnabled, setLiveTrafficEnabled] = useState(false);
+    useUnifiWebSocket({ enabled: liveTrafficEnabled });
+    const liveTopClients = useUnifiRealtimeStore((s) => s.topClients);
+    const getLiveClient = useCallback((mac?: string) => {
+        if (!liveTrafficEnabled) return undefined;
+        const key = mac?.trim().toLowerCase();
+        return key ? liveTopClients.find((c) => c.mac.toLowerCase() === key) : undefined;
+    }, [liveTrafficEnabled, liveTopClients]);
+    // Renders a Download/Upload table cell: today's total (dimmed if unknown), pulsing with an
+    // amber dot when the device is currently in the live top-10 (tooltip shows the live rate).
+    const renderTrafficCell = (scan: NetworkScan, kind: 'download' | 'upload') => {
+        const entry = getTrafficEntry(scan.mac);
+        const live = getLiveClient(scan.mac);
+        const value = entry ? formatBytes(kind === 'download' ? entry.rxBytes : entry.txBytes) : '--';
+        const colorClass = entry ? (kind === 'download' ? 'text-blue-300' : 'text-emerald-300') : 'text-gray-500';
+        return (
+            <span
+                className={`inline-flex items-center gap-1.5 text-sm font-medium ${colorClass} ${live ? 'animate-pulse' : ''}`}
+                title={live ? t('networkScan.tooltips.liveNow', { down: `${formatBytes(live.download * 1024)}/s`, up: `${formatBytes(live.upload * 1024)}/s` }) : undefined}
+            >
+                {live && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
+                {value}
+            </span>
+        );
+    };
     const [showLatencyModal, setShowLatencyModal] = useState(false);
     
     // Filters - Load from localStorage or use defaults
@@ -2278,6 +2310,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     key={value}
                                     type="button"
                                     onClick={() => setStatusFilter(value)}
+                                    title={value === 'online' ? t('networkScan.tooltips.headerOnline') : value === 'offline' ? t('networkScan.tooltips.headerOffline') : undefined}
                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all border ${
                                         statusFilter === value
                                             ? value === 'all'
@@ -2292,18 +2325,30 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     : 'bg-red-500/5 text-red-400/50 border-red-500/20 hover:bg-red-500/10 hover:text-red-400/70'
                                     }`}
                                 >
-                                    {value === 'all' ? t('networkScan.filters.all') : value === 'online' ? t('networkScan.status.online') : t('networkScan.status.offline')}
+                                    {value === 'all' ? (
+                                        t('networkScan.filters.all')
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5">
+                                            {value === 'online' ? t('networkScan.status.online') : t('networkScan.status.offline')}
+                                            <span className="opacity-70">{value === 'online' ? stats?.online ?? 0 : stats?.offline ?? 0}</span>
+                                        </span>
+                                    )}
                                 </button>
                             ))}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="px-2 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold cursor-help" title={t('networkScan.tooltips.headerOnline')}>
-                                {stats?.online ?? 0}
-                            </span>
-                            <span className="px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 text-red-400/90 text-xs font-semibold cursor-help" title={t('networkScan.tooltips.headerOffline')}>
-                                {stats?.offline ?? 0}
-                            </span>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setLiveTrafficEnabled((v) => !v)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all border flex-shrink-0 ${
+                                liveTrafficEnabled
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-400/60 ring-2 ring-rose-400/40 ring-offset-1 ring-offset-[#121212]'
+                                    : 'bg-gray-500/10 text-gray-400 border-gray-600 hover:bg-gray-500/20 hover:text-gray-300'
+                            }`}
+                            title={t('networkScan.tooltips.liveTraffic')}
+                        >
+                            <Radio size={14} className={liveTrafficEnabled ? 'animate-pulse' : ''} />
+                            {t('networkScan.filters.live')}
+                        </button>
                         <div className="flex items-center gap-2">
                                 <label htmlFor="results-per-page" className="text-sm text-gray-400 whitespace-nowrap">{t('networkScan.filters.results')}</label>
                                 <select
@@ -2694,26 +2739,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                 return <span className="text-gray-500">{t('networkScan.status.notScanned')}</span>;
                                             })()}
                                         </td>
-                                        <td className="py-3 px-2 whitespace-nowrap">
-                                            {(() => {
-                                                const entry = getTrafficEntry(scan.mac);
-                                                return (
-                                                    <span className={`text-sm font-medium ${entry ? 'text-blue-300' : 'text-gray-500'}`}>
-                                                        {entry ? formatBytes(entry.rxBytes) : '--'}
-                                                    </span>
-                                                );
-                                            })()}
-                                        </td>
-                                        <td className="py-3 px-2 whitespace-nowrap">
-                                            {(() => {
-                                                const entry = getTrafficEntry(scan.mac);
-                                                return (
-                                                    <span className={`text-sm font-medium ${entry ? 'text-emerald-300' : 'text-gray-500'}`}>
-                                                        {entry ? formatBytes(entry.txBytes) : '--'}
-                                                    </span>
-                                                );
-                                            })()}
-                                        </td>
+                                        <td className="py-3 px-2 whitespace-nowrap">{renderTrafficCell(scan, 'download')}</td>
+                                        <td className="py-3 px-2 whitespace-nowrap">{renderTrafficCell(scan, 'upload')}</td>
                                         <td className="py-3 px-2 whitespace-nowrap">
                                             <div className="flex items-center gap-0.5">
                                                 <button
