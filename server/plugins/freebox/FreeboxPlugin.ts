@@ -26,7 +26,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.10.42');
+        super('freebox', 'Freebox', '0.10.43');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -509,9 +509,10 @@ export class FreeboxPlugin extends BasePlugin {
                     // Only add if we have a valid SSID (not a MAC address)
                     // Accept even if enabled status is unclear (more permissive)
                     if (ssid && ssid.trim() !== '') {
-                        // Determine frequency band from channel or type
-                        let band = '';
-                        if (bss.channel) {
+                        // Freebox v9+ reports the band directly in the BSS status ("2G4", "5G", "6G")
+                        const statusBand = typeof bss.status?.band === 'string' ? bss.status.band.toUpperCase() : '';
+                        let band = statusBand === '2G4' ? '2.4G' : statusBand;
+                        if (!band && bss.channel) {
                             const channel = typeof bss.channel === 'number' ? bss.channel : parseInt(String(bss.channel));
                             if (!isNaN(channel)) {
                                 if (channel >= 1 && channel <= 14) {
@@ -541,7 +542,8 @@ export class FreeboxPlugin extends BasePlugin {
                         wifiNetworks.push({
                             ssid: ssid,
                             band: band,
-                            enabled: true
+                            // A BSS enabled in config still isn't broadcasting when its radio is stopped (state "phy_stopped")
+                            enabled: bss.config?.enabled !== false && (!bss.status?.state || bss.status.state === 'active')
                         });
                     }
                 }

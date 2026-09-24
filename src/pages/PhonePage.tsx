@@ -431,11 +431,11 @@ export const PhonePage: React.FC<PhonePageProps> = ({ onBack }) => {
   const hasCallsPermission = permissions.calls === true;
   const hasContactsPermission = permissions.contacts === true;
 
-  // Derive active tab from URL: /phone/contacts → 'contacts'
-  const urlTab = location.pathname.split('/')[2] as PhoneTab | undefined;
+  // Derive active tab from URL: /freebox/phone/contacts → 'contacts'
+  const urlTab = location.pathname.split('/')[3] as PhoneTab | undefined;
   const activeTab: PhoneTab = urlTab && VALID_PHONE_TABS.has(urlTab) ? urlTab : 'calls';
   const setActiveTab = useCallback((tab: PhoneTab) => {
-    navigate(`/phone/${tab}`);
+    navigate(`/freebox/phone/${tab}`);
   }, [navigate]);
   const [searchQuery, setSearchQuery] = useState('');
   const [callFilter, setCallFilter] = useState<'all' | 'missed' | 'incoming' | 'outgoing'>('all');

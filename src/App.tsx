@@ -121,6 +121,10 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+// Freebox-only pages, routed as /freebox/<page>; the legacy set also lived at the root before 0.10.43
+const LEGACY_FREEBOX_SUBPAGES: ReadonlySet<PageType> = new Set<PageType>(["tv", "phone", "files", "vms"]);
+const FREEBOX_SUBPAGES: ReadonlySet<PageType> = new Set<PageType>([...LEGACY_FREEBOX_SUBPAGES, "analytics"]);
+
 // Freebox firmware update banner (shown on Freebox page when update available)
 const FreeboxFirmwareBanner: React.FC = () => {
   const { t } = useTranslation();
@@ -317,10 +321,6 @@ const App: React.FC = () => {
       "/": "dashboard",
       "/freebox": "freebox",
       "/unifi": "unifi",
-      "/tv": "tv",
-      "/phone": "phone",
-      "/files": "files",
-      "/vms": "vms",
       "/settings": "settings",
       "/plugins": "plugins",
       "/users": "users",
@@ -337,10 +337,10 @@ const App: React.FC = () => {
       dashboard: "/",
       freebox: "/freebox",
       unifi: "/unifi",
-      tv: "/tv",
-      phone: "/phone",
-      files: "/files",
-      vms: "/vms",
+      tv: "/freebox/tv",
+      phone: "/freebox/phone",
+      files: "/freebox/files",
+      vms: "/freebox/vms",
       analytics: "/freebox/analytics",
       settings: "/settings",
       plugins: "/plugins",
@@ -354,14 +354,26 @@ const App: React.FC = () => {
   );
 
   // Support sub-paths: /unifi/traffic → 'unifi', /settings/general → 'settings'
-  // Analytics is nested under Freebox (/freebox/analytics, /freebox/analytics/wifi)
-  // so it needs to be checked before the generic first-segment fallback below.
+  // Freebox sub-pages are nested under /freebox (/freebox/vms, /freebox/tv/guide), so they
+  // need to be checked before the generic first-segment fallback below. Their pre-0.10.43
+  // top-level URLs (/tv, /phone, /files, /vms) still resolve and get redirected below.
+  const [, firstSegment, secondSegment] = location.pathname.split("/");
+  const legacyFreeboxSubPage = LEGACY_FREEBOX_SUBPAGES.has(firstSegment as PageType)
+    ? (firstSegment as PageType)
+    : undefined;
   const currentPage: PageType =
     pageRoutes[location.pathname] ||
-    (location.pathname === "/freebox/analytics" || location.pathname.startsWith("/freebox/analytics/")
-      ? "analytics"
-      : pageRoutes["/" + location.pathname.split("/")[1]]) ||
+    (firstSegment === "freebox" && FREEBOX_SUBPAGES.has(secondSegment as PageType)
+      ? (secondSegment as PageType)
+      : legacyFreeboxSubPage || pageRoutes["/" + firstSegment]) ||
     "dashboard";
+
+  // Redirect old bookmarks (/tv/guide → /freebox/tv/guide), keeping the tab and query string
+  useEffect(() => {
+    if (legacyFreeboxSubPage) {
+      navigate(`/freebox${location.pathname}${location.search}`, { replace: true });
+    }
+  }, [legacyFreeboxSubPage, location.pathname, location.search, navigate]);
 
   const setCurrentPage = useCallback(
     (page: PageType | ((prev: PageType) => PageType)) => {
@@ -1319,7 +1331,7 @@ const App: React.FC = () => {
                   hasLimitedVmSupport() ? `VMs (max ${getMaxVms()})` : "VMs"
                 }
                 actions={
-                  supportsVm() && hasDisk && !vmError ? (
+                  supportsVm() && hasDisk && (!vmError || vms.length > 0) ? (
                     <ActionButton
                       label={t("dashboard.create")}
                       icon={Plus}
@@ -1347,6 +1359,9 @@ const App: React.FC = () => {
                   <div className="text-center text-gray-500 py-4">
                     {t("common.loading")}
                   </div>
+                ) : vms.length > 0 ? (
+                  // Listed even if a later action (start/stop) failed, only an empty list shows the error
+                  <VmPanel vms={vms} onToggle={handleVmToggle} />
                 ) : vmError ? (
                   <div className="text-center py-8">
                     <Server size={32} className="mx-auto text-gray-600 mb-2" />
@@ -1357,8 +1372,6 @@ const App: React.FC = () => {
                       {t("dashboard.vmsNotSupported")}
                     </p>
                   </div>
-                ) : vms.length > 0 ? (
-                  <VmPanel vms={vms} onToggle={handleVmToggle} />
                 ) : (
                   <div className="text-center py-8">
                     <Server size={32} className="mx-auto text-gray-600 mb-2" />

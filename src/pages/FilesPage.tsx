@@ -544,11 +544,11 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
   const { info: systemInfo } = useSystemStore();
   const boxName = getDisplayName(systemInfo?.board_name || '');
 
-  // Derive active tab from URL: /files/downloads → 'downloads'
-  const urlTab = location.pathname.split('/')[2] as FilesTab | undefined;
+  // Derive active tab from URL: /freebox/files/downloads → 'downloads'
+  const urlTab = location.pathname.split('/')[3] as FilesTab | undefined;
   const activeTab: FilesTab = urlTab && VALID_FILES_TABS.has(urlTab) ? urlTab : (initialTab || 'files');
   const setActiveTab = useCallback((tab: FilesTab) => {
-    navigate(`/files/${tab}`);
+    navigate(`/freebox/files/${tab}`);
   }, [navigate]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');

@@ -77,7 +77,7 @@ export const useVmStore = create<VmState>((set, get) => ({
           diskTotal: vm.disk_size ? vm.disk_size / (1024 * 1024 * 1024) : 0 // disk_size is in bytes, convert to GB
         }));
 
-        set({ vms, isLoading: false, hasInitialized: true });
+        set({ vms, isLoading: false, hasInitialized: true, error: null });
       } else {
         set({ isLoading: false, hasInitialized: true, error: response.error?.message });
       }

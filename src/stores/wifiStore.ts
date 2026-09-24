@@ -109,13 +109,15 @@ export const useWifiStore = create<WifiState>((set, get) => ({
         // Build networks from BSS data
         const networks: WifiNetwork[] = [];
         const seenBands = new Set<string>();
+        // is_main_bss only marks the BSS whose config is shared with the others, so with
+        // per-band SSIDs (use_shared_params=false) every BSS reports false. Only skip a
+        // non-main BSS when a main one exists on the same radio (e.g. a guest network).
+        const radiosWithMainBss = new Set(bss.filter(b => b.status?.is_main_bss === true).map(b => b.phy_id));
 
         // For Freebox v9+, BSS contains band info directly in status
         for (const b of bss || []) {
           if (b.config?.enabled) {
-            // Skip secondary BSS (e.g. guest network) broadcast on the same radio as the main one.
-            // Older API responses without this field keep the previous behavior.
-            if (b.status?.is_main_bss === false) continue;
+            if (b.status?.is_main_bss === false && radiosWithMainBss.has(b.phy_id)) continue;
 
             // Get band from BSS status (Freebox v9+) or try to find matching AP
             let band: '2.4GHz' | '5GHz' | '6GHz' = '2.4GHz';
