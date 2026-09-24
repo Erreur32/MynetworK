@@ -180,12 +180,15 @@ export const useWifiStore = create<WifiState>((set, get) => ({
                 else channelWidth = 20;
               }
 
-              // Get device count for this band from devicesByBand
-              let bandDeviceCount = 0;
-              if (devicesByBand) {
-                if (band === '6GHz') bandDeviceCount = devicesByBand['6g'] || 0;
-                else if (band === '5GHz') bandDeviceCount = devicesByBand['5g'] || 0;
-                else if (band === '2.4GHz') bandDeviceCount = devicesByBand['2g4'] || 0;
+              // Device count: the BSS's own station count when the API reports it (exact per
+              // network, e.g. the Ultra's two 5GHz radios), else the per-band LAN estimate
+              let deviceCount = 0;
+              if (typeof b.status?.sta_count === 'number') {
+                deviceCount = b.status.sta_count;
+              } else if (devicesByBand) {
+                if (band === '6GHz') deviceCount = devicesByBand['6g'] || 0;
+                else if (band === '5GHz') deviceCount = devicesByBand['5g'] || 0;
+                else if (band === '2.4GHz') deviceCount = devicesByBand['2g4'] || 0;
               }
 
               // Estimate load based on device count if no channel_usage provided
@@ -195,7 +198,7 @@ export const useWifiStore = create<WifiState>((set, get) => ({
               const estimatedLoad = isActive
                 ? channelUsage > 0
                   ? channelUsage
-                  : Math.min(bandDeviceCount * 8, 80)
+                  : Math.min(deviceCount * 8, 80)
                 : 0;
 
               networks.push({
@@ -206,7 +209,7 @@ export const useWifiStore = create<WifiState>((set, get) => ({
                 channel: apStatus?.primary_channel || apConfig?.primary_channel || 0,
                 active: isActive,
                 // Only count devices if WiFi is active, otherwise set to 0
-                connectedDevices: isActive ? bandDeviceCount : 0,
+                connectedDevices: isActive ? deviceCount : 0,
                 load: estimatedLoad
               });
             }

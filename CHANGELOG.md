@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.45] - 2026-09-24
+
+### Fixed
+
+- Freebox WiFi card: connected devices per network now come from the BSS's own `sta_count` (exact per network) instead of the per-band LAN total, which gave the same count to every network sharing a band (the Ultra's two 5 GHz radios, guest network). The estimated load follows. Falls back to the per-band estimate when the API doesn't report it.
+
+---
+
 ## [0.10.44] - 2026-09-24
 
 ### Fixed
