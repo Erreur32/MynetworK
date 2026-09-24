@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
-import { Network, ArrowRight, Activity, Gauge, Router, Info } from 'lucide-react';
+import { Network, ArrowRight, Activity, Gauge, Router, Info, Maximize2 } from 'lucide-react';
 import { usePluginStore } from '../../stores/pluginStore';
 import { api } from '../../api/client';
 import { formatBytes, formatSpeed } from '../../utils/constants';
@@ -17,6 +17,7 @@ import { VendorIcon } from '../ui/VendorIcon';
 import { hasVendorIcon } from '../../utils/vendorBrand';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { TrafficPeriodToggle, type TrafficPeriod } from '../ui/TrafficPeriodToggle';
+import { TopTrafficOverlay } from '../ui/TopTrafficOverlay';
 
 interface NetworkScanWidgetProps {
     onViewDetails?: () => void;
@@ -112,6 +113,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     };
     const [topTraffic, setTopTraffic] = useState<TopTrafficClient[]>([]);
     const [topTrafficLoading, setTopTrafficLoading] = useState(false);
+    const [showTrafficOverlay, setShowTrafficOverlay] = useState(false);
     const { topClients: liveTopClients, isConnected: unifiWsConnected } = useUnifiRealtimeStore();
 
     // Fetch top traffic consumers (UniFi only — see feasibility notes: no per-host counters on Freebox)
@@ -141,7 +143,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     });
 
     const trafficRows = trafficPeriod === 'live'
-        ? liveTopClients.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
+        ? liveTopClients.slice(0, 10).map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
         : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatBytes(c.rxBytes + c.txBytes) }));
 
     // Fetch default scan range
@@ -324,6 +326,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     };
 
     return (
+        <>
         <Card
             title={
                 <div className="flex items-center gap-2">
@@ -520,15 +523,26 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                         <span className={`w-1.5 h-1.5 rounded-full ${unifiWsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
                                     )}
                                 </div>
-                                <TrafficPeriodToggle
-                                    period={trafficPeriod}
-                                    onChange={setTrafficPeriod}
-                                    labels={{
-                                        live: t('networkScan.widget.trafficLive'),
-                                        today: t('networkScan.widget.trafficToday'),
-                                        alltime: t('networkScan.widget.trafficAllTime')
-                                    }}
-                                />
+                                <div className="flex items-center gap-1.5">
+                                    <TrafficPeriodToggle
+                                        period={trafficPeriod}
+                                        onChange={setTrafficPeriod}
+                                        labels={{
+                                            live: t('networkScan.widget.trafficLive'),
+                                            today: t('networkScan.widget.trafficToday'),
+                                            alltime: t('networkScan.widget.trafficAllTime')
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTrafficOverlay(true)}
+                                        className="p-1 text-gray-400 hover:text-cyan-400 hover:bg-gray-800 rounded transition-colors"
+                                        title={t('networkScan.widget.viewAllTraffic')}
+                                        aria-label={t('networkScan.widget.viewAllTraffic')}
+                                    >
+                                        <Maximize2 size={13} />
+                                    </button>
+                                </div>
                             </div>
                             {(() => {
                                 if (topTrafficLoading && trafficRows.length === 0) {
@@ -622,6 +636,14 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                 </div>
             )}
         </Card>
+        {showTrafficOverlay && (
+            <TopTrafficOverlay
+                initialPeriod={trafficPeriod}
+                onClose={() => setShowTrafficOverlay(false)}
+                onSearch={(query) => navigate(`/search?s=${encodeURIComponent(query)}`)}
+            />
+        )}
+        </>
     );
 };
 

@@ -774,7 +774,7 @@ router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: Aut
  */
 router.get('/unifi/top-clients-history', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const period = req.query.period === 'alltime' ? 'alltime' : 'today';
-    const limit = Math.min(50, Math.max(1, Number.parseInt((req.query.limit as string) || '10', 10) || 10));
+    const limit = Math.min(500, Math.max(1, Number.parseInt((req.query.limit as string) || '10', 10) || 10));
 
     const result = period === 'alltime'
         ? UniFiClientTrafficRepository.getTopAllTime(limit)

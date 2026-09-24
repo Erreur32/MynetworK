@@ -8,6 +8,8 @@ type ClientWebSocket = WsType & { isAlive?: boolean };
 
 const UNIFI_POLLING_INTERVAL = 1000; // 1 second, live mode
 const TOP_CLIENTS_EVERY_N_TICKS = 3; // stat/sta is extra load on top of the existing WAN poll, throttle to ~3s
+// Enough for the full traffic overlay; compact views (widgets, UniFi traffic tab) slice to 10 themselves
+const TOP_CLIENTS_LIMIT = 50;
 
 class UnifiWebSocketService {
   private wss: WebSocketServer | null = null;
@@ -184,7 +186,7 @@ class UnifiWebSocketService {
       this.topClientsTick = (this.topClientsTick + 1) % TOP_CLIENTS_EVERY_N_TICKS;
       if (this.topClientsTick === 0) {
         if (typeof pluginAny.fetchTopClients === 'function') {
-          this.lastTopClients = await pluginAny.fetchTopClients(10).catch(() => this.lastTopClients);
+          this.lastTopClients = await pluginAny.fetchTopClients(TOP_CLIENTS_LIMIT).catch(() => this.lastTopClients);
         }
         if (typeof pluginAny.fetchTotalClientTraffic === 'function') {
           this.lastTotalClientTraffic = await pluginAny.fetchTotalClientTraffic().catch(() => this.lastTotalClientTraffic);

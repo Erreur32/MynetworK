@@ -165,7 +165,7 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
     // realtime store (no REST call); today/all-time read from topTraffic (fetched above).
     const trafficRows: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; volumeValue: number; volumeText: string }> =
         trafficPeriod === 'live'
-            ? liveTopClients.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeValue: c.download + c.upload, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
+            ? liveTopClients.slice(0, 10).map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeValue: c.download + c.upload, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
             : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeValue: c.rxBytes + c.txBytes, volumeText: formatBytes(c.rxBytes + c.txBytes) }));
 
     const topTrafficSort = useSortableTable<typeof trafficRows[number], 'name' | 'ip' | 'volume'>(

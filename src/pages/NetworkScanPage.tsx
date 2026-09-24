@@ -21,6 +21,7 @@ import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringMo
 import { ToastContainer, type ToastData } from '../components/ui/Toast';
 import { VendorIcon } from '../components/ui/VendorIcon';
 import { VendorIconPicker } from '../components/ui/VendorIconPicker';
+import { TopTrafficOverlay } from '../components/ui/TopTrafficOverlay';
 import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
@@ -257,116 +258,6 @@ const InsightPreviewColumn: React.FC<{
     );
 };
 
-type TopTrafficSortBy = 'name' | 'download' | 'upload' | 'total';
-
-/**
- * Detailed "view all" overlay for the top traffic insight: unlike the other two
- * (simple label + single value list), this one shows download/upload broken out
- * in a sortable table, since the whole point of expanding is to compare the two.
- */
-const TopTrafficOverlay: React.FC<{
-    rows: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; rxBytes: number; txBytes: number }>;
-    onClose: () => void;
-    onNavigateToSearch?: (ip: string) => void;
-}> = ({ rows, onClose, onNavigateToSearch }) => {
-    const { t } = useTranslation();
-    const [sortBy, setSortBy] = useState<TopTrafficSortBy>('total');
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
-    const sorted = useMemo(() => {
-        const copy = [...rows];
-        copy.sort((a, b) => {
-            let cmp: number;
-            switch (sortBy) {
-                case 'name': cmp = (a.name || a.mac).localeCompare(b.name || b.mac); break;
-                case 'download': cmp = a.rxBytes - b.rxBytes; break;
-                case 'upload': cmp = a.txBytes - b.txBytes; break;
-                default: cmp = (a.rxBytes + a.txBytes) - (b.rxBytes + b.txBytes);
-            }
-            return sortOrder === 'asc' ? cmp : -cmp;
-        });
-        return copy;
-    }, [rows, sortBy, sortOrder]);
-
-    const toggleSort = (col: TopTrafficSortBy) => {
-        if (sortBy === col) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-        else { setSortBy(col); setSortOrder(col === 'name' ? 'asc' : 'desc'); }
-    };
-
-    const SortHeader: React.FC<{ col: TopTrafficSortBy; label: string; align?: 'left' | 'right'; icon?: React.ReactNode }> = ({ col, label, align = 'right', icon }) => (
-        <th
-            className={`py-2 px-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}
-            onClick={() => toggleSort(col)}
-        >
-            <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
-                {icon}
-                <span>{label}</span>
-                {sortBy === col && (
-                    sortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-400" /> : <ArrowDown size={11} className="text-blue-400" />
-                )}
-            </div>
-        </th>
-    );
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="presentation" onClick={onClose}>
-            <div className="bg-[#121212] border border-gray-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" role="presentation" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between p-4 border-b border-gray-800">
-                    <div className="flex items-center gap-2 text-white font-semibold min-w-0">
-                        <Download size={16} className="text-blue-400 flex-shrink-0" />
-                        <span className="truncate">{t('networkScan.stats.topTraffic')}</span>
-                        <span className="text-gray-500 text-sm font-normal flex-shrink-0">({rows.length})</span>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
-                        aria-label={t('networkScan.tooltips.close')}
-                    >
-                        <X size={18} />
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                    {rows.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 text-sm italic">{t('networkScan.stats.noTopTraffic')}</div>
-                    ) : (
-                        <table className="w-full text-sm">
-                            <thead className="sticky top-0 bg-[#121212]">
-                                <tr className="border-b border-gray-800">
-                                    <SortHeader col="name" label={t('networkScan.table.headers.hostname')} align="left" />
-                                    <SortHeader col="download" label={t('networkScan.table.headers.download')} icon={<Download size={12} className="text-blue-400/70" />} />
-                                    <SortHeader col="upload" label={t('networkScan.table.headers.upload')} icon={<Upload size={12} className="text-emerald-400/70" />} />
-                                    <SortHeader col="total" label={t('networkScan.stats.total')} />
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sorted.map((d) => (
-                                    <tr key={d.mac} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                                        <td className="py-2 px-2 min-w-0">
-                                            {d.ip ? (
-                                                <InsightDeviceName
-                                                    ip={d.ip}
-                                                    label={d.name || d.vendor || d.mac}
-                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
-                                                    onNavigateToSearch={onNavigateToSearch}
-                                                />
-                                            ) : (
-                                                <span className="truncate min-w-0 text-gray-300" title={d.name || d.vendor || d.mac}>{d.name || d.vendor || d.mac}</span>
-                                            )}
-                                        </td>
-                                        <td className="py-2 px-2 text-right text-blue-300 whitespace-nowrap">{formatBytes(d.rxBytes)}</td>
-                                        <td className="py-2 px-2 text-right text-emerald-300 whitespace-nowrap">{formatBytes(d.txBytes)}</td>
-                                        <td className="py-2 px-2 text-right text-gray-300 whitespace-nowrap">{formatBytes(d.rxBytes + d.txBytes)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
 interface NetworkScan {
     id: number;
     ip: string;
@@ -535,7 +426,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return key ? trafficStats[key] : undefined;
     }, [trafficStats]);
 
-    // Live UniFi traffic (top 10 devices by current throughput), opt-in via the "Live" toggle:
+    // Live UniFi traffic (top 50 devices by current throughput), opt-in via the "Live" toggle:
     // keeps the UniFi controller in fast polling (~1-3s) for as long as this page stays open
     // and this is on, so it defaults to off and is never persisted across reloads.
     const [liveTrafficEnabled, setLiveTrafficEnabled] = useState(false);
@@ -547,7 +438,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return key ? liveTopClients.find((c) => c.mac.toLowerCase() === key) : undefined;
     }, [liveTrafficEnabled, liveTopClients]);
     // Renders a Download/Upload table cell: today's total (dimmed if unknown), pulsing with an
-    // amber dot when the device is currently in the live top-10 (tooltip shows the live rate).
+    // amber dot when the device is currently in the live top-50 (tooltip shows the live rate).
     const renderTrafficCell = (scan: NetworkScan, kind: 'download' | 'upload') => {
         const entry = getTrafficEntry(scan.mac);
         const live = getLiveClient(scan.mac);
@@ -2179,9 +2070,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
             {insights && openInsightOverlay === 'topTraffic' && (
                 <TopTrafficOverlay
-                    rows={insights.topTraffic}
                     onClose={() => setOpenInsightOverlay(null)}
-                    onNavigateToSearch={onNavigateToSearch}
+                    onSearch={onNavigateToSearch}
+                    ensureLiveSocket={!liveTrafficEnabled}
                 />
             )}
 
