@@ -640,9 +640,12 @@ export const ParentalControlModal: React.FC<ParentalControlModalProps> = ({
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleDeleteProfile(profile.id)}
+                            onClick={(e) => {
+                              e.stopPropagation(); // don't also toggle the profile row
+                              handleDeleteProfile(profile.id);
+                            }}
                             className="p-2 hover:bg-red-900/50 rounded-lg transition-colors"
                             title="Supprimer"
                           >

@@ -22,6 +22,7 @@ import { ToastContainer, type ToastData } from '../components/ui/Toast';
 import { VendorIcon } from '../components/ui/VendorIcon';
 import { VendorIconPicker } from '../components/ui/VendorIconPicker';
 import { TopTrafficOverlay } from '../components/ui/TopTrafficOverlay';
+import { ModalBackdropButton } from '../components/ui/ModalBackdropButton';
 import { useTranslation } from 'react-i18next';
 
 /** Ports connus : numéro → nom du service (pour les tooltips) */
@@ -164,8 +165,9 @@ const InsightOverlay: React.FC<{
 }> = ({ title, icon, rows, emptyLabel, onClose, onNavigateToSearch }) => {
     const { t } = useTranslation();
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="presentation" onClick={onClose}>
-            <div className="bg-[#121212] border border-gray-700 rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" role="presentation" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <ModalBackdropButton onClose={onClose} label={t('networkScan.tooltips.close')} />
+            <div className="relative bg-[#121212] border border-gray-700 rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
                 <div className="flex items-center justify-between p-4 border-b border-gray-800">
                     <div className="flex items-center gap-2 text-white font-semibold min-w-0">
                         {icon}
@@ -2195,7 +2197,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     </button>
                                 )}
                         </div>
-                        <div className="flex items-center gap-1.5" role="group" aria-label={t('networkScan.filters.statusFilterLabel')}>
+                        <fieldset className="flex items-center gap-1.5 min-w-0" aria-label={t('networkScan.filters.statusFilterLabel')}>
                             {(['all', 'online', 'offline'] as const).map((value) => (
                                 <button
                                     key={value}
@@ -2226,7 +2228,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                     )}
                                 </button>
                             ))}
-                        </div>
+                        </fieldset>
                         <button
                             type="button"
                             onClick={() => setLiveTrafficEnabled((v) => !v)}

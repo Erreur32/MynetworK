@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -140,6 +140,60 @@ const FileItem: React.FC<{
   const Icon = getFileIcon(file);
   const iconColor = getFileIconColor(file);
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const handleItemClick = (e: React.MouseEvent) => {
+    // Clicks inside the ellipsis menu are menu actions, not "open/select this file"
+    if (menuRef.current?.contains(e.target as Node)) return;
+    if ((e.ctrlKey || e.metaKey) && !isParentDir) {
+      onSelect();
+    } else {
+      onOpen();
+    }
+  };
+
+  // Same ellipsis button + dropdown in both views, only its wrapper differs
+  const ellipsisMenu = (
+    <>
+      <button
+        className={`p-1 rounded transition-opacity hover:bg-white/10 ${
+          showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMenu(!showMenu);
+        }}
+      >
+        <MoreVertical size={16} className="text-gray-400" />
+      </button>
+      {showMenu && (
+        <div
+          ref={menuRef}
+          className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+        >
+          <button
+            onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
+            disabled={isRootFolder}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
+          >
+            <Edit3 size={14} /> {t('files.rename')}
+          </button>
+          <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+            <Copy size={14} /> {t('files.copy')}
+          </button>
+          <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+            <Move size={14} /> {t('files.move')}
+          </button>
+          <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
+            <Share2 size={14} /> {t('files.share')}
+          </button>
+          <div className="border-t border-gray-700 my-1" />
+          <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
+            <Trash2 size={14} /> {t('files.delete')}
+          </button>
+        </div>
+      )}
+    </>
+  );
 
   if (viewMode === 'grid') {
     return (
@@ -149,13 +203,7 @@ const FileItem: React.FC<{
             ? 'bg-blue-900/30 border-blue-600'
             : 'bg-[#1a1a1a] border-transparent hover:border-gray-700 hover:bg-[#202020]'
         }`}
-        onClick={(e) => {
-          if ((e.ctrlKey || e.metaKey) && !isParentDir) {
-            onSelect();
-          } else {
-            onOpen();
-          }
-        }}
+        onClick={handleItemClick}
         onContextMenu={isParentDir ? undefined : onContextMenu}
       >
         {!isParentDir && (
@@ -178,44 +226,7 @@ const FileItem: React.FC<{
         {/* Ellipsis menu button */}
         {!isParentDir && (
           <div className="absolute top-2 right-2">
-            <button
-              className={`p-1 rounded transition-opacity hover:bg-white/10 ${
-                showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-            >
-              <MoreVertical size={16} className="text-gray-400" />
-            </button>
-            {showMenu && (
-              <div
-                className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
-                  disabled={isRootFolder}
-                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
-                >
-                  <Edit3 size={14} /> {t('files.rename')}
-                </button>
-                <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Copy size={14} /> {t('files.copy')}
-                </button>
-                <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Move size={14} /> {t('files.move')}
-                </button>
-                <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Share2 size={14} /> {t('files.share')}
-                </button>
-                <div className="border-t border-gray-700 my-1" />
-                <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Trash2 size={14} /> {t('files.delete')}
-                </button>
-              </div>
-            )}
+            {ellipsisMenu}
           </div>
         )}
         {/* Shared indicator */}
@@ -246,13 +257,7 @@ const FileItem: React.FC<{
           ? 'bg-blue-900/30'
           : 'hover:bg-[#1a1a1a]'
       }`}
-      onClick={(e) => {
-        if ((e.ctrlKey || e.metaKey) && !isParentDir) {
-          onSelect();
-        } else {
-          onOpen();
-        }
-      }}
+      onClick={handleItemClick}
       onContextMenu={isParentDir ? undefined : onContextMenu}
     >
       {!isParentDir ? (
@@ -301,44 +306,7 @@ const FileItem: React.FC<{
       {/* Ellipsis menu */}
       {!isParentDir ? (
         <div className="relative">
-          <button
-            className={`p-1 rounded transition-opacity hover:bg-white/10 ${
-              showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-          >
-            <MoreVertical size={16} className="text-gray-400" />
-          </button>
-          {showMenu && (
-            <div
-              className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
-                disabled={isRootFolder}
-                className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
-              >
-                <Edit3 size={14} /> {t('files.rename')}
-              </button>
-              <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Copy size={14} /> {t('files.copy')}
-              </button>
-              <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Move size={14} /> {t('files.move')}
-              </button>
-              <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                <Share2 size={14} /> {t('files.share')}
-              </button>
-              <div className="border-t border-gray-700 my-1" />
-              <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                <Trash2 size={14} /> {t('files.delete')}
-              </button>
-            </div>
-          )}
+          {ellipsisMenu}
         </div>
       ) : (
         <div className="w-6" />
@@ -433,10 +401,10 @@ const DownloadItem: React.FC<{
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           {isActive && (
             <button
-              onClick={onPause}
+              onClick={(e) => { e.stopPropagation(); onPause(); }}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
               title="Pause"
             >
@@ -445,7 +413,7 @@ const DownloadItem: React.FC<{
           )}
           {(isPaused || isQueued) && (
             <button
-              onClick={onResume}
+              onClick={(e) => { e.stopPropagation(); onResume(); }}
               className="p-2 text-gray-400 hover:text-emerald-400 hover:bg-emerald-900/20 rounded-lg transition-colors"
               title="Reprendre"
             >
@@ -454,7 +422,7 @@ const DownloadItem: React.FC<{
           )}
           {isError && (
             <button
-              onClick={onRetry}
+              onClick={(e) => { e.stopPropagation(); onRetry(); }}
               className="p-2 text-gray-400 hover:text-amber-400 hover:bg-amber-900/20 rounded-lg transition-colors"
               title="Réessayer"
             >
@@ -462,7 +430,7 @@ const DownloadItem: React.FC<{
             </button>
           )}
           <button
-            onClick={onDelete}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
             title="Supprimer"
           >
@@ -625,8 +593,12 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
   }, [initialDownloadId, downloads, selectedDownload]);
 
   // Close context menu on click outside
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handleClick = () => setContextMenu(null);
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current?.contains(e.target as Node)) return;
+      setContextMenu(null);
+    };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
@@ -2007,9 +1979,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           className="fixed bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] z-[200]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2 border-b border-gray-700">
             <p className="text-xs text-gray-400 truncate max-w-[160px]">{contextMenu.file.name}</p>

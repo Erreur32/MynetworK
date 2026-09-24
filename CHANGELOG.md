@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.47] - 2026-09-24
+
+### Fixed
+
+- SonarCloud S1082 (8 Minor) and the S6819 accessibility smells (5 existing + the ones a first `role="presentation"` attempt introduced): no more click handlers on non-interactive elements, same behavior for the user.
+  - Modal backdrops (custom domain modal, network-scan insights overlay, top traffic overlay): closing on backdrop click now goes through an invisible real `<button>` behind the content (new shared `ModalBackdropButton`), so the content no longer needs `stopPropagation`.
+  - Button containers inside clickable rows (parental control profile, files page download task): `stopPropagation` moved into each button's own handler.
+  - Menus: the files page ellipsis menus and context menu are excluded by a ref check in the row click / window "click outside" handlers instead of blocking propagation; the user menu (already closed by `useClickOutside`) just drops its redundant handler.
+  - Network-scan status filter group uses a `<fieldset>` instead of `role="group"`.
+  - Files page: the ellipsis button + dropdown menu, duplicated between grid and list views, is now defined once and shared.
+
+---
+
 ## [0.10.46] - 2026-09-24
 
 ### Fixed
