@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
   - Button containers inside clickable rows (parental control profile, files page download task): `stopPropagation` moved into each button's own handler.
   - Menus: the files page ellipsis menus and context menu are excluded by a ref check in the row click / window "click outside" handlers instead of blocking propagation; the user menu (already closed by `useClickOutside`) just drops its redundant handler.
   - Network-scan status filter group uses a `<fieldset>` instead of `role="group"`.
+  - Files page: the ellipsis button + dropdown menu, duplicated between grid and list views, is now defined once and shared.
 
 ---
 

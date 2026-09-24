@@ -151,6 +151,50 @@ const FileItem: React.FC<{
     }
   };
 
+  // Same ellipsis button + dropdown in both views, only its wrapper differs
+  const ellipsisMenu = (
+    <>
+      <button
+        className={`p-1 rounded transition-opacity hover:bg-white/10 ${
+          showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMenu(!showMenu);
+        }}
+      >
+        <MoreVertical size={16} className="text-gray-400" />
+      </button>
+      {showMenu && (
+        <div
+          ref={menuRef}
+          className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+        >
+          <button
+            onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
+            disabled={isRootFolder}
+            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
+          >
+            <Edit3 size={14} /> {t('files.rename')}
+          </button>
+          <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+            <Copy size={14} /> {t('files.copy')}
+          </button>
+          <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
+            <Move size={14} /> {t('files.move')}
+          </button>
+          <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
+            <Share2 size={14} /> {t('files.share')}
+          </button>
+          <div className="border-t border-gray-700 my-1" />
+          <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
+            <Trash2 size={14} /> {t('files.delete')}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   if (viewMode === 'grid') {
     return (
       <div
@@ -182,44 +226,7 @@ const FileItem: React.FC<{
         {/* Ellipsis menu button */}
         {!isParentDir && (
           <div className="absolute top-2 right-2">
-            <button
-              className={`p-1 rounded transition-opacity hover:bg-white/10 ${
-                showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(!showMenu);
-              }}
-            >
-              <MoreVertical size={16} className="text-gray-400" />
-            </button>
-            {showMenu && (
-              <div
-                ref={menuRef}
-                className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-              >
-                <button
-                  onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
-                  disabled={isRootFolder}
-                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
-                >
-                  <Edit3 size={14} /> {t('files.rename')}
-                </button>
-                <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Copy size={14} /> {t('files.copy')}
-                </button>
-                <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                  <Move size={14} /> {t('files.move')}
-                </button>
-                <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Share2 size={14} /> {t('files.share')}
-                </button>
-                <div className="border-t border-gray-700 my-1" />
-                <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                  <Trash2 size={14} /> {t('files.delete')}
-                </button>
-              </div>
-            )}
+            {ellipsisMenu}
           </div>
         )}
         {/* Shared indicator */}
@@ -299,44 +306,7 @@ const FileItem: React.FC<{
       {/* Ellipsis menu */}
       {!isParentDir ? (
         <div className="relative">
-          <button
-            className={`p-1 rounded transition-opacity hover:bg-white/10 ${
-              showMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-          >
-            <MoreVertical size={16} className="text-gray-400" />
-          </button>
-          {showMenu && (
-            <div
-              ref={menuRef}
-              className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-            >
-              <button
-                onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
-                disabled={isRootFolder}
-                className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${isRootFolder ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:bg-gray-800'}`}
-              >
-                <Edit3 size={14} /> {t('files.rename')}
-              </button>
-              <button onClick={() => { onCopy(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Copy size={14} /> {t('files.copy')}
-              </button>
-              <button onClick={() => { onMove(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2">
-                <Move size={14} /> {t('files.move')}
-              </button>
-              <button onClick={() => { onShare(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-purple-400 hover:bg-gray-800 flex items-center gap-2">
-                <Share2 size={14} /> {t('files.share')}
-              </button>
-              <div className="border-t border-gray-700 my-1" />
-              <button onClick={() => { onDelete(); setShowMenu(false); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2">
-                <Trash2 size={14} /> {t('files.delete')}
-              </button>
-            </div>
-          )}
+          {ellipsisMenu}
         </div>
       ) : (
         <div className="w-6" />
