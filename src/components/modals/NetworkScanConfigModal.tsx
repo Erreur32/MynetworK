@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Settings, Play, RefreshCw, Save, Clock, CheckCircle, XCircle, Network, HelpCircle, Plug, ArrowUp, ArrowDown, HardDrive, ExternalLink, Download, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { api } from '../../api/client';
 import { usePluginStore } from '../../stores/pluginStore';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 interface AutoScanConfig {
     enabled: boolean;
@@ -257,7 +258,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                     text: response.error?.message || 'Erreur lors de la mise à jour' 
                 });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to update Wireshark vendors:', error);
             setSaveMessage({ type: 'error', text: 'Erreur lors de la mise à jour' });
         } finally {
@@ -294,7 +295,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             } else {
                 setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save plugin priority failed:', error);
             setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
         } finally {
@@ -386,9 +387,9 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             } else {
                 setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save scan config failed:', error);
-            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (getErrorMessage(error) || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
         }
@@ -406,9 +407,9 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             } else {
                 setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save refresh config failed:', error);
-            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (getErrorMessage(error) || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
         }
@@ -460,9 +461,9 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 console.error('Save failed:', response.error);
                 setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save unified config failed:', error);
-            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (getErrorMessage(error) || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
         }
@@ -480,9 +481,9 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             } else {
                 setSaveMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save default config failed:', error);
-            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (getErrorMessage(error) || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
         }
@@ -525,7 +526,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 } else {
                     errors.push('Configuration de scan automatique');
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Save unified config failed:', error);
                 errors.push('Configuration de scan automatique');
             }
@@ -539,7 +540,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 } else {
                     errors.push('Configuration par défaut');
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Save default config failed:', error);
                 errors.push('Configuration par défaut');
             }
@@ -552,7 +553,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 } else {
                     errors.push('Priorité des plugins');
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Save plugin priority failed:', error);
                 errors.push('Priorité des plugins');
             }
@@ -567,7 +568,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                 } else {
                     errors.push('Mise à jour automatique vendors');
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Save auto-update config failed:', error);
                 errors.push('Mise à jour automatique vendors');
             }
@@ -581,9 +582,9 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
             } else {
                 setSaveMessage({ type: 'error', text: `Erreurs lors de la sauvegarde: ${errors.join(', ')}` });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Save all failed:', error);
-            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (error.message || 'Erreur inconnue') });
+            setSaveMessage({ type: 'error', text: 'Erreur lors de la sauvegarde: ' + (getErrorMessage(error) || 'Erreur inconnue') });
         } finally {
             setIsSaving(false);
         }
@@ -913,7 +914,7 @@ export const NetworkScanConfigModal: React.FC<NetworkScanConfigModalProps> = ({ 
                                                     text: response.error?.message || t('config.clearError') 
                                                 });
                                             }
-                                        } catch (error: any) {
+                                        } catch (error: unknown) {
                                             console.error('[NetworkScanConfigModal] Failed to clear scan data:', error);
                                             setSaveMessage({ type: 'error', text: t('config.clearError') });
                                         }

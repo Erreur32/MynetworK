@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import type { ApiResponse } from '../types/api';
+import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
 
 export interface User {
     id: number;
@@ -108,11 +109,12 @@ export const useUserAuthStore = create<UserAuthState>((set, get) => ({
                 });
                 return false;
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Check if the error is actually an API response with error code
             // Sometimes the API client returns errors in the error object
-            const errorCode = error?.error?.code || error?.code || '';
-            const errorMessage = error?.error?.message || error?.message || String(error || '');
+            const payload = getApiErrorPayload(error);
+            const errorCode = payload.error?.code || payload.code || '';
+            const errorMessage = payload.error?.message || getErrorMessage(error) || (typeof error === 'string' ? error : '');
             
             // Check if it's an authentication error from the API response
             // The API client returns UNAUTHORIZED code for 401 errors

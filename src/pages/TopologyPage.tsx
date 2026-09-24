@@ -23,6 +23,7 @@ import { Card } from '../components/widgets/Card';
 import { api } from '../api/client';
 import { usePluginStore } from '../stores/pluginStore';
 import { TopologyGraph } from '../components/topology/TopologyGraph';
+import { getErrorMessage } from '../utils/errorMessage';
 
 type SourcePlugin = 'freebox' | 'unifi' | 'scan-reseau';
 
@@ -166,8 +167,8 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
             } else {
                 setError(t('topology.fetchError'));
             }
-        } catch (e: any) {
-            setError(e?.message || t('topology.fetchError'));
+        } catch (e: unknown) {
+            setError(getErrorMessage(e) || t('topology.fetchError'));
         } finally {
             setLoading(false);
         }
@@ -183,8 +184,8 @@ export const TopologyPage: React.FC<TopologyPageProps> = ({ onBack }) => {
             } else {
                 setError(t('topology.refreshError'));
             }
-        } catch (e: any) {
-            setError(e?.message || t('topology.refreshError'));
+        } catch (e: unknown) {
+            setError(getErrorMessage(e) || t('topology.refreshError'));
         } finally {
             setRefreshing(false);
         }
