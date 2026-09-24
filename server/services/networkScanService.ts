@@ -1803,7 +1803,7 @@ export class NetworkScanService {
         const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
         try {
             const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin || !plugin.isEnabled()) {
+            if (!plugin?.isEnabled()) {
                 logger.debug('NetworkScanService', `[MAC] ${label} plugin not available or disabled for ${ip}`);
                 return null;
             }
@@ -1948,7 +1948,7 @@ export class NetworkScanService {
     private async getHostnameFromPlugin(pluginId: 'freebox' | 'unifi', ip: string): Promise<string | null> {
         try {
             const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin || !plugin.isEnabled()) return null;
+            if (!plugin?.isEnabled()) return null;
 
             const stats = await plugin.getStats();
             if (!stats?.devices || !Array.isArray(stats.devices)) return null;
@@ -2159,7 +2159,7 @@ export class NetworkScanService {
             logger.debug('NetworkScanService', `[VENDOR] ${label}: Looking up vendor for MAC ${mac}, IP ${ip}`);
 
             const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin || !plugin.isEnabled()) {
+            if (!plugin?.isEnabled()) {
                 logger.debug('NetworkScanService', `[VENDOR] ${label}: Plugin not available or disabled`);
                 return null;
             }

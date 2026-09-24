@@ -114,7 +114,7 @@ export const useUserAuthStore = create<UserAuthState>((set, get) => ({
             // Sometimes the API client returns errors in the error object
             const payload = getApiErrorPayload(error);
             const errorCode = payload.error?.code || payload.code || '';
-            const errorMessage = payload.error?.message || getErrorMessage(error) || String(error || '');
+            const errorMessage = payload.error?.message || getErrorMessage(error) || (typeof error === 'string' ? error : '');
             
             // Check if it's an authentication error from the API response
             // The API client returns UNAUTHORIZED code for 401 errors

@@ -197,7 +197,7 @@ class ApiClient {
       return data as ApiResponse<T>;
     } catch (error: unknown) {
       // In development, suppress connection refused errors - they are normal when backend is not started
-      const errorMessage = getErrorMessage(error) || String(error || '');
+      const errorMessage = getErrorMessage(error) || (typeof error === 'string' ? error : '');
       const isConnectionRefused = 
         errorMessage.includes('ECONNREFUSED') ||
         errorMessage.includes('Failed to fetch') ||

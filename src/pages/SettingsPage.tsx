@@ -302,7 +302,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.vacuumError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.vacuumError') });
     } finally {
       setIsVacuuming(false);
@@ -325,7 +325,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.integrityError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.integrityError') });
     } finally {
       setIsCheckingIntegrity(false);
@@ -344,7 +344,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.walCheckpointError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.walCheckpointError') });
     } finally {
       setIsCheckpointing(false);
@@ -416,7 +416,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
@@ -454,7 +454,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.purgeError') });
     } finally {
       setIsPurging(false);
@@ -495,7 +495,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
     } finally {
       setIsPurgingAll(false);
@@ -518,7 +518,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.optimizeError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.optimizeError') });
     } finally {
       setIsOptimizing(false);
@@ -1550,7 +1550,7 @@ const DatabasePerformanceSection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
-    } catch (error: unknown) {
+    } catch {
       setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
@@ -4395,7 +4395,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else if (successes.length > 0) {
         showSuccess(`Paramètres enregistrés: ${successes.join(', ')}`);
       }
-    } catch (error: unknown) {
+    } catch {
       setError('Erreur lors de la sauvegarde');
     } finally {
       setIsLoading(false);
