@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.48] - 2026-09-24
+
+### Changes
+
+- refactor: share the files page ellipsis menu between grid and list views
+- fix: replace role=presentation with real fixes for S1082/S6819
+
+---
+
 ## [0.10.47] - 2026-09-24
 
 ### Fixed
