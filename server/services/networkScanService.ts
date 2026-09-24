@@ -214,34 +214,7 @@ export class NetworkScanService {
         // Clear last scan result when starting a new scan
         this.lastScanResult = null;
 
-        // Initialize plugin stats cache for full scans (to avoid repeated getStats() calls)
-        if (scanType === 'full') {
-            await this.initializePluginStatsCache();
-        }
-
-        // Check Wireshark vendor database status at start of scan
-        if (scanType === 'full') {
-            try {
-                const vendorStats = WiresharkVendorService.getStats();
-                logger.info('NetworkScanService', `Wireshark vendor database: ${vendorStats.totalVendors} vendors available, last update: ${vendorStats.lastUpdate || 'never'}`);
-                if (vendorStats.totalVendors === 0) {
-                    logger.error('NetworkScanService', '⚠️ Wireshark vendor database is EMPTY! Vendor detection will FAIL. Please update the vendor database in Admin settings.');
-                } else if (vendorStats.totalVendors < 1000) {
-                    logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
-                }
-            } catch (error: any) {
-                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
-            }
-        }
-
-        // Initialize progress tracking
-        this.currentScanProgress = {
-            scanned: 0,
-            total: ipsToScan.length,
-            found: 0,
-            updated: 0,
-            isActive: true
-        };
+        await this.prepareScanRun(scanType, ipsToScan.length);
 
         let found = 0;
         let updated = 0;
@@ -817,34 +790,7 @@ export class NetworkScanService {
 
         logger.info('NetworkScanService', `Refreshing ${ipsToRefresh.length} existing IPs (type: ${scanType})`);
 
-        // Initialize plugin stats cache for full scans (to avoid repeated getStats() calls)
-        if (scanType === 'full') {
-            await this.initializePluginStatsCache();
-        }
-
-        // Check Wireshark vendor database status at start of refresh
-        if (scanType === 'full') {
-            try {
-                const vendorStats = WiresharkVendorService.getStats();
-                logger.info('NetworkScanService', `Wireshark vendor database: ${vendorStats.totalVendors} vendors available, last update: ${vendorStats.lastUpdate || 'never'}`);
-                if (vendorStats.totalVendors === 0) {
-                    logger.error('NetworkScanService', '⚠️ Wireshark vendor database is EMPTY! Vendor detection will FAIL. Please update the vendor database in Admin settings.');
-                } else if (vendorStats.totalVendors < 1000) {
-                    logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
-                }
-            } catch (error: any) {
-                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
-            }
-        }
-
-        // Initialize progress tracking for refresh
-        this.currentScanProgress = {
-            scanned: 0,
-            total: ipsToRefresh.length,
-            found: 0,
-            updated: 0,
-            isActive: true
-        };
+        await this.prepareScanRun(scanType, ipsToRefresh.length);
 
         let online = 0;
         let offline = 0;
@@ -1817,99 +1763,90 @@ export class NetworkScanService {
     }
 
     /**
-     * Get MAC address from Freebox plugin
-     * @param ip IP address
+     * Common setup before a scan or refresh run: warm the plugin stats cache and check the
+     * Wireshark vendor database (full scans only, both are only used for MAC/vendor/hostname
+     * detection), then reset progress tracking.
+     */
+    private async prepareScanRun(scanType: 'full' | 'quick', total: number): Promise<void> {
+        if (scanType === 'full') {
+            // Initialize plugin stats cache (to avoid repeated getStats() calls)
+            await this.initializePluginStatsCache();
+
+            try {
+                const vendorStats = WiresharkVendorService.getStats();
+                logger.info('NetworkScanService', `Wireshark vendor database: ${vendorStats.totalVendors} vendors available, last update: ${vendorStats.lastUpdate || 'never'}`);
+                if (vendorStats.totalVendors === 0) {
+                    logger.error('NetworkScanService', '⚠️ Wireshark vendor database is EMPTY! Vendor detection will FAIL. Please update the vendor database in Admin settings.');
+                } else if (vendorStats.totalVendors < 1000) {
+                    logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
+                }
+            } catch (error: unknown) {
+                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${getErrorMessage(error)}`);
+            }
+        }
+
+        this.currentScanProgress = {
+            scanned: 0,
+            total,
+            found: 0,
+            updated: 0,
+            isActive: true
+        };
+    }
+
+    /**
+     * Get MAC address from a gateway plugin's device list (Freebox or UniFi), by IP.
+     * Uses the cached plugin stats while still valid, otherwise fetches fresh ones.
      * @returns MAC address or null if not found
      */
-    private async getMacFromFreebox(ip: string): Promise<string | null> {
+    private async getMacFromPlugin(pluginId: 'freebox' | 'unifi', ip: string): Promise<string | null> {
+        const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
         try {
-            const freeboxPlugin = pluginManager.getPlugin('freebox');
-            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-                logger.debug('NetworkScanService', `[MAC] Freebox plugin not available or disabled for ${ip}`);
+            const plugin = pluginManager.getPlugin(pluginId);
+            if (!plugin || !plugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[MAC] ${label} plugin not available or disabled for ${ip}`);
                 return null;
             }
-            
-            // Use cached stats if available and still valid, otherwise fetch fresh stats
+
+            const cachedStats = pluginId === 'freebox' ? this.cachedFreeboxStats : this.cachedUniFiStats;
             let stats: any;
-            if (this.cachedFreeboxStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
-                stats = this.cachedFreeboxStats;
-                logger.debug('NetworkScanService', `[MAC] Using cached Freebox stats for ${ip}`);
+            if (cachedStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
+                stats = cachedStats;
+                logger.debug('NetworkScanService', `[MAC] Using cached ${label} stats for ${ip}`);
             } else {
-                // Cache expired or not available, fetch fresh stats
-                stats = await freeboxPlugin.getStats();
-                logger.debug('NetworkScanService', `[MAC] Fetched fresh Freebox stats for ${ip} (cache expired or unavailable)`);
+                stats = await plugin.getStats();
+                logger.debug('NetworkScanService', `[MAC] Fetched fresh ${label} stats for ${ip} (cache expired or unavailable)`);
             }
             if (!stats?.devices || !Array.isArray(stats.devices)) {
-                logger.debug('NetworkScanService', `[MAC] No devices found in Freebox stats for ${ip}`);
+                logger.debug('NetworkScanService', `[MAC] No devices found in ${label} stats for ${ip}`);
                 return null;
             }
-            
-            // Find device by IP
+
+            // Find device by IP (UniFi devices can be access points, switches, or clients)
             const device = stats.devices.find((d: any) => d.ip === ip);
             if (device && device.mac) {
                 const mac = device.mac.toLowerCase().trim();
-                // Validate MAC format
                 if (/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/.test(mac)) {
-                    logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} from Freebox`);
+                    logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} from ${label}`);
                     return mac.replace(/-/g, ':');
                 } else {
-                    logger.debug('NetworkScanService', `[MAC] Invalid MAC format from Freebox for ${ip}: ${mac}`);
+                    logger.debug('NetworkScanService', `[MAC] Invalid MAC format from ${label} for ${ip}: ${mac}`);
                 }
             } else {
-                logger.debug('NetworkScanService', `[MAC] Device not found in Freebox stats for ${ip}`);
+                logger.debug('NetworkScanService', `[MAC] Device not found in ${label} stats for ${ip}`);
             }
         } catch (error: unknown) {
-            logger.debug('NetworkScanService', `[MAC] Freebox lookup failed for ${ip}: ${getErrorMessage(error)}`);
+            logger.debug('NetworkScanService', `[MAC] ${label} lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
 
-    /**
-     * Get MAC address from UniFi plugin
-     * @param ip IP address
-     * @returns MAC address or null if not found
-     */
-    private async getMacFromUniFi(ip: string): Promise<string | null> {
-        try {
-            const unifiPlugin = pluginManager.getPlugin('unifi');
-            if (!unifiPlugin || !unifiPlugin.isEnabled()) {
-                logger.debug('NetworkScanService', `[MAC] UniFi plugin not available or disabled for ${ip}`);
-                return null;
-            }
-            
-            // Use cached stats if available and still valid, otherwise fetch fresh stats
-            let stats: any;
-            if (this.cachedUniFiStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
-                stats = this.cachedUniFiStats;
-                logger.debug('NetworkScanService', `[MAC] Using cached UniFi stats for ${ip}`);
-            } else {
-                // Cache expired or not available, fetch fresh stats
-                stats = await unifiPlugin.getStats();
-                logger.debug('NetworkScanService', `[MAC] Fetched fresh UniFi stats for ${ip} (cache expired or unavailable)`);
-            }
-            if (!stats?.devices || !Array.isArray(stats.devices)) {
-                logger.debug('NetworkScanService', `[MAC] No devices found in UniFi stats for ${ip}`);
-                return null;
-            }
-            
-            // Find device by IP (devices can be access points, switches, or clients)
-            const device = stats.devices.find((d: any) => d.ip === ip);
-            if (device && device.mac) {
-                const mac = device.mac.toLowerCase().trim();
-                // Validate MAC format
-                if (/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/.test(mac)) {
-                    logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} from UniFi`);
-                    return mac.replace(/-/g, ':');
-                } else {
-                    logger.debug('NetworkScanService', `[MAC] Invalid MAC format from UniFi for ${ip}: ${mac}`);
-                }
-            } else {
-                logger.debug('NetworkScanService', `[MAC] Device not found in UniFi stats for ${ip}`);
-            }
-        } catch (error: unknown) {
-            logger.debug('NetworkScanService', `[MAC] UniFi lookup failed for ${ip}: ${getErrorMessage(error)}`);
-        }
-        return null;
+    private getMacFromFreebox(ip: string): Promise<string | null> {
+        return this.getMacFromPlugin('freebox', ip);
+    }
+
+    private getMacFromUniFi(ip: string): Promise<string | null> {
+        return this.getMacFromPlugin('unifi', ip);
     }
 
     /**
@@ -2005,16 +1942,17 @@ export class NetworkScanService {
     }
     
     /**
-     * Get hostname from Freebox plugin
+     * Get hostname from a gateway plugin's device list (Freebox or UniFi): by IP first,
+     * then by the MAC already known for this IP.
      */
-    private async getHostnameFromFreebox(ip: string): Promise<string | null> {
+    private async getHostnameFromPlugin(pluginId: 'freebox' | 'unifi', ip: string): Promise<string | null> {
         try {
-            const freeboxPlugin = pluginManager.getPlugin('freebox');
-            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) return null;
-            
-            const stats = await freeboxPlugin.getStats();
+            const plugin = pluginManager.getPlugin(pluginId);
+            if (!plugin || !plugin.isEnabled()) return null;
+
+            const stats = await plugin.getStats();
             if (!stats?.devices || !Array.isArray(stats.devices)) return null;
-            
+
             // Try by IP first
             const device = stats.devices.find((d: any) => d.ip === ip);
             if (device) {
@@ -2023,15 +1961,12 @@ export class NetworkScanService {
                     return hostname!.split('.')[0];
                 }
             }
-            
+
             // Try by MAC
             const existingScan = NetworkScanRepository.findByIp(ip);
             if (existingScan?.mac) {
-                const deviceByMac = stats.devices.find((d: any) => {
-                    const deviceMac = normalizeMac(d.mac || '');
-                    const scanMac = normalizeMac(existingScan.mac);
-                    return deviceMac === scanMac;
-                });
+                const scanMac = normalizeMac(existingScan.mac);
+                const deviceByMac = stats.devices.find((d: any) => normalizeMac(d.mac || '') === scanMac);
                 if (deviceByMac) {
                     const hostname = (deviceByMac.hostname || deviceByMac.name) as string | undefined;
                     if (this.isValidHostname(hostname, ip)) {
@@ -2039,53 +1974,21 @@ export class NetworkScanService {
                     }
                 }
             }
-        } catch (error: any) {
-            logger.debug('NetworkScanService', `Freebox hostname lookup failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
+            logger.debug('NetworkScanService', `${label} hostname lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
-    
-    /**
-     * Get hostname from UniFi plugin
-     */
-    private async getHostnameFromUniFi(ip: string): Promise<string | null> {
-        try {
-            const unifiPlugin = pluginManager.getPlugin('unifi');
-            if (!unifiPlugin || !unifiPlugin.isEnabled()) return null;
-            
-            const stats = await unifiPlugin.getStats();
-            if (!stats?.devices || !Array.isArray(stats.devices)) return null;
-            
-            // Try by IP first
-            const device = stats.devices.find((d: any) => d.ip === ip);
-            if (device) {
-                const hostname = (device.hostname || device.name) as string | undefined;
-                if (this.isValidHostname(hostname, ip)) {
-                    return hostname!.split('.')[0];
-                }
-            }
-            
-            // Try by MAC
-            const existingScan = NetworkScanRepository.findByIp(ip);
-            if (existingScan?.mac) {
-                const deviceByMac = stats.devices.find((d: any) => {
-                    const deviceMac = normalizeMac(d.mac || '');
-                    const scanMac = normalizeMac(existingScan.mac);
-                    return deviceMac === scanMac;
-                });
-                if (deviceByMac) {
-                    const hostname = (deviceByMac.hostname || deviceByMac.name) as string | undefined;
-                    if (this.isValidHostname(hostname, ip)) {
-                        return hostname!.split('.')[0];
-                    }
-                }
-            }
-        } catch (error: any) {
-            logger.debug('NetworkScanService', `UniFi hostname lookup failed for ${ip}: ${error.message || error}`);
-        }
-        return null;
+
+    private getHostnameFromFreebox(ip: string): Promise<string | null> {
+        return this.getHostnameFromPlugin('freebox', ip);
     }
-    
+
+    private getHostnameFromUniFi(ip: string): Promise<string | null> {
+        return this.getHostnameFromPlugin('unifi', ip);
+    }
+
     /**
      * Get hostname from system methods (reverse DNS, NetBIOS, etc.)
      */
@@ -2241,122 +2144,72 @@ export class NetworkScanService {
     }
     
     /**
-     * Get vendor from Freebox plugin
+     * Get vendor from a gateway plugin's device list (Freebox or UniFi): by MAC first (more
+     * reliable), then by IP as a fallback when that device's MAC matches.
+     * Freebox exposes the vendor in `type` (or `vendor_name`), UniFi in `vendor`/`vendor_name`/`oui`.
      */
-    private async getVendorFromFreebox(mac: string, ip: string): Promise<string | null> {
+    private async getVendorFromPlugin(pluginId: 'freebox' | 'unifi', mac: string, ip: string): Promise<string | null> {
+        const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
+        const readVendor = (d: any): unknown => pluginId === 'freebox'
+            ? d.type || d.vendor_name
+            : d.vendor || d.vendor_name || d.oui;
+        const isUsableVendor = (vendor: unknown): vendor is string =>
+            typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0;
         try {
-            logger.debug('NetworkScanService', `[VENDOR] Freebox: Looking up vendor for MAC ${mac}, IP ${ip}`);
-            
-            const freeboxPlugin = pluginManager.getPlugin('freebox');
-            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: Plugin not available or disabled`);
+            logger.debug('NetworkScanService', `[VENDOR] ${label}: Looking up vendor for MAC ${mac}, IP ${ip}`);
+
+            const plugin = pluginManager.getPlugin(pluginId);
+            if (!plugin || !plugin.isEnabled()) {
+                logger.debug('NetworkScanService', `[VENDOR] ${label}: Plugin not available or disabled`);
                 return null;
             }
-            
-            const stats = await freeboxPlugin.getStats();
+
+            const stats = await plugin.getStats();
             if (!stats?.devices || !Array.isArray(stats.devices)) {
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: No devices found in stats`);
+                logger.debug('NetworkScanService', `[VENDOR] ${label}: No devices found in stats`);
                 return null;
             }
-            
-            logger.debug('NetworkScanService', `[VENDOR] Freebox: Checking ${stats.devices.length} devices`);
-            
+
+            logger.debug('NetworkScanService', `[VENDOR] ${label}: Checking ${stats.devices.length} devices`);
+
             // Try by MAC first (more reliable)
             const normalizedMac = normalizeMac(mac);
-            const device = stats.devices.find((d: any) => {
-                const deviceMac = normalizeMac(d.mac || '');
-                return deviceMac === normalizedMac;
-            });
-            
+            const device = stats.devices.find((d: any) => normalizeMac(d.mac || '') === normalizedMac);
+
             if (!device) {
                 // Try by IP as fallback
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: Device not found by MAC, trying IP ${ip}`);
+                logger.debug('NetworkScanService', `[VENDOR] ${label}: Device not found by MAC, trying IP ${ip}`);
                 const deviceByIp = stats.devices.find((d: any) => d.ip === ip);
                 if (deviceByIp && deviceByIp.mac) {
                     const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
-                    if (deviceMac === normalizedMac) {
-                        const vendor = deviceByIp.type || deviceByIp.vendor_name;
-                        if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
-                            logger.debug('NetworkScanService', `[VENDOR] Freebox: ✓ Found vendor ${vendor} (via IP)`);
-                            return vendor.trim();
-                        }
+                    const vendor = readVendor(deviceByIp);
+                    if (deviceMac === normalizedMac && isUsableVendor(vendor)) {
+                        logger.debug('NetworkScanService', `[VENDOR] ${label}: ✓ Found vendor ${vendor} (via IP)`);
+                        return vendor.trim();
                     }
                 }
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✗ Device not found for MAC ${mac} or IP ${ip}`);
+                logger.debug('NetworkScanService', `[VENDOR] ${label}: ✗ Device not found for MAC ${mac} or IP ${ip}`);
                 return null;
             }
-            
-            // Freebox provides vendor_name in the 'type' field
-            const vendor = device.type || device.vendor_name;
-            if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✓ Found vendor ${vendor} (via MAC)`);
+
+            const vendor = readVendor(device);
+            if (isUsableVendor(vendor)) {
+                logger.debug('NetworkScanService', `[VENDOR] ${label}: ✓ Found vendor ${vendor} (via MAC)`);
                 return vendor.trim();
-            } else {
-                logger.debug('NetworkScanService', `[VENDOR] Freebox: ✗ No vendor field found in device data`);
             }
+            logger.debug('NetworkScanService', `[VENDOR] ${label}: ✗ No vendor field found in device data`);
         } catch (error: unknown) {
-            logger.error('NetworkScanService', `[VENDOR] Freebox: Vendor lookup failed for ${ip}: ${getErrorMessage(error)}`);
+            logger.error('NetworkScanService', `[VENDOR] ${label}: Vendor lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
 
-    /**
-     * Get vendor from UniFi plugin
-     */
-    private async getVendorFromUniFi(mac: string, ip: string): Promise<string | null> {
-        try {
-            logger.debug('NetworkScanService', `[VENDOR] UniFi: Looking up vendor for MAC ${mac}, IP ${ip}`);
-            
-            const unifiPlugin = pluginManager.getPlugin('unifi');
-            if (!unifiPlugin || !unifiPlugin.isEnabled()) {
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: Plugin not available or disabled`);
-                return null;
-            }
-            
-            const stats = await unifiPlugin.getStats();
-            if (!stats?.devices || !Array.isArray(stats.devices)) {
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: No devices found in stats`);
-                return null;
-            }
-            
-            logger.debug('NetworkScanService', `[VENDOR] UniFi: Checking ${stats.devices.length} devices`);
-            
-            // Try by MAC first (more reliable)
-            const normalizedMac = normalizeMac(mac);
-            const device = stats.devices.find((d: any) => {
-                const deviceMac = normalizeMac(d.mac || '');
-                return deviceMac === normalizedMac;
-            });
-            
-            if (!device) {
-                // Try by IP as fallback
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: Device not found by MAC, trying IP ${ip}`);
-                const deviceByIp = stats.devices.find((d: any) => d.ip === ip);
-                if (deviceByIp && deviceByIp.mac) {
-                    const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
-                    if (deviceMac === normalizedMac) {
-                        const vendor = deviceByIp.vendor || deviceByIp.vendor_name || deviceByIp.oui;
-                        if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
-                            logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via IP)`);
-                            return vendor.trim();
-                        }
-                    }
-                }
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✗ Device not found for MAC ${mac} or IP ${ip}`);
-                return null;
-            }
-            
-            const vendor = device.vendor || device.vendor_name || device.oui;
-            if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✓ Found vendor ${vendor} (via MAC)`);
-                return vendor.trim();
-            } else {
-                logger.debug('NetworkScanService', `[VENDOR] UniFi: ✗ No vendor field found in device data`);
-            }
-        } catch (error: unknown) {
-            logger.error('NetworkScanService', `[VENDOR] UniFi: Vendor lookup failed for ${ip}: ${getErrorMessage(error)}`);
-        }
-        return null;
+    private getVendorFromFreebox(mac: string, ip: string): Promise<string | null> {
+        return this.getVendorFromPlugin('freebox', mac, ip);
+    }
+
+    private getVendorFromUniFi(mac: string, ip: string): Promise<string | null> {
+        return this.getVendorFromPlugin('unifi', mac, ip);
     }
 
     /**
