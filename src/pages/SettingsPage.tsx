@@ -72,6 +72,7 @@ import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
 import { UserMenu } from '../components/ui';
 import { ToastContainer, type ToastData } from '../components/ui/Toast';
+import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -268,7 +269,7 @@ const DatabaseManagementSection: React.FC<{
       if (response.success && response.result) {
         setDbStats(response.result);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load DB stats:', error);
     }
   };
@@ -280,7 +281,7 @@ const DatabaseManagementSection: React.FC<{
       if (response.success && response.result) {
         setHealth(response.result);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load DB health:', error);
     } finally {
       setIsLoadingHealth(false);
@@ -301,7 +302,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.vacuumError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.vacuumError') });
     } finally {
       setIsVacuuming(false);
@@ -324,7 +325,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.integrityError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.integrityError') });
     } finally {
       setIsCheckingIntegrity(false);
@@ -343,7 +344,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.walCheckpointError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.walCheckpointError') });
     } finally {
       setIsCheckpointing(false);
@@ -356,7 +357,7 @@ const DatabaseManagementSection: React.FC<{
       if (response.success && response.result) {
         setSizeEstimate(response.result);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load size estimate:', error);
     }
   };
@@ -371,9 +372,9 @@ const DatabaseManagementSection: React.FC<{
         const errorMsg = response.error?.message || response.error?.code || t('admin.database.loadError');
         setMessage({ type: 'error', text: errorMsg });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load retention config:', error);
-      const errorMsg = error?.response?.data?.error?.message || error?.message || t('admin.database.loadError');
+      const errorMsg = getApiErrorPayload(error).response?.data?.error?.message || getErrorMessage(error) || t('admin.database.loadError');
       setMessage({ type: 'error', text: errorMsg });
     }
   };
@@ -394,9 +395,9 @@ const DatabaseManagementSection: React.FC<{
         console.error('Failed to load database stats:', response.error);
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.loadStatsError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load database stats:', error);
-      const errorMsg = error?.response?.data?.error?.message || error?.message || t('admin.database.loadStatsError');
+      const errorMsg = getApiErrorPayload(error).response?.data?.error?.message || getErrorMessage(error) || t('admin.database.loadStatsError');
       setMessage({ type: 'error', text: errorMsg });
     } finally {
       setIsLoading(false);
@@ -415,7 +416,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
@@ -453,7 +454,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.purgeError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.purgeError') });
     } finally {
       setIsPurging(false);
@@ -494,7 +495,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.purgeAllError') });
     } finally {
       setIsPurgingAll(false);
@@ -517,7 +518,7 @@ const DatabaseManagementSection: React.FC<{
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.optimizeError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.optimizeError') });
     } finally {
       setIsOptimizing(false);
@@ -1086,7 +1087,7 @@ const WiresharkVendorSection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement des statistiques' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load IEEE OUI vendor stats:', error);
       setMessage({ type: 'error', text: 'Erreur lors du chargement des statistiques' });
     } finally {
@@ -1129,7 +1130,7 @@ const WiresharkVendorSection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la mise à jour' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to update IEEE OUI vendors:', error);
       setMessage({ type: 'error', text: 'Erreur lors de la mise à jour' });
     } finally {
@@ -1151,7 +1152,7 @@ const WiresharkVendorSection: React.FC = () => {
         setAutoUpdateEnabled(!newValue); // Revert on error
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save auto-update config:', error);
       setAutoUpdateEnabled(!newValue); // Revert on error
       setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
@@ -1284,7 +1285,7 @@ const PluginPrioritySection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors du chargement de la configuration' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load plugin priority config:', error);
       setMessage({ type: 'error', text: 'Erreur lors du chargement de la configuration' });
     } finally {
@@ -1303,7 +1304,7 @@ const PluginPrioritySection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || 'Erreur lors de la sauvegarde' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save plugin priority config:', error);
       setMessage({ type: 'error', text: 'Erreur lors de la sauvegarde' });
     } finally {
@@ -1529,7 +1530,7 @@ const DatabasePerformanceSection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.loadError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load DB config:', error);
       setMessage({ type: 'error', text: t('admin.database.loadError') });
     } finally {
@@ -1549,7 +1550,7 @@ const DatabasePerformanceSection: React.FC = () => {
       } else {
         setMessage({ type: 'error', text: response.error?.message || t('admin.database.saveError') });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ type: 'error', text: t('admin.database.saveError') });
     } finally {
       setIsSaving(false);
@@ -2414,10 +2415,10 @@ const GeneralNetworkSection: React.FC = () => {
         // Update initial value after save
         setInitialPublicUrl(publicUrl.trim() || '');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({ 
         type: 'error', 
-        text: error?.response?.data?.error?.message || t('admin.general.saveError') 
+        text: getApiErrorPayload(error).response?.data?.error?.message || t('admin.general.saveError') 
       });
     } finally {
       setIsSaving(false);
@@ -4181,8 +4182,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setError(response.error?.message || 'Erreur lors de la sauvegarde');
       }
-    } catch (error: any) {
-      setError(error?.response?.data?.error?.message || 'Erreur lors de la sauvegarde');
+    } catch (error: unknown) {
+      setError(getApiErrorPayload(error).response?.data?.error?.message || 'Erreur lors de la sauvegarde');
     } finally {
       setIsLoading(false);
     }
@@ -4216,8 +4217,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else {
         setError(response.error?.message || 'Erreur lors de la sauvegarde');
       }
-    } catch (error: any) {
-      setError(error?.response?.data?.error?.message || 'Erreur lors de la sauvegarde');
+    } catch (error: unknown) {
+      setError(getApiErrorPayload(error).response?.data?.error?.message || 'Erreur lors de la sauvegarde');
     } finally {
       setIsLoading(false);
     }
@@ -4280,8 +4281,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             } else {
               errors.push('Connexion: ' + (response.error?.message || 'Erreur'));
             }
-          } catch (error: any) {
-            errors.push('Connexion: ' + (error?.message || 'Erreur'));
+          } catch (error: unknown) {
+            errors.push('Connexion: ' + (getErrorMessage(error) || 'Erreur'));
           }
         }
       }
@@ -4345,8 +4346,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             } else {
               errors.push('Réseau: ' + (response.error?.message || 'Erreur'));
             }
-          } catch (error: any) {
-            errors.push('Réseau: ' + (error?.response?.data?.error?.message || 'Erreur'));
+          } catch (error: unknown) {
+            errors.push('Réseau: ' + (getApiErrorPayload(error).response?.data?.error?.message || 'Erreur'));
           }
         }
       }
@@ -4380,8 +4381,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             } else {
               errors.push('DynDNS: ' + (response.error?.message || 'Erreur'));
             }
-          } catch (error: any) {
-            errors.push('DynDNS: ' + (error?.response?.data?.error?.message || 'Erreur'));
+          } catch (error: unknown) {
+            errors.push('DynDNS: ' + (getApiErrorPayload(error).response?.data?.error?.message || 'Erreur'));
           }
         }
       }
@@ -4394,7 +4395,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       } else if (successes.length > 0) {
         showSuccess(`Paramètres enregistrés: ${successes.join(', ')}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setError('Erreur lors de la sauvegarde');
     } finally {
       setIsLoading(false);

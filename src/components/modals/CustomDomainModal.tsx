@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Loader2, CheckCircle, AlertCircle, Globe } from 'lucide-react';
 import { ModalBackdropButton } from '../ui/ModalBackdropButton';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 interface CustomDomainModalProps {
   isOpen: boolean;
@@ -83,8 +84,8 @@ export const CustomDomainModal: React.FC<CustomDomainModalProps> = ({ isOpen, on
       await new Promise(resolve => setTimeout(resolve, 2000));
       if (onSuccess) onSuccess();
       handleClose();
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors de la configuration du domaine');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || 'Erreur lors de la configuration du domaine');
     } finally {
       setLoading(false);
     }

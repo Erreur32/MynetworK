@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import logoFreebox from '../icons/logo_ultra.svg';
 import logoUnifi from '../icons/logo_unifi.svg';
 import { VendorIcon } from '../components/ui/VendorIcon';
+import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
 
 /** Ports connus : numéro → nom du service (comme sur la page Scan) */
 const WELL_KNOWN_PORTS: Record<number, string> = {
@@ -513,9 +514,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             } else {
                 return { success: false, error: t('search.pingFailed') };
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Handle socket errors gracefully
-            const errorMessage = err.message || t('search.pingError');
+            const errorMessage = getErrorMessage(err) || t('search.pingError');
             if (errorMessage.includes('socket') || errorMessage.includes('ended') || errorMessage.includes('ECONNRESET')) {
                 return { success: false, error: t('search.connectionInterrupted') };
             }
@@ -575,9 +576,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
             } else {
                 alert(response.error?.message || t('search.rescanError'));
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Rescan failed:', error);
-            alert(t('search.rescanError') + ': ' + (error.message || t('networkScan.errors.unknown')));
+            alert(t('search.rescanError') + ': ' + (getErrorMessage(error) || t('networkScan.errors.unknown')));
         } finally {
             setRescanningIp(null);
         }
@@ -873,22 +874,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                     setResults([]);
                 }
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Handle network/socket errors
             let errorMessage = t('search.searchError');
             
-            if (err.message) {
-                if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
+            const apiErrorMessage = getApiErrorPayload(err).error?.message;
+            if (err instanceof Error && err.message) {
+                const msg = err.message;
+                if (msg.includes('socket') || msg.includes('ended') || msg.includes('ECONNRESET')) {
                     errorMessage = t('search.searchInterrupted');
-                } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
+                } else if (msg.includes('timeout') || msg.includes('TIMEOUT')) {
                     errorMessage = t('search.searchTimeout');
-                } else if (err.message.includes('aborted') || err.message.includes('ABORTED')) {
+                } else if (msg.includes('aborted') || msg.includes('ABORTED')) {
                     errorMessage = t('search.searchCancelled');
                 } else {
-                    errorMessage = err.message;
+                    errorMessage = msg;
                 }
-            } else if (err.error?.message) {
-                errorMessage = err.error.message;
+            } else if (apiErrorMessage) {
+                errorMessage = apiErrorMessage;
             }
             
             setError(errorMessage);

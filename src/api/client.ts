@@ -2,6 +2,7 @@ import type { ApiResponse } from '../types/api';
 import { useAuthStore } from '../stores/authStore';
 import { PERMISSION_LABELS } from '../utils/permissions';
 import { getBasePath } from '../utils/ingress';
+import { getErrorMessage } from '../utils/errorMessage';
 
 // Extended response type for Freebox API errors
 interface FreeboxErrorResponse {
@@ -194,9 +195,9 @@ class ApiClient {
       }
 
       return data as ApiResponse<T>;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // In development, suppress connection refused errors - they are normal when backend is not started
-      const errorMessage = error?.message || String(error || '');
+      const errorMessage = getErrorMessage(error) || String(error || '');
       const isConnectionRefused = 
         errorMessage.includes('ECONNREFUSED') ||
         errorMessage.includes('Failed to fetch') ||
