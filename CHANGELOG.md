@@ -4,10 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [0.10.48] - 2026-09-24
 
-### Changes
+### Refactor
 
-- refactor: share the files page ellipsis menu between grid and list views
-- fix: replace role=presentation with real fixes for S1082/S6819
+- Typed catch blocks in the network scanner (`server/services/networkScanService.ts`, `server/routes/network-scan.ts`): the 89 remaining `catch (error: any)` / `.catch((err: any) => ...)` now use `unknown`, narrowed through the shared `getErrorMessage()` helper (same pattern as v0.10.35). Stack traces read via `instanceof Error`, ping exec errors (`signal`/`stderr`) through an explicit shape. No functional change: same messages and error codes.
 
 ---
 
