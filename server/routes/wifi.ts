@@ -115,11 +115,11 @@ router.get('/full', asyncHandler(async (_req, res) => {
   if (!supports6ghz && Array.isArray(apsData) && Array.isArray(bssData)) {
     // Filter out 6GHz APs (for Pop v8, Revolution v6)
     filteredAps = apsData.filter(
-      (ap: { band?: string }) => !ap.band?.toLowerCase().includes('6g')
+      (ap: { config?: { band?: string } }) => !ap.config?.band?.toLowerCase().includes('6g')
     );
     // Filter out 6GHz BSS
     filteredBss = bssData.filter(
-      (bss: { band?: string }) => !bss.band?.toLowerCase().includes('6g')
+      (bss: { status?: { band?: string } }) => !bss.status?.band?.toLowerCase().includes('6g')
     );
     // Remove 6GHz device count
     filteredDevicesByBand['6g'] = 0;

@@ -1412,11 +1412,11 @@ export const TvPage: React.FC<TvPageProps> = ({onBack}) => {
     const {permissions, freeboxUrl} = useAuthStore();
     const hasPvrPermission = permissions.pvr === true;
 
-    // Derive active tab from URL: /tv/guide → 'guide'
-    const urlTab = location.pathname.split('/')[2] as TvTab | undefined;
+    // Derive active tab from URL: /freebox/tv/guide → 'guide'
+    const urlTab = location.pathname.split('/')[3] as TvTab | undefined;
     const activeTab: TvTab = urlTab && VALID_TV_TABS.has(urlTab) ? urlTab : 'recordings';
     const setActiveTab = useCallback((tab: TvTab) => {
-        navigate(`/tv/${tab}`);
+        navigate(`/freebox/tv/${tab}`);
     }, [navigate]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [showRecordingForm, setShowRecordingForm] = useState(false);

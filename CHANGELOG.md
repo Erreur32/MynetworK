@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.43] - 2026-09-24
+
+### Fixed
+
+- Freebox WiFi card empty: with a different SSID per band, every BSS reports `is_main_bss: false` and they were all filtered out. A non-main BSS is now only skipped when a main one exists on the same radio (guest network case). Also fixes the access point list on the dashboard Freebox card.
+- Freebox plugin WiFi stats: band now read from `status.band` (was always "WiFi"), and `enabled` reflects the real state (enabled in config and radio active) instead of being hardcoded to true. Fixes the Prometheus/InfluxDB WiFi network metrics.
+- 6 GHz filter for models without 6 GHz (Pop, Revolution) read non-existent fields and never filtered anything, now reads `config.band` / `status.band`.
+- Freebox VMs card stuck on "VMs not available" while the VMs page listed them: the VM store error was never cleared after a successful fetch, and the card checked the error before the VM list.
+
+### Changed
+
+- Freebox sub-pages moved under `/freebox`: `/freebox/tv`, `/freebox/phone`, `/freebox/files`, `/freebox/vms` (like `/freebox/analytics`). Old URLs (`/tv/guide` etc.) redirect to the new ones, keeping the tab and query string.
+
+---
+
 ## [0.10.42] - 2026-09-24
 
 ### Added
