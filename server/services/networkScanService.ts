@@ -61,7 +61,7 @@ function grepFile(filePath: string, pattern: RegExp): string[] {
 
 const isWindows = process.platform === 'win32';
 const PING_FLAG = isWindows ? '-n' : '-c';
-const PING_TIMEOUT = isWindows ? 3000 : 3000; // 3 seconds timeout (increased for Docker)
+const PING_TIMEOUT = 3000; // 3 seconds timeout (increased for Docker)
 const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operations
 
 /**

@@ -167,7 +167,7 @@ export class UniFiApiService {
      */
     async login(): Promise<boolean> {
         // If login is already in progress, wait for it
-        if (this.loginInProgress) {
+        if (this.loginInProgress !== null) {
             return await this.loginInProgress;
         }
 
@@ -644,7 +644,7 @@ export class UniFiApiService {
         }
 
         // Singleflight: if a login is already running, await it.
-        if (this.controllerLoginInFlight) {
+        if (this.controllerLoginInFlight !== null) {
             await this.controllerLoginInFlight;
             return;
         }

@@ -1338,30 +1338,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                 <span>{t('search.activeIp')}</span>
                                 <CheckCircle size={12} className={showOnlyActive ? 'text-emerald-400' : 'text-theme-tertiary'} />
                             </button>
-                            {false && (
-                            <button
-                                onClick={() => {}}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border transition-all duration-200 font-medium ${
-                                    false
-                                            ? 'bg-accent-primary/20 border-accent-primary text-accent-primary shadow-lg shadow-accent-primary/10'
-                                            : 'bg-theme-secondary border-theme text-theme-secondary hover:bg-theme-tertiary hover:border-theme-hover'
-                                }`}
-                            >
-                                <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
-                                    false ? 'bg-blue-500' : 'bg-theme-tertiary'
-                                }`}>
-                                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-md ${
-                                        false ? 'translate-x-5' : 'translate-x-0'
-                                    }`} />
-                                </div>
-                                <span className="sr-only">Étendu (retiré)</span>
-                            </button>
-                            )}
-                            {false && (
-                                <span className="text-[10px] text-theme-tertiary ml-0.5" title="Mode strict : recherche exacte avec IP, nom, MAC, port, hostname. La fiche détaillée (ports, UniFi) s’affiche uniquement pour une recherche par IP.">
-                                    (strict : IP, nom, MAC…)
-                                </span>
-                            )}
                             
                             <button
                                 onClick={() => {

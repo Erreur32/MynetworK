@@ -2114,10 +2114,10 @@ html[data-theme="elegant"] body[style*="background"] {
 
 @keyframes elegantInputGlow {
     0%, 100% { 
-        box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.3) !important;
+        box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.3);
     }
     50% { 
-        box-shadow: 0 0 0 2px rgba(251, 207, 232, 0.4) !important;
+        box-shadow: 0 0 0 2px rgba(251, 207, 232, 0.4);
     }
 }
 

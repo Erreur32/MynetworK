@@ -10,12 +10,12 @@ import { logger } from '../../utils/logger.js';
 /** Min/max without spread — large arrays would exceed the JS call stack (Math.max(...arr)). */
 function safeNumberMax(values: number[]): number | null {
     if (values.length === 0) return null;
-    return values.reduce((a, b) => (a > b ? a : b));
+    return values.reduce((a, b) => (a > b ? a : b), values[0]);
 }
 
 function safeNumberMin(values: number[]): number | null {
     if (values.length === 0) return null;
-    return values.reduce((a, b) => (a < b ? a : b));
+    return values.reduce((a, b) => (a < b ? a : b), values[0]);
 }
 
 export interface LatencyMonitoring {

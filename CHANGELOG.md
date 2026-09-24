@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.46] - 2026-09-24
+
+### Fixed
+
+- SonarCloud: all 17 Major bugs addressed.
+  - TV channel list: a channel numbered `0` would have rendered a stray "0" (S6439).
+  - "Elegant" theme input glow: `!important` inside `@keyframes` is invalid and made the browser drop the declaration (css:S4655).
+  - Explicit null/undefined checks on the in-flight request/login promises used for deduplication (S6544 x6, no behavior change).
+  - `reduce()` in latency min/max seeded with an initial value (S6959 x2).
+
+### Removed
+
+- Dead code: two never-rendered `{false && ...}` blocks on the search page (S6638 x2), identical-branch ternaries/conditionals in the theme picker, ping timeout and Prometheus URL builder (S3923 x4).
+
+---
+
 ## [0.10.45] - 2026-09-24
 
 ### Fixed

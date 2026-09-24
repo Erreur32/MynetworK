@@ -26,7 +26,7 @@ export class FreeboxPlugin extends BasePlugin {
     private statsPromise: Promise<PluginStats> | null = null;
 
     constructor() {
-        super('freebox', 'Freebox', '0.10.45');
+        super('freebox', 'Freebox', '0.10.46');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -177,7 +177,7 @@ export class FreeboxPlugin extends BasePlugin {
 
     async getStats(): Promise<PluginStats> {
         // Protection against concurrent calls: if a call is already in progress, return the same promise
-        if (this.isGettingStats && this.statsPromise) {
+        if (this.isGettingStats && this.statsPromise !== null) {
             logger.debug('FreeboxPlugin', 'getStats() already in progress, reusing existing promise');
             return this.statsPromise;
         }

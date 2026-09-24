@@ -758,7 +758,7 @@ const EpgTimeline: React.FC<{
                                     )}
                                 </div>
                                 <div className="min-w-0">
-                                    {channel.number && (
+                                    {channel.number != null && (
                                         <span className="text-[10px] text-gray-600 font-medium">{channel.number}</span>
                                     )}
                                     <p className="text-xs text-white truncate">{channel.name}</p>

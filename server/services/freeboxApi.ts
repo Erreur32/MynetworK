@@ -279,7 +279,7 @@ class FreeboxApiService {
         const lockKey = `${method}:${endpoint}`;
         const existingLock = this.endpointLocks.get(lockKey);
         
-        if (existingLock) {
+        if (existingLock !== undefined) {
             // Réutiliser la promesse existante
             return existingLock as Promise<FreeboxApiResponse<T>>;
         }

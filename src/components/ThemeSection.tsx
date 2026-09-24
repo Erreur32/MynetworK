@@ -802,8 +802,6 @@ export const ThemeSection: React.FC = () => {
                                             ? '#0a0a0a'
                                             : theme.id === 'modern'
                                             ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a1a2e 100%)'
-                                            : theme.id === 'nightly'
-                                            ? '#0f0f0f'
                                             : '#0f0f0f',
                                         backdropFilter: theme.id === 'glass' || theme.id === 'modern' ? 'blur(12px)' : 'none',
                                         color: themeColors.textPrimary
@@ -1010,8 +1008,6 @@ export const ThemeSection: React.FC = () => {
                                                 ? '#0a0a0a'
                                                 : theme.id === 'modern'
                                                 ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #1a1a2e 100%)'
-                                                : theme.id === 'nightly'
-                                                ? '#0f0f0f'
                                                 : '#0f0f0f',
                                             backdropFilter: theme.id === 'glass' || theme.id === 'modern' ? 'blur(12px)' : 'none',
                                             color: themeColors.textPrimary

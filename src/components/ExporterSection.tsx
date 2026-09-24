@@ -93,19 +93,8 @@ export const ExporterSection: React.FC = () => {
             }
         }
         
-        // No public URL configured: use HTTP + IP + port
-        const hostname = window.location.hostname;
-        const isIpAddress = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || /^[0-9a-fA-F:]{2,39}$/.test(hostname);
-        
-        if (isIpAddress) {
-            // Use IP address with configured port
-            const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
-            setPrometheusUrl(url);
-        } else {
-            // Fallback: use hostname with configured port (shouldn't happen if no publicUrl)
-            const url = `http://${hostname}:${configuredPort}/api/metrics/prometheus`;
-            setPrometheusUrl(url);
-        }
+        // No public URL configured: current host (IP or hostname) + configured port over HTTP
+        setPrometheusUrl(`http://${window.location.hostname}:${configuredPort}/api/metrics/prometheus`);
     }, [config.prometheus.port, config.prometheus.enabled, publicUrl]);
 
     const loadConfig = async () => {
