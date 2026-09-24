@@ -60,6 +60,8 @@ router.get(
       ip?: string;
       dmz?: { enabled: boolean; ip?: string };
       dhcp?: { enabled: boolean; ipStart?: string; ipEnd?: string; range?: string; netmask?: string };
+      // DHCP config couldn't be read (API error), so "inactive" would be misleading
+      dhcpUnavailable?: boolean;
       natRules: NatRule[];
     } = { natRules: [] };
     const unifi: {
@@ -159,8 +161,12 @@ router.get(
               // leave counts undefined
             }
           }
+        } else {
+          freebox.dhcpUnavailable = true;
+          dhcpServers.push({ source: 'freebox', active: false, detail: 'Unavailable' });
         }
       } catch {
+        freebox.dhcpUnavailable = true;
         dhcpServers.push({ source: 'freebox', active: false, detail: 'Unavailable' });
       }
 

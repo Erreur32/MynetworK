@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.44] - 2026-09-24
+
+### Fixed
+
+- Dashboard "Network summary" card, Freebox DHCP badge: now says "Inactive (bridge mode)" when the Freebox is in bridge mode (it doesn't serve DHCP even if its config still says enabled, and the IP usage rows are hidden), and "Unavailable" when the DHCP config couldn't be read, instead of a misleading "Inactive".
+
+### Removed
+
+- Dead `NetworkSummaryWidget.tsx` (never imported, superseded by `NetworkSummaryDashboardWidget.tsx`).
+
+---
+
 ## [0.10.43] - 2026-09-24
 
 ### Fixed

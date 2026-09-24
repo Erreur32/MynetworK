@@ -46,6 +46,7 @@ interface FreeboxData {
     freeIps?: number;
     usagePercentage?: number;
   };
+  dhcpUnavailable?: boolean;
   natRules: NatRule[];
 }
 
@@ -124,6 +125,18 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
   }
 
   if (!data) return null;
+
+  // Freebox DHCP badge: say why it's off (bridge mode) or that it couldn't be read at all.
+  // In bridge mode the Freebox doesn't serve DHCP even if its config still says enabled.
+  const freeboxDhcpActive = !!data.freebox?.dhcp?.enabled && data.freebox.mode !== 'bridge';
+  const freeboxDhcpBadge = data.freebox?.dhcpUnavailable
+    ? { label: t('network.dhcpUnavailable'), className: 'bg-amber-900/30 text-amber-400' }
+    : freeboxDhcpActive
+      ? { label: t('network.active'), className: 'bg-green-900/40 text-green-400' }
+      : {
+          label: data.freebox?.mode === 'bridge' ? t('network.dhcpInactiveBridge') : t('network.inactive'),
+          className: 'bg-gray-800 text-gray-500'
+        };
 
   // UniFi role without a detected gateway device (APs/switches-only): gateway/subnet stay 'N/A'
   // server-side, legitimately (nothing to deduce them from), not an error.
@@ -217,13 +230,11 @@ export const NetworkSummaryDashboardWidget: React.FC = () => {
             <div className="bg-[#1a1a1a] rounded-lg p-2.5 text-xs space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 font-medium">Freebox</span>
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                  data.freebox.dhcp?.enabled ? 'bg-green-900/40 text-green-400' : 'bg-gray-800 text-gray-500'
-                }`}>
-                  {data.freebox.dhcp?.enabled ? t('network.active') : t('network.inactive')}
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${freeboxDhcpBadge.className}`}>
+                  {freeboxDhcpBadge.label}
                 </span>
               </div>
-              {data.freebox.dhcp?.enabled && (
+              {freeboxDhcpActive && data.freebox.dhcp && (
                 <>
                   {data.freebox.dhcp.usedIps != null && data.freebox.dhcp.totalIps != null && (
                     <div className="flex justify-between items-center">

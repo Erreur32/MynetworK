@@ -35,6 +35,8 @@
     "dmzActive": "Actif →",
     "active": "Actif",
     "inactive": "Inactif",
+    "dhcpInactiveBridge": "Inactif (mode bridge)",
+    "dhcpUnavailable": "Indisponible",
     "unifiGateway": "UniFi Gateway:",
     "nameLabel": "Nom:",
     "dhcpLabel": "DHCP",

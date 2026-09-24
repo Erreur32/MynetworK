@@ -17,6 +17,5 @@ export { PluginSummaryCard } from './PluginSummaryCard';
 export { BandwidthHistoryWidget } from './BandwidthHistoryWidget';
 export { NetworkEventsWidget } from './NetworkEventsWidget';
 export { NetworkScanWidget } from './NetworkScanWidget';
-export { NetworkSummaryWidget } from './NetworkSummaryWidget';
 export { NetworkSummaryDashboardWidget } from './NetworkSummaryDashboardWidget';
 export { NetworkSummaryFreeboxWidget } from './NetworkSummaryFreeboxWidget';
