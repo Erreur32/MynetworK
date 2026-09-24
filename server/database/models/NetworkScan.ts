@@ -673,7 +673,7 @@ export class NetworkScanRepository {
             FROM network_scans
             WHERE first_seen >= ?
             ORDER BY first_seen DESC
-            LIMIT 10
+            LIMIT 30
         `);
         const newDevices = (newDevicesStmt.all(cutoffIso) as Array<{ ip: string; hostname: string | null; vendor: string | null; first_seen: string }>)
             .map((row) => ({ ip: row.ip, hostname: row.hostname || undefined, vendor: row.vendor || undefined, firstSeen: row.first_seen }));
@@ -690,7 +690,7 @@ export class NetworkScanRepository {
             WHERE prev_status IS NOT NULL AND status != prev_status
             GROUP BY ip
             ORDER BY transitions DESC
-            LIMIT 10
+            LIMIT 30
         `);
         const flakyRows = flakyStmt.all(cutoffIso) as Array<{ ip: string; transitions: number }>;
         const flakyDevices = flakyRows

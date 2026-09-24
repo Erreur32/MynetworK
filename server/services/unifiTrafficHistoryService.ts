@@ -3,8 +3,10 @@
  *
  * Independent of any WebSocket client being connected (unlike the live "top
  * talkers" badges, which only sample while the dashboard is open). Polls
- * stat/sta every minute, computes the delta since the last poll per MAC, and
- * accumulates it into unifi_client_traffic_daily / unifi_client_traffic_totals.
+ * stat/sta every 30s (same cadence as the network-scan page's own refresh, no
+ * point polling faster than the frontend that reads this data), computes the
+ * delta since the last poll per MAC, and accumulates it into
+ * unifi_client_traffic_daily / unifi_client_traffic_totals.
  * Delta baselines live in memory only — a backend restart loses at most one
  * poll's worth of traffic per client, which is an acceptable trade-off for
  * not needing to persist per-MAC baselines.
@@ -15,7 +17,7 @@ import { UniFiClientTrafficRepository } from '../database/models/UniFiClientTraf
 import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { logger } from '../utils/logger.js';
 
-const POLL_INTERVAL_MS = 60_000; // 1 minute — accumulation doesn't need live granularity
+const POLL_INTERVAL_MS = 30_000; // 30s — matches the network-scan page's own refresh cadence
 const DAILY_RETENTION_DAYS = 30; // per-day rows purged after this; all-time totals are never purged
 const PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -26,7 +28,7 @@ class UniFiTrafficHistoryService {
 
     start(): void {
         if (this.pollInterval) return;
-        logger.info('UniFiTrafficHistory', 'Starting per-client traffic accumulation (60s)');
+        logger.info('UniFiTrafficHistory', 'Starting per-client traffic accumulation (30s)');
 
         this.pollInterval = setInterval(() => { this.poll().catch(() => {}); }, POLL_INTERVAL_MS);
         this.purgeInterval = setInterval(() => {

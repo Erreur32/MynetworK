@@ -125,7 +125,11 @@
       "flakyDevices": "Frequently disconnecting",
       "noNewDevices": "No new devices",
       "noFlakyDevices": "No unstable devices",
-      "transitionsCount": "{{count}}x"
+      "transitionsCount": "{{count}}x",
+      "topTraffic": "Top traffic (today)",
+      "noTopTraffic": "No traffic data",
+      "viewAll": "View all ({{count}})",
+      "total": "Total"
     },
     "buttons": {
       "config": "Configuration",
@@ -152,6 +156,7 @@
       "stopPortScan": "Stop port scan",
       "nmapNotInstalled": "nmap is not installed on the server - port scanning is unavailable",
       "latencyMonitoring": "Latency monitoring",
+      "trafficRequiresUnifi": "Today's traffic (UniFi). Empty if the device isn't a known UniFi client.",
       "lastSeen": "Last seen",
       "firstDetection": "First detection",
       "searchIp": "Search for {{ip}} on search page",
@@ -208,6 +213,8 @@
         "openPorts": "Open ports",
         "avg1h": "Avg1h",
         "max": "Max",
+        "download": "Down",
+        "upload": "Up",
         "monitoring": "Monit.",
         "lastSeen": "Last seen",
         "firstDetection": "First seen",
