@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.48] - 2026-09-24
+
+### Refactor
+
+- Typed catch blocks in the network scanner (`server/services/networkScanService.ts`, `server/routes/network-scan.ts`): 68 of the 89 remaining `catch (error: any)` / `.catch((err: any) => ...)` now use `unknown`, narrowed through the shared `getErrorMessage()` helper (same pattern as v0.10.35). Stack traces read via `instanceof Error`, ping exec errors (`signal`/`stderr`) through an explicit shape. No functional change: same messages and error codes. The other 21 sit inside legacy copy-pasted blocks (config/purge route handlers, Freebox/UniFi lookup pairs) and are left for a dedicated deduplication pass, since touching them makes SonarCloud count the whole duplicated block as new code.
+
+---
+
 ## [0.10.47] - 2026-09-24
 
 ### Fixed

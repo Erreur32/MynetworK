@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as dns from 'dns';
 import { NetworkScanRepository, type NetworkScan, type CreateNetworkScanInput } from '../database/models/NetworkScan.js';
 import { logger } from '../utils/logger.js';
+import { getErrorMessage } from '../utils/errorMessage.js';
 import { vendorDetectionService } from './vendorDetection.js';
 import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { metricsCollector } from './metricsCollector.js';
@@ -342,8 +343,8 @@ export class NetworkScanService {
                                             logger.info('NetworkScanService', `[${ip}] ✗ No vendor found for MAC: ${macToUse} (tried all plugins in priority order)`);
                                         }
                                     }
-                                } catch (error: any) {
-                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${error.message || error}`);
+                                } catch (error: unknown) {
+                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${getErrorMessage(error)}`);
                                     // Preserve existing vendor if detection failed
                                     const existingVendor = existing?.vendor?.trim() || '';
                                     if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
@@ -359,8 +360,8 @@ export class NetworkScanService {
                                     scanData.vendorSource = existing.vendorSource || 'manual';
                                 }
                             }
-                        } catch (error: any) {
-                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${error.message || error}`);
+                        } catch (error: unknown) {
+                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${getErrorMessage(error)}`);
                             // MAC detection may fail, preserve existing if available
                             if (existing?.mac) {
                                 scanData.mac = existing.mac;
@@ -408,7 +409,7 @@ export class NetworkScanService {
                                     logger.debug('NetworkScanService', `[${ip}] Preserving existing hostname: ${existingHostname} (source: ${scanData.hostnameSource})`);
                                 }
                             }
-                        } catch (error: any) {
+                        } catch {
                             // Hostname resolution may fail, preserve existing if available (but not if it's an IP)
                             if (!scanData.hostname && existing?.hostname) {
                                 const existingHostname = existing.hostname.trim();
@@ -533,8 +534,8 @@ export class NetworkScanService {
                     hostname: scansWithHostname.length
                 };
                 logger.info('NetworkScanService', `Detection summary: ${detectionSummary.mac} with MAC, ${detectionSummary.vendor} with vendor, ${detectionSummary.hostname} with hostname`);
-            } catch (error: any) {
-                logger.debug('NetworkScanService', `Failed to generate detection summary: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('NetworkScanService', `Failed to generate detection summary: ${getErrorMessage(error)}`);
             }
         }
 
@@ -614,8 +615,8 @@ export class NetworkScanService {
                         // Preserve existing MAC if detection failed
                         scanData.mac = existing.mac;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[${ip}] MAC detection failed: ${error.message}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[${ip}] MAC detection failed: ${getErrorMessage(error)}`);
                     if (existing?.mac) {
                         scanData.mac = existing.mac;
                     }
@@ -636,8 +637,8 @@ export class NetworkScanService {
                         scanData.hostname = existing.hostname;
                         scanData.hostnameSource = existing.hostnameSource;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[${ip}] Hostname detection failed: ${error.message}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[${ip}] Hostname detection failed: ${getErrorMessage(error)}`);
                     if (existing?.hostname) {
                         scanData.hostname = existing.hostname;
                         scanData.hostnameSource = existing.hostnameSource;
@@ -656,8 +657,8 @@ export class NetworkScanService {
                         scanData.vendor = existing.vendor;
                         scanData.vendorSource = existing.vendorSource;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[${ip}] Vendor detection failed: ${error.message}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[${ip}] Vendor detection failed: ${getErrorMessage(error)}`);
                     if (existing?.vendor && existing.vendor.trim() !== '--') {
                         scanData.vendor = existing.vendor;
                         scanData.vendorSource = existing.vendorSource;
@@ -674,8 +675,8 @@ export class NetworkScanService {
             logger.info('NetworkScanService', `[${ip}] Manual scan completed: status=${savedScan.status}, mac=${savedScan.mac || 'none'}, hostname=${savedScan.hostname || 'none'}`);
             
             return savedScan;
-        } catch (error: any) {
-            logger.error('NetworkScanService', `[${ip}] Failed to scan single IP: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('NetworkScanService', `[${ip}] Failed to scan single IP: ${getErrorMessage(error)}`);
             return null;
         }
     }
@@ -734,13 +735,13 @@ export class NetworkScanService {
                     logger.warn('NetworkScanService', `[${ip}] nmap not available, skipping port scan`);
                     return scanResult;
                 }
-            } catch (portScanError: any) {
-                logger.warn('NetworkScanService', `[${ip}] Port scan failed: ${portScanError.message || portScanError}`);
+            } catch (portScanError: unknown) {
+                logger.warn('NetworkScanService', `[${ip}] Port scan failed: ${getErrorMessage(portScanError)}`);
                 // Return the scan result even if port scan failed
                 return scanResult;
             }
-        } catch (error: any) {
-            logger.error('NetworkScanService', `[${ip}] Failed to rescan IP with ports: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('NetworkScanService', `[${ip}] Failed to rescan IP with ports: ${getErrorMessage(error)}`);
             return null;
         }
     }
@@ -920,8 +921,8 @@ export class NetworkScanService {
                                             logger.info('NetworkScanService', `[${ip}] ✗ No vendor found for MAC: ${macToUse} (tried all plugins in priority order)`);
                                         }
                                     }
-                                } catch (error: any) {
-                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${error.message || error}`);
+                                } catch (error: unknown) {
+                                    logger.error('NetworkScanService', `[${ip}] ✗ Vendor detection failed for MAC ${macToUse}: ${getErrorMessage(error)}`);
                                     // Preserve existing vendor if detection failed
                                     const existingVendor = existing?.vendor?.trim() || '';
                                     if (existingVendor && existingVendor !== '--' && existingVendor.toLowerCase() !== 'unknown') {
@@ -937,8 +938,8 @@ export class NetworkScanService {
                                     updateData.vendorSource = existing.vendorSource || 'manual';
                                 }
                             }
-                        } catch (error: any) {
-                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${error.message || error}`);
+                        } catch (error: unknown) {
+                            logger.error('NetworkScanService', `[${ip}] MAC/vendor detection error: ${getErrorMessage(error)}`);
                             // Preserve existing MAC/vendor if detection failed
                             if (existing?.mac) {
                                 updateData.mac = existing.mac;
@@ -1200,8 +1201,8 @@ export class NetworkScanService {
                 }
                 const detectedOnly = this.getNetworkRange();
                 return detectedOnly && this.isScanRangeAuthorized(detectedOnly) ? detectedOnly : null;
-            } catch (e: any) {
-                logger.warn('NetworkScanService', `resolveScanRangeFromAppConfig: ${e?.message || e}`);
+            } catch (e: unknown) {
+                logger.warn('NetworkScanService', `resolveScanRangeFromAppConfig: ${getErrorMessage(e)}`);
             }
         }
 
@@ -1538,10 +1539,12 @@ export class NetworkScanService {
                 }
             }
             return { success: false };
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Only real errors reach here (timeout, permission, command not found, spawn errors)
-            const errorMessage = error.message || String(error);
-            const errorStderr = error.stderr || '';
+            const errorMessage = getErrorMessage(error);
+            // safeExecFile rejects with the raw execFile error, which may carry signal/stderr
+            const execError = (error ?? {}) as { stderr?: string; signal?: string };
+            const errorStderr = execError.stderr || '';
             
             // Check for permission errors
             if (errorMessage.includes('Permission denied') || 
@@ -1561,7 +1564,7 @@ export class NetworkScanService {
                 logger.error('NetworkScanService', `Error details: ${errorMessage}, stderr: ${errorStderr}`);
             }
             // Timeout errors are also normal for offline hosts, but we log them at debug level
-            else if (errorMessage.includes('ETIMEDOUT') || errorMessage.includes('timeout') || error.signal === 'SIGTERM') {
+            else if (errorMessage.includes('ETIMEDOUT') || errorMessage.includes('timeout') || execError.signal === 'SIGTERM') {
                 // Timeout is normal for offline hosts, don't log as error
                 logger.debug('NetworkScanService', `Ping timeout for ${ip} (host may be offline)`);
             }
@@ -1611,8 +1614,8 @@ export class NetworkScanService {
                                 return mac;
                             }
                         }
-                    } catch (error: any) {
-                        logger.debug('NetworkScanService', `[MAC] Plugin ${pluginName} failed for ${ip}: ${error.message || error}`);
+                    } catch (error: unknown) {
+                        logger.debug('NetworkScanService', `[MAC] Plugin ${pluginName} failed for ${ip}: ${getErrorMessage(error)}`);
                         // Continue to next plugin
                     }
                 }
@@ -1634,8 +1637,8 @@ export class NetworkScanService {
                         logger.info('NetworkScanService', `[MAC] ✓ Found MAC ${mac} for ${ip} using Windows arp`);
                         return mac;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] Windows arp failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[MAC] Windows arp failed for ${ip}: ${getErrorMessage(error)}`);
                 }
             } else {
                 // Linux/Mac: Try multiple methods for MAC detection
@@ -1667,8 +1670,8 @@ export class NetworkScanService {
                         } else {
                             logger.debug('NetworkScanService', `[MAC] No valid MAC found in ${arpPath} for ${ip}`);
                         }
-                    } catch (error: any) {
-                        logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${error.message || error}`);
+                    } catch (error: unknown) {
+                        logger.debug('NetworkScanService', `[MAC] ${arpPath} failed for ${ip}: ${getErrorMessage(error)}`);
                     }
                 }
 
@@ -1686,8 +1689,8 @@ export class NetworkScanService {
                         logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using arping`);
                         return mac;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] arping not available or failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[MAC] arping not available or failed for ${ip}: ${getErrorMessage(error)}`);
                 }
 
                 // Method 3: ip neigh (forces ARP resolution for stale/missing entries in native mode)
@@ -1707,8 +1710,8 @@ export class NetworkScanService {
                         logger.info('NetworkScanService', `[MAC] Found MAC ${mac} for ${ip} using ip neigh`);
                         return mac;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] ip neigh failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[MAC] ip neigh failed for ${ip}: ${getErrorMessage(error)}`);
                 }
 
                 // Method 4: arp-scan (if installed)
@@ -1738,8 +1741,8 @@ export class NetworkScanService {
                         logger.debug('NetworkScanService', `Found MAC ${mac} for ${ip} using arp`);
                         return mac;
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[MAC] Traditional arp command failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[MAC] Traditional arp command failed for ${ip}: ${getErrorMessage(error)}`);
                 }
             }
             
@@ -1778,8 +1781,8 @@ export class NetworkScanService {
                     this.cacheTimestamp = Date.now();
                     logger.info('NetworkScanService', '[Cache] Freebox stats cached successfully');
                 }
-            } catch (error: any) {
-                logger.warn('NetworkScanService', `[Cache] Failed to cache Freebox stats: ${error.message || error}. Will use fallback.`);
+            } catch (error: unknown) {
+                logger.warn('NetworkScanService', `[Cache] Failed to cache Freebox stats: ${getErrorMessage(error)}. Will use fallback.`);
                 // Continue without cache - getMacFromFreebox() will call getStats() directly
             }
         }
@@ -1796,8 +1799,8 @@ export class NetworkScanService {
                     }
                     logger.info('NetworkScanService', '[Cache] UniFi stats cached successfully');
                 }
-            } catch (error: any) {
-                logger.warn('NetworkScanService', `[Cache] Failed to cache UniFi stats: ${error.message || error}. Will use fallback.`);
+            } catch (error: unknown) {
+                logger.warn('NetworkScanService', `[Cache] Failed to cache UniFi stats: ${getErrorMessage(error)}. Will use fallback.`);
                 // Continue without cache - getMacFromUniFi() will call getStats() directly
             }
         }
@@ -1855,8 +1858,8 @@ export class NetworkScanService {
             } else {
                 logger.debug('NetworkScanService', `[MAC] Device not found in Freebox stats for ${ip}`);
             }
-        } catch (error: any) {
-            logger.debug('NetworkScanService', `[MAC] Freebox lookup failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.debug('NetworkScanService', `[MAC] Freebox lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
@@ -1903,8 +1906,8 @@ export class NetworkScanService {
             } else {
                 logger.debug('NetworkScanService', `[MAC] Device not found in UniFi stats for ${ip}`);
             }
-        } catch (error: any) {
-            logger.debug('NetworkScanService', `[MAC] UniFi lookup failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.debug('NetworkScanService', `[MAC] UniFi lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
@@ -2231,8 +2234,8 @@ export class NetworkScanService {
                     return vendor.trim();
                 }
             }
-        } catch (error: any) {
-            logger.debug('NetworkScanService', `[VENDOR] Freebox lookup by IP failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.debug('NetworkScanService', `[VENDOR] Freebox lookup by IP failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
@@ -2291,8 +2294,8 @@ export class NetworkScanService {
             } else {
                 logger.debug('NetworkScanService', `[VENDOR] Freebox: ✗ No vendor field found in device data`);
             }
-        } catch (error: any) {
-            logger.error('NetworkScanService', `[VENDOR] Freebox: Vendor lookup failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('NetworkScanService', `[VENDOR] Freebox: Vendor lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
@@ -2350,8 +2353,8 @@ export class NetworkScanService {
             } else {
                 logger.debug('NetworkScanService', `[VENDOR] UniFi: ✗ No vendor field found in device data`);
             }
-        } catch (error: any) {
-            logger.error('NetworkScanService', `[VENDOR] UniFi: Vendor lookup failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('NetworkScanService', `[VENDOR] UniFi: Vendor lookup failed for ${ip}: ${getErrorMessage(error)}`);
         }
         return null;
     }
@@ -2389,8 +2392,8 @@ export class NetworkScanService {
                 } else {
                     logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found in Wireshark DB for OUI ${oui}`);
                 }
-            } catch (error: any) {
-                logger.debug('NetworkScanService', `[VENDOR] Scanner: Wireshark lookup failed for OUI ${oui}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('NetworkScanService', `[VENDOR] Scanner: Wireshark lookup failed for OUI ${oui}: ${getErrorMessage(error)}`);
             }
             
             // Then try local database (vendorDetectionService includes local OUI DB)
@@ -2411,8 +2414,8 @@ export class NetworkScanService {
             } else {
                 logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found from API for MAC ${mac}`);
             }
-        } catch (error: any) {
-            logger.error('NetworkScanService', `[VENDOR] Scanner: Vendor detection failed for MAC ${mac}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.error('NetworkScanService', `[VENDOR] Scanner: Vendor detection failed for MAC ${mac}: ${getErrorMessage(error)}`);
         }
         
         logger.debug('NetworkScanService', `[VENDOR] Scanner: ✗ No vendor found for MAC ${mac} after trying all methods`);
@@ -2573,8 +2576,8 @@ export class NetworkScanService {
             } else {
                 logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS returned no results for ${ip}`);
             }
-        } catch (error: any) {
-            logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS failed for ${ip}: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.info('NetworkScanService', `[HOSTNAME] ✗ Reverse DNS failed for ${ip}: ${getErrorMessage(error)}`);
         }
         
         if (isWindows) {
@@ -2637,8 +2640,8 @@ export class NetworkScanService {
                 } else {
                     logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts returned insufficient data for ${ip} (parts: ${parts.length})`);
                 }
-            } catch (error: any) {
-                logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts failed for ${ip}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ getent hosts failed for ${ip}: ${getErrorMessage(error)}`);
             }
             
             // Method 3: Try reading /etc/hosts directly
@@ -2670,8 +2673,8 @@ export class NetworkScanService {
                     } else {
                         logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} returned insufficient data for ${ip}`);
                     }
-                } catch (error: any) {
-                    logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} lookup failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.debug('NetworkScanService', `[HOSTNAME] ${hostsPath} lookup failed for ${ip}: ${getErrorMessage(error)}`);
                     // Continue to next path
                 }
             }
@@ -2727,8 +2730,8 @@ export class NetworkScanService {
                 } else {
                     logger.info('NetworkScanService', `[HOSTNAME] ✗ nmblookup returned no valid hostname for ${ip}`);
                 }
-            } catch (error: any) {
-                logger.info('NetworkScanService', `[HOSTNAME] ✗ nmblookup failed for ${ip}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ nmblookup failed for ${ip}: ${getErrorMessage(error)}`);
             }
             
             // Method 5: Try to extract hostname from ARP table (some systems store hostnames there)
@@ -2761,12 +2764,12 @@ export class NetworkScanService {
                                 return shortHostname;
                             }
                         }
-                    } catch (error: any) {
-                        logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table lookup failed for ${ip} in ${arpPath}: ${error.message || error}`);
+                    } catch (error: unknown) {
+                        logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table lookup failed for ${ip} in ${arpPath}: ${getErrorMessage(error)}`);
                     }
                 }
-            } catch (error: any) {
-                logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table method failed for ${ip}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.debug('NetworkScanService', `[HOSTNAME] ✗ ARP table method failed for ${ip}: ${getErrorMessage(error)}`);
             }
             
             // Method 6: Try mDNS/Bonjour (avahi-resolve/avahi-browse) if available
@@ -2786,8 +2789,8 @@ export class NetworkScanService {
                             return shortHostname;
                         }
                     }
-                } catch (error: any) {
-                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-resolve failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-resolve failed for ${ip}: ${getErrorMessage(error)}`);
                 }
                 
                 // Method 6b: Try avahi-browse (browse all services and match IP)
@@ -2810,11 +2813,11 @@ export class NetworkScanService {
                             }
                         }
                     }
-                } catch (error: any) {
-                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-browse failed for ${ip}: ${error.message || error}`);
+                } catch (error: unknown) {
+                    logger.info('NetworkScanService', `[HOSTNAME] ✗ avahi-browse failed for ${ip}: ${getErrorMessage(error)}`);
                 }
-            } catch (error: any) {
-                logger.info('NetworkScanService', `[HOSTNAME] ✗ mDNS lookup failed for ${ip}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ mDNS lookup failed for ${ip}: ${getErrorMessage(error)}`);
             }
             
             // Method 7: Try LLMNR (Link-Local Multicast Name Resolution) - Windows and some Linux
@@ -2833,11 +2836,11 @@ export class NetworkScanService {
                             return shortHostname;
                         }
                     }
-                } catch (error: any) {
+                } catch (error: unknown) {
                     // resolvectl not available, skip
                 }
-            } catch (error: any) {
-                logger.info('NetworkScanService', `[HOSTNAME] ✗ LLMNR lookup failed for ${ip}: ${error.message || error}`);
+            } catch (error: unknown) {
+                logger.info('NetworkScanService', `[HOSTNAME] ✗ LLMNR lookup failed for ${ip}: ${getErrorMessage(error)}`);
             }
         }
         
@@ -2943,8 +2946,8 @@ export class NetworkScanService {
                 }
             }
             return ranges;
-        } catch (error: any) {
-            logger.warn('NetworkScanService', `Failed to parse network_scan_default config: ${error.message || error}`);
+        } catch (error: unknown) {
+            logger.warn('NetworkScanService', `Failed to parse network_scan_default config: ${getErrorMessage(error)}`);
             return [];
         }
     }
