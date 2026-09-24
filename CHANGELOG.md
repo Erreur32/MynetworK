@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.49] - 2026-09-24
+
+### Refactor
+
+- Network scanner deduplication. Routes: the 38 identical catch bodies (log + 500 `{ success: false, error: { message, code } }`) go through a single `sendScanError()` helper. Service: the Freebox/UniFi lookup pairs are merged into `getMacFromPlugin()`, `getHostnameFromPlugin()` and `getVendorFromPlugin()`, and `scanNetwork()` / `refreshExistingIps()` share `prepareScanRun()`. About 400 lines removed, same messages, codes and lookup order.
+- Typed catch blocks finished: the 21 `catch (error: any)` left in the scanner's duplicated blocks now use `unknown`, so the backend has none left. Frontend: 46 of 52 converted through a new `src/utils/errorMessage.ts` (`getErrorMessage()` returns '' for non-Errors so `getErrorMessage(e) || fallback` keeps the old fallback behavior, plus `getApiErrorPayload()` for `{ error: { message, code } }` shapes). The 6 left sit inside duplicated blocks (UsersPage, LogsPage, SearchPage, SettingsPage).
+
+---
+
 ## [0.10.48] - 2026-09-24
 
 ### Refactor
