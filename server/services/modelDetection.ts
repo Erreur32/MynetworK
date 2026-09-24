@@ -53,7 +53,7 @@ class ModelDetectionService {
     }
 
     // Prevent multiple simultaneous detections
-    if (this.detectionPromise) {
+    if (this.detectionPromise !== null) {
       return this.detectionPromise;
     }
 

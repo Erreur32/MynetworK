@@ -263,7 +263,7 @@ class ApiClient {
     // Deduplicate concurrent identical GET requests
     const key = endpoint;
     const inflight = this._inflight.get(key);
-    if (inflight) return inflight as Promise<ApiResponse<T>>;
+    if (inflight !== undefined) return inflight as Promise<ApiResponse<T>>;
     const promise = this.request<T>('GET', endpoint).finally(() => {
       this._inflight.delete(key);
     });
