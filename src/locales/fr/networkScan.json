@@ -157,6 +157,8 @@
       "nmapNotInstalled": "nmap n'est pas installé sur le serveur, le scan de ports est indisponible",
       "latencyMonitoring": "Monitoring latence",
       "trafficRequiresUnifi": "Trafic aujourd'hui (UniFi). Vide si l'appareil n'est pas un client UniFi connu.",
+      "liveTraffic": "Active le suivi temps réel du trafic UniFi (10 appareils les plus actifs). Garde le contrôleur UniFi en polling rapide tant que cette page reste ouverte et que c'est actif.",
+      "liveNow": "En direct : ↓{{down}} ↑{{up}}",
       "lastSeen": "Dernière vue",
       "firstDetection": "Première détection",
       "searchIp": "Rechercher {{ip}} dans la page de recherche",
@@ -227,7 +229,8 @@
       "results": "Résultats:",
       "all": "Tous",
       "full": "Full",
-      "statusFilterLabel": "Filtrer par statut"
+      "statusFilterLabel": "Filtrer par statut",
+      "live": "Traffic live"
     },
     "scanInfo": {
       "range": "Plage :",
