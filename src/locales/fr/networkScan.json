@@ -316,6 +316,8 @@
       "trafficLive": "Live",
       "trafficToday": "Aujourd'hui",
       "trafficAllTime": "Depuis toujours",
+      "viewAllTraffic": "Voir tous les appareils",
+      "liveRateNote": "Débit en direct (mis à jour toutes les ~3s), seuls les appareils avec du trafic en cours sont listés",
       "noTrafficData": "Aucune donnée de trafic pour le moment",
       "trafficFreeboxUnavailable": "Le suivi du trafic par appareil nécessite UniFi (bornes/switch) — l'API Freebox ne fournit aucun compteur de trafic par appareil."
     },

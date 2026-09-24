@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.42] - 2026-09-24
+
+### Added
+
+- Full per-device traffic overlay, opened from a new expand button on the dashboard "Data volume" section: wide sortable table (#, device with vendor icon, IP, MAC, download, upload, total) with its own Live / Today / All-time switch. Live shows current rates, Today/All-time show accumulated volumes.
+
+### Changed
+
+- The network-scan insights "view all" top-traffic overlay now uses the same shared component (previously a page-local, today-only table), so it also gains the period switch and the IP/MAC columns.
+- Live UniFi top clients raised from 10 to 50 devices (WebSocket feed), so the overlay and the network-scan live pulse cover more devices. Compact views (dashboard widget, UniFi traffic tab) still show the top 10.
+- `GET /api/plugins/unifi/top-clients-history` limit cap raised from 50 to 500.
+
+---
+
 ## [0.10.41] - 2026-09-24
 
 ### Added
