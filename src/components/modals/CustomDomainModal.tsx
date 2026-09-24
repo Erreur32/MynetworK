@@ -336,8 +336,8 @@ export const CustomDomainModal: React.FC<CustomDomainModalProps> = ({ isOpen, on
   );
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={handleClose}>
-      <div className="bg-[#0f0f0f] border border-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="presentation" onClick={handleClose}>
+      <div className="bg-[#0f0f0f] border border-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto" role="presentation" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-[#0f0f0f] border-b border-gray-800 px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-xl font-semibold text-white">
             Configuration du nom de domaine

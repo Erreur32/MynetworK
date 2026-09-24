@@ -192,6 +192,7 @@ const FileItem: React.FC<{
             {showMenu && (
               <div
                 className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+                role="presentation"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
@@ -315,6 +316,7 @@ const FileItem: React.FC<{
           {showMenu && (
             <div
               className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
+              role="presentation"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -433,7 +435,7 @@ const DownloadItem: React.FC<{
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1" role="presentation" onClick={(e) => e.stopPropagation()}>
           {isActive && (
             <button
               onClick={onPause}
@@ -2009,6 +2011,7 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
         <div
           className="fixed bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] z-[200]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="presentation"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2 border-b border-gray-700">

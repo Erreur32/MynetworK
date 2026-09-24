@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.47] - 2026-09-24
+
+### Fixed
+
+- SonarCloud S1082 (8 Minor): backdrop, dropdown menu and stopPropagation-only containers (custom domain modal, parental control, user menu, files page menus and context menu) marked `role="presentation"`, since their click handlers only close a backdrop or stop event propagation and aren't user actions. No behavior change.
+
+---
+
 ## [0.10.46] - 2026-09-24
 
 ### Fixed
