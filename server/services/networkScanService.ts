@@ -229,8 +229,8 @@ export class NetworkScanService {
                 } else if (vendorStats.totalVendors < 1000) {
                     logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
                 }
-            } catch (error: unknown) {
-                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${getErrorMessage(error)}`);
+            } catch (error: any) {
+                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
             }
         }
 
@@ -409,7 +409,7 @@ export class NetworkScanService {
                                     logger.debug('NetworkScanService', `[${ip}] Preserving existing hostname: ${existingHostname} (source: ${scanData.hostnameSource})`);
                                 }
                             }
-                        } catch (error: unknown) {
+                        } catch {
                             // Hostname resolution may fail, preserve existing if available (but not if it's an IP)
                             if (!scanData.hostname && existing?.hostname) {
                                 const existingHostname = existing.hostname.trim();
@@ -832,8 +832,8 @@ export class NetworkScanService {
                 } else if (vendorStats.totalVendors < 1000) {
                     logger.warn('NetworkScanService', `⚠️ Wireshark vendor database has only ${vendorStats.totalVendors} vendors (expected >1000). Vendor detection may be LIMITED. Please update the vendor database in Admin settings.`);
                 }
-            } catch (error: unknown) {
-                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${getErrorMessage(error)}`);
+            } catch (error: any) {
+                logger.error('NetworkScanService', `Failed to check Wireshark vendor database: ${error.message || error}`);
             }
         }
 
@@ -2039,8 +2039,8 @@ export class NetworkScanService {
                     }
                 }
             }
-        } catch (error: unknown) {
-            logger.debug('NetworkScanService', `Freebox hostname lookup failed for ${ip}: ${getErrorMessage(error)}`);
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `Freebox hostname lookup failed for ${ip}: ${error.message || error}`);
         }
         return null;
     }
@@ -2080,8 +2080,8 @@ export class NetworkScanService {
                     }
                 }
             }
-        } catch (error: unknown) {
-            logger.debug('NetworkScanService', `UniFi hostname lookup failed for ${ip}: ${getErrorMessage(error)}`);
+        } catch (error: any) {
+            logger.debug('NetworkScanService', `UniFi hostname lookup failed for ${ip}: ${error.message || error}`);
         }
         return null;
     }

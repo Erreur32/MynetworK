@@ -622,12 +622,12 @@ router.get('/insights', requireAuth, asyncHandler(async (req: AuthenticatedReque
             success: true,
             result: { ...insights, topTraffic }
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get insights:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to get insights',
+                message: error.message || 'Failed to get insights',
                 code: 'INSIGHTS_ERROR'
             }
         });
@@ -658,12 +658,12 @@ router.get('/config', requireAuth, asyncHandler(async (req: AuthenticatedRequest
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to get config',
+                message: error.message || 'Failed to get config',
                 code: 'CONFIG_ERROR'
             }
         });
@@ -733,12 +733,12 @@ router.post('/config', requireAuth, requireAdmin, autoLog('network-scan', 'confi
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to save config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to save config',
+                message: error.message || 'Failed to save config',
                 code: 'CONFIG_SAVE_ERROR'
             }
         });
@@ -768,12 +768,12 @@ router.get('/refresh-config', requireAuth, asyncHandler(async (req: Authenticate
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get refresh config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to get refresh config',
+                message: error.message || 'Failed to get refresh config',
                 code: 'CONFIG_ERROR'
             }
         });
@@ -831,12 +831,12 @@ router.post('/refresh-config', requireAuth, requireAdmin, autoLog('network-scan'
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to save refresh config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to save refresh config',
+                message: error.message || 'Failed to save refresh config',
                 code: 'CONFIG_SAVE_ERROR'
             }
         });
@@ -1197,12 +1197,12 @@ router.get('/retention-config', requireAuth, requireAdmin, asyncHandler(async (r
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get retention config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to get retention config',
+                message: error.message || 'Failed to get retention config',
                 code: 'RETENTION_CONFIG_ERROR'
             }
         });
@@ -1253,12 +1253,12 @@ router.post('/retention-config', requireAuth, requireAdmin, autoLog('network-sca
                 }
             });
         }
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to save retention config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to save retention config',
+                message: error.message || 'Failed to save retention config',
                 code: 'RETENTION_CONFIG_ERROR'
             }
         });
@@ -1309,12 +1309,12 @@ router.get('/plugin-priority-config', requireAuth, requireAdmin, asyncHandler(as
                 success: true,
                 result: config
             });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get plugin priority config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to get plugin priority config',
+                message: error.message || 'Failed to get plugin priority config',
                 code: 'PLUGIN_PRIORITY_CONFIG_ERROR'
             }
         });
@@ -1384,12 +1384,12 @@ router.post('/plugin-priority-config', requireAuth, requireAdmin, autoLog('netwo
                 }
             });
         }
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to save plugin priority config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to save plugin priority config',
+                message: error.message || 'Failed to save plugin priority config',
                 code: 'PLUGIN_PRIORITY_CONFIG_ERROR'
             }
         });
@@ -1660,12 +1660,12 @@ router.delete('/:id', requireAuth, requireAdmin, autoLog('network-scan', 'delete
                 deleted: true
             }
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to delete IP:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to delete IP',
+                message: error.message || 'Failed to delete IP',
                 code: 'DELETE_IP_ERROR'
             }
         });
@@ -1893,12 +1893,12 @@ router.post('/:id/hostname', requireAuth, requireAdmin, autoLog('network-scan', 
             success: true,
             result: updated
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to update hostname:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to update hostname',
+                message: error.message || 'Failed to update hostname',
                 code: 'UPDATE_HOSTNAME_ERROR'
             }
         });
@@ -2147,12 +2147,12 @@ router.post('/unified-config', requireAuth, requireAdmin, autoLog('network-scan'
             success: true,
             result: config
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to save unified config:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to save unified config',
+                message: error.message || 'Failed to save unified config',
                 code: 'CONFIG_SAVE_ERROR'
             }
         });
@@ -2177,12 +2177,12 @@ router.post('/purge', requireAuth, requireAdmin, autoLog('network-scan', 'purge'
                 message: `Purge completed: ${result.totalDeleted} entries deleted`
             }
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to execute purge:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to execute purge',
+                message: error.message || 'Failed to execute purge',
                 code: 'PURGE_ERROR'
             }
         });
@@ -2208,12 +2208,12 @@ router.post('/purge/history', requireAuth, requireAdmin, autoLog('network-scan',
             },
             message: `History purge completed: ${deleted} entries deleted`
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to purge history:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to purge history',
+                message: error.message || 'Failed to purge history',
                 code: 'PURGE_HISTORY_ERROR'
             }
         });
@@ -2242,12 +2242,12 @@ router.post('/purge/scans', requireAuth, requireAdmin, autoLog('network-scan', '
             },
             message: `Scan purge completed: ${deleted} entries deleted`
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to purge scans:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to purge scans',
+                message: error.message || 'Failed to purge scans',
                 code: 'PURGE_SCANS_ERROR'
             }
         });
@@ -2276,12 +2276,12 @@ router.post('/purge/offline', requireAuth, requireAdmin, autoLog('network-scan',
             },
             message: `Offline purge completed: ${deleted} entries deleted`
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to purge offline scans:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to purge offline scans',
+                message: error.message || 'Failed to purge offline scans',
                 code: 'PURGE_OFFLINE_ERROR'
             }
         });
@@ -2308,12 +2308,12 @@ router.post('/purge/latency', requireAuth, requireAdmin, autoLog('network-scan',
             },
             message: `Latency measurements purge completed: ${deleted} entries deleted`
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         logger.error('NetworkScan', 'Failed to purge latency measurements:', error);
         return res.status(500).json({
             success: false,
             error: {
-                message: getErrorMessage(error) || 'Failed to purge latency measurements',
+                message: error.message || 'Failed to purge latency measurements',
                 code: 'PURGE_LATENCY_ERROR'
             }
         });
