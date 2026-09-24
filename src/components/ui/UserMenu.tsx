@@ -125,8 +125,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                         top: `${menuPosition.top}px`, 
                         left: `${menuPosition.left}px` 
                     }}
-                    role="presentation"
-                    onClick={(e) => e.stopPropagation()}
                 >
                     {/* User Info Section */}
                     <div className="p-4 border-b border-gray-700">

@@ -8,6 +8,7 @@ import { useUnifiWebSocket } from '../../hooks/useUnifiWebSocket';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { hasVendorIcon } from '../../utils/vendorBrand';
 import { VendorIcon } from './VendorIcon';
+import { ModalBackdropButton } from './ModalBackdropButton';
 import { TrafficPeriodToggle, type TrafficPeriod } from './TrafficPeriodToggle';
 
 interface TrafficHistoryEntry {
@@ -137,8 +138,9 @@ export const TopTrafficOverlay: React.FC<{
     );
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="presentation" onClick={onClose}>
-            <div className="bg-[#121212] border border-gray-700 rounded-xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" role="presentation" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <ModalBackdropButton onClose={onClose} label={t('networkScan.tooltips.close')} />
+            <div className="relative bg-[#121212] border border-gray-700 rounded-xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
                 <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-800">
                     <div className="flex items-center gap-2 text-white font-semibold min-w-0">
                         <Gauge size={16} className="text-cyan-400 flex-shrink-0" />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -140,6 +140,16 @@ const FileItem: React.FC<{
   const Icon = getFileIcon(file);
   const iconColor = getFileIconColor(file);
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const handleItemClick = (e: React.MouseEvent) => {
+    // Clicks inside the ellipsis menu are menu actions, not "open/select this file"
+    if (menuRef.current?.contains(e.target as Node)) return;
+    if ((e.ctrlKey || e.metaKey) && !isParentDir) {
+      onSelect();
+    } else {
+      onOpen();
+    }
+  };
 
   if (viewMode === 'grid') {
     return (
@@ -149,13 +159,7 @@ const FileItem: React.FC<{
             ? 'bg-blue-900/30 border-blue-600'
             : 'bg-[#1a1a1a] border-transparent hover:border-gray-700 hover:bg-[#202020]'
         }`}
-        onClick={(e) => {
-          if ((e.ctrlKey || e.metaKey) && !isParentDir) {
-            onSelect();
-          } else {
-            onOpen();
-          }
-        }}
+        onClick={handleItemClick}
         onContextMenu={isParentDir ? undefined : onContextMenu}
       >
         {!isParentDir && (
@@ -191,9 +195,8 @@ const FileItem: React.FC<{
             </button>
             {showMenu && (
               <div
+                ref={menuRef}
                 className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-                role="presentation"
-                onClick={(e) => e.stopPropagation()}
               >
                 <button
                   onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
@@ -247,13 +250,7 @@ const FileItem: React.FC<{
           ? 'bg-blue-900/30'
           : 'hover:bg-[#1a1a1a]'
       }`}
-      onClick={(e) => {
-        if ((e.ctrlKey || e.metaKey) && !isParentDir) {
-          onSelect();
-        } else {
-          onOpen();
-        }
-      }}
+      onClick={handleItemClick}
       onContextMenu={isParentDir ? undefined : onContextMenu}
     >
       {!isParentDir ? (
@@ -315,9 +312,8 @@ const FileItem: React.FC<{
           </button>
           {showMenu && (
             <div
+              ref={menuRef}
               className="absolute right-0 top-8 bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px] z-50"
-              role="presentation"
-              onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => { if (!isRootFolder) { onRename(); setShowMenu(false); } }}
@@ -435,10 +431,10 @@ const DownloadItem: React.FC<{
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1" role="presentation" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
           {isActive && (
             <button
-              onClick={onPause}
+              onClick={(e) => { e.stopPropagation(); onPause(); }}
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
               title="Pause"
             >
@@ -447,7 +443,7 @@ const DownloadItem: React.FC<{
           )}
           {(isPaused || isQueued) && (
             <button
-              onClick={onResume}
+              onClick={(e) => { e.stopPropagation(); onResume(); }}
               className="p-2 text-gray-400 hover:text-emerald-400 hover:bg-emerald-900/20 rounded-lg transition-colors"
               title="Reprendre"
             >
@@ -456,7 +452,7 @@ const DownloadItem: React.FC<{
           )}
           {isError && (
             <button
-              onClick={onRetry}
+              onClick={(e) => { e.stopPropagation(); onRetry(); }}
               className="p-2 text-gray-400 hover:text-amber-400 hover:bg-amber-900/20 rounded-lg transition-colors"
               title="Réessayer"
             >
@@ -464,7 +460,7 @@ const DownloadItem: React.FC<{
             </button>
           )}
           <button
-            onClick={onDelete}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
             title="Supprimer"
           >
@@ -627,8 +623,12 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
   }, [initialDownloadId, downloads, selectedDownload]);
 
   // Close context menu on click outside
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handleClick = () => setContextMenu(null);
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current?.contains(e.target as Node)) return;
+      setContextMenu(null);
+    };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
@@ -2009,10 +2009,9 @@ export const FilesPage: React.FC<FilesPageProps> = ({ onBack, initialTab, initia
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           className="fixed bg-[#1a1a1a] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] z-[200]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
-          role="presentation"
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2 border-b border-gray-700">
             <p className="text-xs text-gray-400 truncate max-w-[160px]">{contextMenu.file.name}</p>
