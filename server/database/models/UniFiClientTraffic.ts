@@ -1,7 +1,7 @@
 /**
  * UniFi per-client traffic accumulation model.
  *
- * Fed by unifiTrafficHistoryService.ts, which polls stat/sta every minute and
+ * Fed by unifiTrafficHistoryService.ts, which polls stat/sta every 30s and
  * adds the positive delta (bytes transferred since the last poll) to both
  * today's row (unifi_client_traffic_daily) and the running all-time total
  * (unifi_client_traffic_totals). Counter resets (client reconnect/roam) are
@@ -116,6 +116,32 @@ export class UniFiClientTrafficRepository {
             logger.error('UniFiClientTraffic', `getTopAllTime failed: ${(err as Error).message}`);
             return [];
         }
+    }
+
+    /** Batch lookup of today's accumulated traffic for a set of MACs (network-scan table columns). */
+    static getTodayByMacs(macs: string[]): Record<string, { rxBytes: number; txBytes: number } | null> {
+        const normalized = macs.map((mac) => mac.toLowerCase().trim());
+        const result: Record<string, { rxBytes: number; txBytes: number } | null> = {};
+        for (const mac of normalized) result[mac] = null;
+        if (normalized.length === 0) return result;
+
+        try {
+            const db = getDatabase();
+            const today = new Date().toISOString().slice(0, 10);
+            const placeholders = normalized.map(() => '?').join(',');
+            const rows = db.prepare(`
+                SELECT mac, rx_bytes, tx_bytes
+                FROM unifi_client_traffic_daily
+                WHERE date = ? AND mac IN (${placeholders})
+            `).all(today, ...normalized) as Pick<TrafficRow, 'mac' | 'rx_bytes' | 'tx_bytes'>[];
+
+            for (const row of rows) {
+                result[row.mac] = { rxBytes: row.rx_bytes, txBytes: row.tx_bytes };
+            }
+        } catch (err) {
+            logger.error('UniFiClientTraffic', `getTodayByMacs failed: ${(err as Error).message}`);
+        }
+        return result;
     }
 
     /** Deletes daily rows older than `days`. The all-time totals table is never purged. */

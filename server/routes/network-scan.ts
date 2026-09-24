@@ -34,6 +34,9 @@ import { PluginPriorityConfigService } from '../services/pluginPriorityConfig.js
 import { WiresharkVendorService } from '../services/wiresharkVendorService.js';
 import { portScanService } from '../services/portScanService.js';
 import { ipBlacklistService } from '../services/ipBlacklistService.js';
+import { pluginManager } from '../services/pluginManager.js';
+import { isValidMac } from '../utils/networkValidation.js';
+import { UniFiClientTrafficRepository } from '../database/models/UniFiClientTraffic.js';
 
 const router = Router();
 
@@ -508,6 +511,47 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
 }));
 
 /**
+ * POST /api/network-scan/traffic/batch
+ * Get today's traffic (download/upload bytes) for a batch of MAC addresses.
+ * The only per-device traffic source is UniFi (unifi_client_traffic_daily, fed by
+ * unifiTrafficHistoryService). Devices that aren't a known UniFi client, or when the
+ * UniFi plugin is disabled, come back as null, there is no generic fallback source.
+ * Body: { macs: string[] }
+ */
+router.post('/traffic/batch', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { macs } = req.body;
+
+    if (!Array.isArray(macs) || macs.length === 0 || macs.length > 500) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'macs must be a non-empty array of at most 500 MAC addresses',
+                code: 'INVALID_MACS'
+            }
+        });
+    }
+    if (!macs.every((mac) => typeof mac === 'string' && isValidMac(mac))) {
+        return res.status(400).json({
+            success: false,
+            error: {
+                message: 'macs must contain valid MAC addresses (xx:xx:xx:xx:xx:xx)',
+                code: 'INVALID_MAC_FORMAT'
+            }
+        });
+    }
+
+    const unifiPlugin = pluginManager.getPlugin('unifi') as { isEnabled?: () => boolean } | undefined;
+    if (!unifiPlugin?.isEnabled?.()) {
+        const empty: Record<string, null> = {};
+        for (const mac of macs) empty[mac.toLowerCase()] = null;
+        return res.json({ success: true, result: empty });
+    }
+
+    const result = UniFiClientTrafficRepository.getTodayByMacs(macs);
+    res.json({ success: true, result });
+}));
+
+/**
  * GET /api/network-scan/stats
  * Get scan statistics
  */
@@ -560,8 +604,9 @@ router.get('/stats-history', requireAuth, asyncHandler(async (req: Authenticated
 
 /**
  * GET /api/network-scan/insights
- * Devices first seen recently, and devices with the most online/offline
- * flips over the same window (connection instability proxy).
+ * Devices first seen recently, devices with the most online/offline flips
+ * over the same window (connection instability proxy), and today's top UniFi
+ * traffic consumers (empty when the UniFi plugin is disabled or unconfigured).
  * Query params:
  * - days?: number (default: 30, max: 90)
  */
@@ -569,10 +614,11 @@ router.get('/insights', requireAuth, asyncHandler(async (req: AuthenticatedReque
     try {
         const days = Number.parseInt(req.query.days as string) || 30;
         const insights = NetworkScanRepository.getInsights(Math.min(Math.max(days, 1), 90));
+        const topTraffic = UniFiClientTrafficRepository.getTopToday(30);
 
         res.json({
             success: true,
-            result: insights
+            result: { ...insights, topTraffic }
         });
     } catch (error: any) {
         logger.error('NetworkScan', 'Failed to get insights:', error);

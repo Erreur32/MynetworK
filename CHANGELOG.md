@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.40] - 2026-09-24
+
+### Added
+
+- Per-device traffic (download/upload) on the `/network-scan` page: two new sortable columns backed by UniFi's daily traffic accumulation, matched by MAC (`--` for devices that aren't a known UniFi client, or when the UniFi plugin is disabled). New `POST /api/network-scan/traffic/batch` route and `UniFiClientTrafficRepository.getTodayByMacs()`.
+- Third "Top traffic (today)" column in the network-scan insights card, alongside "New devices" and "Frequently disconnected". Each category now previews 5 devices with a "view all" overlay for the rest; the top traffic overlay is a dedicated sortable table (device / download / upload / total).
+
+### Changed
+
+- Removed the `Avg1h`/`Max` latency columns from the network-scan table; their values now show as tooltips on the latency cell and the monitoring icon (only when latency monitoring is enabled for that device), alongside the live ping.
+- UniFi per-client traffic accumulation now polls every 30s instead of 60s, matching the network-scan page's own refresh cadence.
+
+### Refactor
+
+- Deduplicated the network-scan insights UI: shared `InsightPreviewColumn`/`InsightOverlay` components and row-building, and shared `renderLatencyStats`/`getTrafficEntry` helpers for the latency tooltips and traffic cells.
+
+---
+
 ## [0.10.39] - 2026-09-23
 
 ### Changes

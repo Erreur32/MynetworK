@@ -6,13 +6,13 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Network, RefreshCw, Play, Trash2, Search, Filter, X, CheckCircle, XCircle, Edit2, Save, X as XIcon, Settings, HelpCircle, ArrowUp, ArrowDown, BarChart2, ToggleLeft, ToggleRight, Link2, Loader2, Terminal, Globe, Lock, Database, Mail, FolderInput, Monitor, Server, Share2, Container, ShieldX, Square, Copy, Check, AlertTriangle, Sparkles, Activity, Download, Upload, type LucideIcon } from 'lucide-react';
 import { Card } from '../components/widgets/Card';
 import { StackedMiniBarChart } from '../components/widgets/BarChart';
 import { usePluginStore } from '../stores/pluginStore';
 import { usePolling } from '../hooks/usePolling';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { POLLING_INTERVALS } from '../utils/constants';
+import { POLLING_INTERVALS, formatBytes } from '../utils/constants';
 import { api } from '../api/client';
 import { NetworkScanConfigModal } from '../components/modals/NetworkScanConfigModal';
 import { LatencyMonitoringModal } from '../components/modals/LatencyMonitoringModal';
@@ -143,6 +143,227 @@ const InsightDeviceName: React.FC<{ ip: string; label: string; searchTitle: stri
     );
 };
 
+interface InsightOverlayRow {
+    key: string;
+    ip?: string;
+    label: string;
+    value: React.ReactNode;
+}
+
+/** Full-list overlay for one insights category, opened by the "view all" link when the inline preview is truncated. */
+const InsightOverlay: React.FC<{
+    title: string;
+    icon: React.ReactNode;
+    rows: InsightOverlayRow[];
+    emptyLabel: string;
+    onClose: () => void;
+    onNavigateToSearch?: (ip: string) => void;
+}> = ({ title, icon, rows, emptyLabel, onClose, onNavigateToSearch }) => {
+    const { t } = useTranslation();
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+            <div className="bg-[#121212] border border-gray-700 rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                    <div className="flex items-center gap-2 text-white font-semibold min-w-0">
+                        {icon}
+                        <span className="truncate">{title}</span>
+                        <span className="text-gray-500 text-sm font-normal flex-shrink-0">({rows.length})</span>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
+                        aria-label={t('networkScan.tooltips.close')}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                    {rows.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 text-sm italic">{emptyLabel}</div>
+                    ) : (
+                        <div className="space-y-1">
+                            {rows.map((row) => (
+                                <div key={row.key} className="flex items-center justify-between gap-2 text-sm text-gray-300 px-2 py-1.5 rounded hover:bg-gray-800/50">
+                                    {row.ip ? (
+                                        <InsightDeviceName
+                                            ip={row.ip}
+                                            label={row.label}
+                                            searchTitle={t('networkScan.tooltips.searchIp', { ip: row.ip })}
+                                            onNavigateToSearch={onNavigateToSearch}
+                                        />
+                                    ) : (
+                                        <span className="truncate min-w-0" title={row.label}>{row.label}</span>
+                                    )}
+                                    {row.value}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const INSIGHT_PREVIEW_COUNT = 5;
+
+/** One category column in the insights card: label + count + "view all" trigger (past the preview count), then a short preview. */
+const InsightPreviewColumn: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    rows: InsightOverlayRow[];
+    emptyLabel: string;
+    onViewAll: () => void;
+    onNavigateToSearch?: (ip: string) => void;
+    bordered?: boolean;
+}> = ({ icon, label, rows, emptyLabel, onViewAll, onNavigateToSearch, bordered }) => {
+    const { t } = useTranslation();
+    return (
+        <div className={bordered ? 'pt-3 sm:pt-0 sm:pl-3 border-t sm:border-t-0 sm:border-l border-gray-800' : undefined}>
+            <div className="flex items-center gap-1.5 text-gray-400 mb-1.5">
+                {icon}
+                <span>{label}</span>
+                <span className="ml-auto text-gray-500 flex-shrink-0">{rows.length}</span>
+                {rows.length > INSIGHT_PREVIEW_COUNT && (
+                    <button type="button" onClick={onViewAll} className="text-cyan-400 hover:text-cyan-300 flex-shrink-0">
+                        {t('networkScan.stats.viewAll', { count: rows.length })}
+                    </button>
+                )}
+            </div>
+            {rows.length > 0 ? (
+                <div className="space-y-1">
+                    {rows.slice(0, INSIGHT_PREVIEW_COUNT).map((row) => (
+                        <div key={row.key} className="flex items-center justify-between gap-1 min-w-0 text-gray-300">
+                            {row.ip ? (
+                                <InsightDeviceName
+                                    ip={row.ip}
+                                    label={row.label}
+                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: row.ip })}
+                                    onNavigateToSearch={onNavigateToSearch}
+                                />
+                            ) : (
+                                <span className="truncate min-w-0" title={row.label}>{row.label}</span>
+                            )}
+                            {row.value}
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-gray-600 italic">{emptyLabel}</div>
+            )}
+        </div>
+    );
+};
+
+type TopTrafficSortBy = 'name' | 'download' | 'upload' | 'total';
+
+/**
+ * Detailed "view all" overlay for the top traffic insight: unlike the other two
+ * (simple label + single value list), this one shows download/upload broken out
+ * in a sortable table, since the whole point of expanding is to compare the two.
+ */
+const TopTrafficOverlay: React.FC<{
+    rows: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; rxBytes: number; txBytes: number }>;
+    onClose: () => void;
+    onNavigateToSearch?: (ip: string) => void;
+}> = ({ rows, onClose, onNavigateToSearch }) => {
+    const { t } = useTranslation();
+    const [sortBy, setSortBy] = useState<TopTrafficSortBy>('total');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+    const sorted = useMemo(() => {
+        const copy = [...rows];
+        copy.sort((a, b) => {
+            let cmp: number;
+            switch (sortBy) {
+                case 'name': cmp = (a.name || a.mac).localeCompare(b.name || b.mac); break;
+                case 'download': cmp = a.rxBytes - b.rxBytes; break;
+                case 'upload': cmp = a.txBytes - b.txBytes; break;
+                default: cmp = (a.rxBytes + a.txBytes) - (b.rxBytes + b.txBytes);
+            }
+            return sortOrder === 'asc' ? cmp : -cmp;
+        });
+        return copy;
+    }, [rows, sortBy, sortOrder]);
+
+    const toggleSort = (col: TopTrafficSortBy) => {
+        if (sortBy === col) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        else { setSortBy(col); setSortOrder(col === 'name' ? 'asc' : 'desc'); }
+    };
+
+    const SortHeader: React.FC<{ col: TopTrafficSortBy; label: string; align?: 'left' | 'right' }> = ({ col, label, align = 'right' }) => (
+        <th
+            className={`py-2 px-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}
+            onClick={() => toggleSort(col)}
+        >
+            <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
+                <span>{label}</span>
+                {sortBy === col && (
+                    sortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-400" /> : <ArrowDown size={11} className="text-blue-400" />
+                )}
+            </div>
+        </th>
+    );
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+            <div className="bg-[#121212] border border-gray-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                    <div className="flex items-center gap-2 text-white font-semibold min-w-0">
+                        <Download size={16} className="text-blue-400 flex-shrink-0" />
+                        <span className="truncate">{t('networkScan.stats.topTraffic')}</span>
+                        <span className="text-gray-500 text-sm font-normal flex-shrink-0">({rows.length})</span>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
+                        aria-label={t('networkScan.tooltips.close')}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    {rows.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 text-sm italic">{t('networkScan.stats.noTopTraffic')}</div>
+                    ) : (
+                        <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-[#121212]">
+                                <tr className="border-b border-gray-800">
+                                    <SortHeader col="name" label={t('networkScan.table.headers.hostname')} align="left" />
+                                    <SortHeader col="download" label={t('networkScan.table.headers.download')} />
+                                    <SortHeader col="upload" label={t('networkScan.table.headers.upload')} />
+                                    <SortHeader col="total" label={t('networkScan.stats.total')} />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sorted.map((d) => (
+                                    <tr key={d.mac} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                        <td className="py-2 px-2 min-w-0">
+                                            {d.ip ? (
+                                                <InsightDeviceName
+                                                    ip={d.ip}
+                                                    label={d.name || d.vendor || d.mac}
+                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
+                                                    onNavigateToSearch={onNavigateToSearch}
+                                                />
+                                            ) : (
+                                                <span className="truncate min-w-0 text-gray-300" title={d.name || d.vendor || d.mac}>{d.name || d.vendor || d.mac}</span>
+                                            )}
+                                        </td>
+                                        <td className="py-2 px-2 text-right text-blue-300 whitespace-nowrap">{formatBytes(d.rxBytes)}</td>
+                                        <td className="py-2 px-2 text-right text-emerald-300 whitespace-nowrap">{formatBytes(d.txBytes)}</td>
+                                        <td className="py-2 px-2 text-right text-gray-300 whitespace-nowrap">{formatBytes(d.rxBytes + d.txBytes)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 interface NetworkScan {
     id: number;
     ip: string;
@@ -217,7 +438,10 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [insights, setInsights] = useState<{
         newDevices: Array<{ ip: string; hostname?: string; vendor?: string; firstSeen: string }>;
         flakyDevices: Array<{ ip: string; hostname?: string; vendor?: string; transitions: number }>;
+        topTraffic: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; rxBytes: number; txBytes: number }>;
     } | null>(null);
+    // Which insights category's "view all" overlay is currently open, if any
+    const [openInsightOverlay, setOpenInsightOverlay] = useState<'newDevices' | 'flakyDevices' | 'topTraffic' | null>(null);
     const [autoStatus, setAutoStatus] = useState<AutoStatus | null>(null);
     const [autoStatusLoading, setAutoStatusLoading] = useState(true);
     const [isScanning, setIsScanning] = useState(false);
@@ -250,9 +474,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [macTooltip, setMacTooltip] = useState<{ mac: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [portsTooltip, setPortsTooltip] = useState<{ ip: string; openPorts: { port: number; protocol?: string }[]; lastPortScan?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [firstSeenTooltip, setFirstSeenTooltip] = useState<{ firstSeenDate: string; lastSeenDate: string; lastCheckText?: string; isOffline: boolean; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
-    const [latencyTooltip, setLatencyTooltip] = useState<{ label: string; date: string; latency?: string; isOffline: boolean; downDuration?: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [latencyTooltip, setLatencyTooltip] = useState<{ label: string; date: string; latency?: string; isOffline: boolean; downDuration?: string; avg1h?: number | null; max?: number | null; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [actionsTooltip, setActionsTooltip] = useState<{ label: string; text: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
-    const [scatterIconTooltip, setScatterIconTooltip] = useState<{ rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
+    const [scatterIconTooltip, setScatterIconTooltip] = useState<{ avg1h?: number | null; max?: number | null; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const [ipTooltip, setIpTooltip] = useState<{ ip: string; rect: { left: number; top: number; bottom: number; right: number } } | null>(null);
     const TOOLTIP_MAC_W = 320;
     const TOOLTIP_IP_W = 320;
@@ -299,6 +523,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [monitoringStatus, setMonitoringStatus] = useState<Record<string, boolean>>({});
     const [latencyStats, setLatencyStats] = useState<Record<string, { avg1h: number | null; max: number | null }>>({});
     const [selectedIpForGraph, setSelectedIpForGraph] = useState<string | null>(null);
+    // Today's traffic (download/upload) per MAC - UniFi-backed, independent of latency monitoring.
+    // Devices that aren't a known UniFi client come back as null (no generic fallback source).
+    const [trafficStats, setTrafficStats] = useState<Record<string, { rxBytes: number; txBytes: number } | null>>({});
+    // Looks up a device's traffic entry by MAC (normalized), shared by the table cells and the download/upload sort.
+    const getTrafficEntry = useCallback((mac?: string) => {
+        const key = mac?.trim().toLowerCase();
+        return key ? trafficStats[key] : undefined;
+    }, [trafficStats]);
     const [showLatencyModal, setShowLatencyModal] = useState(false);
     
     // Filters - Load from localStorage or use defaults
@@ -315,11 +547,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     });
     const [searchFilter, setSearchFilter] = useState<string>('');
     const [debouncedSearchFilter, setDebouncedSearchFilter] = useState<string>('');
-    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'avg1h' | 'max' | 'monitoring'>(() => {
+    const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'monitoring' | 'download' | 'upload'>(() => {
         try {
             const saved = localStorage.getItem('networkScan_sortBy');
-            if (saved && ['ip', 'last_seen', 'first_seen', 'ping_latency', 'hostname', 'mac', 'vendor', 'avg1h', 'max', 'monitoring'].includes(saved)) {
-                return saved as 'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'avg1h' | 'max' | 'monitoring';
+            if (saved && ['ip', 'last_seen', 'first_seen', 'ping_latency', 'hostname', 'mac', 'vendor', 'monitoring', 'download', 'upload'].includes(saved)) {
+                return saved as 'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'monitoring' | 'download' | 'upload';
             }
         } catch (error) {
             console.warn('Failed to load sortBy from localStorage:', error);
@@ -434,6 +666,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             const response = await api.get<{
                 newDevices: Array<{ ip: string; hostname?: string; vendor?: string; firstSeen: string }>;
                 flakyDevices: Array<{ ip: string; hostname?: string; vendor?: string; transitions: number }>;
+                topTraffic: Array<{ mac: string; name: string; ip?: string; vendor?: string | null; rxBytes: number; txBytes: number }>;
             }>('/api/network-scan/insights?days=30');
             if (response.success && response.result) {
                 setInsights(response.result);
@@ -484,9 +717,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
     const fetchHistory = useCallback(async () => {
         try {
-            // Avg1h, Max, Monitoring are client-side only (latencyStats/monitoringStatus).
+            // Monitoring, download and upload are client-side only (monitoringStatus/trafficStats).
             // Send a server-supported sortBy so the API returns data; client will re-sort in filteredScans.
-            const serverSortBy = (sortBy === 'avg1h' || sortBy === 'max' || sortBy === 'monitoring')
+            const serverSortBy = (sortBy === 'monitoring' || sortBy === 'download' || sortBy === 'upload')
                 ? 'last_seen'
                 : sortBy;
             const params: any = {
@@ -602,6 +835,32 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     }, [scans]);
 
+    // Fetch today's UniFi traffic (download/upload) for the scanned devices, batched by MAC
+    const fetchTrafficData = useCallback(async () => {
+        const macs = Array.from(new Set(
+            scans.map(scan => scan.mac?.trim().toLowerCase()).filter((mac): mac is string => !!mac)
+        ));
+        if (macs.length === 0) {
+            setTrafficStats({});
+            return;
+        }
+
+        try {
+            const CHUNK_SIZE = 500; // matches the server-side batch limit
+            const merged: Record<string, { rxBytes: number; txBytes: number } | null> = {};
+            for (let i = 0; i < macs.length; i += CHUNK_SIZE) {
+                const chunk = macs.slice(i, i + CHUNK_SIZE);
+                const response = await api.post<Record<string, { rxBytes: number; txBytes: number } | null>>('/api/network-scan/traffic/batch', { macs: chunk });
+                if (response.success && response.result) {
+                    Object.assign(merged, response.result);
+                }
+            }
+            setTrafficStats(merged);
+        } catch (error) {
+            console.error('Failed to fetch traffic data:', error);
+        }
+    }, [scans]);
+
     // Toggle monitoring for an IP
     const handleToggleMonitoring = async (ip: string, enabled: boolean) => {
         try {
@@ -657,6 +916,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             fetchMonitoringData();
         }
     }, [scans, fetchMonitoringData]);
+
+    // Fetch traffic data when scans change
+    useEffect(() => {
+        if (scans.length > 0) {
+            fetchTrafficData();
+        }
+    }, [scans, fetchTrafficData]);
 
     // Cleanup polling interval on unmount
     useEffect(() => {
@@ -1217,6 +1483,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return 'text-red-400';
     };
 
+    // avg1h/max rows shared between the latency tooltip and the monitoring icon tooltip
+    const renderLatencyStats = (avg1h?: number | null, max?: number | null) => (
+        <>
+            <div>
+                <span className="text-gray-400">{t('networkScan.table.headers.avg1h')}: </span>
+                <span className={`font-medium ${avg1h != null ? getLatencyColor(avg1h) : 'text-gray-500'}`}>
+                    {avg1h != null ? `${Math.round(avg1h)}ms` : '--'}
+                </span>
+            </div>
+            <div>
+                <span className="text-gray-400">{t('networkScan.table.headers.max')}: </span>
+                <span className={`font-medium ${max != null ? getLatencyColor(max) : 'text-gray-500'}`}>
+                    {max != null ? `${Math.round(max)}ms` : '--'}
+                </span>
+            </div>
+        </>
+    );
+
     const formatLatency = (latency?: number): string => {
         if (!latency) return '--';
         
@@ -1424,34 +1708,28 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         return true;
     });
 
-        // Client-side sorting for avg1h, max, and monitoring (server-side sorting for others)
-        if (sortBy === 'avg1h' || sortBy === 'max' || sortBy === 'monitoring') {
+        // Client-side sorting for monitoring, download and upload (server-side sorting for others)
+        if (sortBy === 'monitoring') {
             filtered = [...filtered].sort((a, b) => {
-                if (sortBy === 'avg1h') {
-                    const aVal = latencyStats[a.ip]?.avg1h ?? null;
-                    const bVal = latencyStats[b.ip]?.avg1h ?? null;
-                    if (aVal === null && bVal === null) return 0;
-                    if (aVal === null) return 1;
-                    if (bVal === null) return -1;
-                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-                } else if (sortBy === 'max') {
-                    const aVal = latencyStats[a.ip]?.max ?? null;
-                    const bVal = latencyStats[b.ip]?.max ?? null;
-                    if (aVal === null && bVal === null) return 0;
-                    if (aVal === null) return 1;
-                    if (bVal === null) return -1;
-                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-                } else if (sortBy === 'monitoring') {
-                    const aVal = monitoringStatus[a.ip] ? 1 : 0;
-                    const bVal = monitoringStatus[b.ip] ? 1 : 0;
-                    return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-                }
-                return 0;
+                const aVal = monitoringStatus[a.ip] ? 1 : 0;
+                const bVal = monitoringStatus[b.ip] ? 1 : 0;
+                return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+        } else if (sortBy === 'download' || sortBy === 'upload') {
+            filtered = [...filtered].sort((a, b) => {
+                const aEntry = getTrafficEntry(a.mac);
+                const bEntry = getTrafficEntry(b.mac);
+                const aVal = aEntry ? (sortBy === 'download' ? aEntry.rxBytes : aEntry.txBytes) : null;
+                const bVal = bEntry ? (sortBy === 'download' ? bEntry.rxBytes : bEntry.txBytes) : null;
+                if (aVal === null && bVal === null) return 0;
+                if (aVal === null) return 1;
+                if (bVal === null) return -1;
+                return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
             });
         }
 
         return filtered;
-    }, [scans, statusFilter, searchFilter, sortBy, sortOrder, latencyStats, monitoringStatus]);
+    }, [scans, statusFilter, searchFilter, sortBy, sortOrder, monitoringStatus, getTrafficEntry]);
 
     // Optimize chart data calculations with useMemo
     const buildScanChartData = useCallback((key: 'total' | 'online' | 'offline', currentValue: number) => {
@@ -1490,6 +1768,26 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
 
     const onlineChartData = useMemo(() => stats ? buildScanChartData('online', stats.online || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
     const offlineChartData = useMemo(() => stats ? buildScanChartData('offline', stats.offline || 0) : { data: [], labels: [] }, [stats, buildScanChartData]);
+
+    // Insights rows, built once and shared between each preview column and its "view all" overlay
+    const newDeviceRows: InsightOverlayRow[] = insights?.newDevices.map((d) => ({
+        key: d.ip,
+        ip: d.ip,
+        label: d.hostname || d.vendor || d.ip,
+        value: <span className="text-gray-500 flex-shrink-0 whitespace-nowrap">{formatFirstDetectionShort(d.firstSeen)}</span>
+    })) ?? [];
+    const flakyDeviceRows: InsightOverlayRow[] = insights?.flakyDevices.map((d) => ({
+        key: d.ip,
+        ip: d.ip,
+        label: d.hostname || d.vendor || d.ip,
+        value: <span className="text-amber-400 flex-shrink-0 whitespace-nowrap">{t('networkScan.stats.transitionsCount', { count: d.transitions })}</span>
+    })) ?? [];
+    const topTrafficRows: InsightOverlayRow[] = insights?.topTraffic.map((d) => ({
+        key: d.mac,
+        ip: d.ip,
+        label: d.name || d.vendor || d.mac,
+        value: <span className="text-blue-400 flex-shrink-0 whitespace-nowrap">{formatBytes(d.rxBytes + d.txBytes)}</span>
+    })) ?? [];
 
     return (
         <div className="space-y-6">
@@ -1791,60 +2089,68 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         </div>
                     </Card>
 
-                    {/* Nouveaux appareils & connexions instables - fusion avec la carte réservée - 2 colonnes */}
+                    {/* Nouveaux appareils, connexions instables & top trafic - fusion avec la carte réservée - 3 colonnes */}
                     <Card title={t('networkScan.stats.insights')} className="md:col-span-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                            <div>
-                                <div className="flex items-center gap-1.5 text-gray-400 mb-1.5">
-                                    <Sparkles size={13} className="text-cyan-400 flex-shrink-0" />
-                                    <span>{t('networkScan.stats.newDevices', { days: 30 })}</span>
-                                    <span className="ml-auto text-gray-500 flex-shrink-0">{insights?.newDevices.length ?? 0}</span>
-                                </div>
-                                {insights && insights.newDevices.length > 0 ? (
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                                        {insights.newDevices.slice(0, 8).map((d) => (
-                                            <div key={d.ip} className="flex items-center justify-between gap-1 min-w-0 text-gray-300">
-                                                <InsightDeviceName
-                                                    ip={d.ip}
-                                                    label={d.hostname || d.vendor || d.ip}
-                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
-                                                    onNavigateToSearch={onNavigateToSearch}
-                                                />
-                                                <span className="text-gray-500 flex-shrink-0 whitespace-nowrap">{formatFirstDetectionShort(d.firstSeen)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-gray-600 italic">{t('networkScan.stats.noNewDevices')}</div>
-                                )}
-                            </div>
-                            <div className="pt-3 sm:pt-0 sm:pl-3 border-t sm:border-t-0 sm:border-l border-gray-800">
-                                <div className="flex items-center gap-1.5 text-gray-400 mb-1.5">
-                                    <Activity size={13} className="text-amber-400 flex-shrink-0" />
-                                    <span>{t('networkScan.stats.flakyDevices')}</span>
-                                    <span className="ml-auto text-gray-500 flex-shrink-0">{insights?.flakyDevices.length ?? 0}</span>
-                                </div>
-                                {insights && insights.flakyDevices.length > 0 ? (
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                                        {insights.flakyDevices.slice(0, 8).map((d) => (
-                                            <div key={d.ip} className="flex items-center justify-between gap-1 min-w-0 text-gray-300">
-                                                <InsightDeviceName
-                                                    ip={d.ip}
-                                                    label={d.hostname || d.vendor || d.ip}
-                                                    searchTitle={t('networkScan.tooltips.searchIp', { ip: d.ip })}
-                                                    onNavigateToSearch={onNavigateToSearch}
-                                                />
-                                                <span className="text-amber-400 flex-shrink-0 whitespace-nowrap">{t('networkScan.stats.transitionsCount', { count: d.transitions })}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-gray-600 italic">{t('networkScan.stats.noFlakyDevices')}</div>
-                                )}
-                            </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                            <InsightPreviewColumn
+                                icon={<Sparkles size={13} className="text-cyan-400 flex-shrink-0" />}
+                                label={t('networkScan.stats.newDevices', { days: 30 })}
+                                rows={newDeviceRows}
+                                emptyLabel={t('networkScan.stats.noNewDevices')}
+                                onViewAll={() => setOpenInsightOverlay('newDevices')}
+                                onNavigateToSearch={onNavigateToSearch}
+                            />
+                            <InsightPreviewColumn
+                                icon={<Activity size={13} className="text-amber-400 flex-shrink-0" />}
+                                label={t('networkScan.stats.flakyDevices')}
+                                rows={flakyDeviceRows}
+                                emptyLabel={t('networkScan.stats.noFlakyDevices')}
+                                onViewAll={() => setOpenInsightOverlay('flakyDevices')}
+                                onNavigateToSearch={onNavigateToSearch}
+                                bordered
+                            />
+                            <InsightPreviewColumn
+                                icon={<Download size={13} className="text-blue-400 flex-shrink-0" />}
+                                label={t('networkScan.stats.topTraffic')}
+                                rows={topTrafficRows}
+                                emptyLabel={t('networkScan.stats.noTopTraffic')}
+                                onViewAll={() => setOpenInsightOverlay('topTraffic')}
+                                onNavigateToSearch={onNavigateToSearch}
+                                bordered
+                            />
                         </div>
                     </Card>
                 </div>
+            )}
+
+            {insights && openInsightOverlay === 'newDevices' && (
+                <InsightOverlay
+                    title={t('networkScan.stats.newDevices', { days: 30 })}
+                    icon={<Sparkles size={16} className="text-cyan-400 flex-shrink-0" />}
+                    emptyLabel={t('networkScan.stats.noNewDevices')}
+                    onClose={() => setOpenInsightOverlay(null)}
+                    onNavigateToSearch={onNavigateToSearch}
+                    rows={newDeviceRows}
+                />
+            )}
+
+            {insights && openInsightOverlay === 'flakyDevices' && (
+                <InsightOverlay
+                    title={t('networkScan.stats.flakyDevices')}
+                    icon={<Activity size={16} className="text-amber-400 flex-shrink-0" />}
+                    emptyLabel={t('networkScan.stats.noFlakyDevices')}
+                    onClose={() => setOpenInsightOverlay(null)}
+                    onNavigateToSearch={onNavigateToSearch}
+                    rows={flakyDeviceRows}
+                />
+            )}
+
+            {insights && openInsightOverlay === 'topTraffic' && (
+                <TopTrafficOverlay
+                    rows={insights.topTraffic}
+                    onClose={() => setOpenInsightOverlay(null)}
+                    onNavigateToSearch={onNavigateToSearch}
+                />
             )}
 
             {/* Results Table */}
@@ -2083,25 +2389,25 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                         <span>{t('networkScan.table.headers.openPorts')}</span>
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" onClick={() => {
-                                    if (sortBy === 'avg1h') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                                    else { setSortBy('avg1h'); setSortOrder('asc'); }
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.trafficRequiresUnifi')} onClick={() => {
+                                    if (sortBy === 'download') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('download'); setSortOrder('desc'); }
                                 }}>
-                                    <div className="flex items-center gap-2">
-                                        <span>{t('networkScan.table.headers.avg1h')}</span>
-                                        {sortBy === 'avg1h' && (
-                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                    <div className="flex items-center gap-0.5">
+                                        <span>{t('networkScan.table.headers.download')}</span>
+                                        {sortBy === 'download' && (
+                                            sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
-                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" onClick={() => {
-                                    if (sortBy === 'max') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                                    else { setSortBy('max'); setSortOrder('asc'); }
+                                <th className="text-left py-3 px-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300 transition-colors whitespace-nowrap" title={t('networkScan.tooltips.trafficRequiresUnifi')} onClick={() => {
+                                    if (sortBy === 'upload') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                                    else { setSortBy('upload'); setSortOrder('desc'); }
                                 }}>
-                                    <div className="flex items-center gap-2">
-                                        <span>{t('networkScan.table.headers.max')}</span>
-                                        {sortBy === 'max' && (
-                                            sortOrder === 'asc' ? <ArrowUp size={14} className="text-blue-400" /> : <ArrowDown size={14} className="text-blue-400" />
+                                    <div className="flex items-center gap-0.5">
+                                        <span>{t('networkScan.table.headers.upload')}</span>
+                                        {sortBy === 'upload' && (
+                                            sortOrder === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                                         )}
                                     </div>
                                 </th>
@@ -2326,6 +2632,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                     latency: scan.status === 'online' ? formatLatency(scan.pingLatency ?? 0) : undefined,
                                                     isOffline: scan.status === 'offline',
                                                     downDuration: scan.status === 'offline' ? formatDownDuration(scan.lastSeen) : undefined,
+                                                    avg1h: monitoringStatus[scan.ip] ? latencyStats[scan.ip]?.avg1h ?? null : undefined,
+                                                    max: monitoringStatus[scan.ip] ? latencyStats[scan.ip]?.max ?? null : undefined,
                                                     rect: getEventRect(e)
                                                 });
                                             }}
@@ -2387,14 +2695,24 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                             })()}
                                         </td>
                                         <td className="py-3 px-2 whitespace-nowrap">
-                                            <span className={`text-sm font-medium ${latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? getLatencyColor(latencyStats[scan.ip].avg1h!) : 'text-gray-500'}`}>
-                                                {latencyStats[scan.ip]?.avg1h !== null && latencyStats[scan.ip]?.avg1h !== undefined ? `${Math.round(latencyStats[scan.ip].avg1h!)}ms` : '--'}
-                                            </span>
+                                            {(() => {
+                                                const entry = getTrafficEntry(scan.mac);
+                                                return (
+                                                    <span className={`text-sm font-medium ${entry ? 'text-blue-300' : 'text-gray-500'}`}>
+                                                        {entry ? formatBytes(entry.rxBytes) : '--'}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="py-3 px-2 whitespace-nowrap">
-                                            <span className={`text-sm font-medium ${latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? getLatencyColor(latencyStats[scan.ip].max!) : 'text-gray-500'}`}>
-                                                {latencyStats[scan.ip]?.max !== null && latencyStats[scan.ip]?.max !== undefined ? `${Math.round(latencyStats[scan.ip].max!)}ms` : '--'}
-                                            </span>
+                                            {(() => {
+                                                const entry = getTrafficEntry(scan.mac);
+                                                return (
+                                                    <span className={`text-sm font-medium ${entry ? 'text-emerald-300' : 'text-gray-500'}`}>
+                                                        {entry ? formatBytes(entry.txBytes) : '--'}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="py-3 px-2 whitespace-nowrap">
                                             <div className="flex items-center gap-0.5">
@@ -2417,7 +2735,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                                         onMouseEnter={(e) => {
                                                             cancelTooltipHide();
                                                             hideAllTooltips();
-                                                            setScatterIconTooltip({ rect: getEventRect(e) });
+                                                            setScatterIconTooltip({ avg1h: latencyStats[scan.ip]?.avg1h ?? null, max: latencyStats[scan.ip]?.max ?? null, rect: getEventRect(e) });
                                                         }}
                                                         onMouseLeave={() => scheduleTooltipHide()}
                                                     >
@@ -2578,6 +2896,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                                 </div>
                             );
                         })()}
+                        {(latencyTooltip.avg1h !== undefined || latencyTooltip.max !== undefined) && (
+                            <div className="mt-2 pt-2 border-t border-gray-700/60 text-sm space-y-1">
+                                {renderLatencyStats(latencyTooltip.avg1h, latencyTooltip.max)}
+                            </div>
+                        )}
                     </div>
                 );
             })()}
@@ -2608,6 +2931,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         onMouseEnter={cancelTooltipHide}
                         onMouseLeave={hideAllTooltips}
                     >
+                        <div className="text-sm space-y-1 mb-2 pb-2 border-b border-gray-700/60">
+                            {renderLatencyStats(scatterIconTooltip.avg1h, scatterIconTooltip.max)}
+                        </div>
                         <div className="text-sm text-gray-100 whitespace-pre-line">{t('networkScan.tooltips.openScatterTable')}{'\n'}{t('networkScan.tooltips.clickToOpenScatter')}</div>
                     </div>
                 );
