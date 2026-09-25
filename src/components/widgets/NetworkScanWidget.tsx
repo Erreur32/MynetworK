@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from './Card';
-import { Network, ArrowRight, Activity, Gauge, Router, Info, Maximize2 } from 'lucide-react';
+import { Network, ArrowRight, ArrowDown, ArrowUp, Activity, Gauge, Router, Info, Maximize2 } from 'lucide-react';
 import { usePluginStore } from '../../stores/pluginStore';
 import { api } from '../../api/client';
 import { formatBytes, formatSpeed } from '../../utils/constants';
@@ -143,8 +143,8 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
     });
 
     const trafficRows = trafficPeriod === 'live'
-        ? liveTopClients.slice(0, 10).map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatSpeed((c.download + c.upload) * 1024) }))
-        : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatBytes(c.rxBytes + c.txBytes) }));
+        ? liveTopClients.slice(0, 10).map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatSpeed((c.download + c.upload) * 1024), mostlyUpload: c.upload > c.download }))
+        : topTraffic.map(c => ({ mac: c.mac, name: c.name, ip: c.ip, vendor: c.vendor, volumeText: formatBytes(c.rxBytes + c.txBytes), mostlyUpload: c.txBytes > c.rxBytes }));
 
     // Fetch default scan range
     useEffect(() => {
@@ -553,7 +553,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                 }
                                 return (
                                     <div className="space-y-1 max-h-80 overflow-y-auto">
-                                        {trafficRows.map((c, i) => (
+                                        {trafficRows.map((c) => (
                                             <button
                                                 key={c.mac}
                                                 type="button"
@@ -561,7 +561,10 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                                 className="w-full flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] hover:bg-[#232323] rounded border border-gray-800 transition-colors"
                                             >
                                                 <div className="flex items-center gap-2 min-w-0">
-                                                    <span className="text-gray-500 w-4 text-right shrink-0">{i + 1}</span>
+                                                    {/* Dominant direction of this device's traffic (download vs upload) */}
+                                                    {c.mostlyUpload
+                                                        ? <ArrowUp size={13} className="text-emerald-400 shrink-0" aria-label={t('networkScan.table.headers.upload')} />
+                                                        : <ArrowDown size={13} className="text-blue-400 shrink-0" aria-label={t('networkScan.table.headers.download')} />}
                                                     {hasVendorIcon(c.vendor, c.name)
                                                         ? <VendorIcon vendor={c.vendor} label={c.name} size={13} />
                                                         : <Router size={13} className="text-gray-400 shrink-0" />}

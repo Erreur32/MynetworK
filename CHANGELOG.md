@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.50] - 2026-09-25
+
+### Changed
+
+- Dashboard scanner widget, "Data volume" list: the row numbers are replaced by an arrow showing each device's dominant traffic direction (down arrow when download dominates, up arrow when upload dominates), in live, today and all-time modes
+
+---
+
 ## [0.10.49] - 2026-09-24
 
 ### Refactor
