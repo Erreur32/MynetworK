@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.51] - 2026-09-25
+
+### CI
+
+- Bump all GitHub Actions still running on the deprecated Node.js 20 runtime to their Node.js 24 releases (SHA-pinned): checkout v7, upload-artifact v7, download-artifact v8, dependency-review v5, docker build-push v7, login v4, metadata v6, setup-buildx v4, codeql upload-sarif v4, sonarqube-scan v8
+
+---
+
 ## [0.10.50] - 2026-09-25
 
 ### Changed
