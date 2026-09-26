@@ -6,8 +6,13 @@ import { pluginManager } from '../../services/pluginManager.js';
 import type { UniFiPlugin } from '../../plugins/unifi/UniFiPlugin.js';
 import type { UniFiApiService } from '../../plugins/unifi/UniFiApiService.js';
 import { UniFiClientTrafficRepository } from '../../database/models/UniFiClientTraffic.js';
-import { wrapAsync } from './shared.js';
+import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam } from './shared.js';
 import { isValidMac } from '../../utils/networkValidation.js';
+
+// Max range for unifi_get_bandwidth_report: 7 days of hourly buckets (168 points).
+const MAX_BANDWIDTH_RANGE_SECONDS = 7 * 24 * 3600;
+
+const GATEWAY_TYPES = new Set(['ugw', 'udm', 'uxg']);
 
 function getUnifiPlugin(): UniFiPlugin {
   const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
@@ -27,25 +32,124 @@ function assertValidMac(mac: string): void {
   }
 }
 
+// Compact client summary: the raw stat/sta object has ~90 fields per client.
+// tx_rate/rx_rate are the negotiated link speed, not throughput: renamed so a model can't mix them up.
+function summarizeClient(c: any) {
+  const wired = c.is_wired === true;
+  return {
+    name: c.name || c.hostname || c.ip || c.mac,
+    hostname: c.hostname,
+    mac: c.mac,
+    ip: c.ip,
+    oui: c.oui,
+    network: c.network,
+    wired,
+    guest: c.is_guest === true ? true : undefined,
+    essid: c.essid,
+    ap_mac: c.ap_mac,
+    radio: c.radio,
+    channel: c.channel,
+    signal_dbm: c.signal,
+    satisfaction: c.satisfaction,
+    switch_mac: c.sw_mac,
+    switch_port: c.sw_port,
+    link_rx_rate_kbps: c.rx_rate,
+    link_tx_rate_kbps: c.tx_rate,
+    live_rx_bytes_per_sec: c['rx_bytes-r'] ?? c['wired-rx_bytes-r'],
+    live_tx_bytes_per_sec: c['tx_bytes-r'] ?? c['wired-tx_bytes-r'],
+    rx_bytes: c.rx_bytes ?? c['wired-rx_bytes'],
+    tx_bytes: c.tx_bytes ?? c['wired-tx_bytes'],
+    uptime: c.uptime,
+    last_seen: c.last_seen
+  };
+}
+
+function summarizeDevice(d: any) {
+  const ports: any[] = Array.isArray(d.port_table) ? d.port_table : [];
+  const radios: any[] = Array.isArray(d.radio_table_stats) ? d.radio_table_stats : [];
+  return {
+    name: d.name || d.model,
+    model: d.model,
+    type: d.type,
+    mac: d.mac,
+    ip: d.ip,
+    state: d.state === 1 ? 'connected' : d.state,
+    version: d.version,
+    upgradable: d.upgradable === true ? true : undefined,
+    uptime: d.uptime,
+    clients: d.num_sta,
+    satisfaction: d.satisfaction,
+    cpu_pct: d['system-stats']?.cpu,
+    mem_pct: d['system-stats']?.mem,
+    temperature: d.general_temperature,
+    uplink: d.uplink
+      ? { type: d.uplink.type, mac: d.uplink.uplink_mac, port: d.uplink.uplink_remote_port, speed: d.uplink.speed }
+      : undefined,
+    ports: ports.length ? { total: ports.length, up: ports.filter((p) => p.up === true).length } : undefined,
+    radios: radios.length
+      ? radios.map((r) => ({ radio: r.radio, channel: r.channel, clients: r.num_sta, satisfaction: r.satisfaction }))
+      : undefined,
+    last_seen: d.last_seen
+  };
+}
+
+function deviceMatchesType(d: any, type: 'all' | 'ap' | 'switch' | 'gateway'): boolean {
+  const t = (d.type || '').toString().toLowerCase();
+  if (type === 'ap') return t === 'uap';
+  if (type === 'switch') return t === 'usw';
+  if (type === 'gateway') return GATEWAY_TYPES.has(t);
+  return true;
+}
+
 export function registerUnifiTools(server: McpServer): void {
   server.registerTool(
     'unifi_get_devices',
     {
       title: 'UniFi devices',
-      description: 'List UniFi devices (access points, switches, gateways) with status and stats.',
+      description:
+        'List UniFi devices (access points, switches, gateways) as a compact summary: status, firmware, uptime, client count, uplink, port/radio overview. Use raw=true only if a field is missing.',
+      inputSchema: {
+        type: z.enum(['all', 'ap', 'switch', 'gateway']).default('all').describe('Filter by device type'),
+        search: searchParam,
+        limit: limitParam(),
+        raw: rawParam
+      },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async () => wrapAsync(() => getUnifiApiService().getDevices())
+    async ({ type, search, limit, raw }) =>
+      wrapAsync(async () =>
+        toListResult(await getUnifiApiService().getDevices(), {
+          filter: (d: any) => deviceMatchesType(d, type) && matchesSearch(search, d.name, d.model, d.ip, d.mac),
+          limit,
+          project: raw ? undefined : summarizeDevice
+        })
+      )
   );
 
   server.registerTool(
     'unifi_get_clients',
     {
       title: 'UniFi clients',
-      description: 'List clients (stations) currently connected to the UniFi network.',
+      description:
+        'List clients (stations) currently connected to the UniFi network, as a compact summary. link_*_rate_kbps is the negotiated WiFi/port speed; live_*_bytes_per_sec is the actual current throughput. Use raw=true only if a field is missing.',
+      inputSchema: {
+        type: z.enum(['all', 'wifi', 'wired']).default('all').describe('Filter by connection type'),
+        search: searchParam,
+        limit: limitParam(),
+        raw: rawParam
+      },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async () => wrapAsync(() => getUnifiApiService().getClients())
+    async ({ type, search, limit, raw }) =>
+      wrapAsync(async () =>
+        toListResult(await getUnifiApiService().getClients(), {
+          filter: (c: any) =>
+            (type === 'all' || (type === 'wired') === (c.is_wired === true)) &&
+            matchesSearch(search, c.name, c.hostname, c.ip, c.mac),
+          limit,
+          project: raw ? undefined : summarizeClient
+        })
+      )
   );
 
   server.registerTool(
@@ -106,9 +210,15 @@ export function registerUnifiTools(server: McpServer): void {
     'unifi_get_bandwidth_report',
     {
       title: 'UniFi WAN bandwidth report',
-      description: 'Get a WAN download/upload bandwidth time series for a given time range.',
+      description:
+        'Get a WAN download/upload bandwidth time series (KB/s) for a given time range: 5-minute buckets up to 24h, hourly buckets beyond (max 7 days).',
       inputSchema: {
-        rangeSeconds: z.number().int().positive().describe('Time range in seconds, e.g. 3600 for the last hour')
+        rangeSeconds: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_BANDWIDTH_RANGE_SECONDS)
+          .describe('Time range in seconds, e.g. 3600 for the last hour (max 604800 = 7 days)')
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },

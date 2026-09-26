@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.54] - 2026-09-26
+
+### Changed
+
+- MCP tool responses are now compact JSON (no indentation), for every tool
+- `unifi_get_clients`, `unifi_get_devices`, `freebox_get_lan_hosts`, `freebox_get_wifi_stations` and `scan_get_devices` return a compact per-item summary instead of the raw controller objects (e.g. ~100 KB down to ~10 KB for 35 UniFi clients), `raw: true` returns the full objects
+- New list filters: `type` (wifi/wired, ap/switch/gateway), `search` (name, IP or MAC), `limit`, `status` for the scanner, `activeOnly` (default true) for Freebox LAN hosts
+- `freebox_get_call_log` (most recent first, default 50) and `freebox_get_contacts` (default 100) gain `search`/`limit`, the call log also a `type` filter
+- `unifi_get_bandwidth_report` range capped at 7 days
+- List responses keep the `{success, result}` envelope and add `total` (matches before `limit`)
+
+---
+
 ## [0.10.53] - 2026-09-26
 
 ### Changed

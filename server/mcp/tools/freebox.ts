@@ -3,6 +3,20 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { freeboxApi } from "../../services/freeboxApi.js";
+import {
+  textResult,
+  toListResult,
+  matchesSearch,
+  searchParam,
+  rawParam,
+  limitParam,
+  listToolResult,
+  MAX_SEARCH_LENGTH,
+  type ListOptions,
+} from "./shared.js";
+
+const DEFAULT_CALL_LOG_LIMIT = 50;
+const DEFAULT_CONTACTS_LIMIT = 100;
 
 interface FreeboxLikeResponse {
   success: boolean;
@@ -12,14 +26,59 @@ interface FreeboxLikeResponse {
 }
 
 function toToolResult(response: FreeboxLikeResponse) {
+  return textResult(response, !response.success);
+}
+
+// Applies list options to a Freebox array response; errors/non-array results pass through untouched.
+function listResponse(response: FreeboxLikeResponse, options: ListOptions<any>) {
+  if (!response.success || !Array.isArray(response.result)) {
+    return toToolResult(response);
+  }
+  return listToolResult(toListResult(response.result, options));
+}
+
+function hostIpv4(host: any): string[] {
+  const l3: any[] = Array.isArray(host?.l3connectivities) ? host.l3connectivities : [];
+  return l3.filter((c) => c.af === "ipv4").map((c) => c.addr);
+}
+
+// Compact LAN host summary: the raw object carries every name source, IPv6
+// address and access point detail ever seen for the host.
+function summarizeLanHost(h: any) {
+  const ap = h.access_point;
+  const wifi = ap?.wifi_information;
   return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify(response, null, 2),
-      },
-    ],
-    isError: !response.success,
+    name: h.primary_name,
+    type: h.host_type,
+    mac: h.l2ident?.id,
+    vendor: h.vendor_name || undefined,
+    ipv4: hostIpv4(h),
+    active: h.active,
+    reachable: h.reachable,
+    last_activity: h.last_activity,
+    interface: h.interface,
+    connection: ap?.connectivity_type,
+    ssid: wifi?.ssid,
+    band: wifi?.band,
+    signal_dbm: wifi?.signal,
+  };
+}
+
+function summarizeWifiStation(s: any) {
+  return {
+    name: s.hostname || s.host?.primary_name,
+    mac: s.mac,
+    ipv4: hostIpv4(s.host),
+    vendor: s.host?.vendor_name || undefined,
+    bssid: s.bssid,
+    state: s.state,
+    signal_dbm: s.signal,
+    rx_rate: s.rx_rate,
+    tx_rate: s.tx_rate,
+    rx_bytes: s.rx_bytes,
+    tx_bytes: s.tx_bytes,
+    conn_duration: s.conn_duration,
+    inactive: s.inactive,
   };
 }
 
@@ -60,26 +119,48 @@ export function registerFreeboxTools(server: McpServer): void {
     "freebox_get_wifi_stations",
     {
       title: "Freebox WiFi stations",
-      description: "List devices currently connected over WiFi.",
+      description:
+        "List devices currently connected over WiFi, as a compact summary. Use raw=true only if a field is missing.",
+      inputSchema: {
+        search: searchParam,
+        limit: limitParam(),
+        raw: rawParam,
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getWifiStations()),
+    async ({ search, limit, raw }) =>
+      listResponse(await freeboxApi.getWifiStations(), {
+        filter: (s: any) =>
+          matchesSearch(search, s.hostname, s.host?.primary_name, s.mac, ...hostIpv4(s.host)),
+        limit,
+        project: raw ? undefined : summarizeWifiStation,
+      }),
   );
 
   server.registerTool(
     "freebox_get_lan_hosts",
     {
       title: "Freebox LAN hosts",
-      description: "List devices on the LAN, across all browser interfaces.",
+      description:
+        "List devices known to the Freebox LAN browser, across all interfaces, as a compact summary. By default only currently active hosts are returned (the Freebox also remembers every host ever seen). Use raw=true only if a field is missing.",
+      inputSchema: {
+        activeOnly: z
+          .boolean()
+          .default(true)
+          .describe("true (default) = only currently active hosts; false = include inactive, remembered hosts"),
+        search: searchParam,
+        limit: limitParam(),
+        raw: rawParam,
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => {
+    async ({ activeOnly, search, limit, raw }) => {
       const interfaces = await freeboxApi.getLanBrowserInterfaces();
       if (!interfaces.success || !Array.isArray(interfaces.result)) {
         return toToolResult(interfaces);
       }
 
-      const allHosts: unknown[] = [];
+      const allHosts: any[] = [];
       for (const iface of interfaces.result as Array<{ name: string }>) {
         const hosts = await freeboxApi.getLanHosts(iface.name);
         if (hosts.success && Array.isArray(hosts.result)) {
@@ -89,7 +170,15 @@ export function registerFreeboxTools(server: McpServer): void {
         }
       }
 
-      return toToolResult({ success: true, result: allHosts });
+      return listToolResult(
+        toListResult(allHosts, {
+          filter: (h) =>
+            (!activeOnly || h.active === true) &&
+            matchesSearch(search, h.primary_name, h.l2ident?.id, ...hostIpv4(h)),
+          limit,
+          project: raw ? undefined : summarizeLanHost,
+        }),
+      );
     },
   );
 
@@ -128,10 +217,33 @@ export function registerFreeboxTools(server: McpServer): void {
     "freebox_get_call_log",
     {
       title: "Freebox call log",
-      description: "Get the phone call log (incoming/outgoing/missed).",
+      description:
+        "Get the phone call log (accepted/incoming/missed/outgoing), most recent first.",
+      inputSchema: {
+        type: z
+          .enum(["all", "accepted", "incoming", "missed", "outgoing"])
+          .default("all")
+          .describe("Filter by call type"),
+        search: z
+          .string()
+          .max(MAX_SEARCH_LENGTH)
+          .optional()
+          .describe("Case-insensitive substring match on caller name or number"),
+        limit: limitParam(DEFAULT_CALL_LOG_LIMIT),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getCallLog()),
+    async ({ type, search, limit }) => {
+      const response = await freeboxApi.getCallLog();
+      if (Array.isArray(response.result)) {
+        response.result.sort((a: any, b: any) => (b.datetime ?? 0) - (a.datetime ?? 0));
+      }
+      return listResponse(response, {
+        filter: (c: any) =>
+          (type === "all" || c.type === type) && matchesSearch(search, c.name, c.number),
+        limit: limit ?? DEFAULT_CALL_LOG_LIMIT,
+      });
+    },
   );
 
   server.registerTool(
@@ -139,9 +251,22 @@ export function registerFreeboxTools(server: McpServer): void {
     {
       title: "Freebox contacts",
       description: "Get the phone contacts list, read-only.",
+      inputSchema: {
+        search: z
+          .string()
+          .max(MAX_SEARCH_LENGTH)
+          .optional()
+          .describe("Case-insensitive substring match on contact name or company"),
+        limit: limitParam(DEFAULT_CONTACTS_LIMIT),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getContacts()),
+    async ({ search, limit }) =>
+      listResponse(await freeboxApi.getContacts(), {
+        filter: (c: any) =>
+          matchesSearch(search, c.display_name, c.first_name, c.last_name, c.company),
+        limit: limit ?? DEFAULT_CONTACTS_LIMIT,
+      }),
   );
 
   server.registerTool(
