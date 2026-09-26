@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Edit2, Shield, User as UserIcon, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
+import { getRequestErrorMessage } from '../utils/errorMessage';
 import { useUserAuthStore, type User } from '../stores/userAuthStore';
 import { Card } from '../components/widgets/Card';
 import { Button } from '../components/ui/Button';
@@ -38,25 +39,13 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onBack }) => {
                 const errorMsg = response.error?.message || 'Échec du chargement des utilisateurs';
                 setError(errorMsg);
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Handle network/socket errors
-            let errorMessage = 'Échec du chargement des utilisateurs';
-            
-            if (err.message) {
-                if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-                    errorMessage = 'Connexion interrompue. Veuillez réessayer.';
-                } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-                    errorMessage = 'La requête a expiré. Veuillez réessayer.';
-                } else if (err.error?.message) {
-                    errorMessage = err.error.message;
-                } else {
-                    errorMessage = err.message;
-                }
-            } else if (err.error?.message) {
-                errorMessage = err.error.message;
-            }
-            
-            setError(errorMessage);
+            setError(getRequestErrorMessage(err, {
+                fallback: 'Échec du chargement des utilisateurs',
+                connection: 'Connexion interrompue. Veuillez réessayer.',
+                timeout: 'La requête a expiré. Veuillez réessayer.'
+            }));
         } finally {
             setIsLoading(false);
         }
@@ -75,25 +64,13 @@ export const UsersPage: React.FC<UsersPageProps> = ({ onBack }) => {
                 const errorMsg = response.error?.message || 'Échec de la suppression';
                 alert(errorMsg);
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Handle network/socket errors
-            let errorMessage = 'Échec de la suppression';
-            
-            if (err.message) {
-                if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-                    errorMessage = 'Connexion interrompue. Veuillez réessayer.';
-                } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-                    errorMessage = 'La requête a expiré. Veuillez réessayer.';
-                } else if (err.error?.message) {
-                    errorMessage = err.error.message;
-                } else {
-                    errorMessage = err.message;
-                }
-            } else if (err.error?.message) {
-                errorMessage = err.error.message;
-            }
-            
-            alert(errorMessage);
+            alert(getRequestErrorMessage(err, {
+                fallback: 'Échec de la suppression',
+                connection: 'Connexion interrompue. Veuillez réessayer.',
+                timeout: 'La requête a expiré. Veuillez réessayer.'
+            }));
         }
     };
 

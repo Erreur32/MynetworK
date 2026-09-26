@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.53] - 2026-09-26
+
+### Changed
+
+- Last 6 frontend `catch (error: any)` migrated to `unknown` (UsersPage, SettingsPage, LogsPage, SearchPage), frontend and backend now have no `catch any` left
+- Duplicated network/socket/timeout error handling of UsersPage and SettingsPage factored into `getRequestErrorMessage()` (`src/utils/errorMessage.ts`)
+
+---
+
 ## [0.10.52] - 2026-09-26
 
 ### CI

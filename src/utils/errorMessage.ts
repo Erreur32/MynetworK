@@ -21,3 +21,22 @@ type ApiErrorPayload = {
 export function getApiErrorPayload(error: unknown): ApiErrorPayload {
     return typeof error === 'object' && error !== null ? (error as ApiErrorPayload) : {};
 }
+
+/**
+ * User-facing message for a failed request: dedicated messages for dropped connections and
+ * timeouts, otherwise the API error message, the raw error message, or the fallback.
+ */
+export function getRequestErrorMessage(
+    error: unknown,
+    messages: { fallback: string; connection: string; timeout: string }
+): string {
+    const message = getErrorMessage(error);
+    const apiMessage = getApiErrorPayload(error).error?.message;
+    if (message.includes('socket') || message.includes('ended') || message.includes('ECONNRESET')) {
+        return messages.connection;
+    }
+    if (message.includes('timeout') || message.includes('TIMEOUT')) {
+        return messages.timeout;
+    }
+    return apiMessage || message || messages.fallback;
+}

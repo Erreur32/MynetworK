@@ -72,7 +72,7 @@ import { ThemeSection } from '../components/ThemeSection';
 import { useUpdateStore } from '../stores/updateStore';
 import { UserMenu } from '../components/ui';
 import { ToastContainer, type ToastData } from '../components/ui/Toast';
-import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
+import { getErrorMessage, getApiErrorPayload, getRequestErrorMessage } from '../utils/errorMessage';
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -3306,25 +3306,13 @@ const UsersManagementSection: React.FC = () => {
         const errorMsg = response.error?.message || t('admin.users.loadError');
         setError(errorMsg);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Handle network/socket errors
-      let errorMessage = t('admin.users.loadError');
-      
-      if (err.message) {
-        if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-          errorMessage = t('admin.users.connectionError');
-        } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-          errorMessage = t('admin.users.timeoutError');
-        } else if (err.error?.message) {
-          errorMessage = err.error.message;
-        } else {
-          errorMessage = err.message;
-        }
-      } else if (err.error?.message) {
-        errorMessage = err.error.message;
-      }
-      
-      setError(errorMessage);
+      setError(getRequestErrorMessage(err, {
+        fallback: t('admin.users.loadError'),
+        connection: t('admin.users.connectionError'),
+        timeout: t('admin.users.timeoutError')
+      }));
     } finally {
       setIsLoading(false);
     }
@@ -3343,25 +3331,13 @@ const UsersManagementSection: React.FC = () => {
         const errorMsg = response.error?.message || t('admin.users.deleteError');
         alert(errorMsg);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Handle network/socket errors
-      let errorMessage = t('admin.users.deleteError');
-      
-      if (err.message) {
-        if (err.message.includes('socket') || err.message.includes('ended') || err.message.includes('ECONNRESET')) {
-          errorMessage = t('admin.users.connectionError');
-        } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-          errorMessage = t('admin.users.timeoutError');
-        } else if (err.error?.message) {
-          errorMessage = err.error.message;
-        } else {
-          errorMessage = err.message;
-        }
-      } else if (err.error?.message) {
-        errorMessage = err.error.message;
-      }
-      
-      alert(errorMessage);
+      alert(getRequestErrorMessage(err, {
+        fallback: t('admin.users.deleteError'),
+        connection: t('admin.users.connectionError'),
+        timeout: t('admin.users.timeoutError')
+      }));
     }
   };
 
