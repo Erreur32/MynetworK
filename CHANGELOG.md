@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.52] - 2026-09-26
+
+### CI
+
+- Bump ossf/scorecard-action from v2.4.1 to v2.4.4 (SHA-pinned), Scorecard engine v5.5.0
+
+---
+
 ## [0.10.51] - 2026-09-25
 
 ### CI
