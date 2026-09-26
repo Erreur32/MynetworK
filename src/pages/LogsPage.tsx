@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Filter, RefreshCw, Calendar, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { api } from '../api/client';
+import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
 import { useUserAuthStore } from '../stores/userAuthStore';
 import { Card } from '../components/widgets/Card';
 
@@ -60,9 +61,9 @@ export const LogsPage: React.FC<LogsPageProps> = ({ onBack }) => {
                     console.error('Failed to fetch logs:', errorMsg);
                 }
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Handle network/socket errors silently
-            const errorMessage = err.message || err.error?.message || '';
+            const errorMessage = getErrorMessage(err) || getApiErrorPayload(err).error?.message || '';
             if (errorMessage && !errorMessage.includes('socket') && !errorMessage.includes('ECONNRESET')) {
                 console.error('Failed to fetch logs:', errorMessage);
             }

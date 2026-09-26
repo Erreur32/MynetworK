@@ -838,7 +838,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                             setResults([]);
                         }
                     }
-                } catch (ipErr: any) {
+                } catch (ipErr: unknown) {
                     console.warn('Search', `Failed to get IP details, falling back to regular search:`, ipErr);
                     setIsExactIpSearch(false);
                     const response = await api.post<SearchResultData>('/api/search', {
