@@ -4,15 +4,32 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { networkScanService } from '../../services/networkScanService.js';
-import { NetworkScanRepository } from '../../database/models/NetworkScan.js';
+import { NetworkScanRepository, type NetworkScan } from '../../database/models/NetworkScan.js';
 import { ipBlacklistService } from '../../services/ipBlacklistService.js';
 import { isValidIp } from '../../utils/networkValidation.js';
-import { wrapAsync } from './shared.js';
+import { wrapAsync, ListResult, rawParam, limitParam, MAX_SEARCH_LENGTH } from './shared.js';
+
+const DEFAULT_DEVICE_LIMIT = 100;
 
 function assertValidIp(ip: string): void {
   if (!isValidIp(ip)) {
     throw new Error(`Invalid IP address: ${ip}`);
   }
+}
+
+// Drops icon/source bookkeeping fields and flattens openPorts to a plain port list.
+function summarizeScan(s: NetworkScan) {
+  const openPorts = s.additionalInfo?.openPorts;
+  return {
+    ip: s.ip,
+    mac: s.mac,
+    hostname: s.hostname,
+    vendor: s.vendor,
+    status: s.status,
+    latency_ms: s.pingLatency,
+    last_seen: s.lastSeen,
+    open_ports: Array.isArray(openPorts) ? openPorts.map((p: { port?: number }) => p.port) : undefined
+  };
 }
 
 export function registerScannerTools(server: McpServer): void {
@@ -31,10 +48,31 @@ export function registerScannerTools(server: McpServer): void {
     'scan_get_devices',
     {
       title: 'List scanned devices',
-      description: 'List devices discovered by the network scanner (up to 1000 most recently seen).',
+      description:
+        'List devices discovered by the network scanner, most recently seen first, as a compact summary (IP, MAC, hostname, vendor, status, latency, open ports). Use raw=true only if a field is missing.',
+      inputSchema: {
+        status: z.enum(['all', 'online', 'offline', 'unknown']).default('all').describe('Filter by last known status'),
+        search: z
+          .string()
+          .max(MAX_SEARCH_LENGTH)
+          .optional()
+          .describe('Case-insensitive substring match on IP, MAC, hostname, vendor or open port'),
+        limit: limitParam(DEFAULT_DEVICE_LIMIT),
+        raw: rawParam
+      },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async () => wrapAsync(() => NetworkScanRepository.find({ limit: 1000, sortBy: 'last_seen', sortOrder: 'desc' }))
+    async ({ status, search, limit, raw }) =>
+      wrapAsync(() => {
+        const filters = { status: status === 'all' ? undefined : status, search: search?.trim() || undefined };
+        const devices = NetworkScanRepository.find({
+          ...filters,
+          limit: limit ?? DEFAULT_DEVICE_LIMIT,
+          sortBy: 'last_seen',
+          sortOrder: 'desc'
+        });
+        return new ListResult(raw ? devices : devices.map(summarizeScan), NetworkScanRepository.count(filters));
+      })
   );
 
   server.registerTool(
