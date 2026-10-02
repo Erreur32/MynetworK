@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.55] - 2026-10-02
+
+### Security
+
+- `fast-uri` 4.1.4 to 4.2.1 (GHSA-jvvf-x445-j334) and `ip-address` 10.5.0 to 10.7.3 (GHSA-2vr4-cq9g-pvrc), Dependabot PR #55
+- `brace-expansion` 2.1.4 to 2.1.7 and 5.0.9 to 5.0.12 (GHSA-q2hr-2g5m-vwhr and related DoS advisories), build-time only via `vite-plugin-pwa`
+- `dompurify` 3.4.13 to 3.4.16 (GHSA-p98j-92pf-mc4p), pulled in by `jspdf`
+
+---
+
 ## [0.10.54] - 2026-09-26
 
 ### Changed
