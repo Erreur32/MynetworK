@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.56] - 2026-10-02
+
+### Security
+
+- `shell-quote` 1.10.0 to 1.12.0 (CVE-2026-102422 / GHSA-pqg4-j6r4-53mv, command injection in `quote()`), override raised to `>=1.11.0`. Pulled in by `concurrently`, no user input reaches it
+
+### Changed
+
+- `concurrently` and `cross-env` moved to `devDependencies`: the container runs `tsx` directly, so neither is needed at runtime and both are now pruned from the Docker image
+
+---
+
 ## [0.10.55] - 2026-10-02
 
 ### Security
