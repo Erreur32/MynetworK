@@ -6,6 +6,7 @@ import { Router, Response } from "express";
 import { mcpAuthService } from "../services/mcpAuthService.js";
 import { McpTokenAccessLevel } from "../database/models/McpToken.js";
 import { getToolCatalog } from "../mcp/toolCatalog.js";
+import { reapplyMcpTokenPermissions } from "./mcp.js";
 import {
   requireAuth,
   requireAdmin,
@@ -182,6 +183,7 @@ router.patch(
       res.status(404).json({ success: false, error: "Token not found" });
       return;
     }
+    reapplyMcpTokenPermissions(id);
 
     logger.warn(
       "MCP",
@@ -257,6 +259,7 @@ router.put(
       res.status(500).json({ success: false, error: "Failed to save override" });
       return;
     }
+    reapplyMcpTokenPermissions(id);
 
     logger.warn(
       "MCP",
@@ -280,6 +283,7 @@ router.delete(
       res.status(500).json({ success: false, error: "Failed to clear override" });
       return;
     }
+    reapplyMcpTokenPermissions(id);
 
     logger.warn(
       "MCP",

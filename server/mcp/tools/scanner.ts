@@ -1,4 +1,5 @@
-// Network scanner MCP tools (phase 2) — read + non-destructive actions only.
+// Network scanner MCP tools (phase 2) — read + write actions. Disruptive ones carry
+// destructiveHint: true so MCP clients ask the user before running them.
 // Each tool wraps existing networkScanService/NetworkScanRepository/ipBlacklistService methods;
 // no business logic lives here.
 import { z } from 'zod';
@@ -14,6 +15,15 @@ const DEFAULT_DEVICE_LIMIT = 100;
 function assertValidIp(ip: string): void {
   if (!isValidIp(ip)) {
     throw new Error(`Invalid IP address: ${ip}`);
+  }
+}
+
+// For tools that send packets to the IP: an LLM-supplied address must not
+// turn the scanner into a probe against hosts outside the user's networks.
+function assertScannableIp(ip: string): void {
+  assertValidIp(ip);
+  if (!networkScanService.isIpScanAuthorized(ip)) {
+    throw new Error(`IP ${ip} is outside the configured scan ranges and the host's local networks`);
   }
 }
 
@@ -145,7 +155,7 @@ export function registerScannerTools(server: McpServer): void {
     },
     async ({ ip }) =>
       wrapAsync(async () => {
-        assertValidIp(ip);
+        assertScannableIp(ip);
         const result = await networkScanService.rescanSingleIpWithPorts(ip);
         if (!result) {
           throw new Error(`Failed to rescan ${ip} (may be blacklisted or unreachable)`);
@@ -173,7 +183,7 @@ export function registerScannerTools(server: McpServer): void {
     },
     async ({ ip, mac, hostname }) =>
       wrapAsync(async () => {
-        assertValidIp(ip);
+        assertScannableIp(ip);
         const result = await networkScanService.scanSingleIp(ip, true, mac, hostname);
         if (!result) {
           throw new Error(`Failed to scan ${ip}`);
@@ -222,7 +232,7 @@ export function registerScannerTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false
       }

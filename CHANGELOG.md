@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.57] - 2026-10-06
+
+### Security
+
+- MCP: disruptive write tools now carry `destructiveHint: true` (`freebox_reboot`, `freebox_set_wifi_enabled`, `freebox_toggle_wifi_bss`, `unifi_block_client`, `unifi_set_wlan_enabled`, `unifi_restart_device`, `scan_blacklist_add`), so MCP clients ask the user before running them. Limits prompt injection planted in device names, DHCP hostnames or call logs from chaining into a disruptive action
+- MCP: `scan_rescan_ip` and `scan_add_manual_ip` only accept IPs inside the configured scan ranges or the host's local /24 networks, so the scanner can no longer be pointed at arbitrary external hosts
+- MCP: changing a token's access level or tool overrides now applies immediately to its open sessions (clients get `tools/list_changed`), instead of only on the next session
+
+---
+
 ## [0.10.56] - 2026-10-02
 
 ### Security

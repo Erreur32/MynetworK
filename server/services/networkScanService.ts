@@ -1124,6 +1124,15 @@ export class NetworkScanService {
     }
 
     /**
+     * Single-IP counterpart of isScanRangeAuthorized: the IP must fall in a
+     * user-configured range or in a /24 LAN present on this host.
+     */
+    isIpScanAuthorized(ip: string): boolean {
+        return [...this.getConfiguredRanges(), ...this.getMachineLanRanges()]
+            .some(range => this.isIpInRange(ip, range));
+    }
+
+    /**
      * Resolves range for scheduled scans using the same rules as the API (defaultRange + defaultAutoDetect).
      */
     resolveScanRangeFromAppConfig(): string | null {
