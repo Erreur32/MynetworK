@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.59] - 2026-10-06
+
+### Security
+
+- `source-map-js` 1.2.1 to 1.2.2 (GHSA-68fv-2mgg-jv7q / CVE-2026-93749, DoS via indexed source-map offsets), via a new `>=1.2.2` override. Pulled in by `postcss`, build-time only
+- `postcss-selector-parser` 6.1.4 to 7.1.6 (GHSA-rj75-hqrm-r3gf, quadratic selector parsing), via a new `>=7.1.6` override. Pulled in by `tailwindcss` 3; generated CSS checked byte-identical to the 6.x build
+- Replaces Dependabot PR #59, which fixed the same advisories by jumping `tailwindcss` 3 to 4 (major, breaks the PostCSS integration and the build)
+- Known and accepted: `braces` 3.0.3 (GHSA-vfj7-8cjw-p6xm) has no patched release; it only reaches the build through `tailwindcss` 3 (chokidar/micromatch) with glob patterns from our own `tailwind.config.js`, never user input. Goes away with a future Tailwind 4 migration
+
+---
+
 ## [0.10.58] - 2026-10-06
 
 ### Changed
