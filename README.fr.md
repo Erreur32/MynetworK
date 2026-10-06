@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.57-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.58-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -513,7 +513,7 @@ Voir le [dépôt HA](https://github.com/Erreur32/HA_mynetwork) pour l'installati
 
 MynetworK embarque un serveur [MCP](https://modelcontextprotocol.io) natif : un client MCP (Claude Desktop, Claude Code...) peut ainsi interroger et piloter directement votre Freebox, votre contrôleur UniFi et le scanner réseau, sans passer par l'interface web.
 
-- **Réseau local uniquement** - non exposé via le reverse proxy ; protégé par une liste blanche d'IP (RFC1918 + loopback) en plus d'un jeton dédié
+- **Réseau local uniquement** - non exposé via le reverse proxy ; protégé par une liste blanche d'IP (RFC1918 + loopback + Tailscale 100.64.0.0/10) en plus d'un jeton dédié
 - **Jetons nommés, multiples** - distincts de la session JWT web ; créez autant de jetons nommés que nécessaire (un par client/appareil), chacun avec sa propre durée de validité optionnelle, depuis le panneau admin
 - **Gérés depuis l'UI admin** - l'onglet "MCP" permet de créer des jetons (affichés une seule fois), de les révoquer individuellement, et affiche l'état (activé/désactivé), l'endpoint, les clients connectés et le statut/dernière utilisation de chaque jeton
 

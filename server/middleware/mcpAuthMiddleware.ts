@@ -8,7 +8,7 @@
  */
 import { Request, Response, NextFunction } from "express";
 import { mcpAuthService } from "../services/mcpAuthService.js";
-import { isPrivateNetworkIp } from "../utils/networkValidation.js";
+import { isPrivateNetworkIp, isTailscaleIp } from "../utils/networkValidation.js";
 
 export interface McpAuthenticatedRequest extends Request {
   mcpTokenId?: number;
@@ -48,12 +48,12 @@ export const mcpAuthMiddleware = (
   // an attacker on that path could set X-Forwarded-For to any private IP.
   const clientIp = req.socket.remoteAddress || "";
 
-  if (!isPrivateNetworkIp(clientIp)) {
+  if (!isPrivateNetworkIp(clientIp) && !isTailscaleIp(clientIp)) {
     jsonRpcError(
       res,
       403,
       -32000,
-      "MCP access is restricted to the local network",
+      "MCP access is restricted to the local network and Tailscale",
     );
     return;
   }
