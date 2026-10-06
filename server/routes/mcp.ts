@@ -7,7 +7,9 @@ import { randomUUID } from "crypto";
 import { Router, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMynetworkMcpServer } from "../mcp/server.js";
+import { applyTokenToolPermissions } from "../mcp/toolPermissions.js";
 import {
   mcpAuthMiddleware,
   McpAuthenticatedRequest,
@@ -36,11 +38,15 @@ function sessionOwnershipError(res: Response): void {
 // exposes session metadata (token, IP, user-agent, activity) to the admin
 // UI, but transport internals stay private to this router.
 const transports = new Map<string, StreamableHTTPServerTransport>();
+// Per-session McpServer, kept so a token's permission change can be pushed
+// to its already-open sessions instead of waiting for them to reconnect.
+const servers = new Map<string, McpServer>();
 
 function closeSession(sessionId: string): void {
   const transport = transports.get(sessionId);
   if (!transport) return;
   transports.delete(sessionId);
+  servers.delete(sessionId);
   unregisterMcpSession(sessionId);
   transport.close().catch((error: Error) => {
     logger.warn("MCP", `Error closing session ${sessionId}: ${error.message}`);
@@ -57,6 +63,16 @@ const sweepInterval = setInterval(() => {
   }
 }, SESSION_SWEEP_INTERVAL_MS);
 sweepInterval.unref();
+
+/** Re-applies a token's current permissions to all of its open sessions. */
+export function reapplyMcpTokenPermissions(tokenId: number): void {
+  for (const info of getActiveMcpSessions()) {
+    const server = servers.get(info.sessionId);
+    if (server && info.tokenId === tokenId) {
+      applyTokenToolPermissions(server, tokenId);
+    }
+  }
+}
 
 const router = Router();
 router.use(mcpAuthMiddleware);
@@ -82,6 +98,7 @@ router.post("/", async (req: McpAuthenticatedRequest, res: Response) => {
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (newSessionId: string) => {
         transports.set(newSessionId, transport);
+        servers.set(newSessionId, server);
         registerMcpSession(newSessionId, tokenId, ip, userAgent);
         logger.info("MCP", `Session initialized: ${newSessionId}`);
       },

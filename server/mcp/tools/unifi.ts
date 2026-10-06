@@ -1,4 +1,5 @@
-// UniFi MCP tools (phase 2): read + a few non-destructive write actions.
+// UniFi MCP tools (phase 2): read + a few write actions. Disruptive ones carry
+// destructiveHint: true so MCP clients ask the user before running them.
 // Each tool wraps existing/new UniFiApiService methods; no business logic lives here.
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -256,7 +257,7 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -305,7 +306,7 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -328,7 +329,7 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false
       }

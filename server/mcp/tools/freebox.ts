@@ -1,4 +1,5 @@
-// Freebox MCP tools (phase 1) — read + non-destructive actions only.
+// Freebox MCP tools (phase 1) — read + write actions. Disruptive ones carry
+// destructiveHint: true so MCP clients ask the user before running them.
 // Each tool wraps a freeboxApi method; no business logic lives here.
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -277,7 +278,7 @@ export function registerFreeboxTools(server: McpServer): void {
         "Reboot the Freebox now. Disruptive: the network and all connected devices will briefly go offline (typically 1-2 minutes). Not destructive to data.",
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false,
       },
@@ -297,7 +298,7 @@ export function registerFreeboxTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false,
       },
@@ -322,7 +323,7 @@ export function registerFreeboxTools(server: McpServer): void {
       },
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: false,
       },
