@@ -4,7 +4,7 @@
 
 <img src="src/icons/logo_mynetwork.svg" alt="MynetworK" width="96" height="96" />
 
-![MynetworK](https://img.shields.io/badge/MynetworK-0.10.57-111827?style=for-the-badge)
+![MynetworK](https://img.shields.io/badge/MynetworK-0.10.58-111827?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-PRODUCTION-374151?style=for-the-badge)
 [![GHCR](https://img.shields.io/badge/GHCR-mynetwork-0ea5e9?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/Erreur32/MynetworK/pkgs/container/mynetwork)
 ![React](https://img.shields.io/badge/React-19-111827?style=for-the-badge&logo=react&logoColor=38bdf8)
@@ -509,7 +509,7 @@ See [HA Repo](https://github.com/Erreur32/HA_mynetwork) for installation.
 
 MynetworK ships a native [MCP](https://modelcontextprotocol.io) server, so an MCP client (e.g. Claude Desktop, Claude Code) can query and control your Freebox, UniFi controller and network scanner directly, no need to go through the web UI.
 
-- **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback) in addition to a dedicated bearer token
+- **LAN-only** - not exposed through the reverse proxy; gated by an IP allowlist (RFC1918 + loopback + Tailscale 100.64.0.0/10) in addition to a dedicated bearer token
 - **Named, multi-token auth** - separate from the JWT web session; create as many named tokens as you need (one per client/device), each with its own optional expiry, from the admin panel
 - **Managed from the admin UI** - the "MCP" tab lets you create tokens (shown once), revoke them individually, and shows whether MCP is enabled, the endpoint, active sessions and each token's status/last-used time
 

@@ -81,6 +81,25 @@ export function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function unwrapIpv4Mapped(ip: string): string {
+    const mappedMatch = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+    return mappedMatch ? mappedMatch[1] : ip;
+}
+
+/**
+ * Check whether an IP address is a Tailscale IPv4 address (100.64.0.0/10, the
+ * CGNAT range Tailscale assigns from). Tailscale IPv6 (fd7a:115c:a1e0::/48) is
+ * already covered by isPrivateNetworkIp's fc00::/7 rule. Kept separate from
+ * isPrivateNetworkIp on purpose: that one also gates insecureAgent's TLS
+ * bypass, which must not extend to CGNAT addresses.
+ */
+export function isTailscaleIp(ip: string): boolean {
+    const addr = unwrapIpv4Mapped(ip);
+    if (!isValidIp(addr)) return false;
+    const [first, second] = addr.split('.').map(Number);
+    return first === 100 && second >= 64 && second <= 127;
+}
+
 /**
  * Check whether an IP address belongs to a private/local range (RFC1918 + loopback
  * + link-local, IPv4 and IPv6). Unwraps IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
@@ -90,11 +109,7 @@ export function escapeRegex(str: string): string {
 export function isPrivateNetworkIp(ip: string): boolean {
     if (!ip) return false;
 
-    let addr = ip;
-    const mappedMatch = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
-    if (mappedMatch) {
-        addr = mappedMatch[1];
-    }
+    const addr = unwrapIpv4Mapped(ip);
 
     if (addr === '::1' || addr === 'localhost') return true;
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.58] - 2026-10-06
+
+### Changed
+
+- MCP: the IP allowlist now also accepts Tailscale IPv4 addresses (100.64.0.0/10), so MCP clients connecting directly over Tailscale (without a reverse proxy in front) are no longer rejected with 403. Tailscale IPv6 (fd7a:115c:a1e0::/48) was already accepted. The shared `isPrivateNetworkIp()` is unchanged, so the TLS bypass in `insecureAgent` does not extend to this range
+
+---
+
 ## [0.10.57] - 2026-10-06
 
 ### Security
