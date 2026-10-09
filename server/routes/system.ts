@@ -139,19 +139,19 @@ router.get('/environment', asyncHandler(async (_req, res) => {
 }));
 
 // GET /api/system/reboot/schedule - Get reboot schedule
-router.get('/reboot/schedule', asyncHandler(async (_req, res) => {
+router.get('/reboot/schedule', requireAuth, asyncHandler(async (_req, res) => {
   const schedule = rebootScheduler.getSchedule();
   res.json({ success: true, result: schedule });
 }));
 
 // POST /api/system/reboot/schedule - Update reboot schedule
-router.post('/reboot/schedule', asyncHandler(async (req, res) => {
+router.post('/reboot/schedule', requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const schedule = rebootScheduler.updateSchedule(req.body);
   res.json({ success: true, result: schedule });
 }));
 
 // POST /api/system/reboot - Reboot Freebox
-router.post('/reboot', asyncHandler(async (_req, res) => {
+router.post('/reboot', requireAuth, requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.reboot();
   res.json(result);
 }));

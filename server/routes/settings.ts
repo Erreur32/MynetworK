@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
-import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { param } from '../utils/params.js';
 
 const router = Router();
+router.use(requireAuth);
 
 // ===== DHCP =====
 
@@ -16,7 +17,7 @@ router.get('/dhcp', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/dhcp - Update DHCP config
-router.put('/dhcp', asyncHandler(async (req, res) => {
+router.put('/dhcp', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateDhcpConfig(req.body);
   res.json(result);
 }));
@@ -34,14 +35,14 @@ router.get('/dhcp/static', asyncHandler(async (_req, res) => {
 }));
 
 // POST /api/settings/dhcp/static - Create static lease
-router.post('/dhcp/static', asyncHandler(async (req, res) => {
+router.post('/dhcp/static', requireAdmin, asyncHandler(async (req, res) => {
   const { mac, ip, comment } = req.body;
   const result = await freeboxApi.addDhcpStaticLease(mac, ip, comment);
   res.json(result);
 }));
 
 // DELETE /api/settings/dhcp/static/:id - Delete static lease
-router.delete('/dhcp/static/:id', asyncHandler(async (req, res) => {
+router.delete('/dhcp/static/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deleteDhcpStaticLease(param(req, 'id'));
   res.json(result);
 }));
@@ -55,7 +56,7 @@ router.get('/ftp', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/ftp - Update FTP config
-router.put('/ftp', asyncHandler(async (req, res) => {
+router.put('/ftp', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateFtpConfig(req.body);
   res.json(result);
 }));
@@ -75,25 +76,25 @@ router.get('/vpn/servers/:id', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/settings/vpn/servers/:id/config - Get VPN server config
-router.get('/vpn/servers/:id/config', asyncHandler(async (req, res) => {
+router.get('/vpn/servers/:id/config', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.getVpnServerConfig(param(req, 'id'));
   res.json(result);
 }));
 
 // PUT /api/settings/vpn/servers/:id/config - Update VPN server config
-router.put('/vpn/servers/:id/config', asyncHandler(async (req, res) => {
+router.put('/vpn/servers/:id/config', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateVpnServerConfig(param(req, 'id'), req.body);
   res.json(result);
 }));
 
 // POST /api/settings/vpn/servers/:id/start - Start VPN server
-router.post('/vpn/servers/:id/start', asyncHandler(async (req, res) => {
+router.post('/vpn/servers/:id/start', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.startVpnServer(param(req, 'id'));
   res.json(result);
 }));
 
 // POST /api/settings/vpn/servers/:id/stop - Stop VPN server
-router.post('/vpn/servers/:id/stop', asyncHandler(async (req, res) => {
+router.post('/vpn/servers/:id/stop', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.stopVpnServer(param(req, 'id'));
   res.json(result);
 }));
@@ -105,26 +106,26 @@ router.get('/vpn/server', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/vpn/server - Update VPN server config (legacy)
-router.put('/vpn/server', asyncHandler(async (req, res) => {
+router.put('/vpn/server', requireAdmin, asyncHandler(async (req, res) => {
   // For legacy, assume openvpn_routed
   const result = await freeboxApi.updateVpnServerConfig('openvpn_routed', req.body);
   res.json(result);
 }));
 
 // GET /api/settings/vpn/users - Get VPN users
-router.get('/vpn/users', asyncHandler(async (_req, res) => {
+router.get('/vpn/users', requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getVpnUsers();
   res.json(result);
 }));
 
 // POST /api/settings/vpn/users - Create VPN user
-router.post('/vpn/users', asyncHandler(async (req, res) => {
+router.post('/vpn/users', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createVpnUser(req.body);
   res.json(result);
 }));
 
 // DELETE /api/settings/vpn/users/:login - Delete VPN user
-router.delete('/vpn/users/:login', asyncHandler(async (req, res) => {
+router.delete('/vpn/users/:login', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deleteVpnUser(param(req, 'login'));
   res.json(result);
 }));
@@ -138,7 +139,7 @@ router.get('/vpn/connections', asyncHandler(async (_req, res) => {
 // ===== VPN Client =====
 
 // GET /api/settings/vpn/client - Get VPN client configs
-router.get('/vpn/client', asyncHandler(async (_req, res) => {
+router.get('/vpn/client', requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getVpnClientConfigs();
   res.json(result);
 }));
@@ -158,19 +159,19 @@ router.get('/nat/redirections', asyncHandler(async (_req, res) => {
 }));
 
 // POST /api/settings/nat/redirections - Create port forwarding rule
-router.post('/nat/redirections', asyncHandler(async (req, res) => {
+router.post('/nat/redirections', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.createPortForwardingRule(req.body);
   res.json(result);
 }));
 
 // PUT /api/settings/nat/redirections/:id - Update port forwarding rule
-router.put('/nat/redirections/:id', asyncHandler(async (req, res) => {
+router.put('/nat/redirections/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updatePortForwardingRule(parseInt(param(req, 'id')), req.body);
   res.json(result);
 }));
 
 // DELETE /api/settings/nat/redirections/:id - Delete port forwarding rule
-router.delete('/nat/redirections/:id', asyncHandler(async (req, res) => {
+router.delete('/nat/redirections/:id', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.deletePortForwardingRule(parseInt(param(req, 'id')));
   res.json(result);
 }));
@@ -182,7 +183,7 @@ router.get('/nat/dmz', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/nat/dmz - Update DMZ config
-router.put('/nat/dmz', asyncHandler(async (req, res) => {
+router.put('/nat/dmz', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateDmzConfig(req.body);
   res.json(result);
 }));
@@ -210,7 +211,7 @@ router.get('/lcd', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/lcd - Update LCD config
-router.put('/lcd', asyncHandler(async (req, res) => {
+router.put('/lcd', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateLcdConfig(req.body);
   res.json(result);
 }));
@@ -232,7 +233,7 @@ router.get('/connection', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/connection - Update connection config
-router.put('/connection', asyncHandler(async (req, res) => {
+router.put('/connection', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateConnectionConfig(req.body);
   res.json(result);
 }));
@@ -244,7 +245,7 @@ router.get('/connection/ipv6', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/connection/ipv6 - Update IPv6 config
-router.put('/connection/ipv6', asyncHandler(async (req, res) => {
+router.put('/connection/ipv6', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateIpv6Config(req.body);
   res.json(result);
 }));
@@ -264,7 +265,7 @@ router.get('/lan', asyncHandler(async (_req, res) => {
 }));
 
 // PUT /api/settings/lan - Update LAN config
-router.put('/lan', asyncHandler(async (req, res) => {
+router.put('/lan', requireAdmin, asyncHandler(async (req, res) => {
   const result = await freeboxApi.updateLanConfig(req.body);
   res.json(result);
 }));
@@ -272,7 +273,7 @@ router.put('/lan', asyncHandler(async (req, res) => {
 // ===== THEME =====
 
 // GET /api/settings/theme - Get theme configuration
-router.get('/theme', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get('/theme', asyncHandler(async (req: AuthenticatedRequest, res) => {
   const db = getDatabase();
   const stmt = db.prepare('SELECT value FROM app_config WHERE key = ?');
   const row = stmt.get('theme_config') as { value: string } | undefined;
@@ -296,7 +297,7 @@ router.get('/theme', requireAuth, asyncHandler(async (req: AuthenticatedRequest,
 }));
 
 // POST /api/settings/theme - Save theme configuration
-router.post('/theme', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post('/theme', asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { theme, customColors } = req.body;
   
   if (!theme || !['dark', 'glass', 'modern', 'nightly', 'neon', 'elegant'].includes(theme)) {
