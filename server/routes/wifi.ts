@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { param, requireIntParam } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+import { redactForNonAdmin } from '../utils/redactSecrets.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -37,9 +38,9 @@ router.get('/aps/:id/stations', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/wifi/bss - Get all BSS (SSIDs)
-router.get('/bss', asyncHandler(async (_req, res) => {
+router.get('/bss', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getWifiBss();
-  res.json(result);
+  res.json(redactForNonAdmin(req, result));
 }));
 
 // PUT /api/wifi/bss/:id - Enable/disable a specific BSS
@@ -63,8 +64,31 @@ interface WifiLanDevice {
   };
 }
 
+// Count active WiFi devices from LAN host data, grouped by band
+function countWifiDevicesByBand(lanHosts: unknown): { wifiDeviceCount: number; devicesByBand: Record<string, number> } {
+  const devicesByBand: Record<string, number> = { '2g4': 0, '5g': 0, '6g': 0 };
+  if (!Array.isArray(lanHosts)) return { wifiDeviceCount: 0, devicesByBand };
+
+  const wifiDevices = lanHosts.filter(
+    (device: WifiLanDevice) =>
+      device.active && device.reachable && device.access_point?.connectivity_type === 'wifi'
+  );
+
+  for (const device of wifiDevices as WifiLanDevice[]) {
+    const band = device.access_point?.wifi_information?.band?.toLowerCase() || '';
+    if (band.includes('6g')) {
+      devicesByBand['6g']++;
+    } else if (band.includes('5g')) {
+      devicesByBand['5g']++;
+    } else if (band.includes('2') || band.includes('2g4') || band.includes('2.4')) {
+      devicesByBand['2g4']++;
+    }
+  }
+  return { wifiDeviceCount: wifiDevices.length, devicesByBand };
+}
+
 // GET /api/wifi/full - Get complete WiFi status (APs + BSS combined)
-router.get('/full', asyncHandler(async (_req, res) => {
+router.get('/full', asyncHandler(async (req, res) => {
   // Fetch all WiFi data in parallel, plus LAN devices for WiFi count
   const [config, aps, bss, lanDevices] = await Promise.allSettled([
     freeboxApi.getWifiConfig(),
@@ -78,29 +102,9 @@ router.get('/full', asyncHandler(async (_req, res) => {
   const apsData = aps.status === 'fulfilled' && aps.value.success ? aps.value.result : [];
   const bssData = bss.status === 'fulfilled' && bss.value.success ? bss.value.result : [];
 
-  // Count WiFi devices from LAN data, grouped by band
-  let wifiDeviceCount = 0;
-  const devicesByBand: Record<string, number> = { '2g4': 0, '5g': 0, '6g': 0 };
-
-  if (lanDevices.status === 'fulfilled' && lanDevices.value.success && Array.isArray(lanDevices.value.result)) {
-    const wifiDevices = lanDevices.value.result.filter(
-      (device: WifiLanDevice) =>
-        device.active && device.reachable && device.access_point?.connectivity_type === 'wifi'
-    );
-    wifiDeviceCount = wifiDevices.length;
-
-    // Count by band
-    for (const device of wifiDevices) {
-      const band = (device as WifiLanDevice).access_point?.wifi_information?.band?.toLowerCase() || '';
-      if (band.includes('6g')) {
-        devicesByBand['6g']++;
-      } else if (band.includes('5g')) {
-        devicesByBand['5g']++;
-      } else if (band.includes('2') || band.includes('2g4') || band.includes('2.4')) {
-        devicesByBand['2g4']++;
-      }
-    }
-  }
+  const { wifiDeviceCount, devicesByBand } = countWifiDevicesByBand(
+    lanDevices.status === 'fulfilled' && lanDevices.value.success ? lanDevices.value.result : null
+  );
 
   // Filter out 6GHz data if model doesn't support it
   const supports6ghz = modelDetection.supportsWifi6ghz();
@@ -130,7 +134,7 @@ router.get('/full', asyncHandler(async (_req, res) => {
     result: {
       config: configData,
       aps: filteredAps,
-      bss: filteredBss,
+      bss: redactForNonAdmin(req, filteredBss),
       wifiDeviceCount: supports6ghz ? wifiDeviceCount : wifiDeviceCount - devicesByBand['6g'],
       devicesByBand: filteredDevicesByBand
     }
@@ -256,9 +260,9 @@ router.delete('/temp-disable', requireAdmin, asyncHandler(async (_req, res) => {
 // ==================== WiFi Guest Network (v14.0+) ====================
 
 // GET /api/wifi/guest/config - Get guest network config
-router.get('/guest/config', asyncHandler(async (_req, res) => {
+router.get('/guest/config', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getWifiCustomKeyConfig();
-  res.json(result);
+  res.json(redactForNonAdmin(req, result));
 }));
 
 // PUT /api/wifi/guest/config - Update guest network config
@@ -268,9 +272,9 @@ router.put('/guest/config', requireAdmin, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/wifi/guest/keys - Get guest network keys
-router.get('/guest/keys', asyncHandler(async (_req, res) => {
+router.get('/guest/keys', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getWifiCustomKeys();
-  res.json(result);
+  res.json(redactForNonAdmin(req, result));
 }));
 
 // POST /api/wifi/guest/keys - Create guest network key

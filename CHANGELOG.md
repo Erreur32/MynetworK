@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.61] - 2026-10-09
+
+### Security
+
+- Removed the public `POST /api/users/register` route: anyone reaching the port could create an account with no restriction (it was never used by the UI). Accounts are created by admins via `POST /api/users`
+- Credentials are now masked for non-admin users: Freebox WiFi and guest keys (`/api/wifi/bss`, `/api/wifi/full`, `/api/wifi/guest/keys`, `/api/wifi/guest/config`), DynDNS password (`/api/connection/ddns/:provider`), FTP password (`/api/settings/ftp`), and the UniFi controller password and API key in plugin settings (`/api/plugins`, `/api/plugins/:id`). Admin responses are unchanged
+- `GET /api/plugins/:id/token` (UniFi API key) is now admin only
+- WebSocket connections now enforce the same rules as the REST API: revoked (logged out) tokens and disabled accounts are rejected. `/ws/logs` (server logs) is admin only, matching `GET /api/logs`
+- The user role and username are now read from the database on every request instead of the token, so demoting or renaming a user takes effect immediately rather than when their token expires (up to 7 days)
+
+---
+
 ## [0.10.60] - 2026-10-09
 
 ### Security

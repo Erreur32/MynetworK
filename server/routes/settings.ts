@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { param } from '../utils/params.js';
+import { redactForNonAdmin } from '../utils/redactSecrets.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -40,7 +41,7 @@ router.delete('/dhcp/static/:id', requireAdmin, relay((req) => freeboxApi.delete
 // ===== FTP =====
 
 // GET /api/settings/ftp - Get FTP config
-router.get('/ftp', relay(() => freeboxApi.getFtpConfig()));
+router.get('/ftp', relay(async (req) => redactForNonAdmin(req, await freeboxApi.getFtpConfig())));
 
 // PUT /api/settings/ftp - Update FTP config
 router.put('/ftp', requireAdmin, relay((req) => freeboxApi.updateFtpConfig(req.body)));

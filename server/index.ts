@@ -5,6 +5,7 @@ import compression from "compression";
 import cors from "cors";
 import path from "path";
 import http from "http";
+import type { WebSocketServer } from "ws";
 import os from "os";
 import fsSync from "fs";
 import { fileURLToPath } from "url";
@@ -21,6 +22,10 @@ import { unifiTrafficHistoryService } from "./services/unifiTrafficHistoryServic
 import { initializeDatabase, getDatabase } from "./database/connection.js";
 import { UserRepository } from "./database/models/User.js";
 import { authService } from "./services/authService.js";
+import {
+  authenticateToken,
+  type AuthenticatedUser,
+} from "./middleware/authMiddleware.js";
 
 // Plugins
 import { pluginManager } from "./services/pluginManager.js";
@@ -553,8 +558,11 @@ logsWebSocket.init(server);
 unifiWebSocket.init(server);
 unifiTrafficHistoryService.start();
 
-// Verify JWT token from WebSocket upgrade request (query param or Authorization header)
-async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
+// Authenticate a WebSocket upgrade request (query param or Authorization header)
+// with the same rules as requireAuth (revoked tokens, disabled accounts).
+async function authenticateWsRequest(
+  request: http.IncomingMessage,
+): Promise<AuthenticatedUser | null> {
   try {
     const urlObj = new URL(request.url || "", `http://${request.headers.host}`);
     const token =
@@ -565,18 +573,23 @@ async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
         "WebSocket",
         "Connection attempt without authentication token",
       );
-      return false;
+      return null;
     }
-    await authService.verifyToken(token);
-    return true;
+    return await authenticateToken(token);
   } catch (error) {
     logger.warn(
       "WebSocket",
       `Authentication failed: ${error instanceof Error ? error.message : error}`,
     );
-    return false;
+    return null;
   }
 }
+
+const wsServices = new Map<string, { getWss(): WebSocketServer | null }>([
+  ["/ws/connection", connectionWebSocket],
+  ["/ws/logs", logsWebSocket],
+  ["/ws/unifi", unifiWebSocket],
+]);
 
 // Single upgrade handler that routes to the correct WebSocket server by path.
 // Using noServer:true on each WSS avoids the ws library calling socket.destroy()
@@ -588,45 +601,36 @@ server.on("upgrade", async (request, socket, head) => {
   }
 
   // Authenticate WebSocket connections
-  const authenticated = await verifyWsToken(request);
-  if (!authenticated) {
+  const user = await authenticateWsRequest(request);
+  if (!user) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
   }
 
-  if (url === "/ws/connection") {
-    const wss = connectionWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else if (url === "/ws/logs") {
-    const wss = logsWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else if (url === "/ws/unifi") {
-    const wss = unifiWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else {
+  // Server logs are admin-only, same as GET /api/logs
+  if (url === "/ws/logs" && user.role !== "admin") {
+    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  const service = wsServices.get(url);
+  if (!service) {
     // Unknown WS path — reject cleanly
     socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     socket.destroy();
+    return;
   }
+
+  const wss = service.getWss();
+  if (!wss) {
+    socket.destroy();
+    return;
+  }
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit("connection", ws, request);
+  });
 });
 
 // Helper function to get network IP address
