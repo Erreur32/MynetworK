@@ -9,13 +9,47 @@ import { authService } from '../services/authService.js';
 import { UserRepository } from '../database/models/User.js';
 import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
 
-export interface AuthenticatedRequest extends Request {
-    user?: {
-        userId: number;
-        username: string;
-        role: 'admin' | 'user' | 'viewer';
-    };
+export interface AuthenticatedUser {
+    userId: number;
+    username: string;
+    role: 'admin' | 'user' | 'viewer';
 }
+
+export interface AuthenticatedRequest extends Request {
+    user?: AuthenticatedUser;
+}
+
+class AuthError extends Error {
+    constructor(readonly code: string, message: string) {
+        super(message);
+    }
+}
+
+/**
+ * Resolve a bearer token to its user. Rejects revoked tokens (logout/ban),
+ * invalid signatures and disabled accounts. Shared by the HTTP middlewares
+ * and the WebSocket upgrade handler so both enforce the same rules.
+ */
+export const authenticateToken = async (token: string): Promise<AuthenticatedUser> => {
+    if (tokenBlacklistService.isRevoked(token)) {
+        throw new AuthError('TOKEN_REVOKED', 'Token has been revoked');
+    }
+
+    const payload = await authService.verifyToken(token);
+
+    const user = UserRepository.findById(payload.userId);
+    if (!user || !user.enabled) {
+        throw new AuthError('USER_DISABLED', 'User account is disabled');
+    }
+
+    // Role and username come from the database, not the token payload, so a
+    // demotion or rename takes effect immediately instead of at token expiry.
+    return {
+        userId: user.id,
+        username: user.username,
+        role: user.role
+    };
+};
 
 /**
  * Middleware to require authentication
@@ -41,49 +75,14 @@ export const requireAuth = async (
         }
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-        // Check if token has been revoked (logout/ban)
-        if (tokenBlacklistService.isRevoked(token)) {
-            res.status(401).json({
-                success: false,
-                error: {
-                    code: 'TOKEN_REVOKED',
-                    message: 'Token has been revoked'
-                }
-            });
-            return;
-        }
-
-        // Verify token
-        const payload = await authService.verifyToken(token);
-
-        // Verify user still exists and is enabled
-        const user = UserRepository.findById(payload.userId);
-        if (!user || !user.enabled) {
-            res.status(401).json({
-                success: false,
-                error: {
-                    code: 'USER_DISABLED',
-                    message: 'User account is disabled'
-                }
-            });
-            return;
-        }
-
-        // Add user info to request
-        req.user = {
-            userId: payload.userId,
-            username: payload.username,
-            role: payload.role as 'admin' | 'user' | 'viewer'
-        };
-
+        req.user = await authenticateToken(token);
         next();
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Authentication failed';
         res.status(401).json({
             success: false,
             error: {
-                code: 'AUTH_FAILED',
+                code: error instanceof AuthError ? error.code : 'AUTH_FAILED',
                 message
             }
         });
@@ -136,21 +135,7 @@ export const optionalAuth = async (
     try {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            if (tokenBlacklistService.isRevoked(token)) {
-                next();
-                return;
-            }
-            const payload = await authService.verifyToken(token);
-            const user = UserRepository.findById(payload.userId);
-            
-            if (user && user.enabled) {
-                req.user = {
-                    userId: payload.userId,
-                    username: payload.username,
-                    role: payload.role as 'admin' | 'user' | 'viewer'
-                };
-            }
+            req.user = await authenticateToken(authHeader.substring(7));
         }
     } catch {
         // Ignore errors for optional auth

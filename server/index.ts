@@ -21,6 +21,10 @@ import { unifiTrafficHistoryService } from "./services/unifiTrafficHistoryServic
 import { initializeDatabase, getDatabase } from "./database/connection.js";
 import { UserRepository } from "./database/models/User.js";
 import { authService } from "./services/authService.js";
+import {
+  authenticateToken,
+  type AuthenticatedUser,
+} from "./middleware/authMiddleware.js";
 
 // Plugins
 import { pluginManager } from "./services/pluginManager.js";
@@ -553,8 +557,11 @@ logsWebSocket.init(server);
 unifiWebSocket.init(server);
 unifiTrafficHistoryService.start();
 
-// Verify JWT token from WebSocket upgrade request (query param or Authorization header)
-async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
+// Authenticate a WebSocket upgrade request (query param or Authorization header)
+// with the same rules as requireAuth (revoked tokens, disabled accounts).
+async function authenticateWsRequest(
+  request: http.IncomingMessage,
+): Promise<AuthenticatedUser | null> {
   try {
     const urlObj = new URL(request.url || "", `http://${request.headers.host}`);
     const token =
@@ -565,16 +572,15 @@ async function verifyWsToken(request: http.IncomingMessage): Promise<boolean> {
         "WebSocket",
         "Connection attempt without authentication token",
       );
-      return false;
+      return null;
     }
-    await authService.verifyToken(token);
-    return true;
+    return await authenticateToken(token);
   } catch (error) {
     logger.warn(
       "WebSocket",
       `Authentication failed: ${error instanceof Error ? error.message : error}`,
     );
-    return false;
+    return null;
   }
 }
 
@@ -588,9 +594,16 @@ server.on("upgrade", async (request, socket, head) => {
   }
 
   // Authenticate WebSocket connections
-  const authenticated = await verifyWsToken(request);
-  if (!authenticated) {
+  const user = await authenticateWsRequest(request);
+  if (!user) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  // Server logs are admin-only, same as GET /api/logs
+  if (url === "/ws/logs" && user.role !== "admin") {
+    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
     return;
   }

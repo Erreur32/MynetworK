@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 import { param } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+import { redactForNonAdmin } from '../utils/redactSecrets.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -74,7 +75,7 @@ router.get('/ddns/:provider', asyncHandler(async (req, res) => {
     });
   }
   const result = await freeboxApi.getDdnsConfig(provider as 'ovh' | 'dyndns' | 'noip');
-  res.json(result);
+  res.json(redactForNonAdmin(req, result));
 }));
 
 // PUT /api/connection/ddns/:provider - Update DynDNS config

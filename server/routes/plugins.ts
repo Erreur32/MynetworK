@@ -13,6 +13,7 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
+import { redactForNonAdmin } from '../utils/redactSecrets.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
@@ -67,7 +68,7 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
             enabled: isEnabled,
             configured: dbConfig !== null,
             connectionStatus,
-            settings: dbConfig?.settings || {}
+            settings: redactForNonAdmin(req, dbConfig?.settings || {})
         };
 
         // Validate plugin data structure
@@ -120,7 +121,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
             enabled: isEnabled,
             configured: dbConfig !== null,
             connectionStatus,
-            settings: dbConfig?.settings || {}
+            settings: redactForNonAdmin(req, dbConfig?.settings || {})
         }
     });
 }), autoLog('plugin.get', 'plugin', (req) => param(req, 'id')));
@@ -652,7 +653,7 @@ router.post('/:id/test', requireAuth, requireAdmin, asyncHandler(async (req: Aut
 }), autoLog('plugin.test', 'plugin', (req) => param(req, 'id')));
 
 // GET /api/plugins/:id/token - Get plugin token/API key (for display in settings)
-router.get('/:id/token', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get('/:id/token', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const pluginId = param(req, 'id');
     const plugin = pluginManager.getPlugin(pluginId);
     

@@ -21,50 +21,6 @@ import { param, requireIntParam } from '../utils/params.js';
 
 const router = Router();
 
-// POST /api/users/register - Register new user (public, but can be restricted)
-router.post('/register', asyncHandler(async (req, res) => {
-    const { username, email, password, role } = req.body;
-
-    if (!username || !email || !password) {
-        throw createError('Username, email and password are required', 400, 'MISSING_FIELDS');
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-        throw createError('Password must be at least 8 characters long', 400, 'WEAK_PASSWORD');
-    }
-
-    // Only allow 'user' or 'viewer' roles for self-registration (admin can create admins via admin route)
-    const allowedRoles = ['user', 'viewer'];
-    const userRole = (role && allowedRoles.includes(role)) ? role : 'user';
-
-    const user = await authService.register({
-        username,
-        email,
-        password,
-        role: userRole
-    });
-
-    // Log registration
-    await loggingService.log({
-        action: 'user.register',
-        resource: 'user',
-        resourceId: user.id.toString(),
-        username: user.username,
-        ipAddress: getClientIp(req),
-        userAgent: req.get('user-agent') || undefined,
-        level: 'info'
-    });
-
-    res.json({
-        success: true,
-        result: {
-            message: 'User registered successfully',
-            user
-        }
-    });
-}));
-
 // POST /api/users/login - Login user
 router.post('/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body;
