@@ -11,7 +11,6 @@ import {
   requireAdmin,
   AuthenticatedRequest,
 } from "../middleware/authMiddleware.js";
-import { asyncHandler } from "../middleware/errorHandler.js";
 import { logger } from "../utils/logger.js";
 import { parseStrictIntParam } from "../utils/params.js";
 
@@ -57,16 +56,16 @@ export function registerTokenLifecycleRoutes(router: Router, kind: McpTokenKind)
     "/",
     requireAuth,
     requireAdmin,
-    asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
+    (_req: AuthenticatedRequest, res: Response) => {
       res.json({ success: true, result: mcpAuthService.listTokens(kind) });
-    }),
+    },
   );
 
   router.post(
     "/",
     requireAuth,
     requireAdmin,
-    asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    (req: AuthenticatedRequest, res: Response) => {
       const { name, expiresInDays, accessLevel } = req.body as {
         name?: unknown;
         expiresInDays?: unknown;
@@ -118,14 +117,14 @@ export function registerTokenLifecycleRoutes(router: Router, kind: McpTokenKind)
           error: error instanceof Error ? error.message : "Failed to create token",
         });
       }
-    }),
+    },
   );
 
   router.delete(
     "/:id",
     requireAuth,
     requireAdmin,
-    asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    (req: AuthenticatedRequest, res: Response) => {
       const id = parseStrictIntParam(req, "id");
       if (id === null) {
         res.status(400).json({ success: false, error: "Invalid token id" });
@@ -139,14 +138,14 @@ export function registerTokenLifecycleRoutes(router: Router, kind: McpTokenKind)
 
       logger.warn("MCP", `${label} #${id} revoked by ${req.user?.username ?? "admin"}`);
       res.json({ success: true, result: { id } });
-    }),
+    },
   );
 
   router.delete(
     "/:id/purge",
     requireAuth,
     requireAdmin,
-    asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    (req: AuthenticatedRequest, res: Response) => {
       const id = parseStrictIntParam(req, "id");
       if (id === null) {
         res.status(400).json({ success: false, error: "Invalid token id" });
@@ -168,6 +167,6 @@ export function registerTokenLifecycleRoutes(router: Router, kind: McpTokenKind)
 
       logger.warn("MCP", `${label} #${id} permanently deleted by ${req.user?.username ?? "admin"}`);
       res.json({ success: true, result: { id } });
-    }),
+    },
   );
 }

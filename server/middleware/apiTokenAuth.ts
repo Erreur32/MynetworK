@@ -52,7 +52,8 @@ export function stripSensitiveFields(value: unknown): unknown {
 }
 
 export function isApiTokenRouteAllowed(path: string): boolean {
-    const normalized = path.length > 1 ? path.replace(/\/+$/, '') : path;
+    let normalized = path;
+    while (normalized.length > 1 && normalized.endsWith('/')) normalized = normalized.slice(0, -1);
     return API_TOKEN_ALLOWED_ROUTES.some((route) => route.pattern.test(normalized));
 }
 

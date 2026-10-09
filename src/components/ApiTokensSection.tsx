@@ -80,7 +80,7 @@ export const ApiTokensSection: React.FC = () => {
   };
 
   useEffect(() => {
-    loadTokens();
+    loadTokens().catch(() => setError(t("admin.mcp.tokensLoadError")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
