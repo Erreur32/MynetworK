@@ -16,6 +16,10 @@ All notable changes to this project will be documented in this file.
 - API tokens only work on a GET/HEAD allowlist (inventory routes), only from the LAN and Tailscale, and are always refused on admin routes and on `/api/mcp`. MCP tokens are refused on the REST API. Credential-like fields are stripped from every API token response
 - Fixed token expiry check: `expires_at` (ISO 8601) was compared as text against SQLite `datetime('now')`, so an MCP token expiring today stayed valid until the end of the UTC day
 
+
+### CI
+
+- Docker builds pull the official `node:22-alpine` image through Google's Docker Hub mirror (`mirror.gcr.io`), and Snyk scans run the Snyk CLI directly instead of Docker-based actions: Docker Hub's anonymous pull rate limit was failing builds and scans on shared GitHub runners
 ---
 
 ## [0.10.61] - 2026-10-09

@@ -7,7 +7,9 @@ ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
 # ---------- Stage 1: Build (with build tools) ----------
-FROM node:22-alpine AS builder
+# Official node image via Google's Docker Hub mirror: Docker Hub rate-limits
+# anonymous pulls per IP, which regularly fails CI on shared GitHub runners.
+FROM mirror.gcr.io/library/node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -44,7 +46,7 @@ RUN npm prune --production && npm cache clean --force
 # Re-declare so this stage gets Buildx TARGETPLATFORM (global ARG is not available after first FROM)
 ARG TARGETPLATFORM
 # Use TARGETPLATFORM so the runtime base matches the built arch (required for HA / Raspberry)
-FROM node:22-alpine
+FROM mirror.gcr.io/library/node:22-alpine
 
 WORKDIR /app
 
