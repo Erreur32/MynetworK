@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { getDatabase } from '../database/connection.js';
@@ -8,267 +8,154 @@ import { param } from '../utils/params.js';
 const router = Router();
 router.use(requireAuth);
 
+// Most routes here relay a single Freebox API call and return its result as-is
+const relay = (call: (req: Request) => Promise<unknown>) =>
+  asyncHandler(async (req, res) => {
+    res.json(await call(req));
+  });
+
 // ===== DHCP =====
 
 // GET /api/settings/dhcp - Get DHCP config
-router.get('/dhcp', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getDhcpConfig();
-  res.json(result);
-}));
+router.get('/dhcp', relay(() => freeboxApi.getDhcpConfig()));
 
 // PUT /api/settings/dhcp - Update DHCP config
-router.put('/dhcp', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateDhcpConfig(req.body);
-  res.json(result);
-}));
+router.put('/dhcp', requireAdmin, relay((req) => freeboxApi.updateDhcpConfig(req.body)));
 
 // GET /api/settings/dhcp/leases - Get DHCP leases
-router.get('/dhcp/leases', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getDhcpLeases();
-  res.json(result);
-}));
+router.get('/dhcp/leases', relay(() => freeboxApi.getDhcpLeases()));
 
 // GET /api/settings/dhcp/static - Get static leases
-router.get('/dhcp/static', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getDhcpStaticLeases();
-  res.json(result);
-}));
+router.get('/dhcp/static', relay(() => freeboxApi.getDhcpStaticLeases()));
 
 // POST /api/settings/dhcp/static - Create static lease
-router.post('/dhcp/static', requireAdmin, asyncHandler(async (req, res) => {
+router.post('/dhcp/static', requireAdmin, relay((req) => {
   const { mac, ip, comment } = req.body;
-  const result = await freeboxApi.addDhcpStaticLease(mac, ip, comment);
-  res.json(result);
+  return freeboxApi.addDhcpStaticLease(mac, ip, comment);
 }));
 
 // DELETE /api/settings/dhcp/static/:id - Delete static lease
-router.delete('/dhcp/static/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteDhcpStaticLease(param(req, 'id'));
-  res.json(result);
-}));
+router.delete('/dhcp/static/:id', requireAdmin, relay((req) => freeboxApi.deleteDhcpStaticLease(param(req, 'id'))));
 
 // ===== FTP =====
 
 // GET /api/settings/ftp - Get FTP config
-router.get('/ftp', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getFtpConfig();
-  res.json(result);
-}));
+router.get('/ftp', relay(() => freeboxApi.getFtpConfig()));
 
 // PUT /api/settings/ftp - Update FTP config
-router.put('/ftp', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateFtpConfig(req.body);
-  res.json(result);
-}));
+router.put('/ftp', requireAdmin, relay((req) => freeboxApi.updateFtpConfig(req.body)));
 
 // ===== VPN Server =====
 
 // GET /api/settings/vpn/servers - List all VPN servers (openvpn_routed, openvpn_bridge, pptp)
-router.get('/vpn/servers', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnServers();
-  res.json(result);
-}));
+router.get('/vpn/servers', relay(() => freeboxApi.getVpnServers()));
 
 // GET /api/settings/vpn/servers/:id - Get specific VPN server
-router.get('/vpn/servers/:id', asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getVpnServer(param(req, 'id'));
-  res.json(result);
-}));
+router.get('/vpn/servers/:id', relay((req) => freeboxApi.getVpnServer(param(req, 'id'))));
 
 // GET /api/settings/vpn/servers/:id/config - Get VPN server config
-router.get('/vpn/servers/:id/config', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.getVpnServerConfig(param(req, 'id'));
-  res.json(result);
-}));
+router.get('/vpn/servers/:id/config', requireAdmin, relay((req) => freeboxApi.getVpnServerConfig(param(req, 'id'))));
 
 // PUT /api/settings/vpn/servers/:id/config - Update VPN server config
-router.put('/vpn/servers/:id/config', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateVpnServerConfig(param(req, 'id'), req.body);
-  res.json(result);
-}));
+router.put('/vpn/servers/:id/config', requireAdmin, relay((req) => freeboxApi.updateVpnServerConfig(param(req, 'id'), req.body)));
 
 // POST /api/settings/vpn/servers/:id/start - Start VPN server
-router.post('/vpn/servers/:id/start', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.startVpnServer(param(req, 'id'));
-  res.json(result);
-}));
+router.post('/vpn/servers/:id/start', requireAdmin, relay((req) => freeboxApi.startVpnServer(param(req, 'id'))));
 
 // POST /api/settings/vpn/servers/:id/stop - Stop VPN server
-router.post('/vpn/servers/:id/stop', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.stopVpnServer(param(req, 'id'));
-  res.json(result);
-}));
+router.post('/vpn/servers/:id/stop', requireAdmin, relay((req) => freeboxApi.stopVpnServer(param(req, 'id'))));
 
 // Legacy route for backward compatibility
-router.get('/vpn/server', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnServers();
-  res.json(result);
-}));
+router.get('/vpn/server', relay(() => freeboxApi.getVpnServers()));
 
 // PUT /api/settings/vpn/server - Update VPN server config (legacy)
-router.put('/vpn/server', requireAdmin, asyncHandler(async (req, res) => {
-  // For legacy, assume openvpn_routed
-  const result = await freeboxApi.updateVpnServerConfig('openvpn_routed', req.body);
-  res.json(result);
-}));
+router.put('/vpn/server', requireAdmin, relay((req) => freeboxApi.updateVpnServerConfig('openvpn_routed', req.body)));
 
 // GET /api/settings/vpn/users - Get VPN users
-router.get('/vpn/users', requireAdmin, asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnUsers();
-  res.json(result);
-}));
+router.get('/vpn/users', requireAdmin, relay(() => freeboxApi.getVpnUsers()));
 
 // POST /api/settings/vpn/users - Create VPN user
-router.post('/vpn/users', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.createVpnUser(req.body);
-  res.json(result);
-}));
+router.post('/vpn/users', requireAdmin, relay((req) => freeboxApi.createVpnUser(req.body)));
 
 // DELETE /api/settings/vpn/users/:login - Delete VPN user
-router.delete('/vpn/users/:login', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deleteVpnUser(param(req, 'login'));
-  res.json(result);
-}));
+router.delete('/vpn/users/:login', requireAdmin, relay((req) => freeboxApi.deleteVpnUser(param(req, 'login'))));
 
 // GET /api/settings/vpn/connections - Get active VPN connections
-router.get('/vpn/connections', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnConnections();
-  res.json(result);
-}));
+router.get('/vpn/connections', relay(() => freeboxApi.getVpnConnections()));
 
 // ===== VPN Client =====
 
 // GET /api/settings/vpn/client - Get VPN client configs
-router.get('/vpn/client', requireAdmin, asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnClientConfigs();
-  res.json(result);
-}));
+router.get('/vpn/client', requireAdmin, relay(() => freeboxApi.getVpnClientConfigs()));
 
 // GET /api/settings/vpn/client/status - Get VPN client status
-router.get('/vpn/client/status', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getVpnClientStatus();
-  res.json(result);
-}));
+router.get('/vpn/client/status', relay(() => freeboxApi.getVpnClientStatus()));
 
 // ===== Port Forwarding =====
 
 // GET /api/settings/nat/redirections - Get port forwarding rules
-router.get('/nat/redirections', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getPortForwardingRules();
-  res.json(result);
-}));
+router.get('/nat/redirections', relay(() => freeboxApi.getPortForwardingRules()));
 
 // POST /api/settings/nat/redirections - Create port forwarding rule
-router.post('/nat/redirections', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.createPortForwardingRule(req.body);
-  res.json(result);
-}));
+router.post('/nat/redirections', requireAdmin, relay((req) => freeboxApi.createPortForwardingRule(req.body)));
 
 // PUT /api/settings/nat/redirections/:id - Update port forwarding rule
-router.put('/nat/redirections/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updatePortForwardingRule(parseInt(param(req, 'id')), req.body);
-  res.json(result);
-}));
+router.put('/nat/redirections/:id', requireAdmin, relay((req) => freeboxApi.updatePortForwardingRule(parseInt(param(req, 'id')), req.body)));
 
 // DELETE /api/settings/nat/redirections/:id - Delete port forwarding rule
-router.delete('/nat/redirections/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.deletePortForwardingRule(parseInt(param(req, 'id')));
-  res.json(result);
-}));
+router.delete('/nat/redirections/:id', requireAdmin, relay((req) => freeboxApi.deletePortForwardingRule(parseInt(param(req, 'id')))));
 
 // GET /api/settings/nat/dmz - Get DMZ config
-router.get('/nat/dmz', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getDmzConfig();
-  res.json(result);
-}));
+router.get('/nat/dmz', relay(() => freeboxApi.getDmzConfig()));
 
 // PUT /api/settings/nat/dmz - Update DMZ config
-router.put('/nat/dmz', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateDmzConfig(req.body);
-  res.json(result);
-}));
+router.put('/nat/dmz', requireAdmin, relay((req) => freeboxApi.updateDmzConfig(req.body)));
 
 // ===== Switch / Ports =====
 
 // GET /api/settings/switch - Get switch status
-router.get('/switch', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getSwitchStatus();
-  res.json(result);
-}));
+router.get('/switch', relay(() => freeboxApi.getSwitchStatus()));
 
 // GET /api/settings/switch/ports - Get switch ports
-router.get('/switch/ports', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getSwitchPorts();
-  res.json(result);
-}));
+router.get('/switch/ports', relay(() => freeboxApi.getSwitchPorts()));
 
 // ===== LCD =====
 
 // GET /api/settings/lcd - Get LCD config
-router.get('/lcd', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getLcdConfig();
-  res.json(result);
-}));
+router.get('/lcd', relay(() => freeboxApi.getLcdConfig()));
 
 // PUT /api/settings/lcd - Update LCD config
-router.put('/lcd', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateLcdConfig(req.body);
-  res.json(result);
-}));
+router.put('/lcd', requireAdmin, relay((req) => freeboxApi.updateLcdConfig(req.body)));
 
 // ===== Freeplugs =====
 
 // GET /api/settings/freeplugs - Get freeplugs
-router.get('/freeplugs', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getFreeplugs();
-  res.json(result);
-}));
+router.get('/freeplugs', relay(() => freeboxApi.getFreeplugs()));
 
 // ===== Connection / IP Config =====
 
 // GET /api/settings/connection - Get connection config
-router.get('/connection', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getConnectionConfig();
-  res.json(result);
-}));
+router.get('/connection', relay(() => freeboxApi.getConnectionConfig()));
 
 // PUT /api/settings/connection - Update connection config
-router.put('/connection', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateConnectionConfig(req.body);
-  res.json(result);
-}));
+router.put('/connection', requireAdmin, relay((req) => freeboxApi.updateConnectionConfig(req.body)));
 
 // GET /api/settings/connection/ipv6 - Get IPv6 config
-router.get('/connection/ipv6', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getIpv6Config();
-  res.json(result);
-}));
+router.get('/connection/ipv6', relay(() => freeboxApi.getIpv6Config()));
 
 // PUT /api/settings/connection/ipv6 - Update IPv6 config
-router.put('/connection/ipv6', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateIpv6Config(req.body);
-  res.json(result);
-}));
+router.put('/connection/ipv6', requireAdmin, relay((req) => freeboxApi.updateIpv6Config(req.body)));
 
 // GET /api/settings/connection/ftth - Get FTTH info
-router.get('/connection/ftth', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getFtthInfo();
-  res.json(result);
-}));
+router.get('/connection/ftth', relay(() => freeboxApi.getFtthInfo()));
 
 // ===== LAN Config =====
 
 // GET /api/settings/lan - Get LAN config
-router.get('/lan', asyncHandler(async (_req, res) => {
-  const result = await freeboxApi.getLanConfig();
-  res.json(result);
-}));
+router.get('/lan', relay(() => freeboxApi.getLanConfig()));
 
 // PUT /api/settings/lan - Update LAN config
-router.put('/lan', requireAdmin, asyncHandler(async (req, res) => {
-  const result = await freeboxApi.updateLanConfig(req.body);
-  res.json(result);
-}));
+router.put('/lan', requireAdmin, relay((req) => freeboxApi.updateLanConfig(req.body)));
 
 // ===== THEME =====
 
