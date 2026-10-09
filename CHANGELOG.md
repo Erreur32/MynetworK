@@ -20,6 +20,8 @@ All notable changes to this project will be documented in this file.
 ### CI
 
 - Docker builds pull the official `node:22-alpine` image through Google's Docker Hub mirror (`mirror.gcr.io`), and Snyk scans run the Snyk CLI directly instead of Docker-based actions: Docker Hub's anonymous pull rate limit was failing builds and scans on shared GitHub runners
+- Removed the Snyk Code (SAST) job: Snyk Code is not enabled on the Snyk organization, so it never scanned anything. CodeQL and SonarCloud still cover static analysis
+
 ---
 
 ## [0.10.61] - 2026-10-09
