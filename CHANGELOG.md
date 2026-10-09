@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.60] - 2026-10-09
+
+### Security
+
+- `/api/settings/*` had no authentication (except `/theme`): anyone reaching the port could change the Freebox DHCP, port forwarding/DMZ, VPN (users, server config, start/stop), FTP, connection, IPv6 and LAN settings. All routes now require a logged-in user, and every write requires the admin role
+- VPN reads that may expose credentials (`/vpn/users`, `/vpn/servers/:id/config`, `/vpn/client`) are now admin only
+- `POST /api/system/reboot` and `POST /api/system/reboot/schedule` had no authentication (unauthenticated Freebox reboot). Both now require the admin role; `GET /api/system/reboot/schedule` requires a logged-in user
+
+---
+
 ## [0.10.59] - 2026-10-06
 
 ### Security
