@@ -10,6 +10,9 @@ import { logger } from "../../utils/logger.js";
 
 export type McpTokenAccessLevel = "full" | "read_only";
 
+/** "mcp": /api/mcp transport only. "api": read-only REST API (GET allowlist). */
+export type McpTokenKind = "mcp" | "api";
+
 export interface McpTokenRow {
   id: number;
   name: string;
@@ -19,6 +22,7 @@ export interface McpTokenRow {
   expiresAt: string | null;
   revokedAt: string | null;
   accessLevel: McpTokenAccessLevel;
+  kind: McpTokenKind;
 }
 
 interface RawRow {
@@ -30,6 +34,7 @@ interface RawRow {
   expires_at: string | null;
   revoked_at: string | null;
   access_level: string;
+  kind: string;
 }
 
 function fromRaw(row: RawRow): McpTokenRow {
@@ -42,6 +47,7 @@ function fromRaw(row: RawRow): McpTokenRow {
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
     accessLevel: row.access_level === "read_only" ? "read_only" : "full",
+    kind: row.kind === "api" ? "api" : "mcp",
   };
 }
 
@@ -51,18 +57,20 @@ export class McpTokenRepository {
     tokenHash: string,
     expiresAt: Date | null,
     accessLevel: McpTokenAccessLevel = "full",
+    kind: McpTokenKind = "mcp",
   ): McpTokenRow | null {
     try {
       const db = getDatabase();
       const stmt = db.prepare(`
-        INSERT INTO mcp_tokens (name, token_hash, expires_at, access_level)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO mcp_tokens (name, token_hash, expires_at, access_level, kind)
+        VALUES (?, ?, ?, ?, ?)
       `);
       const result = stmt.run(
         name,
         tokenHash,
         expiresAt?.toISOString() ?? null,
         accessLevel,
+        kind,
       );
       return this.findById(result.lastInsertRowid as number);
     } catch (error) {
@@ -98,12 +106,12 @@ export class McpTokenRepository {
   }
 
   /** All rows, most recent first, for the admin UI list. */
-  static listAll(): McpTokenRow[] {
+  static listAll(kind: McpTokenKind): McpTokenRow[] {
     try {
       const db = getDatabase();
       const rows = db
-        .prepare("SELECT * FROM mcp_tokens ORDER BY created_at DESC")
-        .all() as RawRow[];
+        .prepare("SELECT * FROM mcp_tokens WHERE kind = ? ORDER BY created_at DESC")
+        .all(kind) as RawRow[];
       return rows.map(fromRaw);
     } catch (error) {
       logger.error("McpToken", "Failed to list tokens:", error);
@@ -111,17 +119,23 @@ export class McpTokenRepository {
     }
   }
 
-  /** Active (non-revoked, non-expired) rows, for auth verification. */
-  static listActive(): McpTokenRow[] {
+  /**
+   * Active (non-revoked, non-expired) rows, for auth verification.
+   * expires_at is stored as ISO 8601 ("...T...Z"): it must go through
+   * datetime() before comparing, a raw string comparison against
+   * datetime('now') ("... ...") keeps same-day expired tokens valid.
+   */
+  static listActive(kind: McpTokenKind): McpTokenRow[] {
     try {
       const db = getDatabase();
       const rows = db
         .prepare(
           `SELECT * FROM mcp_tokens
-           WHERE revoked_at IS NULL
-             AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+           WHERE kind = ?
+             AND revoked_at IS NULL
+             AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
         )
-        .all() as RawRow[];
+        .all(kind) as RawRow[];
       return rows.map(fromRaw);
     } catch (error) {
       logger.error("McpToken", "Failed to list active tokens:", error);
@@ -129,17 +143,18 @@ export class McpTokenRepository {
     }
   }
 
-  static hasActive(): boolean {
+  static hasActive(kind: McpTokenKind): boolean {
     try {
       const db = getDatabase();
       const row = db
         .prepare(
           `SELECT 1 FROM mcp_tokens
-           WHERE revoked_at IS NULL
-             AND (expires_at IS NULL OR expires_at > datetime('now'))
+           WHERE kind = ?
+             AND revoked_at IS NULL
+             AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
            LIMIT 1`,
         )
-        .get();
+        .get(kind);
       return row !== undefined;
     } catch (error) {
       logger.error("McpToken", "Failed to check active tokens:", error);

@@ -382,6 +382,19 @@ export function initializeDatabase(): void {
         }
     }
 
+    // kind separates MCP tokens from read-only REST API tokens (/api/* GET
+    // allowlist, see server/middleware/apiTokenAuth.ts). Existing rows default
+    // to 'mcp' so no MCP token ever becomes usable on the REST API.
+    try {
+        database.exec(`
+            ALTER TABLE mcp_tokens ADD COLUMN kind TEXT NOT NULL DEFAULT 'mcp';
+        `);
+    } catch (e: unknown) {
+        if (!getErrorMessage(e).includes('duplicate column name')) {
+            logger.debug('Database', 'Migration: kind column may already exist');
+        }
+    }
+
     // Per-token exceptions layered on top of access_level: an explicit row
     // wins over the access_level rule for that one tool (e.g. allow a single
     // write tool on an otherwise read_only token, or block a single tool on

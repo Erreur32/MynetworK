@@ -27,6 +27,19 @@ function jsonRpcError(
   });
 }
 
+/**
+ * Bearer-token clients (MCP and REST API tokens) are only accepted from the
+ * local network or Tailscale. Uses the actual TCP peer address, not req.ip
+ * (derived from the spoofable X-Forwarded-For header via trust proxy): this
+ * app is also reachable on a directly-published Docker port, bypassing the
+ * reverse proxy entirely, so an attacker on that path could set
+ * X-Forwarded-For to any private IP.
+ */
+export function isTrustedNetworkClient(req: Request): boolean {
+  const clientIp = req.socket.remoteAddress || "";
+  return isPrivateNetworkIp(clientIp) || isTailscaleIp(clientIp);
+}
+
 export const mcpAuthMiddleware = (
   req: McpAuthenticatedRequest,
   res: Response,
@@ -42,13 +55,7 @@ export const mcpAuthMiddleware = (
     return;
   }
 
-  // Use the actual TCP peer address, not req.ip (derived from the spoofable
-  // X-Forwarded-For header via trust proxy) — this app is also reachable on a
-  // directly-published Docker port, bypassing the reverse proxy entirely, so
-  // an attacker on that path could set X-Forwarded-For to any private IP.
-  const clientIp = req.socket.remoteAddress || "";
-
-  if (!isPrivateNetworkIp(clientIp) && !isTailscaleIp(clientIp)) {
+  if (!isTrustedNetworkClient(req)) {
     jsonRpcError(
       res,
       403,
@@ -75,13 +82,13 @@ export const mcpAuthMiddleware = (
   }
 
   const token = authHeader.substring(7);
-  const tokenId = mcpAuthService.verifyToken(token);
-  if (tokenId === null) {
+  const tokenRow = mcpAuthService.verifyToken(token, "mcp");
+  if (!tokenRow) {
     jsonRpcError(res, 401, -32000, "Invalid bearer token");
     return;
   }
 
-  mcpAuthService.recordUsage(tokenId);
-  req.mcpTokenId = tokenId;
+  mcpAuthService.recordUsage(tokenRow.id);
+  req.mcpTokenId = tokenRow.id;
   next();
 };

@@ -348,6 +348,7 @@ import networkScanRoutes from "./routes/network-scan.js";
 import latencyMonitoringRoutes from "./routes/latency-monitoring.js";
 import databaseRoutes from "./routes/database.js";
 import topologyRoutes from "./routes/topology.js";
+import apiTokensRoutes from "./routes/apiTokens.js";
 import mcpRoutes from "./routes/mcp.js";
 import mcpStatusRoutes from "./routes/mcpStatus.js";
 import mcpTokensRoutes from "./routes/mcpTokens.js";
@@ -450,6 +451,7 @@ app.use("/api/network-scan", networkScanRoutes);
 app.use("/api/latency-monitoring", latencyMonitoringRoutes);
 app.use("/api/database", databaseRoutes);
 app.use("/api/topology", topologyRoutes);
+app.use("/api/api-tokens", apiTokensRoutes);
 
 // MCP (Model Context Protocol) - LAN-only, own auth layer (see mcpAuthMiddleware).
 // Status and tokens must be mounted before the transport router: mcpRoutes

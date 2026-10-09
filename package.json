@@ -1,7 +1,7 @@
 {
   "name": "mynetwork",
   "private": true,
-  "version": "0.10.61",
+  "version": "0.10.62",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -17,7 +17,8 @@
     "version:major": "node scripts/bump-version.js major",
     "security:cve": "cve-lite --no-open",
     "security:cve:strict": "cve-lite --no-open --fail-on high",
-    "mcp:token": "tsx scripts/mcp-token.ts"
+    "mcp:token": "tsx scripts/mcp-token.ts",
+    "test": "tsx --test --test-force-exit server/tests/*.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

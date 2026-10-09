@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.62] - 2026-10-09
+
+### Added
+
+- Read-only REST API tokens (Administration > API tokens, or `scripts/mcp-token.ts --api`) so external LAN services such as MyServices can read the network inventory without a user account. Tokens use a `mwk_api_` prefix, are hashed at rest, can expire and be revoked, and record their last use. See `docs/API-TOKENS.md` for routes and response formats
+- `GET /api/dhcp/leases`: Freebox dynamic DHCP leases (no DHCP configuration)
+- `GET /api/plugins/unifi/clients` and `GET /api/plugins/unifi/devices`: compact UniFi inventory (same summaries as the MCP tools, never raw controller objects), with `type`, `search` and `limit` filters
+- `npm test`: first automated tests (`node:test`, no new dependency) covering the API token auth matrix
+
+### Security
+
+- API tokens only work on a GET/HEAD allowlist (inventory routes), only from the LAN and Tailscale, and are always refused on admin routes and on `/api/mcp`. MCP tokens are refused on the REST API. Credential-like fields are stripped from every API token response
+- Fixed token expiry check: `expires_at` (ISO 8601) was compared as text against SQLite `datetime('now')`, so an MCP token expiring today stayed valid until the end of the UTC day
+
+---
+
 ## [0.10.61] - 2026-10-09
 
 ### Security

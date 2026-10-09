@@ -83,7 +83,7 @@ type DurationPreset = "30" | "90" | "365" | "unlimited" | "custom";
 type McpMainTab = "general" | "tokens" | "setup";
 type ClientTab = "claude-code" | "claude-desktop" | "other";
 
-const CodeBlock: React.FC<{ label?: string; code: string }> = ({
+export const CodeBlock: React.FC<{ label?: string; code: string }> = ({
   label,
   code,
 }) => {

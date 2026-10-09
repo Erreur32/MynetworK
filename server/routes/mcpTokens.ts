@@ -1,10 +1,10 @@
-// MCP token management for the admin UI: list, create, revoke.
+// MCP token management for the admin UI: lifecycle (list, create, revoke,
+// purge, see tokenLifecycle.ts) plus MCP-only access level and per-tool overrides.
 // Guarded by requireAuth + requireAdmin, same as mcpStatus.ts. Creating a
 // token here is a sensitive action (it mints a working MCP credential), so
 // every create/revoke is logged with the acting admin's username.
 import { Router, Response } from "express";
 import { mcpAuthService } from "../services/mcpAuthService.js";
-import { McpTokenAccessLevel } from "../database/models/McpToken.js";
 import { getToolCatalog } from "../mcp/toolCatalog.js";
 import { reapplyMcpTokenPermissions } from "./mcp.js";
 import {
@@ -15,148 +15,15 @@ import {
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { logger } from "../utils/logger.js";
 import { parseStrictIntParam } from "../utils/params.js";
+import {
+  registerTokenLifecycleRoutes,
+  isValidAccessLevel,
+  VALID_ACCESS_LEVELS,
+} from "./tokenLifecycle.js";
 
 const router = Router();
 
-const NAME_MAX_LENGTH = 100;
-const MAX_EXPIRES_IN_DAYS = 3650; // 10 years, well beyond the offered presets
-const VALID_ACCESS_LEVELS: McpTokenAccessLevel[] = ["full", "read_only"];
-
-function isValidAccessLevel(value: unknown): value is McpTokenAccessLevel {
-  return typeof value === "string" && (VALID_ACCESS_LEVELS as string[]).includes(value);
-}
-
-router.get(
-  "/",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-    res.json({ success: true, result: mcpAuthService.listTokens() });
-  }),
-);
-
-router.post(
-  "/",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const { name, expiresInDays, accessLevel } = req.body as {
-      name?: unknown;
-      expiresInDays?: unknown;
-      accessLevel?: unknown;
-    };
-
-    if (typeof name !== "string" || !name.trim()) {
-      res.status(400).json({ success: false, error: "'name' is required" });
-      return;
-    }
-    const trimmedName = name.trim().slice(0, NAME_MAX_LENGTH);
-
-    let resolvedAccessLevel: McpTokenAccessLevel = "full";
-    if (accessLevel !== undefined) {
-      if (!isValidAccessLevel(accessLevel)) {
-        res.status(400).json({
-          success: false,
-          error: `'accessLevel' must be one of: ${VALID_ACCESS_LEVELS.join(", ")}`,
-        });
-        return;
-      }
-      resolvedAccessLevel = accessLevel;
-    }
-
-    let expiresAt: Date | null = null;
-    if (expiresInDays !== null && expiresInDays !== undefined) {
-      if (
-        typeof expiresInDays !== "number" ||
-        !Number.isInteger(expiresInDays) ||
-        expiresInDays < 1 ||
-        expiresInDays > MAX_EXPIRES_IN_DAYS
-      ) {
-        res.status(400).json({
-          success: false,
-          error: `'expiresInDays' must be an integer between 1 and ${MAX_EXPIRES_IN_DAYS}, or null for no expiry`,
-        });
-        return;
-      }
-      expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
-    }
-
-    try {
-      const { token, summary } = mcpAuthService.generateToken(
-        trimmedName,
-        expiresAt,
-        resolvedAccessLevel,
-      );
-      logger.warn(
-        "MCP",
-        `MCP token "${trimmedName}" created by ${req.user?.username ?? "admin"}` +
-          (expiresAt ? `, expires ${expiresAt.toISOString()}` : ", no expiry") +
-          `, access level: ${resolvedAccessLevel}`,
-      );
-      res.json({ success: true, result: { ...summary, token } });
-    } catch (error) {
-      logger.error("MCP", "Failed to create MCP token:", error);
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to create token",
-      });
-    }
-  }),
-);
-
-router.delete(
-  "/:id",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = parseStrictIntParam(req, "id");
-    if (id === null) {
-      res.status(400).json({ success: false, error: "Invalid token id" });
-      return;
-    }
-
-    const revoked = mcpAuthService.revokeToken(id);
-    if (!revoked) {
-      res.status(404).json({ success: false, error: "Token not found or already revoked" });
-      return;
-    }
-
-    logger.warn(
-      "MCP",
-      `MCP token #${id} revoked by ${req.user?.username ?? "admin"}`,
-    );
-    res.json({ success: true, result: { id } });
-  }),
-);
-
-router.delete(
-  "/:id/purge",
-  requireAuth,
-  requireAdmin,
-  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-    const id = parseStrictIntParam(req, "id");
-    if (id === null) {
-      res.status(400).json({ success: false, error: "Invalid token id" });
-      return;
-    }
-
-    const { purged, reason } = mcpAuthService.purgeToken(id);
-    if (!purged) {
-      if (reason === "still_active") {
-        res.status(409).json({
-          success: false,
-          error: "Token is still active: revoke it first before deleting it",
-        });
-        return;
-      }
-      res.status(404).json({ success: false, error: "Token not found" });
-      return;
-    }
-
-    logger.warn("MCP", `MCP token #${id} permanently deleted by ${req.user?.username ?? "admin"}`);
-    res.json({ success: true, result: { id } });
-  }),
-);
+registerTokenLifecycleRoutes(router, "mcp");
 
 router.patch(
   "/:id/access-level",

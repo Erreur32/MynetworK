@@ -708,6 +708,21 @@
       "importConfigLabel": "Import configuration",
       "importConfigDesc": "Import configuration from a .conf file (replaces current configuration)",
       "selectFile": "Select a file"
+    },
+    "apiTokens": {
+      "tabLabel": "API tokens",
+      "title": "REST API tokens (read-only)",
+      "description": "Read-only tokens for external services on your network (e.g. an inventory or monitoring tool) to read devices without a user account. They are separate from MCP tokens and never work on the MCP endpoint.",
+      "rulesTitle": "What a token can do",
+      "ruleReadOnly": "GET requests only, on the routes listed below. Any other route or method is refused (403), admin routes included.",
+      "ruleNetwork": "Accepted only from the local network and Tailscale, same as MCP.",
+      "ruleSecrets": "Credential-like fields (keys, passwords, tokens) are always removed from responses.",
+      "routesTitle": "Available routes",
+      "docsHint": "Response formats are documented in docs/API-TOKENS.md.",
+      "namePlaceholder": "e.g. MyServices",
+      "createButton": "Create read-only token",
+      "curlExample": "Example request",
+      "noTokens": "No API token yet."
     }
   }
 }
