@@ -12,6 +12,7 @@ import {
   McpTokenRepository,
   McpTokenRow,
   McpTokenAccessLevel,
+  McpTokenKind,
 } from "../database/models/McpToken.js";
 import { McpTokenToolOverrideRepository } from "../database/models/McpTokenToolOverride.js";
 import { getToolCatalog, McpToolMeta } from "../mcp/toolCatalog.js";
@@ -26,6 +27,10 @@ const LEGACY_CREATED_AT_KEY = "mcp_token_created_at";
 const LEGACY_LAST_USED_KEY = "mcp_token_last_used_at";
 
 const TOKEN_BYTES = 32;
+
+// REST API tokens carry a recognizable prefix so requireAuth can route them
+// away from JWT verification by format alone (a JWT always contains dots).
+export const API_TOKEN_PREFIX = "mwk_api_";
 
 // Debounce last-used persistence per token: recording it on every MCP request
 // would write to SQLite on every tool call. In-memory map, keyed by token id.
@@ -52,6 +57,7 @@ export interface McpTokenSummary {
   expiresAt: string | null;
   revokedAt: string | null;
   accessLevel: McpTokenAccessLevel;
+  kind: McpTokenKind;
   status: "active" | "expired" | "revoked";
   categories: Record<string, McpTokenCategoryStatus>;
 }
@@ -99,6 +105,7 @@ function summarize(row: McpTokenRow, catalog: McpToolMeta[]): McpTokenSummary {
     expiresAt: row.expiresAt,
     revokedAt: row.revokedAt,
     accessLevel: row.accessLevel,
+    kind: row.kind,
     status,
     categories: computeCategorySummary(catalog, row.accessLevel, overrides),
   };
@@ -138,9 +145,11 @@ class McpAuthService {
     name: string,
     expiresAt: Date | null,
     accessLevel: McpTokenAccessLevel = "full",
+    kind: McpTokenKind = "mcp",
   ): { token: string; summary: McpTokenSummary } {
-    const token = crypto.randomBytes(TOKEN_BYTES).toString("hex");
-    const row = McpTokenRepository.create(name, this.hash(token), expiresAt, accessLevel);
+    const secret = crypto.randomBytes(TOKEN_BYTES).toString("hex");
+    const token = kind === "api" ? API_TOKEN_PREFIX + secret : secret;
+    const row = McpTokenRepository.create(name, this.hash(token), expiresAt, accessLevel, kind);
     if (!row) {
       throw new Error(
         "Failed to persist the MCP token to the database: the token was NOT saved and will not work. " +
@@ -150,12 +159,14 @@ class McpAuthService {
     return { token, summary: summarize(row, getToolCatalog()) };
   }
 
-  listTokens(): McpTokenSummary[] {
+  listTokens(kind: McpTokenKind = "mcp"): McpTokenSummary[] {
     const catalog = getToolCatalog();
-    return McpTokenRepository.listAll().map((row) => summarize(row, catalog));
+    return McpTokenRepository.listAll(kind).map((row) => summarize(row, catalog));
   }
 
-  revokeToken(id: number): boolean {
+  /** Each admin page only manages its own kind of token. */
+  revokeToken(id: number, kind: McpTokenKind = "mcp"): boolean {
+    if (McpTokenRepository.findById(id)?.kind !== kind) return false;
     this.lastPersistedUseMsById.delete(id);
     return McpTokenRepository.revoke(id);
   }
@@ -165,9 +176,12 @@ class McpAuthService {
    * still-active token: it must be revoked first, so a client relying on it
    * always loses access explicitly rather than via an unrelated cleanup click.
    */
-  purgeToken(id: number): { purged: boolean; reason?: "not_found" | "still_active" } {
+  purgeToken(
+    id: number,
+    kind: McpTokenKind = "mcp",
+  ): { purged: boolean; reason?: "not_found" | "still_active" } {
     const row = McpTokenRepository.findById(id);
-    if (!row) return { purged: false, reason: "not_found" };
+    if (row?.kind !== kind) return { purged: false, reason: "not_found" };
 
     const isExpired = !!row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now();
     const isActive = !row.revokedAt && !isExpired;
@@ -209,7 +223,7 @@ class McpAuthService {
   }
 
   isConfigured(): boolean {
-    return McpTokenRepository.hasActive();
+    return McpTokenRepository.hasActive("mcp");
   }
 
   /**
@@ -234,20 +248,24 @@ class McpAuthService {
     }
   }
 
-  /** Returns the matched token's id on success, so callers can record usage. */
-  verifyToken(candidate: string): number | null {
+  /**
+   * Returns the matched token's id on success, so callers can record usage.
+   * Only tokens of the given kind match: an MCP token never authenticates
+   * on the REST API, and an API token never on /api/mcp.
+   */
+  verifyToken(candidate: string, kind: McpTokenKind = "mcp"): McpTokenRow | null {
     if (!candidate) return null;
     const candidateBuf = Buffer.from(this.hash(candidate), "hex");
 
-    for (const row of McpTokenRepository.listActive()) {
+    for (const row of McpTokenRepository.listActive(kind)) {
       const storedBuf = Buffer.from(row.tokenHash, "hex");
       if (storedBuf.length !== candidateBuf.length) continue;
-      if (crypto.timingSafeEqual(storedBuf, candidateBuf)) return row.id;
+      if (crypto.timingSafeEqual(storedBuf, candidateBuf)) return row;
     }
     return null;
   }
 
-  /** Called by mcpAuthMiddleware after a successful token check. Debounced to ~1/min per token. */
+  /** Called after a successful token check (MCP or REST API). Debounced to ~1/min per token. */
   recordUsage(id: number): void {
     const now = Date.now();
     const lastPersisted = this.lastPersistedUseMsById.get(id) ?? 0;

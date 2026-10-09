@@ -708,6 +708,21 @@
       "importConfigLabel": "Importer la configuration",
       "importConfigDesc": "Importez une configuration depuis un fichier .conf (remplace la configuration actuelle)",
       "selectFile": "Sélectionner un fichier"
+    },
+    "apiTokens": {
+      "tabLabel": "Jetons d'API",
+      "title": "Jetons d'API REST (lecture seule)",
+      "description": "Jetons en lecture seule pour des services externes de votre réseau (outil d'inventaire, de supervision...) afin de lire les appareils sans compte utilisateur. Ils sont distincts des jetons MCP et ne fonctionnent jamais sur le point d'accès MCP.",
+      "rulesTitle": "Ce qu'un jeton peut faire",
+      "ruleReadOnly": "Uniquement des requêtes GET, sur les routes listées ci-dessous. Toute autre route ou méthode est refusée (403), routes d'administration comprises.",
+      "ruleNetwork": "Accepté uniquement depuis le réseau local et Tailscale, comme le MCP.",
+      "ruleSecrets": "Les champs ressemblant à des identifiants (clés, mots de passe, jetons) sont toujours retirés des réponses.",
+      "routesTitle": "Routes disponibles",
+      "docsHint": "Les formats de réponse sont documentés dans docs/API-TOKENS.md.",
+      "namePlaceholder": "ex. MyServices",
+      "createButton": "Créer un jeton lecture seule",
+      "curlExample": "Exemple de requête",
+      "noTokens": "Aucun jeton d'API pour l'instant."
     }
   }
 }

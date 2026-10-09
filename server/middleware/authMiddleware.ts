@@ -8,6 +8,7 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService.js';
 import { UserRepository } from '../database/models/User.js';
 import { tokenBlacklistService } from '../services/tokenBlacklistService.js';
+import { authenticateApiToken, isApiToken } from './apiTokenAuth.js';
 
 export interface AuthenticatedUser {
     userId: number;
@@ -17,6 +18,8 @@ export interface AuthenticatedUser {
 
 export interface AuthenticatedRequest extends Request {
     user?: AuthenticatedUser;
+    /** Set when authenticated with a read-only REST API token instead of a user JWT */
+    apiToken?: { id: number; name: string };
 }
 
 class AuthError extends Error {
@@ -75,6 +78,10 @@ export const requireAuth = async (
         }
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        if (isApiToken(token)) {
+            authenticateApiToken(req, res, next, token);
+            return;
+        }
         req.user = await authenticateToken(token);
         next();
     } catch (error) {
@@ -104,6 +111,17 @@ export const requireAdmin = (
             error: {
                 code: 'NOT_AUTHENTICATED',
                 message: 'Authentication required'
+            }
+        });
+        return;
+    }
+
+    if (req.apiToken) {
+        res.status(403).json({
+            success: false,
+            error: {
+                code: 'API_TOKEN_READ_ONLY',
+                message: 'API tokens cannot access admin routes'
             }
         });
         return;

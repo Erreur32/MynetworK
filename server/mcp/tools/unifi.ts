@@ -7,7 +7,7 @@ import { pluginManager } from '../../services/pluginManager.js';
 import type { UniFiPlugin } from '../../plugins/unifi/UniFiPlugin.js';
 import type { UniFiApiService } from '../../plugins/unifi/UniFiApiService.js';
 import { UniFiClientTrafficRepository } from '../../database/models/UniFiClientTraffic.js';
-import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam } from './shared.js';
+import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam, type ListResult } from './shared.js';
 import { isValidMac } from '../../utils/networkValidation.js';
 
 // Max range for unifi_get_bandwidth_report: 7 days of hourly buckets (168 points).
@@ -102,6 +102,35 @@ function deviceMatchesType(d: any, type: 'all' | 'ap' | 'switch' | 'gateway'): b
   return true;
 }
 
+export type UnifiDeviceType = 'all' | 'ap' | 'switch' | 'gateway';
+export type UnifiClientType = 'all' | 'wifi' | 'wired';
+
+interface UnifiListOptions<T> {
+  type: T;
+  search?: string;
+  limit?: number;
+  raw?: boolean;
+}
+
+// Shared by the MCP tools and the read-only REST routes (GET /api/plugins/unifi/devices|clients)
+export async function listUnifiDevices({ type, search, limit, raw }: UnifiListOptions<UnifiDeviceType>): Promise<ListResult> {
+  return toListResult(await getUnifiApiService().getDevices(), {
+    filter: (d: any) => deviceMatchesType(d, type) && matchesSearch(search, d.name, d.model, d.ip, d.mac),
+    limit,
+    project: raw ? undefined : summarizeDevice
+  });
+}
+
+export async function listUnifiClients({ type, search, limit, raw }: UnifiListOptions<UnifiClientType>): Promise<ListResult> {
+  return toListResult(await getUnifiApiService().getClients(), {
+    filter: (c: any) =>
+      (type === 'all' || (type === 'wired') === (c.is_wired === true)) &&
+      matchesSearch(search, c.name, c.hostname, c.ip, c.mac),
+    limit,
+    project: raw ? undefined : summarizeClient
+  });
+}
+
 export function registerUnifiTools(server: McpServer): void {
   server.registerTool(
     'unifi_get_devices',
@@ -117,14 +146,7 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ type, search, limit, raw }) =>
-      wrapAsync(async () =>
-        toListResult(await getUnifiApiService().getDevices(), {
-          filter: (d: any) => deviceMatchesType(d, type) && matchesSearch(search, d.name, d.model, d.ip, d.mac),
-          limit,
-          project: raw ? undefined : summarizeDevice
-        })
-      )
+    async ({ type, search, limit, raw }) => wrapAsync(() => listUnifiDevices({ type, search, limit, raw }))
   );
 
   server.registerTool(
@@ -142,15 +164,7 @@ export function registerUnifiTools(server: McpServer): void {
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
     async ({ type, search, limit, raw }) =>
-      wrapAsync(async () =>
-        toListResult(await getUnifiApiService().getClients(), {
-          filter: (c: any) =>
-            (type === 'all' || (type === 'wired') === (c.is_wired === true)) &&
-            matchesSearch(search, c.name, c.hostname, c.ip, c.mac),
-          limit,
-          project: raw ? undefined : summarizeClient
-        })
-      )
+      wrapAsync(() => listUnifiClients({ type, search, limit, raw }))
   );
 
   server.registerTool(

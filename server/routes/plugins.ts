@@ -14,6 +14,8 @@ import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
+import { listUnifiClients, listUnifiDevices, type UnifiClientType, type UnifiDeviceType } from '../mcp/tools/unifi.js';
+import type { ListResult } from '../mcp/tools/shared.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
@@ -701,6 +703,47 @@ router.get('/:id/token', requireAuth, requireAdmin, asyncHandler(async (req: Aut
         });
     }
 }), autoLog('plugin.getToken', 'plugin', (req) => param(req, 'id')));
+
+const UNIFI_LIST_MAX_SEARCH = 200;
+const UNIFI_LIST_MAX_LIMIT = 1000;
+
+// Shared query parsing for the read-only UniFi inventory lists. Always returns
+// compact summaries (same projection as the MCP tools), never raw controller
+// objects, which embed device credentials (x_authkey, x_ssh_*...).
+const unifiListRoute = <T extends string>(
+    types: readonly T[],
+    list: (options: { type: T; search?: string; limit?: number }) => Promise<ListResult>
+) => asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { type = 'all', search, limit } = req.query;
+    if (typeof type !== 'string' || !types.includes(type as T)) {
+        throw createError(`type must be one of: ${types.join(', ')}`, 400, 'INVALID_TYPE');
+    }
+    if (search !== undefined && (typeof search !== 'string' || search.length > UNIFI_LIST_MAX_SEARCH)) {
+        throw createError(`search must be a string of at most ${UNIFI_LIST_MAX_SEARCH} characters`, 400, 'INVALID_SEARCH');
+    }
+    let parsedLimit: number | undefined;
+    if (limit !== undefined) {
+        parsedLimit = Number(limit);
+        if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > UNIFI_LIST_MAX_LIMIT) {
+            throw createError(`limit must be an integer between 1 and ${UNIFI_LIST_MAX_LIMIT}`, 400, 'INVALID_LIMIT');
+        }
+    }
+
+    let result: ListResult;
+    try {
+        result = await list({ type: type as T, search: search as string | undefined, limit: parsedLimit });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'UniFi is unavailable';
+        throw createError(message, 503, 'UNIFI_UNAVAILABLE');
+    }
+    res.json({ success: true, result: result.items, total: result.total });
+});
+
+// GET /api/plugins/unifi/devices - UniFi devices (APs, switches, gateways), compact summary
+router.get('/unifi/devices', requireAuth, unifiListRoute<UnifiDeviceType>(['all', 'ap', 'switch', 'gateway'], listUnifiDevices));
+
+// GET /api/plugins/unifi/clients - Connected UniFi clients, compact summary
+router.get('/unifi/clients', requireAuth, unifiListRoute<UnifiClientType>(['all', 'wifi', 'wired'], listUnifiClients));
 
 // GET /api/plugins/unifi/nat - Get UniFi NAT/port forwarding rules
 router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {

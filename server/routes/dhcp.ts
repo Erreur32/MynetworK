@@ -20,6 +20,12 @@ router.put('/config', requireAdmin, asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// GET /api/dhcp/leases - Get dynamic DHCP leases (no configuration)
+router.get('/leases', asyncHandler(async (_req, res) => {
+  const result = await freeboxApi.getDhcpLeases();
+  res.json(result);
+}));
+
 // GET /api/dhcp/static-leases - Get all static leases
 router.get('/static-leases', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getDhcpStaticLeases();
