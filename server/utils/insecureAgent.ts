@@ -13,8 +13,12 @@ const baseConnector = buildConnector({ rejectUnauthorized: false });
 // can resolve to a public IP (or fail to resolve at all), incorrectly
 // blocking a valid connection. This previously broke Freebox connectivity
 // in production for exactly that reason.
+export function isInsecureTlsAllowedFor(hostname: string): boolean {
+    return !isValidIp(hostname) || isPrivateNetworkIp(hostname);
+}
+
 const lanOnlyConnector: buildConnector.connector = (options, callback) => {
-    if (isValidIp(options.hostname) && !isPrivateNetworkIp(options.hostname)) {
+    if (!isInsecureTlsAllowedFor(options.hostname)) {
         callback(
             new Error(
                 `insecureAgent: refusing to disable certificate verification for non-private IP "${options.hostname}"`

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.63] - 2026-10-10
+
+### Security
+
+- `GET /api/system` and `GET /api/system/version` now require a logged-in user: they exposed the Freebox serial number, MAC addresses, remote-access domain and HTTPS port to anyone reaching the port. The UI only calls them after login
+- `GET /api/fs/share` and `GET /api/fs/share/:token` are now admin only: each Freebox share link grants direct access to files (creating links was already admin only). Non-admins see an empty share list
+- `GET /api/metrics/prometheus` now returns 404 when the Prometheus export is disabled (it answered regardless), and only accepts the local network and Tailscale, like MCP and API tokens
+- The default CORS configuration no longer allows `*.myoueb.fr` (the author's domain, hardcoded for every install). Defaults are now localhost and private networks only; the UI is served from the same origin and never needs CORS. Extra origins can be added in Administration > Security > CORS
+- The Freebox native WebSocket (self-signed certificate, verification disabled) now applies the same LAN-only safeguard as the HTTP client: it refuses to connect without certificate verification to a public IP literal in `FREEBOX_HOST`
+
+---
+
 ## [0.10.62] - 2026-10-09
 
 ### Added
