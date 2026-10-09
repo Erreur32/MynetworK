@@ -232,10 +232,11 @@ function getCorsConfig() {
     );
   }
 
-  // Default CORS configuration
-  // Allow same domain + all subdomains + local network
+  // Default CORS configuration: localhost + private networks only. The UI is
+  // served from the same origin, so it never needs CORS; extra origins (e.g.
+  // another app calling this API from the browser) are added in
+  // Administration > Security > CORS.
   const corsOrigin = [
-    /^https?:\/\/([a-z0-9-]+\.)*myoueb\.fr(:\d+)?$/, // *.myoueb.fr (any subdomain, any port)
     /^https?:\/\/localhost(:\d+)?$/, // localhost (any port)
     /^https?:\/\/127\.0\.0\.1(:\d+)?$/, // 127.0.0.1 (any port)
     /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/, // 192.168.x.x (any port)

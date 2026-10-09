@@ -16,14 +16,15 @@ import pkg from '../../package.json';
 const router = Router();
 
 // GET /api/system/version - Get API version info (includes box model name)
-// This endpoint is public and doesn't require auth
-router.get('/version', asyncHandler(async (_req, res) => {
+// Requires auth: exposes the box's remote-access domain and HTTPS port
+router.get('/version', requireAuth, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getApiVersion();
   res.json(result);
 }));
 
 // GET /api/system - Get system info with combined API version data
-router.get('/', asyncHandler(async (_req, res) => {
+// Requires auth: exposes the box serial number, MAC addresses and remote-access domain
+router.get('/', requireAuth, asyncHandler(async (_req, res) => {
   // Get both system info and API version in parallel
   const [systemResult, versionResult] = await Promise.all([
     freeboxApi.getSystemInfo(),

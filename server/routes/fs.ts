@@ -101,14 +101,14 @@ router.get('/disks', asyncHandler(async (_req, res) => {
 
 // ==================== FILE SHARING ====================
 
-// GET /api/fs/share - Get all share links
-router.get('/share', asyncHandler(async (_req, res) => {
+// GET /api/fs/share - Get all share links (admin only: each link grants direct file access)
+router.get('/share', requireAdmin, asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getShareLinks();
   res.json(result);
 }));
 
-// GET /api/fs/share/:token - Get share link by token
-router.get('/share/:token', asyncHandler(async (req, res) => {
+// GET /api/fs/share/:token - Get share link by token (admin only)
+router.get('/share/:token', requireAdmin, asyncHandler(async (req, res) => {
   const token = param(req, 'token');
   const result = await freeboxApi.getShareLink(token);
   res.json(result);

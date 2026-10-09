@@ -3,6 +3,7 @@ import { freeboxApi } from './freeboxApi.js';
 import { connectionWebSocket } from './connectionWebSocket.js';
 import { pluginManager } from './pluginManager.js';
 import { logger } from '../utils/logger.js';
+import { isInsecureTlsAllowedFor } from '../utils/insecureAgent.js';
 
 // Freebox native WebSocket events (API v8+)
 type FreeboxEvent =
@@ -124,6 +125,14 @@ class FreeboxNativeWebSocketService {
     try {
       const sessionToken = freeboxApi.getSessionToken();
       const freeboxHost = process.env.FREEBOX_HOST || 'mafreebox.freebox.fr';
+      // Certificate checks are disabled below (self-signed Freebox cert): same
+      // LAN-only safeguard as insecureAgent, never for a public IP literal.
+      if (!isInsecureTlsAllowedFor(freeboxHost.replace(/:\d+$/, ''))) {
+        logger.error('FBX-WS', `Refusing to disable certificate verification for non-private IP "${freeboxHost}"`);
+        this.shouldReconnect = false;
+        this.isConnecting = false;
+        return;
+      }
       const wsUrl = `wss://${freeboxHost}/api/v${this.apiVersion}/ws/event`;
 
       logger.debug('FBX-WS', `Connecting to Freebox native WebSocket: ${wsUrl}`);

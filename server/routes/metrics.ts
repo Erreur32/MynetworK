@@ -16,11 +16,32 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { autoLog } from '../middleware/loggingMiddleware.js';
 import { loggingService } from '../services/loggingService.js';
 import { getDatabase } from '../database/connection.js';
+import { isTrustedNetworkClient } from '../middleware/mcpAuthMiddleware.js';
 
 const router = Router();
 
+function loadMetricsConfig(): MetricsConfig {
+    const row = getDatabase()
+        .prepare('SELECT value FROM app_config WHERE key = ?')
+        .get('metrics_config') as { value: string } | undefined;
+    if (!row) return getDefaultMetricsConfig();
+    try {
+        return JSON.parse(row.value);
+    } catch {
+        return getDefaultMetricsConfig();
+    }
+}
+
 // GET /api/metrics/prometheus - Export metrics in Prometheus format
-router.get('/prometheus', asyncHandler(async (_req, res) => {
+// No auth (scrapers), so restricted instead: only when the export is enabled
+// in Administration > Exporter, and only from the LAN / Tailscale.
+router.get('/prometheus', asyncHandler(async (req, res) => {
+    if (!loadMetricsConfig().prometheus?.enabled) {
+        throw createError('Prometheus export is disabled', 404, 'METRICS_DISABLED');
+    }
+    if (!isTrustedNetworkClient(req)) {
+        throw createError('Prometheus export is restricted to the local network and Tailscale', 403, 'METRICS_NETWORK');
+    }
     try {
         const metrics = await generatePrometheusMetrics();
         res.set('Content-Type', 'text/plain; version=0.0.4');
@@ -162,20 +183,7 @@ router.get('/influxdb', requireAuth, requireAdmin, asyncHandler(async (req: Auth
 // GET /api/metrics/config - Get metrics export configuration
 router.get('/config', requireAuth, requireAdmin, asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
-        const db = getDatabase();
-        const stmt = db.prepare('SELECT value FROM app_config WHERE key = ?');
-        const row = stmt.get('metrics_config') as { value: string } | undefined;
-        
-        let config: MetricsConfig;
-        if (row) {
-            try {
-                config = JSON.parse(row.value);
-            } catch {
-                config = getDefaultMetricsConfig();
-            }
-        } else {
-            config = getDefaultMetricsConfig();
-        }
+        const config = loadMetricsConfig();
         
         res.json({
             success: true,
