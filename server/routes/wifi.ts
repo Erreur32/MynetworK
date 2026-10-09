@@ -64,6 +64,29 @@ interface WifiLanDevice {
   };
 }
 
+// Count active WiFi devices from LAN host data, grouped by band
+function countWifiDevicesByBand(lanHosts: unknown): { wifiDeviceCount: number; devicesByBand: Record<string, number> } {
+  const devicesByBand: Record<string, number> = { '2g4': 0, '5g': 0, '6g': 0 };
+  if (!Array.isArray(lanHosts)) return { wifiDeviceCount: 0, devicesByBand };
+
+  const wifiDevices = lanHosts.filter(
+    (device: WifiLanDevice) =>
+      device.active && device.reachable && device.access_point?.connectivity_type === 'wifi'
+  );
+
+  for (const device of wifiDevices as WifiLanDevice[]) {
+    const band = device.access_point?.wifi_information?.band?.toLowerCase() || '';
+    if (band.includes('6g')) {
+      devicesByBand['6g']++;
+    } else if (band.includes('5g')) {
+      devicesByBand['5g']++;
+    } else if (band.includes('2') || band.includes('2g4') || band.includes('2.4')) {
+      devicesByBand['2g4']++;
+    }
+  }
+  return { wifiDeviceCount: wifiDevices.length, devicesByBand };
+}
+
 // GET /api/wifi/full - Get complete WiFi status (APs + BSS combined)
 router.get('/full', asyncHandler(async (req, res) => {
   // Fetch all WiFi data in parallel, plus LAN devices for WiFi count
@@ -79,29 +102,9 @@ router.get('/full', asyncHandler(async (req, res) => {
   const apsData = aps.status === 'fulfilled' && aps.value.success ? aps.value.result : [];
   const bssData = bss.status === 'fulfilled' && bss.value.success ? bss.value.result : [];
 
-  // Count WiFi devices from LAN data, grouped by band
-  let wifiDeviceCount = 0;
-  const devicesByBand: Record<string, number> = { '2g4': 0, '5g': 0, '6g': 0 };
-
-  if (lanDevices.status === 'fulfilled' && lanDevices.value.success && Array.isArray(lanDevices.value.result)) {
-    const wifiDevices = lanDevices.value.result.filter(
-      (device: WifiLanDevice) =>
-        device.active && device.reachable && device.access_point?.connectivity_type === 'wifi'
-    );
-    wifiDeviceCount = wifiDevices.length;
-
-    // Count by band
-    for (const device of wifiDevices) {
-      const band = (device as WifiLanDevice).access_point?.wifi_information?.band?.toLowerCase() || '';
-      if (band.includes('6g')) {
-        devicesByBand['6g']++;
-      } else if (band.includes('5g')) {
-        devicesByBand['5g']++;
-      } else if (band.includes('2') || band.includes('2g4') || band.includes('2.4')) {
-        devicesByBand['2g4']++;
-      }
-    }
-  }
+  const { wifiDeviceCount, devicesByBand } = countWifiDevicesByBand(
+    lanDevices.status === 'fulfilled' && lanDevices.value.success ? lanDevices.value.result : null
+  );
 
   // Filter out 6GHz data if model doesn't support it
   const supports6ghz = modelDetection.supportsWifi6ghz();

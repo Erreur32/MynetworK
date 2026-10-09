@@ -5,6 +5,7 @@ import compression from "compression";
 import cors from "cors";
 import path from "path";
 import http from "http";
+import type { WebSocketServer } from "ws";
 import os from "os";
 import fsSync from "fs";
 import { fileURLToPath } from "url";
@@ -584,6 +585,12 @@ async function authenticateWsRequest(
   }
 }
 
+const wsServices = new Map<string, { getWss(): WebSocketServer | null }>([
+  ["/ws/connection", connectionWebSocket],
+  ["/ws/logs", logsWebSocket],
+  ["/ws/unifi", unifiWebSocket],
+]);
+
 // Single upgrade handler that routes to the correct WebSocket server by path.
 // Using noServer:true on each WSS avoids the ws library calling socket.destroy()
 // when a path doesn't match, which caused "Invalid frame header" on the client.
@@ -608,38 +615,22 @@ server.on("upgrade", async (request, socket, head) => {
     return;
   }
 
-  if (url === "/ws/connection") {
-    const wss = connectionWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else if (url === "/ws/logs") {
-    const wss = logsWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else if (url === "/ws/unifi") {
-    const wss = unifiWebSocket.getWss();
-    if (wss) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
-  } else {
+  const service = wsServices.get(url);
+  if (!service) {
     // Unknown WS path — reject cleanly
     socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     socket.destroy();
+    return;
   }
+
+  const wss = service.getWss();
+  if (!wss) {
+    socket.destroy();
+    return;
+  }
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit("connection", ws, request);
+  });
 });
 
 // Helper function to get network IP address
