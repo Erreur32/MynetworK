@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 ### Security
 
 - API tokens only work on a GET/HEAD allowlist (inventory routes), only from the LAN and Tailscale, and are always refused on admin routes and on `/api/mcp`. MCP tokens are refused on the REST API. Credential-like fields are stripped from every API token response
+- `@modelcontextprotocol/sdk` 1.30.0 to 1.31.0 (Dependabot alert #74, high: the SDK's OAuth client could send credentials to an authorization server chosen by the MCP server). MyNetwork only uses the server side, but the fix is applied anyway. Supersedes PR #63 (Dependabot) and PR #65 (Snyk), which made the same bump
 - Fixed token expiry check: `expires_at` (ISO 8601) was compared as text against SQLite `datetime('now')`, so an MCP token expiring today stayed valid until the end of the UTC day
 
 
