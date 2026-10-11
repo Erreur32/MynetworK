@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.65] - 2026-10-11
+
+### Fixed
+
+- `scripts/update-version.sh` no longer pre-fills the CHANGELOG and `commit-message.txt` with commits from previous releases. The base lookup missed scoped subjects such as `fix(security): Version 0.10.63` and fell back to a months-old merge; it now starts from the last `v*` tag reachable from HEAD
+
+---
+
 ## [0.10.64] - 2026-10-11
 
 ### Added

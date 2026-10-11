@@ -180,17 +180,22 @@ if grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md 2>/dev/null; then
     # Mettre à jour la date si nécessaire
     sed -i "s/^## \[$NEW_VERSION\] - .*/## [$NEW_VERSION] - $CURRENT_DATE/" CHANGELOG.md
 else
-    # Récupérer les commits depuis le dernier bump de version pour pré-remplir le changelog.
-    # Pas de fallback sur "les N derniers commits" : dans le workflow de ce projet, il n'y a
-    # jamais de commit intermédiaire entre deux bumps (un seul commit par version), donc
-    # COMMIT_LINES est systématiquement vide ici et un tel fallback ne ferait que ressortir
-    # les titres de versions déjà publiées à chaque nouveau bump. Laisser vide : le contenu
+    # Pré-remplir le changelog avec les commits depuis la dernière version publiée.
+    # Base = dernier tag vX.Y.Z atteignable depuis HEAD (un tag est posé après chaque merge).
+    # Fallback: dernier commit "type(scope): Version X.Y.Z" (le scope optionnel était la cause
+    # des anciens commits ressortis: "fix(security): Version ..." n'était pas reconnu et le
+    # script retombait sur un commit de version beaucoup plus ancien).
+    # Pas de fallback sur "les N derniers commits" : dans ce workflow il n'y a pas de commit
+    # intermédiaire entre deux versions, donc la liste est normalement vide ici. Le contenu
     # réel de la version doit toujours être écrit à la main avant de committer.
     COMMIT_LINES=""
     if command -v git &> /dev/null && git rev-parse --git-dir > /dev/null 2>&1; then
-        LAST_VERSION_COMMIT=$(git log --grep="^[a-z]*: Version [0-9]" --pretty=format:"%H" -n 1 2>/dev/null)
-        if [ -n "$LAST_VERSION_COMMIT" ]; then
-            COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges "${LAST_VERSION_COMMIT}..HEAD" 2>/dev/null)
+        LAST_RELEASE_REF=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null)
+        if [ -z "$LAST_RELEASE_REF" ]; then
+            LAST_RELEASE_REF=$(git log -E --no-merges --grep="^[a-z]+(\([^)]*\))?!?: Version [0-9]" --pretty=format:"%H" -n 1 2>/dev/null)
+        fi
+        if [ -n "$LAST_RELEASE_REF" ]; then
+            COMMIT_LINES=$(git log --pretty=format:"- %s" --no-merges "${LAST_RELEASE_REF}..HEAD" 2>/dev/null)
         fi
     fi
 
