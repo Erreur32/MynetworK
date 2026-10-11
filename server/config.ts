@@ -121,6 +121,9 @@ export const config = {
   // MCP (Model Context Protocol) server - LAN-only, opt-out via env
   mcp: {
     enabled: process.env.MCP_ENABLED !== 'false',
+    // IPv4/CIDR list of reverse proxies whose X-Forwarded-For is believed by the
+    // LAN-only check (MCP, API tokens, /metrics). Empty = use the TCP peer only.
+    trustedProxies: process.env.MCP_TRUSTED_PROXIES ?? '',
   }
 };
 

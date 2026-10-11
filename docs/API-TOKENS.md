@@ -58,8 +58,10 @@ These rules are always enforced, in this order:
 
 1. **Network.** Requests are accepted only from private networks (RFC 1918),
    loopback and Tailscale (100.64.0.0/10), the same list as MCP. The check
-   uses the real TCP peer address, not `X-Forwarded-For`. Otherwise the
-   response is `403 API_TOKEN_NETWORK`.
+   uses the real TCP peer address, not `X-Forwarded-For`, unless that peer is
+   listed in `MCP_TRUSTED_PROXIES` (IPv4/CIDR list): then the client address is
+   read from `X-Forwarded-For`, skipping trusted proxies from the right.
+   Otherwise the response is `403 API_TOKEN_NETWORK`.
 2. **Valid token.** Unknown, expired and revoked tokens get
    `401 API_TOKEN_INVALID`.
 3. **Read only.** Only `GET` and `HEAD` are accepted. Any other method gets

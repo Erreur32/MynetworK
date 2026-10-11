@@ -81,7 +81,7 @@ export function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function unwrapIpv4Mapped(ip: string): string {
+export function unwrapIpv4Mapped(ip: string): string {
     const mappedMatch = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
     return mappedMatch ? mappedMatch[1] : ip;
 }
@@ -128,4 +128,41 @@ export function isPrivateNetworkIp(ip: string): boolean {
     }
 
     return false;
+}
+
+export interface Ipv4Cidr {
+    base: number;
+    mask: number;
+}
+
+function ipv4ToInt(ip: string): number {
+    return ip.split('.').reduce((acc, part) => acc * 256 + Number(part), 0);
+}
+
+/**
+ * Parse a comma-separated list of IPv4 addresses or CIDR ranges
+ * (e.g. "172.18.0.0/16,192.168.32.150"). Invalid entries are returned
+ * separately so the caller can warn instead of silently trusting less.
+ */
+export function parseIpv4Cidrs(raw: string | undefined): { cidrs: Ipv4Cidr[]; invalid: string[] } {
+    const cidrs: Ipv4Cidr[] = [];
+    const invalid: string[] = [];
+    for (const entry of (raw ?? '').split(',').map(e => e.trim()).filter(Boolean)) {
+        const [ip, bits = '32', ...rest] = entry.split('/');
+        const prefix = Number(bits);
+        if (rest.length > 0 || !isValidIp(ip) || !/^\d{1,2}$/.test(bits) || prefix > 32) {
+            invalid.push(entry);
+            continue;
+        }
+        const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+        cidrs.push({ base: (ipv4ToInt(ip) & mask) >>> 0, mask });
+    }
+    return { cidrs, invalid };
+}
+
+export function isIpInCidrs(ip: string, cidrs: readonly Ipv4Cidr[]): boolean {
+    const addr = unwrapIpv4Mapped(ip);
+    if (!isValidIp(addr)) return false;
+    const value = ipv4ToInt(addr);
+    return cidrs.some(c => ((value & c.mask) >>> 0) === c.base);
 }
