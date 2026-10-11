@@ -8,7 +8,17 @@
  */
 import { Request, Response, NextFunction } from "express";
 import { mcpAuthService } from "../services/mcpAuthService.js";
-import { isPrivateNetworkIp, isTailscaleIp } from "../utils/networkValidation.js";
+import {
+  isPrivateNetworkIp,
+  isTailscaleIp,
+  isValidIp,
+  isIpInCidrs,
+  parseIpv4Cidrs,
+  unwrapIpv4Mapped,
+  type Ipv4Cidr,
+} from "../utils/networkValidation.js";
+import { config } from "../config.js";
+import { logger } from "../utils/logger.js";
 
 export interface McpAuthenticatedRequest extends Request {
   mcpTokenId?: number;
@@ -27,16 +37,49 @@ function jsonRpcError(
   });
 }
 
+const { cidrs: TRUSTED_PROXIES, invalid: INVALID_PROXY_ENTRIES } = parseIpv4Cidrs(
+  config.mcp.trustedProxies,
+);
+if (INVALID_PROXY_ENTRIES.length > 0) {
+  logger.warn(
+    "MCP",
+    `MCP_TRUSTED_PROXIES: ignoring invalid entries: ${INVALID_PROXY_ENTRIES.join(", ")}`,
+  );
+}
+
 /**
- * Bearer-token clients (MCP and REST API tokens) are only accepted from the
- * local network or Tailscale. Uses the actual TCP peer address, not req.ip
- * (derived from the spoofable X-Forwarded-For header via trust proxy): this
- * app is also reachable on a directly-published Docker port, bypassing the
- * reverse proxy entirely, so an attacker on that path could set
- * X-Forwarded-For to any private IP.
+ * Address of the client as the LAN-only check must see it. By default the
+ * actual TCP peer, not req.ip (derived from the spoofable X-Forwarded-For
+ * header via trust proxy): this app is also reachable on a directly-published
+ * Docker port, bypassing the reverse proxy entirely, so an attacker on that
+ * path could set X-Forwarded-For to any private IP.
+ *
+ * Only when the TCP peer is listed in MCP_TRUSTED_PROXIES is X-Forwarded-For
+ * read, walking it from the right and skipping trusted proxies: the first
+ * other entry was appended by our own proxy chain, entries to its left are
+ * client-supplied. Returns "" (refused) when no usable address is found.
  */
+export function resolveClientIp(
+  req: Request,
+  trustedProxies: readonly Ipv4Cidr[] = TRUSTED_PROXIES,
+): string {
+  const peer = req.socket.remoteAddress || "";
+  if (trustedProxies.length === 0 || !isIpInCidrs(peer, trustedProxies)) return peer;
+
+  const forwarded = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((entry) => unwrapIpv4Mapped(entry.trim()))
+    .reverse();
+  for (const entry of forwarded) {
+    if (!isValidIp(entry)) return "";
+    if (!isIpInCidrs(entry, trustedProxies)) return entry;
+  }
+  return "";
+}
+
+/** Bearer-token clients (MCP and REST API tokens) are only accepted from the local network or Tailscale. */
 export function isTrustedNetworkClient(req: Request): boolean {
-  const clientIp = req.socket.remoteAddress || "";
+  const clientIp = resolveClientIp(req);
   return isPrivateNetworkIp(clientIp) || isTailscaleIp(clientIp);
 }
 

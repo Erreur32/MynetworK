@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.64] - 2026-10-11
+
+### Added
+
+- `MCP_TRUSTED_PROXIES` (optional, IPv4 or CIDR list, comma-separated): the LAN-only check used by MCP, REST API tokens and the Prometheus export reads `X-Forwarded-For` only when the TCP peer is one of these proxies, so the allowlist protects installs exposed behind a reverse proxy. The header is walked from the right, skipping trusted proxies; a missing or invalid header is refused. Unset by default: behavior unchanged
+
+---
+
 ## [0.10.63] - 2026-10-10
 
 ### Security
