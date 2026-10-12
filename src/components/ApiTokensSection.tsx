@@ -31,6 +31,7 @@ const ALLOWED_ROUTES = [
   "/api/lan/devices",
   "/api/dhcp/leases",
   "/api/wifi/stations",
+  "/api/connection/summary",
   "/api/topology",
   "/api/plugins/unifi/clients",
   "/api/plugins/unifi/devices",

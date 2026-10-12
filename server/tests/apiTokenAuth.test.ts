@@ -187,10 +187,10 @@ test('stripSensitiveFields keeps non-sensitive data intact', () => {
 
 test('allowlist matches only the documented routes', () => {
     for (const p of ['/api/network-scan/history', '/api/network-scan/192.168.1.10', '/api/lan/devices', '/api/dhcp/leases',
-        '/api/wifi/stations', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices']) {
+        '/api/wifi/stations', '/api/connection/summary', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices']) {
         assert.equal(isApiTokenRouteAllowed(p), true, p);
     }
-    for (const p of ['/api/network-scan/blacklist', '/api/topology/positions', '/api/dhcp/config', '/api/lan/config',
+    for (const p of ['/api/connection', '/api/connection/config', '/api/system', '/api/network-scan/blacklist', '/api/topology/positions', '/api/dhcp/config', '/api/lan/config',
         '/api/plugins/unifi/nat', '/api/settings/dhcp/leases', '/api/network-scan/1.2.3.4/rescan']) {
         assert.equal(isApiTokenRouteAllowed(p), false, p);
     }

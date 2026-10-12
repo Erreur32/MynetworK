@@ -5,6 +5,8 @@ import { param } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
+import { summarizeFreebox } from '../utils/freeboxSummary.js';
+import { normalizeSystemInfo } from '../services/apiNormalizer.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -13,6 +15,23 @@ router.use(requireAuth);
 router.get('/', asyncHandler(async (_req, res) => {
   const result = await freeboxApi.getConnectionStatus();
   res.json(result);
+}));
+
+// GET /api/connection/summary - Line state, rates and box health in one call (API tokens: no IP, serial or MAC)
+router.get('/summary', asyncHandler(async (_req, res) => {
+    const [conn, system, version] = await Promise.all([
+        freeboxApi.getConnectionStatus(),
+        freeboxApi.getSystemInfo(),
+        freeboxApi.getApiVersion()
+    ]);
+    if (!conn.success && !system.success) {
+        res.json(conn);
+        return;
+    }
+    const sys = system.success && system.result
+        ? normalizeSystemInfo({ ...(system.result as Record<string, unknown>), box_model_name: (version.result as Record<string, unknown> | undefined)?.box_model_name })
+        : null;
+    res.json({ success: true, result: summarizeFreebox(conn.success ? conn.result : null, sys) });
 }));
 
 // GET /api/connection/config - Get connection config
