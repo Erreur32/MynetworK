@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.66] - 2026-10-12
+
+### Added
+
+- `GET /api/connection/summary`, open to read-only API tokens: Freebox line state, rates and box health (temperatures, fans, uptime, firmware, disk) in one call. Identifiers are left out: no public IP, serial number, MAC or remote-access domain
+
+### Fixed
+
+- `GET /api/wifi/stations` called `/wifi/stations/` on the Freebox, which does not exist (404). It now gathers the stations of every access point and adds an `ap_id` field. This also fixes the MCP tool that lists WiFi stations
+
+---
+
 ## [0.10.65] - 2026-10-11
 
 ### Fixed
