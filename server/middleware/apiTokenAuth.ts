@@ -26,7 +26,6 @@ export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
     { path: '/api/lan/devices', pattern: /^\/api\/lan\/devices$/ },
     { path: '/api/dhcp/leases', pattern: /^\/api\/dhcp\/leases$/ },
     { path: '/api/wifi/stations', pattern: /^\/api\/wifi\/stations$/ },
-
     { path: '/api/connection/summary', pattern: /^\/api\/connection\/summary$/ },
     { path: '/api/topology', pattern: /^\/api\/topology$/ },
     { path: '/api/plugins/unifi/clients', pattern: /^\/api\/plugins\/unifi\/clients$/ },
