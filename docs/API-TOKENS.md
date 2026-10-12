@@ -99,6 +99,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/lan/devices` | Freebox | LAN hosts on all interfaces |
 | `GET /api/dhcp/leases` | Freebox | Dynamic DHCP leases (no DHCP config) |
 | `GET /api/wifi/stations` | Freebox | Connected WiFi stations |
+| `GET /api/connection/summary` | Freebox | Line state, rates and box health (no IP, serial or MAC) |
 | `GET /api/topology` | MyNetwork | Last computed topology snapshot |
 | `GET /api/plugins/unifi/clients` | UniFi | Connected clients, compact summary |
 | `GET /api/plugins/unifi/devices` | UniFi | APs, switches, gateways, compact summary |
@@ -217,8 +218,8 @@ server configuration are not exposed.
 
 ### `GET /api/wifi/stations`
 
-Freebox WiFi stations currently associated, relayed from the Freebox OS API
-(`/wifi/stations/`).
+Freebox WiFi stations currently associated, gathered from every access point
+(`/wifi/ap/<id>/stations/`) with an added `ap_id` field.
 
 | Field | Type | Description |
 |---|---|---|
@@ -232,6 +233,36 @@ Freebox WiFi stations currently associated, relayed from the Freebox OS API
 | `conn_duration` / `inactive` | number | Seconds |
 | `state` | string | Association state |
 | `flags`? | object | Capability flags (`authorized` is removed by the credential filter) |
+
+### `GET /api/connection/summary`
+
+Line state and box health in one call, built from the Freebox connection
+status and system info. Identifiers (public IP, serial number, MAC addresses,
+remote-access domain) are left out.
+
+```json
+{
+  "success": true,
+  "result": {
+    "connection": { "state": "up", "type": "ethernet", "media": "ftth", "rate_down": 1200, "rate_up": 300,
+                    "bandwidth_down": 8000000000, "bandwidth_up": 700000000, "bytes_down": 0, "bytes_up": 0 },
+    "system": { "model": "Freebox Ultra", "firmware": "4.9.4", "uptime": 86400, "disk_status": "active",
+                "sensors": [{ "id": "temp_cpu0", "name": "CPU 0", "value": 52 }],
+                "fans": [{ "id": "fan0", "name": "Fan", "value": 1800 }] }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `connection.state`? | string | `up`, `down`, `going_up`, `going_down` |
+| `connection.media`? / `type`? | string | `ftth`, `xdsl`, `backup_4g` / `ethernet`, `rfc2684`, `pppoatm` |
+| `connection.rate_down` / `rate_up`? | number | Current rate, bytes/s |
+| `connection.bandwidth_down` / `bandwidth_up`? | number | Line capacity, bit/s |
+| `system.uptime`? | number | Seconds since the box started |
+| `system.sensors` / `fans` | array | `{ id, name, value }`, °C and rpm |
+
+Any field may be `null` when the box firmware does not report it.
 
 ### `GET /api/topology`
 

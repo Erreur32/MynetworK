@@ -734,8 +734,16 @@ class FreeboxApiService {
         return this.requestWithLock('PUT', `${API_ENDPOINTS.WIFI_BSS}${bssId}`, {config: params});
     }
 
+    // Freebox OS has no global station list: gather the stations of every access point
     async getWifiStations(): Promise<FreeboxApiResponse> {
-        return this.requestWithLock('GET', API_ENDPOINTS.WIFI_STATIONS);
+        const aps = await this.getWifiAps();
+        if (!aps.success || !Array.isArray(aps.result)) return aps;
+        const stations: unknown[] = [];
+        for (const ap of aps.result as Array<{ id: number }>) {
+            const r = await this.getWifiApStations(ap.id);
+            if (r.success && Array.isArray(r.result)) stations.push(...r.result.map((st) => ({ ...(st as object), ap_id: ap.id })));
+        }
+        return { success: true, result: stations };
     }
 
     async getWifiMacFilter(): Promise<FreeboxApiResponse> {
