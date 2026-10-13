@@ -33,6 +33,17 @@ import { pluginManager } from "./services/pluginManager.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Read app version from package.json (served by /api/health and shown in the startup banner)
+let appVersion = "0.1.0"; // Default fallback
+try {
+  const packageJsonPath = path.join(__dirname, "..", "package.json");
+  const packageJson = JSON.parse(fsSync.readFileSync(packageJsonPath, "utf8"));
+  appVersion = packageJson.version || appVersion;
+} catch (error) {
+  // If package.json can't be read, use default version
+  logger.warn("Server", "Could not read package.json version, using default");
+}
+
 // Routes
 import authRoutes from "./routes/auth.js";
 import usersRoutes from "./routes/users.js";
@@ -491,7 +502,11 @@ app.use("/api/security", securityRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    version: appVersion,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Public config for frontend (no auth) - used when running under Home Assistant Ingress
@@ -967,19 +982,6 @@ server.listen(port, host, () => {
     const withoutEmojis = cleaned.replace(emojiRegex, "");
     return withoutEmojis.length + emojiCount * 2;
   };
-
-  // Read app version from package.json
-  let appVersion = "0.1.0"; // Default fallback
-  try {
-    const packageJsonPath = path.join(__dirname, "..", "package.json");
-    const packageJson = JSON.parse(
-      fsSync.readFileSync(packageJsonPath, "utf8"),
-    );
-    appVersion = packageJson.version || appVersion;
-  } catch (error) {
-    // If package.json can't be read, use default version
-    logger.warn("Server", "Could not read package.json version, using default");
-  }
 
   // Calculate content widths for all lines
   const title = "MynetworK Backend Server";
