@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.67] - 2026-10-13
+
+### Added
+
+- `GET /api/health` now returns the app `version` read from `package.json`. The route stays public (no token required), so API token permissions are unchanged
+
+---
+
 ## [0.10.66] - 2026-10-12
 
 ### Added
