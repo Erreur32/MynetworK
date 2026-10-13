@@ -29,7 +29,8 @@ export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
     { path: '/api/connection/summary', pattern: /^\/api\/connection\/summary$/ },
     { path: '/api/topology', pattern: /^\/api\/topology$/ },
     { path: '/api/plugins/unifi/clients', pattern: /^\/api\/plugins\/unifi\/clients$/ },
-    { path: '/api/plugins/unifi/devices', pattern: /^\/api\/plugins\/unifi\/devices$/ }
+    { path: '/api/plugins/unifi/devices', pattern: /^\/api\/plugins\/unifi\/devices$/ },
+    { path: '/api/plugins/unifi/system', pattern: /^\/api\/plugins\/unifi\/system$/ }
 ];
 
 const READ_METHODS = new Set(['GET', 'HEAD']);

@@ -4,6 +4,8 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { freeboxApi } from "../../services/freeboxApi.js";
+import { freeboxFirmwareCheckService } from "../../services/freeboxFirmwareCheckService.js";
+import { firmwareUpdate } from "../../utils/freeboxSummary.js";
 import {
   textResult,
   toListResult,
@@ -88,10 +90,17 @@ export function registerFreeboxTools(server: McpServer): void {
     "freebox_get_system_info",
     {
       title: "Freebox system info",
-      description: "Get Freebox hardware/firmware system information.",
+      description:
+        "Get Freebox hardware/firmware system information, plus latest_firmware/update_available (Freebox Server update check, null when unknown).",
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getSystemInfo()),
+    async () => {
+      const response = await freeboxApi.getSystemInfo();
+      if (!response.success || !response.result || typeof response.result !== "object") return toToolResult(response);
+      const result = response.result as Record<string, unknown>;
+      const latest = freeboxFirmwareCheckService.getLatestFirmwareInfo()?.server.latestVersion;
+      return toToolResult({ ...response, result: { ...result, ...firmwareUpdate(result.firmware_version, latest) } });
+    },
   );
 
   server.registerTool(

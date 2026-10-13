@@ -15,6 +15,10 @@ const MAX_BANDWIDTH_RANGE_SECONDS = 7 * 24 * 3600;
 
 const GATEWAY_TYPES = new Set(['ugw', 'udm', 'uxg']);
 
+function isGatewayDevice(d: any): boolean {
+  return GATEWAY_TYPES.has((d.type || '').toString().toLowerCase());
+}
+
 function getUnifiPlugin(): UniFiPlugin {
   const plugin = pluginManager.getPlugin('unifi') as UniFiPlugin | undefined;
   if (!plugin) {
@@ -65,9 +69,47 @@ function summarizeClient(c: any) {
   };
 }
 
-function summarizeDevice(d: any) {
+// system-stats values arrive as strings ("88.1"); anything non-numeric becomes undefined.
+function toNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+// Firmware update state. null means "unknown" (controller sent nothing), which
+// API consumers must be able to tell apart from "up to date" (false).
+// Same rule as the UI badges: some controllers only fill upgrade_to_firmware.
+function firmwareUpgrade(d: any): { upgradable: boolean | null; upgrade_to_firmware: string | null } {
+  const target = typeof d.upgrade_to_firmware === 'string' && d.upgrade_to_firmware !== '' && d.upgrade_to_firmware !== d.version
+    ? d.upgrade_to_firmware
+    : null;
+  if (d.upgradable === true || target) return { upgradable: true, upgrade_to_firmware: target };
+  if (d.upgradable === false) return { upgradable: false, upgrade_to_firmware: null };
+  return { upgradable: null, upgrade_to_firmware: null };
+}
+
+// A gateway's ip is often its WAN address: expose the main LAN address separately.
+// Prefer the default LAN (attr_no_delete) in network_table, then any LAN, then config_network.ip.
+function gatewayLanIp(d: any): string | null {
+  const lans: any[] = Array.isArray(d.network_table)
+    ? d.network_table.filter((n: any) => n?.purpose === 'corporate' && typeof n.ip === 'string' && n.ip !== '')
+    : [];
+  const lan = lans.find((n) => n.attr_no_delete === true) ?? lans[0];
+  return lan?.ip ?? (typeof d.config_network?.ip === 'string' && d.config_network.ip !== '' ? d.config_network.ip : null);
+}
+
+// Highest reading of the temperatures array (gateways, some switches), else general_temperature.
+function maxTemperature(d: any): number | undefined {
+  const values = (Array.isArray(d.temperatures) ? d.temperatures : [])
+    .map((t: any) => toNumber(t?.value))
+    .filter((v: number | undefined): v is number => v !== undefined);
+  return values.length ? Math.max(...values) : toNumber(d.general_temperature);
+}
+
+export function summarizeDevice(d: any) {
   const ports: any[] = Array.isArray(d.port_table) ? d.port_table : [];
   const radios: any[] = Array.isArray(d.radio_table_stats) ? d.radio_table_stats : [];
+  const isGateway = isGatewayDevice(d);
   return {
     name: d.name || d.model,
     model: d.model,
@@ -76,13 +118,14 @@ function summarizeDevice(d: any) {
     ip: d.ip,
     state: d.state === 1 ? 'connected' : d.state,
     version: d.version,
-    upgradable: d.upgradable === true ? true : undefined,
+    ...firmwareUpgrade(d),
+    lan_ip: isGateway ? gatewayLanIp(d) : undefined,
     uptime: d.uptime,
     clients: d.num_sta,
     satisfaction: d.satisfaction,
-    cpu_pct: d['system-stats']?.cpu,
-    mem_pct: d['system-stats']?.mem,
-    temperature: d.general_temperature,
+    cpu_pct: toNumber(d['system-stats']?.cpu),
+    mem_pct: toNumber(d['system-stats']?.mem),
+    temperature: maxTemperature(d),
     uplink: d.uplink
       ? { type: d.uplink.type, mac: d.uplink.uplink_mac, port: d.uplink.uplink_remote_port, speed: d.uplink.speed }
       : undefined,
@@ -94,11 +137,53 @@ function summarizeDevice(d: any) {
   };
 }
 
+// Compact controller summary: stat/sysinfo (UniFi Network application) plus the
+// gateway's health. The raw sysinfo object carries SSO app ids/secrets and
+// controller IPs, so only the fields below are ever returned.
+export function summarizeSystem(sysinfo: any, devices: any[]) {
+  const gw = devices.find(isGatewayDevice);
+  const g = gw ? summarizeDevice(gw) : null;
+  const sysStats = gw?.sys_stats;
+  return {
+    name: sysinfo?.name ?? null,
+    hostname: sysinfo?.hostname ?? null,
+    version: sysinfo?.version ?? null,
+    previous_version: sysinfo?.previous_version ?? null,
+    update_available: typeof sysinfo?.update_available === 'boolean' ? sysinfo.update_available : null,
+    update_downloaded: typeof sysinfo?.update_downloaded === 'boolean' ? sysinfo.update_downloaded : null,
+    console_version: sysinfo?.console_display_version ?? sysinfo?.udm_version ?? null,
+    uptime: toNumber(sysinfo?.uptime) ?? null,
+    gateway: g
+      ? {
+          name: g.name,
+          model: g.model,
+          type: g.type,
+          version: g.version,
+          upgradable: g.upgradable,
+          upgrade_to_firmware: g.upgrade_to_firmware,
+          lan_ip: g.lan_ip,
+          uptime: g.uptime,
+          cpu_pct: g.cpu_pct,
+          mem_pct: g.mem_pct,
+          mem_total: toNumber(sysStats?.mem_total),
+          mem_used: toNumber(sysStats?.mem_used),
+          temperature: g.temperature
+        }
+      : null
+  };
+}
+
+export async function getUnifiSystemSummary() {
+  const api = getUnifiApiService();
+  const [sysinfo, devices] = await Promise.all([api.getSystemInfo(), api.getDevices()]);
+  return summarizeSystem(sysinfo, devices);
+}
+
 function deviceMatchesType(d: any, type: 'all' | 'ap' | 'switch' | 'gateway'): boolean {
   const t = (d.type || '').toString().toLowerCase();
   if (type === 'ap') return t === 'uap';
   if (type === 'switch') return t === 'usw';
-  if (type === 'gateway') return GATEWAY_TYPES.has(t);
+  if (type === 'gateway') return isGatewayDevice(d);
   return true;
 }
 
@@ -244,10 +329,12 @@ export function registerUnifiTools(server: McpServer): void {
     'unifi_get_system_info',
     {
       title: 'UniFi system info',
-      description: 'Get UniFi controller/site system information.',
+      description:
+        'Get UniFi controller system information as a compact summary: UniFi Network version and pending update, UniFi OS console version, gateway firmware/update, uptime, CPU, memory and temperature. Use raw=true only if a field is missing.',
+      inputSchema: { raw: rawParam },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async () => wrapAsync(() => getUnifiApiService().getSystemInfo())
+    async ({ raw }) => wrapAsync(() => (raw ? getUnifiApiService().getSystemInfo() : getUnifiSystemSummary()))
   );
 
   server.registerTool(

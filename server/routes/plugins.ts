@@ -14,7 +14,7 @@ import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
-import { listUnifiClients, listUnifiDevices, type UnifiClientType, type UnifiDeviceType } from '../mcp/tools/unifi.js';
+import { getUnifiSystemSummary, listUnifiClients, listUnifiDevices, type UnifiClientType, type UnifiDeviceType } from '../mcp/tools/unifi.js';
 import type { ListResult } from '../mcp/tools/shared.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
@@ -744,6 +744,18 @@ router.get('/unifi/devices', requireAuth, unifiListRoute<UnifiDeviceType>(['all'
 
 // GET /api/plugins/unifi/clients - Connected UniFi clients, compact summary
 router.get('/unifi/clients', requireAuth, unifiListRoute<UnifiClientType>(['all', 'wifi', 'wired'], listUnifiClients));
+
+// GET /api/plugins/unifi/system - UniFi Network version/update and gateway health, compact summary
+router.get('/unifi/system', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+    let result;
+    try {
+        result = await getUnifiSystemSummary();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'UniFi is unavailable';
+        throw createError(message, 503, 'UNIFI_UNAVAILABLE');
+    }
+    res.json({ success: true, result });
+}));
 
 // GET /api/plugins/unifi/nat - Get UniFi NAT/port forwarding rules
 router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {

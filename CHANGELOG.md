@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.68] - 2026-10-13
+
+### Added
+
+- `GET /api/plugins/unifi/system`, open to read-only API tokens: UniFi Network version and pending update (`version`, `update_available`), UniFi OS console version, and gateway health (firmware and update, LAN IP, uptime, CPU, memory, temperature). Compact projection only: SSO secrets and controller IPs from `stat/sysinfo` are never returned
+- `GET /api/plugins/unifi/devices`: new `upgrade_to_firmware` field, and `lan_ip` for gateways (their `ip` is often the WAN address)
+- `GET /api/connection/summary`: new `system.latest_firmware` and `system.update_available` fields, from the dev.freebox.fr blog check
+- MCP: `freebox_get_system_info` adds the same two firmware fields; `unifi_get_system_info` now returns the compact summary (`raw=true` for the full object)
+
+### Changed
+
+- UniFi devices: `upgradable` is always present, `true`, `false`, or `null` when the controller does not report it (it was only sent when `true`). Unknown values are `null`, never `false`
+- UniFi devices: `cpu_pct` and `mem_pct` are numbers instead of strings, `temperature` is the highest reading of `temperatures[]` with `general_temperature` as fallback (UniFi OS gateways often only fill the former)
+
+---
+
 ## [0.10.67] - 2026-10-13
 
 ### Added

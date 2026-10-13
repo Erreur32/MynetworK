@@ -6,6 +6,7 @@ import { param } from '../utils/params.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
 import { summarizeFreebox } from '../utils/freeboxSummary.js';
+import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
 import { normalizeSystemInfo } from '../services/apiNormalizer.js';
 
 const router = Router();
@@ -31,7 +32,8 @@ router.get('/summary', asyncHandler(async (_req, res) => {
     const sys = system.success && system.result
         ? normalizeSystemInfo({ ...(system.result as Record<string, unknown>), box_model_name: (version.result as Record<string, unknown> | undefined)?.box_model_name })
         : null;
-    res.json({ success: true, result: summarizeFreebox(conn.success ? conn.result : null, sys) });
+    const latest = freeboxFirmwareCheckService.getLatestFirmwareInfo()?.server.latestVersion;
+    res.json({ success: true, result: summarizeFreebox(conn.success ? conn.result : null, sys, latest) });
 }));
 
 // GET /api/connection/config - Get connection config

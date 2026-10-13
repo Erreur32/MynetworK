@@ -103,6 +103,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/topology` | MyNetwork | Last computed topology snapshot |
 | `GET /api/plugins/unifi/clients` | UniFi | Connected clients, compact summary |
 | `GET /api/plugins/unifi/devices` | UniFi | APs, switches, gateways, compact summary |
+| `GET /api/plugins/unifi/system` | UniFi | UniFi Network version and update, gateway health |
 
 All responses use the `{ "success": true, "result": ... }` envelope. In the
 field lists below, `?` marks a field that may be missing or `null`.
@@ -246,7 +247,8 @@ remote-access domain) are left out.
   "result": {
     "connection": { "state": "up", "type": "ethernet", "media": "ftth", "rate_down": 1200, "rate_up": 300,
                     "bandwidth_down": 8000000000, "bandwidth_up": 700000000, "bytes_down": 0, "bytes_up": 0 },
-    "system": { "model": "Freebox Ultra", "firmware": "4.9.4", "uptime": 86400, "disk_status": "active",
+    "system": { "model": "Freebox Ultra", "firmware": "4.9.4", "latest_firmware": "4.9.16", "update_available": true,
+                "uptime": 86400, "disk_status": "active",
                 "sensors": [{ "id": "temp_cpu0", "name": "CPU 0", "value": 52 }],
                 "fans": [{ "id": "fan0", "name": "Fan", "value": 1800 }] }
   }
@@ -259,6 +261,9 @@ remote-access domain) are left out.
 | `connection.media`? / `type`? | string | `ftth`, `xdsl`, `backup_4g` / `ethernet`, `rfc2684`, `pppoatm` |
 | `connection.rate_down` / `rate_up`? | number | Current rate, bytes/s |
 | `connection.bandwidth_down` / `bandwidth_up`? | number | Line capacity, bit/s |
+| `system.firmware`? | string | Installed Freebox Server firmware |
+| `system.latest_firmware`? | string | Latest Freebox Server firmware published on dev.freebox.fr/blog |
+| `system.update_available` | boolean or null | `true` when `latest_firmware` is newer than `firmware`. `null` when unknown (blog check not run yet or disabled): the box does not report pending updates itself |
 | `system.uptime`? | number | Seconds since the box started |
 | `system.sensors` / `fans` | array | `{ id, name, value }`, °C and rpm |
 
@@ -355,8 +360,8 @@ default `all`), `search`, `limit`, as for clients.
   "success": true,
   "result": [
     { "name": "AP Salon", "model": "U6LR", "type": "uap", "mac": "aa:bb:cc:00:00:01", "ip": "192.168.1.5",
-      "state": "connected", "version": "6.6.77", "uptime": 864000, "clients": 12, "satisfaction": 97,
-      "cpu_pct": "4.1", "mem_pct": "38.2",
+      "state": "connected", "version": "6.6.77", "upgradable": true, "upgrade_to_firmware": "6.7.31", "uptime": 864000, "clients": 12, "satisfaction": 97,
+      "cpu_pct": 4.1, "mem_pct": 38.2,
       "uplink": { "type": "wire", "mac": "aa:bb:cc:00:00:02", "port": 3, "speed": 1000 },
       "radios": [{ "radio": "na", "channel": 36, "clients": 9, "satisfaction": 98 }],
       "last_seen": 1760043600 }
@@ -371,9 +376,12 @@ default `all`), `search`, `limit`, as for clients.
 | `mac` / `ip`? | string | Identity |
 | `state` | string or number | `connected`, or the raw UniFi state code |
 | `version`? | string | Firmware |
-| `upgradable`? | boolean | Present (true) only when an update is available |
+| `upgradable` | boolean or null | `true` when a firmware update is available, `false` when up to date, `null` when the controller does not report it |
+| `upgrade_to_firmware` | string or null | Target firmware version, `null` when there is none or it is unknown |
+| `lan_ip`? | string or null | Gateways only: address on the main LAN (`ip` is often the WAN address). `null` when not reported |
 | `uptime`? / `clients`? / `satisfaction`? | number | |
-| `cpu_pct`? / `mem_pct`? / `temperature`? | | Health |
+| `cpu_pct`? / `mem_pct`? | number | Health, percent |
+| `temperature`? | number | °C, highest sensor reading (gateways, some switches) |
 | `uplink`? | object | `{ type, mac, port, speed }` |
 | `ports`? | object | `{ total, up }` (switches, gateways) |
 | `radios`? | array | `[{ radio, channel, clients, satisfaction }]` (APs) |
@@ -382,3 +390,39 @@ default `all`), `search`, `limit`, as for clients.
 When UniFi is not configured or unreachable:
 `503 { "success": false, "error": { "code": "UNIFI_UNAVAILABLE", ... } }`.
 Raw controller objects are never exposed through this API.
+
+### `GET /api/plugins/unifi/system`
+
+No query parameters. Controller information from `stat/sysinfo` (UniFi
+Network application) plus the health of the first gateway found.
+
+```json
+{
+  "success": true,
+  "result": {
+    "name": "UniFi Network", "hostname": "udm", "version": "9.4.19", "previous_version": "9.3.45",
+    "update_available": true, "update_downloaded": false, "console_version": "4.3.6", "uptime": 864000,
+    "gateway": { "name": "UDM Pro", "model": "UDMPRO", "type": "udm", "version": "4.3.6",
+      "upgradable": false, "upgrade_to_firmware": null, "lan_ip": "192.168.32.1", "uptime": 864000,
+      "cpu_pct": 12.4, "mem_pct": 61.2, "mem_total": 4124114944, "mem_used": 2523959296, "temperature": 58 }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `name`? / `hostname`? | string | Controller display name and hostname |
+| `version`? | string | UniFi Network application version |
+| `previous_version`? | string | Version before the last update |
+| `update_available` | boolean or null | `true` when a UniFi Network update is available, `null` when not reported |
+| `update_downloaded` | boolean or null | Update already downloaded |
+| `console_version`? | string | UniFi OS console version (UniFi OS consoles only) |
+| `uptime`? | number | Controller uptime, seconds |
+| `gateway` | object or null | `null` without a UniFi gateway (software controller) |
+| `gateway.version` / `upgradable` / `upgrade_to_firmware` | | Gateway firmware and pending update, same rules as `/devices` |
+| `gateway.lan_ip`? | string | Address on the main LAN |
+| `gateway.uptime`? / `cpu_pct`? / `mem_pct`? / `temperature`? | number | Seconds, percent, percent, °C |
+| `gateway.mem_total`? / `mem_used`? | number | Bytes |
+
+Same `503 UNIFI_UNAVAILABLE` as above when UniFi is not configured or
+unreachable. With the cloud Site Manager connection most fields are `null`.
