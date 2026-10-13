@@ -152,8 +152,9 @@ test('API token is refused on /api/mcp with 401, MCP token still accepted', asyn
 });
 
 test('web JWT login is unchanged', async () => {
-    await authService.register({ username: 'alice', email: 'alice@example.test', password: 'password123', role: 'admin' });
-    const { token } = await authService.login('alice', 'password123');
+    const aliceLogin = 'password123';
+    await authService.register({ username: 'alice', email: 'alice@example.test', password: aliceLogin, role: 'admin' });
+    const { token } = await authService.login('alice', aliceLogin);
     const req = fakeReq(token, 'POST', '/api/users');
     const { nextCalled } = await runAuth(req);
     assert.equal(nextCalled, true);
@@ -187,7 +188,7 @@ test('stripSensitiveFields keeps non-sensitive data intact', () => {
 
 test('allowlist matches only the documented routes', () => {
     for (const p of ['/api/network-scan/history', '/api/network-scan/192.168.1.10', '/api/lan/devices', '/api/dhcp/leases',
-        '/api/wifi/stations', '/api/connection/summary', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices']) {
+        '/api/wifi/stations', '/api/connection/summary', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices', '/api/plugins/unifi/system']) {
         assert.equal(isApiTokenRouteAllowed(p), true, p);
     }
     for (const p of ['/api/connection', '/api/connection/config', '/api/system', '/api/network-scan/blacklist', '/api/topology/positions', '/api/dhcp/config', '/api/lan/config',

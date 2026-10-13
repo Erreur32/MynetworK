@@ -1,5 +1,6 @@
 // Compact Freebox health for read-only API tokens (GET /api/connection/summary).
 // Only line state, rates and box health: no public IP, serial, MAC or remote-access domain.
+import { compareVersions } from './version.js';
 
 type Obj = Record<string, unknown>;
 
@@ -12,7 +13,19 @@ const readings = (v: unknown) =>
             .filter((x) => x.value !== null)
         : [];
 
-export function summarizeFreebox(connection: unknown, system: unknown) {
+// Freebox Server update state. The box does not report pending updates itself:
+// latest comes from the dev.freebox.fr blog check (freeboxFirmwareCheckService).
+// null means "unknown" (check not run yet or disabled), never "up to date".
+export function firmwareUpdate(current: unknown, latest: string | null | undefined) {
+    const installed = str(current);
+    const latestFirmware = latest || null;
+    return {
+        latest_firmware: latestFirmware,
+        update_available: installed && latestFirmware ? compareVersions(latestFirmware, installed) > 0 : null,
+    };
+}
+
+export function summarizeFreebox(connection: unknown, system: unknown, latestFirmware?: string | null) {
     const c = (connection && typeof connection === 'object' ? connection : {}) as Obj;
     const s = (system && typeof system === 'object' ? system : {}) as Obj;
     return {
@@ -30,6 +43,7 @@ export function summarizeFreebox(connection: unknown, system: unknown) {
         system: {
             model: str(s.box_model_name) ?? str(s.board_name),
             firmware: str(s.firmware_version),
+            ...firmwareUpdate(s.firmware_version, latestFirmware),
             uptime: num(s.uptime_val),      // seconds
             disk_status: str(s.disk_status),
             sensors: readings(s.sensors),   // °C

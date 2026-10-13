@@ -21,3 +21,14 @@ test('summarizeFreebox tolerates missing data', () => {
     assert.equal(out.connection.state, null);
     assert.deepEqual(out.system.sensors, []);
 });
+
+test('summarizeFreebox reports a firmware update from the blog check, null when unknown', () => {
+    const sys = { firmware_version: '4.9.4' };
+    const outdated = summarizeFreebox(null, sys, '4.9.16');
+    assert.equal(outdated.system.latest_firmware, '4.9.16');
+    assert.equal(outdated.system.update_available, true);
+    assert.equal(summarizeFreebox(null, sys, '4.9.4').system.update_available, false);
+    const unknown = summarizeFreebox(null, sys);
+    assert.equal(unknown.system.latest_firmware, null);
+    assert.equal(unknown.system.update_available, null);
+});
