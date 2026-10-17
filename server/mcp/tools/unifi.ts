@@ -137,6 +137,35 @@ export function summarizeDevice(d: any) {
   };
 }
 
+// Gateway WAN links: state, negotiated speed, latency. Public IPs are never returned.
+function summarizeWan(gw: any) {
+  const links = ['wan1', 'wan2']
+    .filter((k) => gw?.[k] && typeof gw[k] === 'object')
+    .map((k) => ({
+      name: k.toUpperCase(),
+      up: typeof gw[k].up === 'boolean' ? gw[k].up : null,
+      speed_mbps: toNumber(gw[k].speed) ?? null,
+      latency_ms: toNumber(gw[k].latency) ?? null
+    }));
+  // The gateway reports the active uplink's latency once, on `uplink`
+  const uplinkLatency = toNumber(gw?.uplink?.latency);
+  if (links.length > 0 && uplinkLatency !== undefined && links[0].latency_ms === null) links[0].latency_ms = uplinkLatency;
+  return links;
+}
+
+// Last speed test run by the gateway, null when it never ran one
+function summarizeSpeedtest(gw: any) {
+  const st = gw?.['speedtest-status'];
+  const download = toNumber(st?.xput_download);
+  if (!st || download === undefined) return null;
+  return {
+    download_mbps: download,
+    upload_mbps: toNumber(st.xput_upload) ?? null,
+    latency_ms: toNumber(st.latency) ?? null,
+    date: toNumber(st.rundate) ?? null
+  };
+}
+
 // Compact controller summary: stat/sysinfo (UniFi Network application) plus the
 // gateway's health. The raw sysinfo object carries SSO app ids/secrets and
 // controller IPs, so only the fields below are ever returned.
@@ -167,7 +196,9 @@ export function summarizeSystem(sysinfo: any, devices: any[]) {
           mem_pct: g.mem_pct,
           mem_total: toNumber(sysStats?.mem_total),
           mem_used: toNumber(sysStats?.mem_used),
-          temperature: g.temperature
+          temperature: g.temperature,
+          wan: summarizeWan(gw),
+          speedtest: summarizeSpeedtest(gw)
         }
       : null
   };

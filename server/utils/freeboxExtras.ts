@@ -144,7 +144,26 @@ export function mapVmSystem(info: unknown) {
     };
 }
 
+export function mapSwitch(ports: unknown) {
+    const p = list(ports).map((x) => ({
+        id: num(x.id),
+        link_up: typeof x.link === 'string' ? x.link === 'up' : null,
+        speed_mbps: num(Number.parseInt(String(x.speed ?? ''), 10)),
+        duplex: str(x.duplex),
+    }));
+    return { ports_total: p.length, ports_up: p.filter((x) => x.link_up === true).length, ports: p };
+}
+
+// Hosts known to the box and those currently reachable, over every LAN interface
+export function countHosts(perInterface: unknown[][]) {
+    const hosts = perInterface.flat().filter(isObj);
+    return { hosts: hosts.length, hosts_active: hosts.filter((h) => h.active === true).length };
+}
+
 interface Api {
+    getSwitchStatus(): Promise<Resp>;
+    getLanBrowserInterfaces(): Promise<Resp>;
+    getLanHosts(name: string): Promise<Resp>;
     getDhcpConfig(): Promise<Resp>;
     getWifiBss(): Promise<Resp>;
     getVmInfo(): Promise<Resp>;
@@ -161,6 +180,9 @@ interface Api {
 export interface FreeboxExtras {
     lan_ip: string | null;
     dhcp: ReturnType<typeof mapDhcp> | null;
+    switch: ReturnType<typeof mapSwitch> | null;
+    hosts: number | null;
+    hosts_active: number | null;
     storage: ReturnType<typeof mapStorage> | null;
     ftth?: ReturnType<typeof mapFtth> | null;
     wifi: ReturnType<typeof mapWifi> | null;
@@ -170,7 +192,7 @@ export interface FreeboxExtras {
 }
 
 // Right each block needs, used when the box does not name the missing one itself.
-const RIGHT = { lan: 'settings', dhcp: 'settings', bss: 'settings', storage: 'settings', ftth: 'settings', wifi: 'settings', vm: 'vm' } as const;
+const RIGHT = { switch: 'settings', hosts: 'settings', lan: 'settings', dhcp: 'settings', bss: 'settings', storage: 'settings', ftth: 'settings', wifi: 'settings', vm: 'vm' } as const;
 
 type Rights = Set<string>;
 interface Fetched { ok: boolean; result?: unknown; denied: boolean }
@@ -200,13 +222,23 @@ function mapWifiBlock(wcfg: Fetched, aps: Fetched, stations: Fetched, bss: Fetch
     return mapWifi(enabled, aps.result, count, bss.ok ? bss.result : []);
 }
 
+async function fetchHosts(api: Api, missing: Rights) {
+    const ifaces = await fetchBlock(() => api.getLanBrowserInterfaces(), RIGHT.hosts, missing);
+    if (!ifaces.ok) return null;
+    const names = list(ifaces.result).map((i) => str(i.name)).filter((n): n is string => n !== null);
+    const perInterface = await Promise.all(names.map((n) => fetchBlock(() => api.getLanHosts(n), RIGHT.hosts, missing)));
+    return countHosts(perInterface.map((r) => (r.ok && Array.isArray(r.result) ? r.result : [])));
+}
+
 export async function collectExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
     const missing: Rights = new Set();
     const get = (call: () => Promise<Resp>, right: string) => fetchBlock(call, right, missing);
 
-    const [lan, dhcp, disks, ftth, wcfg, aps, stations, bss, vms] = await Promise.all([
+    const [lan, dhcp, sw, hostCounts, disks, ftth, wcfg, aps, stations, bss, vms] = await Promise.all([
         get(() => api.getLanConfig(), RIGHT.lan),
         get(() => api.getDhcpConfig(), RIGHT.dhcp),
+        get(() => api.getSwitchStatus(), RIGHT.switch),
+        fetchHosts(api, missing),
         get(() => api.getDisks(), RIGHT.storage),
         media === 'ftth' ? get(() => api.getFtthInfo(), RIGHT.ftth) : Promise.resolve(null),
         get(() => api.getWifiConfig(), RIGHT.wifi),
@@ -219,6 +251,9 @@ export async function collectExtras(api: Api, media: string | null): Promise<Fre
     const out: FreeboxExtras = {
         lan_ip: lan.ok && isObj(lan.result) ? str(lan.result.ip) : null,
         dhcp: dhcp.ok ? mapDhcp(dhcp.result) : null,
+        switch: sw.ok ? mapSwitch(sw.result) : null,
+        hosts: hostCounts?.hosts ?? null,
+        hosts_active: hostCounts?.hosts_active ?? null,
         storage: disks.ok ? mapStorage(disks.result) : null,
         wifi: mapWifiBlock(wcfg, aps, stations, bss),
         missing_rights: [],

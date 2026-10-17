@@ -71,3 +71,14 @@ test('summarizeSystem tolerates a software controller and an empty sysinfo', () 
     assert.equal(out.version, null);
     assert.equal(out.update_available, null);
 });
+
+test('summarizeSystem gives WAN state and speedtest without any public IP', () => {
+    const out = summarizeSystem({}, [{ type: 'udm', wan1: { up: true, speed: 1000, ip: '203.0.113.9' }, uplink: { latency: 7 }, 'speedtest-status': { xput_download: 940, xput_upload: 880, latency: 6, rundate: 1760000000 } }]);
+    assert.deepEqual(out.gateway?.wan, [{ name: 'WAN1', up: true, speed_mbps: 1000, latency_ms: 7 }]);
+    assert.equal(out.gateway?.speedtest?.download_mbps, 940);
+    assert.ok(!JSON.stringify(out).includes('203.0.113.9'));
+});
+
+test('summarizeSystem speedtest is null when the gateway never ran one', () => {
+    assert.equal(summarizeSystem({}, [{ type: 'udm' }]).gateway?.speedtest, null);
+});
