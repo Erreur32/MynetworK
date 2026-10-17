@@ -259,7 +259,7 @@ remote-access domain) are left out.
               "aps": [{ "name": "wifi0", "state": "active", "band": "2d4g", "channel": 6, "width": "20" }] },
     "vms": [{ "id": 0, "name": "debian", "status": "running", "vcpus": 2, "memory_mb": 2048, "disk_type": "qcow2",
               "disk_total_bytes": 21474836480, "disk_used_bytes": 3000000000, "os": "debian" }],
-    "vm_system": { "total_memory_mb": 8192, "used_memory_mb": 2048, "total_cpus": 4, "used_cpus": 2 },
+    "vm_system": { "total_memory_mb": 8192, "used_memory_mb": 2048, "memory_pct": 25, "total_cpus": 4, "used_cpus": 2, "cpu_pct": 50 },
     "missing_rights": []
   }
 }
@@ -282,7 +282,7 @@ remote-access domain) are left out.
 | `ftth` | object or null | Only present when `connection.media` is `ftth`: `sfp_present`, `sfp_has_signal`, `link`, `sfp_pwr_rx` / `sfp_pwr_tx` in dBm. The line IPv4/IPv6 are deliberately not exposed |
 | `wifi` | object or null | `enabled`, `stations_count`, `aps` (`name`, `state`, `band`, `channel`, `width`) |
 | `vms` | array or null | Freebox Delta / Ultra only, absent otherwise: `id`, `name`, `status`, `vcpus`, `memory_mb`, `disk_type`, `disk_total_bytes` (virtual size), `disk_used_bytes` (actual size), `os` |
-| `vm_system` | object or null | Memory (MB) and CPUs, total and used, available to VMs |
+| `vm_system` | object or null | Memory (MB) and CPUs, total and used, available to VMs, with `memory_pct` and `cpu_pct` (0 to 100, `null` when the total is unknown). This is capacity allocated to VMs, not the load of the box itself: the Freebox does not report its own CPU or memory usage (use `system.sensors` for CPU temperature) |
 | `missing_rights` | string[] | Freebox permissions the paired app lacks (e.g. `settings`, `vm`). The matching blocks are `null`, the rest of the response stays valid |
 
 Optional blocks are cached for 30 seconds. An unknown value is `null`, never `false`.
