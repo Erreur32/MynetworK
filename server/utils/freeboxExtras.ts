@@ -54,8 +54,42 @@ export function mapFtth(ftth: unknown) {
     };
 }
 
-export function mapWifi(enabled: unknown, aps: unknown, stationsCount: number | null) {
+// Main networks only: a non-main BSS is skipped when a main one exists on the same radio (guest network).
+// Key, passphrase and encryption are never read.
+export function mapWifiNetworks(bss: unknown, aps: unknown) {
+    const all = list(bss);
+    const radiosWithMain = new Set(all.filter((b) => isObj(b.status) && b.status.is_main_bss === true).map((b) => b.phy_id));
+    const bandOfRadio = new Map(list(aps).map((ap) => [ap.id, isObj(ap.config) ? str(ap.config.band) : null]));
+    return all
+        .filter((b) => !(isObj(b.status) && b.status.is_main_bss === false && radiosWithMain.has(b.phy_id)))
+        .map((b) => {
+            const status = isObj(b.status) ? b.status : {};
+            const config = isObj(b.config) ? b.config : {};
+            return {
+                ssid: str(config.ssid),
+                enabled: bool(config.enabled),
+                hidden: bool(config.hide_ssid),
+                state: str(status.state),
+                band: str(status.band) ?? bandOfRadio.get(b.phy_id) ?? null,
+            };
+        });
+}
+
+export function mapDhcp(cfg: unknown) {
+    const c = isObj(cfg) ? cfg : {};
     return {
+        enabled: bool(c.enabled),
+        ip_range_start: str(c.ip_range_start),
+        ip_range_end: str(c.ip_range_end),
+        gateway: str(c.gateway),
+        netmask: str(c.netmask),
+        dns: Array.isArray(c.dns) ? c.dns.filter((d): d is string => typeof d === 'string' && d !== '') : [],
+    };
+}
+
+export function mapWifi(enabled: unknown, aps: unknown, stationsCount: number | null, bss: unknown = []) {
+    return {
+        networks: mapWifiNetworks(bss, aps),
         enabled: bool(enabled),
         aps: list(aps).map((ap) => {
             const status = isObj(ap.status) ? ap.status : {};
@@ -111,6 +145,8 @@ export function mapVmSystem(info: unknown) {
 }
 
 interface Api {
+    getDhcpConfig(): Promise<Resp>;
+    getWifiBss(): Promise<Resp>;
     getVmInfo(): Promise<Resp>;
     getVmDiskInfo(diskPath: string, diskType?: string): Promise<Resp>;
     getLanConfig(): Promise<Resp>;
@@ -124,6 +160,7 @@ interface Api {
 
 export interface FreeboxExtras {
     lan_ip: string | null;
+    dhcp: ReturnType<typeof mapDhcp> | null;
     storage: ReturnType<typeof mapStorage> | null;
     ftth?: ReturnType<typeof mapFtth> | null;
     wifi: ReturnType<typeof mapWifi> | null;
@@ -133,7 +170,7 @@ export interface FreeboxExtras {
 }
 
 // Right each block needs, used when the box does not name the missing one itself.
-const RIGHT = { lan: 'settings', storage: 'settings', ftth: 'settings', wifi: 'settings', vm: 'vm' } as const;
+const RIGHT = { lan: 'settings', dhcp: 'settings', bss: 'settings', storage: 'settings', ftth: 'settings', wifi: 'settings', vm: 'vm' } as const;
 
 type Rights = Set<string>;
 interface Fetched { ok: boolean; result?: unknown; denied: boolean }
@@ -156,31 +193,34 @@ async function vmDiskSizes(api: Api, vms: unknown, missing: Rights): Promise<Arr
     }));
 }
 
-function mapWifiBlock(wcfg: Fetched, aps: Fetched, stations: Fetched) {
+function mapWifiBlock(wcfg: Fetched, aps: Fetched, stations: Fetched, bss: Fetched) {
     if (!aps.ok) return null;
     const enabled = wcfg.ok && isObj(wcfg.result) ? wcfg.result.enabled : null;
     const count = stations.ok && Array.isArray(stations.result) ? stations.result.length : null;
-    return mapWifi(enabled, aps.result, count);
+    return mapWifi(enabled, aps.result, count, bss.ok ? bss.result : []);
 }
 
 export async function collectExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
     const missing: Rights = new Set();
     const get = (call: () => Promise<Resp>, right: string) => fetchBlock(call, right, missing);
 
-    const [lan, disks, ftth, wcfg, aps, stations, vms] = await Promise.all([
+    const [lan, dhcp, disks, ftth, wcfg, aps, stations, bss, vms] = await Promise.all([
         get(() => api.getLanConfig(), RIGHT.lan),
+        get(() => api.getDhcpConfig(), RIGHT.dhcp),
         get(() => api.getDisks(), RIGHT.storage),
         media === 'ftth' ? get(() => api.getFtthInfo(), RIGHT.ftth) : Promise.resolve(null),
         get(() => api.getWifiConfig(), RIGHT.wifi),
         get(() => api.getWifiAps(), RIGHT.wifi),
         get(() => api.getWifiStations(), RIGHT.wifi),
+        get(() => api.getWifiBss(), RIGHT.bss),
         get(() => api.getVms(), RIGHT.vm),
     ]);
 
     const out: FreeboxExtras = {
         lan_ip: lan.ok && isObj(lan.result) ? str(lan.result.ip) : null,
+        dhcp: dhcp.ok ? mapDhcp(dhcp.result) : null,
         storage: disks.ok ? mapStorage(disks.result) : null,
-        wifi: mapWifiBlock(wcfg, aps, stations),
+        wifi: mapWifiBlock(wcfg, aps, stations, bss),
         missing_rights: [],
     };
     if (ftth) out.ftth = ftth.ok ? mapFtth(ftth.result) : null;

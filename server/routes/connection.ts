@@ -5,7 +5,7 @@ import { param } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
-import { summarizeFreebox } from '../utils/freeboxSummary.js';
+import { summarizeFreebox, firmwareBlock, healthBlock } from '../utils/freeboxSummary.js';
 import { getExtras } from '../utils/freeboxExtras.js';
 import { freeboxFirmwareCheckService } from '../services/freeboxFirmwareCheckService.js';
 import { normalizeSystemInfo } from '../services/apiNormalizer.js';
@@ -33,10 +33,16 @@ router.get('/summary', asyncHandler(async (_req, res) => {
     const sys = system.success && system.result
         ? normalizeSystemInfo({ ...(system.result as Record<string, unknown>), box_model_name: (version.result as Record<string, unknown> | undefined)?.box_model_name })
         : null;
-    const latest = freeboxFirmwareCheckService.getLatestFirmwareInfo()?.server.latestVersion;
-    const base = summarizeFreebox(conn.success ? conn.result : null, sys, latest);
+    const fwInfo = freeboxFirmwareCheckService.getLatestFirmwareInfo();
+    const base = summarizeFreebox(conn.success ? conn.result : null, sys, fwInfo?.server.latestVersion);
     const { lan_ip, ...extras } = await getExtras(freeboxApi, base.connection.media);
-    res.json({ success: true, result: { ...base, system: { ...base.system, lan_ip }, ...extras } });
+    res.json({ success: true, result: {
+        ...base,
+        system: { ...base.system, lan_ip },
+        ...extras,
+        firmware_update: firmwareBlock(fwInfo, base.system.firmware),
+        health: healthBlock(base, extras.storage, extras.ftth),
+    } });
 }));
 
 // GET /api/connection/config - Get connection config

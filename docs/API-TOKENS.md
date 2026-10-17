@@ -256,10 +256,18 @@ remote-access domain) are left out.
                                   "used_bytes": 23000000000, "free_bytes": 207000000000, "used_pct": 10 }] },
     "ftth": { "sfp_present": true, "sfp_has_signal": true, "link": true, "sfp_pwr_rx": -18.5, "sfp_pwr_tx": 2.1 },
     "wifi": { "enabled": true, "stations_count": 12,
+              "networks": [{ "ssid": "MyBox", "enabled": true, "hidden": false, "state": "active", "band": "5g" }],
               "aps": [{ "name": "wifi0", "state": "active", "band": "2d4g", "channel": 6, "width": "20" }] },
     "vms": [{ "id": 0, "name": "debian", "status": "running", "vcpus": 2, "memory_mb": 2048, "disk_type": "qcow2",
               "disk_total_bytes": 21474836480, "disk_used_bytes": 3000000000, "os": "debian" }],
     "vm_system": { "total_memory_mb": 8192, "used_memory_mb": 2048, "memory_pct": 25, "total_cpus": 4, "used_cpus": 2, "cpu_pct": 50 },
+    "dhcp": { "enabled": true, "ip_range_start": "192.168.1.10", "ip_range_end": "192.168.1.200", "gateway": "192.168.1.254",
+              "netmask": "255.255.255.0", "dns": ["192.168.1.254"] },
+    "firmware_update": { "server": { "installed": "4.9.4", "latest": "4.9.16", "update_available": true, "date": "1 octobre 2026",
+                                     "changelog": "Corrections: ...", "url": "https://dev.freebox.fr/blog/" },
+                         "player": null, "last_check": "2026-10-17T10:00:00.000Z" },
+    "health": { "sensors": [{ "id": "temp_cpu0", "name": "CPU 0", "value": 52 }], "fans": [{ "id": "fan0", "name": "Fan", "value": 1800 }],
+                "max_temperature": 52, "disk_status": "active", "max_used_pct": 10, "line_up": true, "fibre_signal": true, "fibre_link": true },
     "missing_rights": []
   }
 }
@@ -277,10 +285,13 @@ remote-access domain) are left out.
 | `system.uptime`? | number | Seconds since the box started |
 | `system.sensors` / `fans` | array | `{ id, name, value }`, °C and rpm |
 | `system.lan_ip`? | string | LAN address of the box, for a reliable match with other sources |
-| `system.board_name`? / `user_main_storage`? / `box_authenticated`? | string / string / boolean | Board name, main storage location, authentication state |
+| `system.board_name`? / `user_main_storage`? | string | Board name, main storage location |
 | `storage` | object or null | `disks` (`id`, `model`, `state`, `smart_ok`, `temperature` in °C, `total_bytes`) and `partitions` (`label`, `fstype`, `state`, sizes in bytes, `used_pct` 0 to 100 computed by MynetworK, `null` when the total is unknown). Serial numbers are never returned |
 | `ftth` | object or null | Only present when `connection.media` is `ftth`: `sfp_present`, `sfp_has_signal`, `link`, `sfp_pwr_rx` / `sfp_pwr_tx` in dBm. The line IPv4/IPv6 are deliberately not exposed |
-| `wifi` | object or null | `enabled`, `stations_count`, `aps` (`name`, `state`, `band`, `channel`, `width`) |
+| `wifi` | object or null | `enabled`, `stations_count`, `aps` (`name`, `state`, `band`, `channel`, `width`) and `networks` (`ssid`, `enabled`, `hidden`, `state`, `band`). Main networks only: the guest network, keys and passphrases are never returned |
+| `dhcp` | object or null | `enabled`, `ip_range_start`, `ip_range_end`, `gateway`, `netmask`, `dns`. Static leases are not included |
+| `firmware_update` | object or null | From the dev.freebox.fr blog check. `server` (`installed`, `latest`, `update_available`, `date`, `changelog`, `url`) and `player` (same, without `installed`), `last_check`. `null` until the check has run |
+| `health` | object | Same values as elsewhere, grouped: `sensors`, `fans`, `max_temperature` (°C), `disk_status`, `max_used_pct`, `line_up`, `fibre_signal`, `fibre_link`. Existing fields are unchanged |
 | `vms` | array or null | Freebox Delta / Ultra only, absent otherwise: `id`, `name`, `status`, `vcpus`, `memory_mb`, `disk_type`, `disk_total_bytes` (virtual size), `disk_used_bytes` (actual size), `os` |
 | `vm_system` | object or null | Memory (MB) and CPUs, total and used, available to VMs, with `memory_pct` and `cpu_pct` (0 to 100, `null` when the total is unknown). This is capacity allocated to VMs, not the load of the box itself: the Freebox does not report its own CPU or memory usage (use `system.sensors` for CPU temperature) |
 | `missing_rights` | string[] | Freebox permissions the paired app lacks (e.g. `settings`, `vm`). The matching blocks are `null`, the rest of the response stays valid |

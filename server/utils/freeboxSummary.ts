@@ -48,9 +48,46 @@ export function summarizeFreebox(connection: unknown, system: unknown, latestFir
             disk_status: str(s.disk_status),
             board_name: str(s.board_name),
             user_main_storage: str(s.user_main_storage),
-            box_authenticated: typeof s.box_authenticated === 'boolean' ? s.box_authenticated : null,
             sensors: readings(s.sensors),   // °C
             fans: readings(s.fans),         // rpm
         },
+    };
+}
+
+interface Entry { latestVersion?: string; updateAvailable?: boolean; changelog?: string; date?: string; blogUrl?: string }
+
+const entry = (e: Entry | null | undefined) => e ? {
+    latest: str(e.latestVersion),
+    update_available: typeof e.updateAvailable === 'boolean' ? e.updateAvailable : null,
+    date: str(e.date),
+    changelog: str(e.changelog),
+    url: str(e.blogUrl),
+} : null;
+
+// Firmware updates summary (Freebox Server and Player), from the dev.freebox.fr blog check.
+// null when the check has not run yet or is disabled.
+export function firmwareBlock(info: { server?: Entry; player?: Entry | null; lastCheck?: string } | null | undefined, installed: unknown) {
+    if (!info) return null;
+    const server = entry(info.server);
+    return {
+        server: server && { installed: str(installed), ...server, ...firmwareUpdate(installed, server.latest) },
+        player: entry(info.player),
+        last_check: str(info.lastCheck),
+    };
+}
+
+// Health in one place: temperatures, fans, disk, line and fibre. Same values as elsewhere in the response.
+export function healthBlock(base: ReturnType<typeof summarizeFreebox>, storage: { partitions: Array<{ used_pct: number | null }> } | null, ftth: { sfp_has_signal: boolean | null; link: boolean | null } | null | undefined) {
+    const temps = base.system.sensors.map((x) => x.value as number);
+    const pcts = (storage?.partitions ?? []).map((p) => p.used_pct).filter((v): v is number => v !== null);
+    return {
+        sensors: base.system.sensors,
+        fans: base.system.fans,
+        max_temperature: temps.length ? Math.max(...temps) : null,
+        disk_status: base.system.disk_status,
+        max_used_pct: pcts.length ? Math.max(...pcts) : null,
+        line_up: base.connection.state === null ? null : base.connection.state === 'up',
+        fibre_signal: ftth?.sfp_has_signal ?? null,
+        fibre_link: ftth?.link ?? null,
     };
 }
