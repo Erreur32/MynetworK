@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.72] - 2026-10-17
+
+### Added
+
+- `GET /api/connection/summary`, four new optional blocks for MyServices:
+  - `firmware_update`: Freebox Server and Player firmware (installed, latest, date, changelog, blog URL) from the dev.freebox.fr check. `null` until the check has run
+  - `dhcp`: enabled, address range, gateway, netmask, DNS (static leases are not included)
+  - `wifi.networks`: SSID, enabled, hidden, state and band of the main networks. The guest network, keys and passphrases are never returned
+  - `health`: temperatures, fans, disk status, highest partition usage, line and fibre state, grouped in one block (existing fields unchanged)
+
+### Removed
+
+- `system.box_authenticated`: it was always dropped by the API token credential filter (name contains "auth")
+
+---
+
 ## [0.10.71] - 2026-10-17
 
 ### Changed
