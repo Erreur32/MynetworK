@@ -26,6 +26,27 @@ router.get('/check', requireAuth, asyncHandler(async (req: AuthenticatedRequest,
 }));
 
 /**
+ * GET /api/updates/status
+ * Compact view of the shared update check (open to API tokens). Same cache as the UI, so at most one
+ * lookup per check interval; there is no `force` option here.
+ * update_available is null when the check is disabled or has not found a version: unknown, not "up to date".
+ */
+router.get('/status', requireAuth, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+  const r = await getCheckResult();
+  res.json({
+    success: true,
+    result: {
+      enabled: r.enabled,
+      current_version: r.currentVersion,
+      latest_version: r.latestVersion,
+      update_available: r.enabled && r.latestVersion ? r.updateAvailable : null,
+      docker_ready: typeof r.dockerReady === 'boolean' ? r.dockerReady : null,
+      last_check: r.lastCheckAt ?? null
+    }
+  });
+}));
+
+/**
  * GET /api/updates/config
  * Get update check configuration
  */

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.73] - 2026-10-17
+
+### Added
+
+- `GET /api/connection/summary`: `hosts` and `hosts_active` (devices known and active on the box) and `switch` (ports up, per-port link and speed, no MAC lists)
+- `GET /api/updates/status`, open to read-only API tokens: installed and latest MynetworK version from the shared cached check (no forced refresh possible). `update_available` is `null` when the check is disabled
+- `GET /api/plugins/unifi/system`: `gateway.wan` (per WAN link up, speed, latency, no public IP) and `gateway.speedtest` (last speed test of the gateway)
+
+---
+
 ## [0.10.72] - 2026-10-17
 
 ### Added

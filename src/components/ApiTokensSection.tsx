@@ -36,6 +36,7 @@ const ALLOWED_ROUTES = [
   "/api/plugins/unifi/clients",
   "/api/plugins/unifi/devices",
   "/api/plugins/unifi/system",
+  "/api/updates/status",
 ];
 
 const DURATIONS: { days: number | null; labelKey: string }[] = [

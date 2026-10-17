@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapDhcp, mapWifiNetworks, mapVmSystem } from '../utils/freeboxExtras.js';
+import { mapSwitch, countHosts, mapDhcp, mapWifiNetworks, mapVmSystem } from '../utils/freeboxExtras.js';
 import { firmwareBlock, healthBlock, summarizeFreebox } from '../utils/freeboxSummary.js';
 
 describe('freeboxExtras', () => {
@@ -38,5 +38,17 @@ describe('freeboxExtras', () => {
         assert.equal(out.max_used_pct, 55);
         assert.equal(out.line_up, true);
         assert.equal(out.fibre_signal, true);
+    });
+
+    it('mapSwitch counts ports up and drops anything but the allowlisted fields', () => {
+        const out = mapSwitch([{ id: 1, link: 'up', speed: '1000', duplex: 'full', mac_list: [{ mac: 'aa' }] }, { id: 2, link: 'down' }]);
+        assert.equal(out.ports_total, 2);
+        assert.equal(out.ports_up, 1);
+        assert.equal(out.ports[0].speed_mbps, 1000);
+        assert.ok(!JSON.stringify(out).includes('mac'));
+    });
+
+    it('countHosts counts known and active hosts over all interfaces', () => {
+        assert.deepEqual(countHosts([[{ active: true }, { active: false }], [{ active: true }]]), { hosts: 3, hosts_active: 2 });
     });
 });

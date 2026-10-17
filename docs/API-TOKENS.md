@@ -103,7 +103,8 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/topology` | MyNetwork | Last computed topology snapshot |
 | `GET /api/plugins/unifi/clients` | UniFi | Connected clients, compact summary |
 | `GET /api/plugins/unifi/devices` | UniFi | APs, switches, gateways, compact summary |
-| `GET /api/plugins/unifi/system` | UniFi | UniFi Network version and update, gateway health |
+| `GET /api/plugins/unifi/system` | UniFi | UniFi Network version and update, gateway health, WAN links, last speed test |
+| `GET /api/updates/status` | MyNetwork | Installed and latest MynetworK version (shared cached check) |
 
 All responses use the `{ "success": true, "result": ... }` envelope. In the
 field lists below, `?` marks a field that may be missing or `null`.
@@ -268,6 +269,8 @@ remote-access domain) are left out.
                          "player": null, "last_check": "2026-10-17T10:00:00.000Z" },
     "health": { "sensors": [{ "id": "temp_cpu0", "name": "CPU 0", "value": 52 }], "fans": [{ "id": "fan0", "name": "Fan", "value": 1800 }],
                 "max_temperature": 52, "disk_status": "active", "max_used_pct": 10, "line_up": true, "fibre_signal": true, "fibre_link": true },
+    "hosts": 127, "hosts_active": 42,
+    "switch": { "ports_total": 4, "ports_up": 2, "ports": [{ "id": 1, "link_up": true, "speed_mbps": 1000, "duplex": "full" }] },
     "missing_rights": []
   }
 }
@@ -289,6 +292,8 @@ remote-access domain) are left out.
 | `storage` | object or null | `disks` (`id`, `model`, `state`, `smart_ok`, `temperature` in °C, `total_bytes`) and `partitions` (`label`, `fstype`, `state`, sizes in bytes, `used_pct` 0 to 100 computed by MynetworK, `null` when the total is unknown). Serial numbers are never returned |
 | `ftth` | object or null | Only present when `connection.media` is `ftth`: `sfp_present`, `sfp_has_signal`, `link`, `sfp_pwr_rx` / `sfp_pwr_tx` in dBm. The line IPv4/IPv6 are deliberately not exposed |
 | `wifi` | object or null | `enabled`, `stations_count`, `aps` (`name`, `state`, `band`, `channel`, `width`) and `networks` (`ssid`, `enabled`, `hidden`, `state`, `band`). Main networks only: the guest network, keys and passphrases are never returned |
+| `hosts` / `hosts_active` | number or null | Devices known to the box, and those currently active, over all LAN interfaces |
+| `switch` | object or null | Built-in switch: `ports_total`, `ports_up` and per port `id`, `link_up`, `speed_mbps`, `duplex`. MAC lists are never returned |
 | `dhcp` | object or null | `enabled`, `ip_range_start`, `ip_range_end`, `gateway`, `netmask`, `dns`. Static leases are not included |
 | `firmware_update` | object or null | From the dev.freebox.fr blog check. `server` (`installed`, `latest`, `update_available`, `date`, `changelog`, `url`) and `player` (same, without `installed`), `last_check`. `null` until the check has run |
 | `health` | object | Same values as elsewhere, grouped: `sensors`, `fans`, `max_temperature` (°C), `disk_status`, `max_used_pct`, `line_up`, `fibre_signal`, `fibre_link`. Existing fields are unchanged |
@@ -457,3 +462,19 @@ Network application) plus the health of the first gateway found.
 
 Same `503 UNIFI_UNAVAILABLE` as above when UniFi is not configured or
 unreachable. With the cloud Site Manager connection most fields are `null`.
+
+### `GET /api/updates/status`
+
+MynetworK update check, same cache as the interface: at most one GitHub lookup per check interval, and no way to force one.
+
+```json
+{ "success": true, "result": { "enabled": true, "current_version": "0.10.73", "latest_version": "0.10.73",
+                               "update_available": false, "docker_ready": true, "last_check": "2026-10-17T10:00:00.000Z" } }
+```
+
+`update_available` is `null` when the check is disabled or found no version: unknown, not "up to date".
+
+### UniFi gateway additions (`GET /api/plugins/unifi/system`, `gateway`)
+
+- `wan`: list of `{ name, up, speed_mbps, latency_ms }` per WAN link (public IPs are never returned)
+- `speedtest`: `{ download_mbps, upload_mbps, latency_ms, date }` of the gateway's last speed test, `null` if it never ran one
