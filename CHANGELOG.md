@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.70] - 2026-10-17
+
+### Fixed
+
+- API tokens settings: the list of reachable routes now shows `/api/plugins/unifi/system` (missing since 0.10.68)
+
+### Security
+
+- Dependencies: `qs` 6.16.1 (SNYK-JS-QS-20943482) and `zod` 4.6.7 (SNYK-JS-ZOD-20510278), both fixed upstream
+
+---
+
 ## [0.10.69] - 2026-10-17
 
 ### Added
