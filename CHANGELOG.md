@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.69] - 2026-10-17
+
+### Added
+
+- `GET /api/connection/summary`, optional and backward compatible blocks for MyServices (unknown values are `null`, never `false`):
+  - `system.lan_ip`, plus `system.board_name`, `system.user_main_storage`, `system.box_authenticated`
+  - `storage`: disks (model, state, `smart_ok`, temperature, size) and partitions (label, fstype, sizes, computed `used_pct`)
+  - `ftth` (only when media is `ftth`): SFP presence, signal, link, optical power in dBm. Line IPs are deliberately not exposed
+  - `wifi`: `enabled`, access points (name, state, band, channel, width), `stations_count`
+  - `vms` (Delta / Ultra only): status, vCPUs, memory, disk type and disk sizes, and `vm_system` (total/used memory and CPUs)
+  - `missing_rights`: Freebox permissions the paired app lacks. A denied block is `null`, the rest of the response stays valid
+- Explicit field allowlists: serial, MAC, keys and raw Freebox payloads are never returned. Extra blocks share a 30 s cache
+
+---
+
 ## [0.10.68] - 2026-10-13
 
 ### Added
