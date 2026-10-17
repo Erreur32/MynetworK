@@ -96,11 +96,17 @@ export function mapVms(vms: unknown, sizes: Array<VmDiskSize | null> = []) {
 
 export function mapVmSystem(info: unknown) {
     const i = isObj(info) ? info : {};
+    const totalMem = num(i.total_memory);
+    const usedMem = num(i.used_memory);
+    const totalCpus = num(i.total_cpus);
+    const usedCpus = num(i.used_cpus);
     return {
-        total_memory_mb: num(i.total_memory),
-        used_memory_mb: num(i.used_memory),
-        total_cpus: num(i.total_cpus),
-        used_cpus: num(i.used_cpus),
+        total_memory_mb: totalMem,
+        used_memory_mb: usedMem,
+        memory_pct: pct(usedMem, totalMem),
+        total_cpus: totalCpus,
+        used_cpus: usedCpus,
+        cpu_pct: pct(usedCpus, totalCpus),
     };
 }
 

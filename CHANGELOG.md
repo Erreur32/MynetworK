@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.71] - 2026-10-17
+
+### Changed
+
+- Docs: `docs/API-TOKENS.md` describes the new `GET /api/connection/summary` blocks (`storage`, `ftth`, `wifi`, `vms`, `vm_system`, `missing_rights`, `system.lan_ip`)
+- `GET /api/connection/summary`: `vm_system` gains `memory_pct` and `cpu_pct` (share of memory and vCPUs allocated to VMs)
+
+---
+
 ## [0.10.70] - 2026-10-17
 
 ### Fixed
