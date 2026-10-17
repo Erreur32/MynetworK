@@ -1454,6 +1454,21 @@ class FreeboxApiService {
         return this.requestWithLock('GET', API_ENDPOINTS.VM_INFO);
     }
 
+    // Disk image size lookup is an asynchronous task: start it, then poll /vm/disk/task/{id}
+    async getVmDiskInfo(diskPath: string, diskType?: string): Promise<FreeboxApiResponse> {
+        const started = await this.requestWithLock<{ id?: number }>('POST', API_ENDPOINTS.VM_DISK_INFO, { disk_path: diskPath, disk_type: diskType });
+        const taskId = started.result?.id;
+        if (!started.success || typeof taskId !== 'number') return started;
+        for (let i = 0; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 300));
+            const task = await this.requestWithLock<{ state?: string; result?: unknown }>('GET', `${API_ENDPOINTS.VM_DISK_TASK}${taskId}`);
+            if (!task.success) return task;
+            if (task.result?.state === 'done') return { success: true, result: task.result.result ?? task.result };
+            if (task.result?.state === 'failed') return { success: false, error_code: 'task_failed' };
+        }
+        return { success: false, error_code: 'task_timeout' };
+    }
+
     // ==================== NOTIFICATIONS ====================
 
     async getNotifications(): Promise<FreeboxApiResponse> {

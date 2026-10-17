@@ -275,6 +275,8 @@ export const API_ENDPOINTS = {
   // VM (may not be available on all models)
   VM: '/vm/',
   VM_INFO: '/vm/info/',
+  VM_DISK_INFO: '/vm/disk/info',
+  VM_DISK_TASK: '/vm/disk/task/',
   VM_DISTROS: '/vm/distros/',
 
   // AirMedia

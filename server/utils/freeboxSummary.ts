@@ -46,6 +46,9 @@ export function summarizeFreebox(connection: unknown, system: unknown, latestFir
             ...firmwareUpdate(s.firmware_version, latestFirmware),
             uptime: num(s.uptime_val),      // seconds
             disk_status: str(s.disk_status),
+            board_name: str(s.board_name),
+            user_main_storage: str(s.user_main_storage),
+            box_authenticated: typeof s.box_authenticated === 'boolean' ? s.box_authenticated : null,
             sensors: readings(s.sensors),   // °C
             fans: readings(s.fans),         // rpm
         },
