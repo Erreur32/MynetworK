@@ -129,15 +129,37 @@ export interface FreeboxExtras {
 // Right each block needs, used when the box does not name the missing one itself.
 const RIGHT = { lan: 'settings', storage: 'settings', ftth: 'settings', wifi: 'settings', vm: 'vm' } as const;
 
+type Rights = Set<string>;
+interface Fetched { ok: boolean; result?: unknown; denied: boolean }
+
+// Never throws; records the missing right on a 403.
+async function fetchBlock(call: () => Promise<Resp>, fallbackRight: string, missing: Rights): Promise<Fetched> {
+    const r = await call().catch((): Resp => ({ success: false }));
+    const denied = r.error_code === 'insufficient_rights';
+    if (denied) missing.add(r.missing_right || fallbackRight);
+    return { ok: r.success, result: r.result, denied };
+}
+
+async function vmDiskSizes(api: Api, vms: unknown, missing: Rights): Promise<Array<VmDiskSize | null>> {
+    return Promise.all(list(vms).map(async (v) => {
+        const path = str(v.disk_path);
+        if (!path) return null;
+        const r = await api.getVmDiskInfo(path, str(v.disk_type) ?? undefined).catch((): Resp => ({ success: false }));
+        if (r.error_code === 'insufficient_rights') missing.add(r.missing_right || RIGHT.vm);
+        return r.success ? mapVmDisk(r.result) : null;
+    }));
+}
+
+function mapWifiBlock(wcfg: Fetched, aps: Fetched, stations: Fetched) {
+    if (!aps.ok) return null;
+    const enabled = wcfg.ok && isObj(wcfg.result) ? wcfg.result.enabled : null;
+    const count = stations.ok && Array.isArray(stations.result) ? stations.result.length : null;
+    return mapWifi(enabled, aps.result, count);
+}
+
 export async function collectExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
-    const missing = new Set<string>();
-    // Never throws; records the missing right on 403.
-    const get = async (call: () => Promise<Resp>, fallbackRight: string): Promise<{ ok: boolean; result?: unknown; denied: boolean }> => {
-        const r = await call().catch((): Resp => ({ success: false }));
-        const denied = r.error_code === 'insufficient_rights';
-        if (denied) missing.add(r.missing_right || fallbackRight);
-        return { ok: r.success, result: r.result, denied };
-    };
+    const missing: Rights = new Set();
+    const get = (call: () => Promise<Resp>, right: string) => fetchBlock(call, right, missing);
 
     const [lan, disks, ftth, wcfg, aps, stations, vms] = await Promise.all([
         get(() => api.getLanConfig(), RIGHT.lan),
@@ -152,26 +174,19 @@ export async function collectExtras(api: Api, media: string | null): Promise<Fre
     const out: FreeboxExtras = {
         lan_ip: lan.ok && isObj(lan.result) ? str(lan.result.ip) : null,
         storage: disks.ok ? mapStorage(disks.result) : null,
-        wifi: aps.ok
-            ? mapWifi(wcfg.ok && isObj(wcfg.result) ? wcfg.result.enabled : null, aps.result, stations.ok && Array.isArray(stations.result) ? stations.result.length : null)
-            : null,
+        wifi: mapWifiBlock(wcfg, aps, stations),
         missing_rights: [],
     };
     if (ftth) out.ftth = ftth.ok ? mapFtth(ftth.result) : null;
     // No VM support (Revolution/Pop): block omitted. Denied rights: explicit null.
     if (vms.ok) {
-        const sizes = await Promise.all(list(vms.result).map(async (v) => {
-            const path = str(v.disk_path);
-            if (!path) return null;
-            const r = await api.getVmDiskInfo(path, str(v.disk_type) ?? undefined).catch((): Resp => ({ success: false }));
-            if (r.error_code === 'insufficient_rights') missing.add(r.missing_right || RIGHT.vm);
-            return r.success ? mapVmDisk(r.result) : null;
-        }));
-        out.vms = mapVms(vms.result, sizes);
+        out.vms = mapVms(vms.result, await vmDiskSizes(api, vms.result, missing));
         const vmInfo = await get(() => api.getVmInfo(), RIGHT.vm);
         out.vm_system = vmInfo.ok ? mapVmSystem(vmInfo.result) : null;
-    } else if (vms.denied) out.vms = null;
-    out.missing_rights = [...missing].sort();
+    } else if (vms.denied) {
+        out.vms = null;
+    }
+    out.missing_rights = [...missing].sort((a, b) => a.localeCompare(b));
     return out;
 }
 
@@ -181,7 +196,7 @@ let cache: { key: string; at: number; value: Promise<FreeboxExtras> } | null = n
 // Short shared cache: several consumers polling the summary must not multiply Freebox calls.
 export function getExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
     const key = media ?? '';
-    if (cache && cache.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
+    if (cache?.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
     const value = collectExtras(api, media);
     cache = { key, at: Date.now(), value };
     value.catch(() => { if (cache?.value === value) cache = null; });
