@@ -37,6 +37,9 @@
       "resizeHint": "Tirer le bord droit pour redimensionner",
       "heightHint": "Tirer le bord inférieur pour régler la hauteur (la carte est réduite proportionnellement). Double-clic pour réinitialiser",
       "cornerHint": "Tirer pour redimensionner largeur et hauteur. Double-clic pour réinitialiser la taille",
+      "uplink": "Uplink",
+      "uplinkAuto": "Auto (port {{port}})",
+      "uplinkAutoNone": "Auto (non détecté)",
       "resetLayout": "Réinitialiser la disposition"
     },
     "threats": {

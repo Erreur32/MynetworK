@@ -104,6 +104,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/topology` | MyNetwork | Last computed topology snapshot |
 | `GET /api/plugins/unifi/clients` | UniFi | Connected clients, compact summary |
 | `GET /api/plugins/unifi/devices` | UniFi | APs, switches, gateways, compact summary |
+| `GET /api/plugins/unifi/card-devices` | UniFi | Switches, gateways and APs with the per-port detail read by the front-panel cards |
 | `GET /api/plugins/unifi/system` | UniFi | UniFi Network version and update, gateway health, WAN links, last speed test |
 | `GET /api/updates/status` | MyNetwork | Installed and latest MynetworK version (shared cached check) |
 
@@ -461,6 +462,54 @@ default `all`), `search`, `limit`, as for clients.
 When UniFi is not configured or unreachable:
 `503 { "success": false, "error": { "code": "UNIFI_UNAVAILABLE", ... } }`.
 Raw controller objects are never exposed through this API.
+
+### `GET /api/plugins/unifi/card-devices`
+
+The data behind the CARD tab (front-panel cards): one entry per switch, gateway
+or access point, never clients. `result` is an array. Same field names as the
+UniFi controller, only the listed ones are copied. Numbers are JSON numbers,
+a field the controller does not send is omitted. UniFi not connected:
+`503 UNIFI_UNAVAILABLE`. The result is cached for 3 seconds server side, poll
+every 5 to 30 s.
+
+```json
+{
+  "success": true,
+  "result": [
+    { "mac": "aa:bb:cc:00:00:02", "name": "Plex", "model": "USWED37", "model_name": "USW Flex 2.5G 8 PoE",
+      "hw_version": "1", "type": "usw", "ip": "192.168.1.4", "state": 1, "version": "7.0.50",
+      "uptime": 12345, "num_sta": 4, "general_temperature": 41,
+      "system-stats": { "cpu": 13.2, "mem": 40.5, "temps": { "CPU": 48 } },
+      "uplink": { "type": "wire", "uplink_mac": "aa:bb:cc:00:00:01", "uplink_remote_port": 6, "port_idx": 10, "speed": 10000 },
+      "upgradable": true, "upgrade_to_firmware": "7.0.66",
+      "port_table": [
+        { "port_idx": 1, "name": "Port 1", "ifname": "eth0", "up": true, "speed": 2500, "media": "GE",
+          "port_poe": true, "poe_enable": true, "poe_power": 3.2, "rx_bytes-r": 11116, "tx_bytes-r": 185617 },
+        { "port_idx": 10, "name": "SFP+ 1", "up": true, "speed": 10000, "media": "SFP+", "is_uplink": true,
+          "lldp_table": [{ "chassis_id": "aa:bb:cc:00:00:01" }] }
+      ] }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `mac` / `name` / `model` / `type` | string | Identity. `type` is `usw`, `ugw`, `udm`, `uxg`, `uck`, `uap`, `u6` or `u7` |
+| `model_name`? / `shortname`? / `hw_version`? | string | Readable model name and hardware revision |
+| `ip`? | string | LAN address. For a gateway only its LAN address, never the WAN one |
+| `state` | number | 1 = online |
+| `version`? / `uptime`? / `num_sta`? / `user-num_sta`? / `num_port`? | | Firmware, seconds, client counts, port count |
+| `general_temperature`? | number | Degrees Celsius |
+| `system-stats`? | object | `{ cpu, mem, temps: { CPU } }`, percentages and degrees |
+| `uplink`? | object | `{ type, uplink_mac, uplink_remote_port, port_idx, speed }`: `port_idx` is the device's own uplink port |
+| `upgradable`? / `upgrade_to_firmware`? | boolean / string | Firmware update |
+| `wan1`? / `wan2`? | object | Gateways: `{ name, ifname, port_idx, up, speed, type }`, no address |
+| `port_table` | array | One row per port, also filled from `eth_port_table` or `ports` when the controller uses those names |
+
+Port row: `port_idx`, `name`?, `ifname`?, `up`?, `speed`? (Mbit/s), `media`?, `is_uplink`?,
+`port_poe`?, `poe_enable`?, `poe_power`? (W), `rx_bytes-r`? and `tx_bytes-r`? (bytes per
+second), `lldp_table`? (`[{ chassis_id }]`, only neighbours that are UniFi devices known to
+the controller).
 
 ### `GET /api/plugins/unifi/system`
 

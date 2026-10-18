@@ -42,11 +42,12 @@ interface DeviceCardProps {
     hass: unknown;
     showPanel: boolean;
     height?: number;
+    uplinkPort?: number;
 }
 
 // With a chosen height the card keeps its natural layout and is reduced
 // proportionally to fit.
-const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, height }) => {
+const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, height, uplinkPort }) => {
     const outerRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<CardElement | null>(null);
@@ -61,6 +62,10 @@ const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, heig
             type: 'custom:unifi-device-card',
             device_id: deviceId,
             show_panel: showPanel,
+            // Without a detected uplink, open on a connected special port (SFP+, 10G) instead of the first one.
+            default_uplink_port: 'auto',
+            // Manual choice; without it the card uses the uplink detected from the controller.
+            ...(uplinkPort != null ? { uplink_port: uplinkPort } : {}),
             // Up: slow blink. Port with traffic: faster blink. Kept calm on purpose.
             port_led_blink: true,
             port_led_blink_speed_rj45: 1,
@@ -73,7 +78,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, heig
             el.remove();
             cardRef.current = null;
         };
-    }, [deviceId, showPanel]);
+    }, [deviceId, showPanel, uplinkPort]);
 
     useEffect(() => {
         if (cardRef.current) cardRef.current.hass = hass;
@@ -149,7 +154,7 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
     );
 
     const deviceIds = useMemo(() => devices.map((d: MnDevice) => d.id), [devices]);
-    const { order, spans, heights, move, setSpan, setHeight, reset } = useCardLayout(deviceIds);
+    const { order, spans, heights, uplinks, move, setSpan, setHeight, setUplink, reset } = useCardLayout(deviceIds);
     const orderedDevices = useMemo(() => applyOrder<MnDevice>(devices, order), [devices, order]);
     const isWide = useIsWide();
     const gridRef = useRef<HTMLDivElement>(null);
@@ -241,7 +246,33 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                 >
                     <GripVertical size={18} />
                 </span>
-                <Card title={d.name} className="min-w-0">
+                <Card
+                    title={
+                        <span className="flex flex-wrap items-center gap-3">
+                            {d.name}
+                            {d.type !== 'access_point' && d.ports.length > 0 && (
+                                <label className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-700 text-gray-300 border border-blue-500/70 text-xs font-normal">
+                                        {t('unifi.card.uplink')}
+                                        <select
+                                            className="bg-transparent text-gray-200 outline-none"
+                                            value={uplinks[d.id] ?? ''}
+                                            onChange={(e) => setUplink(d.id, e.target.value === '' ? null : Number(e.target.value))}
+                                        >
+                                            <option value="">
+                                                {d.uplinkPort != null
+                                                    ? t('unifi.card.uplinkAuto', { port: d.uplinkPort })
+                                                    : t('unifi.card.uplinkAutoNone')}
+                                            </option>
+                                            {d.ports.map((n) => (
+                                                <option key={n} value={n}>{n}</option>
+                                            ))}
+                                        </select>
+                                </label>
+                            )}
+                        </span>
+                    }
+                    className="min-w-0"
+                >
                     <div className="flex flex-wrap gap-2 text-xs mb-3">
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{t('unifi.card.model')}: {d.model}</span>
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{d.type}</span>
@@ -255,6 +286,7 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                         hass={hass}
                         showPanel={showPanel}
                         height={heights[d.id]}
+                        uplinkPort={uplinks[d.id]}
                     />}
                 </Card>
                 {/* The whole lower border is the height handle */}

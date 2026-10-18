@@ -15,9 +15,11 @@ interface StoredLayout {
     spans: Record<string, number>;
     // Chosen card height in px; absent = natural height. The card content is stretched to fit.
     heights: Record<string, number>;
+    // Uplink port chosen by hand; absent = automatic detection from the controller.
+    uplinks: Record<string, number>;
 }
 
-const EMPTY: StoredLayout = { order: [], spans: {}, heights: {} };
+const EMPTY: StoredLayout = { order: [], spans: {}, heights: {}, uplinks: {} };
 
 function load(): StoredLayout {
     try {
@@ -27,7 +29,8 @@ function load(): StoredLayout {
         return {
             order: Array.isArray(parsed.order) ? parsed.order.filter((v) => typeof v === 'string') : [],
             spans: parsed.spans && typeof parsed.spans === 'object' ? parsed.spans : {},
-            heights: parsed.heights && typeof parsed.heights === 'object' ? parsed.heights : {}
+            heights: parsed.heights && typeof parsed.heights === 'object' ? parsed.heights : {},
+            uplinks: parsed.uplinks && typeof parsed.uplinks === 'object' ? parsed.uplinks : {}
         };
     } catch {
         return EMPTY;
@@ -83,7 +86,16 @@ export function useCardLayout(deviceIds: string[]) {
         });
     }, []);
 
+    const setUplink = useCallback((id: string, port: number | null) => {
+        setLayout((prev) => {
+            const uplinks = { ...prev.uplinks };
+            if (port == null) delete uplinks[id];
+            else uplinks[id] = port;
+            return { ...prev, uplinks };
+        });
+    }, []);
+
     const reset = useCallback(() => setLayout(EMPTY), []);
 
-    return { order: layout.order, spans: layout.spans, heights: layout.heights, move, setSpan, setHeight, reset };
+    return { order: layout.order, spans: layout.spans, heights: layout.heights, uplinks: layout.uplinks, move, setSpan, setHeight, setUplink, reset };
 }

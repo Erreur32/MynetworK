@@ -37,6 +37,9 @@
       "resizeHint": "Drag the right edge to resize",
       "heightHint": "Drag the lower border to set the height (the card is reduced proportionally). Double-click to reset",
       "cornerHint": "Drag to resize width and height. Double-click to reset size",
+      "uplink": "Uplink",
+      "uplinkAuto": "Auto (port {{port}})",
+      "uplinkAutoNone": "Auto (not detected)",
       "resetLayout": "Reset layout"
     },
     "threats": {

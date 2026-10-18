@@ -144,6 +144,112 @@ export function summarizeDevice(d: any) {
   };
 }
 
+// Devices the front-panel cards can draw: switches, gateways, access points. No clients.
+const CARD_DEVICE_TYPES = new Set(['usw', 'ugw', 'udm', 'uxg', 'uck', 'uap', 'u6', 'u7']);
+
+const cardString = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+const cardBool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
+const cardMac = (v: unknown): string => (typeof v === 'string' ? v.toLowerCase().replace(/[^0-9a-f]/g, '') : '');
+
+// Only the listed keys are copied (never the raw controller object): UniFi devices embed credentials.
+function cardPortRow(row: any, knownMacs: Set<string>) {
+  // LLDP neighbours are kept only when they are UniFi devices we know, so other machines' MACs stay out.
+  const neighbours = (Array.isArray(row?.lldp_table) ? row.lldp_table : [])
+    .filter((n: any) => knownMacs.has(cardMac(n?.chassis_id)))
+    .map((n: any) => ({ chassis_id: n.chassis_id }));
+  return {
+    port_idx: toNumber(row?.port_idx),
+    name: cardString(row?.name),
+    ifname: cardString(row?.ifname),
+    up: cardBool(row?.up),
+    speed: toNumber(row?.speed),
+    media: cardString(row?.media),
+    is_uplink: cardBool(row?.is_uplink),
+    port_poe: cardBool(row?.port_poe),
+    poe_enable: cardBool(row?.poe_enable),
+    poe_power: toNumber(row?.poe_power),
+    'rx_bytes-r': toNumber(row?.['rx_bytes-r']),
+    'tx_bytes-r': toNumber(row?.['tx_bytes-r']),
+    lldp_table: neighbours.length ? neighbours : undefined
+  };
+}
+
+function cardWan(link: any) {
+  if (!link || typeof link !== 'object') return undefined;
+  return {
+    name: cardString(link.name),
+    ifname: cardString(link.ifname),
+    port_idx: toNumber(link.port_idx),
+    up: cardBool(link.up),
+    speed: toNumber(link.speed),
+    type: cardString(link.type)
+  };
+}
+
+/** Projection read by the CARD tab adapter, served to API tokens by GET /api/plugins/unifi/card-devices. */
+export function summarizeCardDevice(d: any, knownMacs: Set<string>) {
+  const stats = d['system-stats'];
+  const rows = [d.port_table, d.eth_port_table, d.ports].find((r) => Array.isArray(r) && r.length) ?? [];
+  const cpuTemperature = toNumber(stats?.temps?.CPU);
+  return {
+    mac: cardString(d.mac),
+    name: cardString(d.name),
+    model: cardString(d.model),
+    model_name: cardString(d.model_name),
+    shortname: cardString(d.shortname),
+    hw_version: cardString(d.hw_version),
+    type: cardString(d.type),
+    // A gateway's own ip is often its public WAN address: only its LAN address is exposed.
+    ip: isGatewayDevice(d) ? gatewayLanIp(d) ?? undefined : cardString(d.ip),
+    state: toNumber(d.state),
+    version: cardString(d.version),
+    uptime: toNumber(d.uptime),
+    num_sta: toNumber(d.num_sta),
+    'user-num_sta': toNumber(d['user-num_sta']),
+    num_port: toNumber(d.num_port),
+    general_temperature: toNumber(d.general_temperature),
+    'system-stats': stats
+      ? {
+          cpu: toNumber(stats.cpu),
+          mem: toNumber(stats.mem),
+          temps: cpuTemperature === undefined ? undefined : { CPU: cpuTemperature }
+        }
+      : undefined,
+    uplink: d.uplink && typeof d.uplink === 'object'
+      ? {
+          type: cardString(d.uplink.type),
+          uplink_mac: cardString(d.uplink.uplink_mac),
+          uplink_remote_port: toNumber(d.uplink.uplink_remote_port),
+          port_idx: toNumber(d.uplink.port_idx),
+          speed: toNumber(d.uplink.speed)
+        }
+      : undefined,
+    upgradable: cardBool(d.upgradable),
+    upgrade_to_firmware: cardString(d.upgrade_to_firmware),
+    wan1: cardWan(d.wan1),
+    wan2: cardWan(d.wan2),
+    port_table: rows.map((row: any) => cardPortRow(row, knownMacs))
+  };
+}
+
+export function summarizeCardDevices(devices: any[]) {
+  const cardDevices = devices.filter((d) => CARD_DEVICE_TYPES.has(String(d?.type ?? '').toLowerCase()));
+  const knownMacs = new Set(cardDevices.map((d) => cardMac(d.mac)).filter(Boolean));
+  return cardDevices.map((d) => summarizeCardDevice(d, knownMacs));
+}
+
+// A consumer polling every few seconds must not turn into a controller request each time.
+const CARD_DEVICES_TTL_MS = 3000;
+let cardDevicesCache: { at: number; items: ReturnType<typeof summarizeCardDevices> } | null = null;
+
+export async function listUnifiCardDevices() {
+  const now = Date.now();
+  if (cardDevicesCache && now - cardDevicesCache.at < CARD_DEVICES_TTL_MS) return cardDevicesCache.items;
+  const items = summarizeCardDevices(await getUnifiApiService().getDevices());
+  cardDevicesCache = { at: now, items };
+  return items;
+}
+
 // Gateway WAN links: state, negotiated speed, latency. Public IPs are never returned.
 function summarizeWan(gw: any) {
   const links = ['wan1', 'wan2']
