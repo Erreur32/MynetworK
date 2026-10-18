@@ -138,6 +138,12 @@ test('MCP token is refused on the REST API with 401', async () => {
     assert.equal(res.statusCode, 401);
 });
 
+test('MCP token is refused on the card-devices route with 401', async () => {
+    const { res, nextCalled } = await runAuth(fakeReq(mcpToken, 'GET', '/api/plugins/unifi/card-devices'));
+    assert.equal(res.statusCode, 401);
+    assert.equal(nextCalled, false);
+});
+
 test('API token is refused on /api/mcp with 401, MCP token still accepted', async () => {
     const run = (token: string) => {
         const res = fakeRes();
@@ -188,11 +194,11 @@ test('stripSensitiveFields keeps non-sensitive data intact', () => {
 
 test('allowlist matches only the documented routes', () => {
     for (const p of ['/api/network-scan/history', '/api/network-scan/192.168.1.10', '/api/search/ip-details/192.168.1.10', '/api/lan/devices', '/api/dhcp/leases',
-        '/api/wifi/stations', '/api/connection/summary', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices', '/api/plugins/unifi/system', '/api/updates/status']) {
+        '/api/wifi/stations', '/api/connection/summary', '/api/topology', '/api/topology/', '/api/plugins/unifi/clients', '/api/plugins/unifi/devices', '/api/plugins/unifi/system', '/api/plugins/unifi/card-devices', '/api/updates/status']) {
         assert.equal(isApiTokenRouteAllowed(p), true, p);
     }
     for (const p of ['/api/connection', '/api/connection/config', '/api/system', '/api/network-scan/blacklist', '/api/topology/positions', '/api/dhcp/config', '/api/lan/config',
-        '/api/plugins/unifi/nat', '/api/settings/dhcp/leases', '/api/network-scan/1.2.3.4/rescan', '/api/search', '/api/search/ip-details/evil', '/api/search/ip-details/1.2.3.4/x']) {
+        '/api/plugins/unifi/nat', '/api/plugins/unifi/card-devices/extra', '/api/settings/dhcp/leases', '/api/network-scan/1.2.3.4/rescan', '/api/search', '/api/search/ip-details/evil', '/api/search/ip-details/1.2.3.4/x']) {
         assert.equal(isApiTokenRouteAllowed(p), false, p);
     }
 });

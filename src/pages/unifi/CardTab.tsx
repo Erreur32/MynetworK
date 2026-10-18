@@ -281,19 +281,6 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                         </span>
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{t('unifi.card.ports', { count: d.portCount })}</span>
                     </div>
-                    {d.type !== 'access_point' && (
-                        <details className="text-xs text-gray-400 mb-2">
-                            <summary className="cursor-pointer">{t('unifi.card.uplinkDiagnostic')}</summary>
-                            <button
-                                type="button"
-                                className="mt-1 mr-2 underline hover:text-gray-200"
-                                onClick={() => { void navigator.clipboard?.writeText(d.uplinkDebug); }}
-                            >
-                                {t('unifi.card.copyDiagnostic')}
-                            </button>
-                            <pre className="mt-1 max-h-48 overflow-auto rounded bg-black/30 p-2 text-[10px] leading-tight">{d.uplinkDebug}</pre>
-                        </details>
-                    )}
                     {cardReady && <DeviceCard
                         deviceId={d.id}
                         hass={hass}

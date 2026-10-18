@@ -87,34 +87,6 @@ function detectUplinkPort(d, rows, all, type) {
   return neighbour >= 0 ? portNumber(rows[neighbour], neighbour) : null;
 }
 
-// What the detection looks at, shown in the card's diagnostic block.
-function uplinkDiagnostic(d, rows, all) {
-  const brief = (o) => (o && typeof o === "object"
-    ? { name: o.name, ifname: o.ifname, port_idx: o.port_idx, up: o.up, speed: o.speed, type: o.type }
-    : null);
-  return {
-    model: d.model,
-    keys: Object.keys(d),
-    lengths: { port_table: d.port_table?.length, eth_port_table: d.eth_port_table?.length, ports: d.ports?.length, num_port: d.num_port },
-    // addresses are left out on purpose: only what identifies a port
-    wan: [d.wan1, d.wan2].map(brief),
-    uplink: d.uplink ?? null,
-    children: all
-      .filter((o) => o !== d && macKey(o.uplink?.uplink_mac) === macKey(d.mac))
-      .map((o) => ({ name: o.name, remote_port: o.uplink?.uplink_remote_port })),
-    ports: rows.map((row, i) => ({
-      port: portNumber(row, i),
-      name: row.name,
-      ifname: row.ifname,
-      media: row.media,
-      up: row.up,
-      speed: row.speed,
-      is_uplink: row.is_uplink,
-      lldp: [].concat(row.lldp_table || []).map((n) => n?.chassis_id),
-    })),
-  };
-}
-
 function buildPortEntities(states, prefix, row, index) {
   const n = portNumber(row, index);
   const id = (suffix) => `${prefix}_p${n}_${suffix}`;
@@ -268,6 +240,10 @@ export function createMynetworkHass(unifiDevices, language = "en") {
     // exact = a dedicated front panel exists in the registry, otherwise the
     // card draws a generic layout from the port count.
     const modelKey = ctx.model_key || null;
+    // numberedPorts also carries the special ports' rows: count each port once.
+    const portNumbers = [...new Set([...ctx.numberedPorts, ...ctx.specialPorts].map((p) => p.port))]
+      .filter((n) => Number.isInteger(n))
+      .sort((a, b) => a - b);
     devices.push({
       id: mnDeviceId(d),
       name: d.name || d.model,
@@ -275,13 +251,9 @@ export function createMynetworkHass(unifiDevices, language = "en") {
       type,
       modelKey,
       exact: !!(modelKey && MODEL_REGISTRY[modelKey]),
-      portCount: ctx.numberedPorts.length + ctx.specialPorts.length,
-      ports: [...ctx.numberedPorts, ...ctx.specialPorts]
-        .map((p) => p.port)
-        .filter((n) => Number.isInteger(n))
-        .sort((a, b) => a - b),
+      portCount: portNumbers.length,
+      ports: portNumbers,
       uplinkPort: ctx.uplink_port,
-      uplinkDebug: JSON.stringify(uplinkDiagnostic(d, portRowsOf(d), all), null, 1),
     });
   }
 

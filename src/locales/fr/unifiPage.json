@@ -40,8 +40,6 @@
       "uplink": "Uplink",
       "uplinkAuto": "Auto (port {{port}})",
       "uplinkAutoNone": "Auto (non détecté)",
-      "uplinkDiagnostic": "Diagnostic uplink",
-      "copyDiagnostic": "Copier le diagnostic",
       "resetLayout": "Réinitialiser la disposition"
     },
     "threats": {

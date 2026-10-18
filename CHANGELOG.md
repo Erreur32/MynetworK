@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] - 2026-10-18
+
+### Added
+
+- `GET /api/plugins/unifi/card-devices`, open to read-only API tokens: switches, gateways and access points with the per-port detail the front-panel cards read (port rows with link, speed, PoE, live RX/TX, uplink flag, LLDP neighbours that are known UniFi devices; uplink port, WAN links without addresses, firmware update). Explicit field list, numbers are real numbers, a gateway only exposes its LAN address, cached 3 s server side
+- CARD tab: per-card uplink selector next to the title, with the real uplink port of switches and gateways detected from the controller (uplink object, LLDP, child devices) and selected when the card opens
+
+### Changed
+
+- CARD tab: port RX/TX shown as bit/s, kbit/s, Mbit/s or Gbit/s with the unit picked automatically
+
+### Fixed
+
+- CARD tab: special ports (WAN, SFP+, 10G RJ45) showed no link and no speed because their rows were dropped before the card rebuilt them
+- CARD tab: link status shown untranslated ("no_link"), and ports with no controller data now say so
+
+---
+
 ## [0.11.0] - 2026-10-18
 
 ### Added

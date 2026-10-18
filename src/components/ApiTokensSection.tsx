@@ -36,6 +36,7 @@ const ALLOWED_ROUTES = [
   "/api/topology",
   "/api/plugins/unifi/clients",
   "/api/plugins/unifi/devices",
+  "/api/plugins/unifi/card-devices",
   "/api/plugins/unifi/system",
   "/api/updates/status",
 ];
