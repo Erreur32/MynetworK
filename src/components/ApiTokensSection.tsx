@@ -28,6 +28,7 @@ interface ApiTokenSummary {
 const ALLOWED_ROUTES = [
   "/api/network-scan/history",
   "/api/network-scan/:ip",
+  "/api/search/ip-details/:ip",
   "/api/lan/devices",
   "/api/dhcp/leases",
   "/api/wifi/stations",

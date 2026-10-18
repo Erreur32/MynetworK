@@ -19,6 +19,41 @@ import { getErrorMessage } from '../utils/errorMessage.js';
 
 const router = Router();
 
+const pick = (src: any, keys: string[]): Record<string, unknown> | null => {
+    if (!src) return null;
+    const out: Record<string, unknown> = {};
+    for (const k of keys) if (src[k] !== undefined) out[k] = src[k];
+    return out;
+};
+
+/**
+ * Projection for API tokens: the aggregated payload spreads raw Freebox and
+ * UniFi objects (needed by the UI), which must not leave through a token.
+ */
+function compactIpDetails(d: any) {
+    const f = d.freebox;
+    const u = d.unifi;
+    return {
+        ip: d.ip,
+        scanner: d.scanner && {
+            ...pick(d.scanner, ['mac', 'hostname', 'vendor', 'status', 'pingLatency', 'firstSeen', 'lastSeen', 'scanCount']),
+            openPorts: d.scanner.additionalInfo?.openPorts,
+            lastPortScan: d.scanner.additionalInfo?.lastPortScan
+        },
+        freebox: f && {
+            ...pick(f, ['name', 'mac', 'hostname', 'active', 'lastSeen', 'type']),
+            dhcp: pick(f.dhcp, ['ip', 'hostname', 'mac', 'static', 'expires', 'lease_time', 'comment']),
+            portForwarding: f.portForwarding
+        },
+        unifi: u && {
+            device: pick(u.device, ['name', 'mac', 'ip', 'type', 'model', 'active', 'lastSeen']),
+            client: pick(u.client, ['name', 'hostname', 'mac', 'ip', 'is_wired', 'is_wireless', 'ssid', 'ap_name', 'ap_mac', 'sw_name', 'sw_mac', 'sw_port', 'rssi', 'radio', 'channel', 'tx_rate', 'rx_rate', 'tx_bytes', 'rx_bytes', 'last_seen']),
+            switch: pick(u.switch, ['name', 'mac', 'ip', 'model']),
+            ap: pick(u.ap, ['name', 'mac', 'ip', 'model'])
+        }
+    };
+}
+
 /**
  * POST /api/search
  * Search across all active plugins.
@@ -557,7 +592,7 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
 
         res.json({
             success: true,
-            result: aggregatedData
+            result: req.apiToken ? compactIpDetails(aggregatedData) : aggregatedData
         });
     } catch (error: unknown) {
         logger.error('Search', `Failed to get IP details for ${ip}:`, error);

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.74] - 2026-10-18
+
+### Added
+
+- `GET /api/search/ip-details/:ip`, open to read-only API tokens: the machine panel of the Search page in one call (scan with open ports and last port scan, Freebox host and DHCP lease, port forwarding, UniFi client, switch, AP). Compact projection for tokens, raw Freebox and UniFi objects are never returned. Existing tokens work without being recreated
+- `GET /api/plugins/unifi/clients` and the `unifi_get_clients` MCP tool: `switch_name` and `switch_ip` for wired clients, resolved from the switch MAC
+
+---
+
 ## [0.10.73] - 2026-10-17
 
 ### Added
