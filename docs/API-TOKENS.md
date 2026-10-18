@@ -95,6 +95,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 |---|---|---|
 | `GET /api/health` | MyNetwork | Public, no token needed |
 | `GET /api/network-scan/history` | MyNetwork scanner DB | Full inventory, paginated |
+| `GET /api/network-scan/stats` | MyNetwork scanner DB | Counters: total, online, offline, unknown, last scan |
 | `GET /api/network-scan/:ip` | MyNetwork scanner DB | One device, IPv4 only |
 | `GET /api/search/ip-details/:ip` | MyNetwork | One machine, all sources merged (scan, Freebox, UniFi), IPv4 only |
 | `GET /api/lan/devices` | Freebox | LAN hosts on all interfaces |
@@ -104,6 +105,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/topology` | MyNetwork | Last computed topology snapshot |
 | `GET /api/plugins/unifi/clients` | UniFi | Connected clients, compact summary |
 | `GET /api/plugins/unifi/devices` | UniFi | APs, switches, gateways, compact summary |
+| `GET /api/plugins/unifi/top-traffic` | UniFi | Clients using the most traffic: live rate, volume today or since tracking started |
 | `GET /api/plugins/unifi/card-devices` | UniFi | Switches, gateways and APs with the per-port detail read by the front-panel cards |
 | `GET /api/plugins/unifi/system` | UniFi | UniFi Network version and update, gateway health, WAN links, last speed test |
 | `GET /api/updates/status` | MyNetwork | Installed and latest MynetworK version (shared cached check) |
@@ -133,6 +135,9 @@ Query parameters (all optional):
 
 Blacklisted IPs and IPs outside the configured scan ranges are excluded. Use
 `offset` to page through more than 1000 devices.
+
+Common queries: offline IPs `?status=offline`, worst latencies first
+`?status=online&sortBy=ping_latency&sortOrder=desc&limit=10`.
 
 ```json
 {
@@ -176,6 +181,36 @@ Blacklisted IPs and IPs outside the configured scan ranges are excluded. Use
 | `firstSeen` / `lastSeen` | string | ISO 8601 |
 | `scanCount` | number | Number of scans that saw the device |
 | `additionalInfo`? | object | Free-form scanner data (open ports, OS hints...), shape not guaranteed |
+
+### `GET /api/network-scan/stats`
+
+```json
+{ "success": true, "result": { "total": 57, "online": 41, "offline": 15, "unknown": 1, "lastScan": "2026-10-18T00:04:57.000Z" } }
+```
+
+`lastScan` is omitted when no scan ran yet.
+
+### `GET /api/plugins/unifi/top-traffic`
+
+Query parameters (all optional): `mode` (`live`, `today`, `alltime`, default
+`today`) and `limit` (1 to 50, default 10). `today` and `alltime` read the volume
+MynetworK accumulates itself (bytes); `alltime` starts when tracking started, there is
+no retroactive history. `live` asks the controller for the instantaneous rate.
+Invalid values: `400 INVALID_MODE` or `400 INVALID_LIMIT`. `live` with UniFi not
+connected: `503 UNIFI_UNAVAILABLE`.
+
+```json
+{
+  "success": true,
+  "result": [
+    { "mac": "aa:bb:cc:dd:ee:01", "name": "Pc Gamer", "ip": "192.168.1.50", "vendor": "ASUSTek",
+      "rxBytes": 5368709120, "txBytes": 734003200 }
+  ]
+}
+```
+
+With `mode=live` each item carries `download` and `upload` instead of `rxBytes` and
+`txBytes`, in KB/s.
 
 ### `GET /api/network-scan/:ip`
 

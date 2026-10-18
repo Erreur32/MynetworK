@@ -14,7 +14,7 @@ import { autoLog } from '../middleware/loggingMiddleware.js';
 import { logger } from '../utils/logger.js';
 import { param } from '../utils/params.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
-import { getUnifiSystemSummary, listUnifiCardDevices, listUnifiClients, listUnifiDevices, type UnifiClientType, type UnifiDeviceType } from '../mcp/tools/unifi.js';
+import { getUnifiSystemSummary, getUnifiTopTraffic, listUnifiCardDevices, listUnifiClients, listUnifiDevices, type UnifiClientType, type UnifiDeviceType } from '../mcp/tools/unifi.js';
 import type { ListResult } from '../mcp/tools/shared.js';
 import type { PluginConfig } from '../plugins/base/PluginInterface.js';
 import { freeboxApi } from '../services/freeboxApi.js';
@@ -750,6 +750,29 @@ router.get('/unifi/card-devices', requireAuth, asyncHandler(async (_req: Authent
     let result;
     try {
         result = await listUnifiCardDevices();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'UniFi is unavailable';
+        throw createError(message, 503, 'UNIFI_UNAVAILABLE');
+    }
+    res.json({ success: true, result });
+}));
+
+// GET /api/plugins/unifi/top-traffic - Clients using the most traffic: live rate, or volume today / since tracking started
+router.get('/unifi/top-traffic', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const { mode = 'today', limit } = req.query;
+    if (mode !== 'live' && mode !== 'today' && mode !== 'alltime') {
+        throw createError('mode must be one of: live, today, alltime', 400, 'INVALID_MODE');
+    }
+    let parsedLimit: number | undefined;
+    if (limit !== undefined) {
+        parsedLimit = Number(limit);
+        if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+            throw createError('limit must be an integer between 1 and 50', 400, 'INVALID_LIMIT');
+        }
+    }
+    let result;
+    try {
+        result = await getUnifiTopTraffic(mode, parsedLimit);
     } catch (error) {
         const message = error instanceof Error ? error.message : 'UniFi is unavailable';
         throw createError(message, 503, 'UNIFI_UNAVAILABLE');

@@ -27,6 +27,7 @@ interface ApiTokenSummary {
 // Mirrors API_TOKEN_ALLOWED_ROUTES in server/middleware/apiTokenAuth.ts
 const ALLOWED_ROUTES = [
   "/api/network-scan/history",
+  "/api/network-scan/stats",
   "/api/network-scan/:ip",
   "/api/search/ip-details/:ip",
   "/api/lan/devices",
@@ -36,6 +37,7 @@ const ALLOWED_ROUTES = [
   "/api/topology",
   "/api/plugins/unifi/clients",
   "/api/plugins/unifi/devices",
+  "/api/plugins/unifi/top-traffic",
   "/api/plugins/unifi/card-devices",
   "/api/plugins/unifi/system",
   "/api/updates/status",

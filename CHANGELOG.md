@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2] - 2026-10-18
+
+### Added
+
+- `GET /api/plugins/unifi/top-traffic`, open to read-only API tokens: clients using the most traffic, `mode=live` (rate), `today` or `alltime` (volume), `limit` 1 to 50
+- `GET /api/network-scan/stats`, open to read-only API tokens: total, online, offline and unknown hosts, last scan date
+- MCP `scan_get_devices`: `sort_by` (`last_seen`, `latency`, `ip`, `hostname`) and `order`, so the worst latencies come first with `status=online`, `sort_by=latency`, `order=desc`
+
+### Changed
+
+- `unifi_get_top_traffic` and the new REST route share one implementation
+
+---
+
 ## [0.11.1] - 2026-10-18
 
 ### Added
