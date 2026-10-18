@@ -13,6 +13,8 @@ import { wrapAsync, ListResult, rawParam, limitParam, MAX_SEARCH_LENGTH } from '
 
 const DEFAULT_DEVICE_LIMIT = 100;
 
+const SCAN_SORT_COLUMNS = { last_seen: 'last_seen', latency: 'ping_latency', ip: 'ip', hostname: 'hostname' } as const;
+
 function assertValidIp(ip: string): void {
   if (!isValidIp(ip)) {
     throw new Error(`Invalid IP address: ${ip}`);
@@ -60,7 +62,7 @@ export function registerScannerTools(server: McpServer): void {
     {
       title: 'List scanned devices',
       description:
-        'List devices discovered by the network scanner, most recently seen first, as a compact summary (IP, MAC, hostname, vendor, status, latency, open ports). Use raw=true only if a field is missing.',
+        'List devices discovered by the network scanner, most recently seen first by default (sort_by / order change that), as a compact summary (IP, MAC, hostname, vendor, status, latency, open ports). Use raw=true only if a field is missing.',
       inputSchema: {
         status: z.enum(['all', 'online', 'offline', 'unknown']).default('all').describe('Filter by last known status'),
         search: z
@@ -68,19 +70,24 @@ export function registerScannerTools(server: McpServer): void {
           .max(MAX_SEARCH_LENGTH)
           .optional()
           .describe('Case-insensitive substring match on IP, MAC, hostname, vendor or open port'),
+        sort_by: z
+          .enum(['last_seen', 'latency', 'ip', 'hostname'])
+          .default('last_seen')
+          .describe("Sort key. 'latency' + order 'desc' + status 'online' lists the worst latencies first"),
+        order: z.enum(['asc', 'desc']).default('desc').describe('Sort order'),
         limit: limitParam(DEFAULT_DEVICE_LIMIT),
         raw: rawParam
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ status, search, limit, raw }) =>
+    async ({ status, search, sort_by, order, limit, raw }) =>
       wrapAsync(() => {
         const filters = { status: status === 'all' ? undefined : status, search: search?.trim() || undefined };
         const devices = NetworkScanRepository.find({
           ...filters,
           limit: limit ?? DEFAULT_DEVICE_LIMIT,
-          sortBy: 'last_seen',
-          sortOrder: 'desc'
+          sortBy: SCAN_SORT_COLUMNS[sort_by],
+          sortOrder: order
         });
         return new ListResult(raw ? devices : devices.map(summarizeScan), NetworkScanRepository.count(filters));
       })

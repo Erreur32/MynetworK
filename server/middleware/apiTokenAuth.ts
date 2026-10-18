@@ -22,6 +22,7 @@ const IPV4 = String.raw`\d{1,3}(?:\.\d{1,3}){3}`;
 /** GET/HEAD routes reachable with an API token. Everything else returns 403. */
 export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
     { path: '/api/network-scan/history', pattern: /^\/api\/network-scan\/history$/ },
+    { path: '/api/network-scan/stats', pattern: /^\/api\/network-scan\/stats$/ },
     { path: '/api/network-scan/:ip', pattern: new RegExp(`^/api/network-scan/${IPV4}$`) },
     { path: '/api/search/ip-details/:ip', pattern: new RegExp(`^/api/search/ip-details/${IPV4}$`) },
     { path: '/api/lan/devices', pattern: /^\/api\/lan\/devices$/ },
@@ -31,6 +32,7 @@ export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
     { path: '/api/topology', pattern: /^\/api\/topology$/ },
     { path: '/api/plugins/unifi/clients', pattern: /^\/api\/plugins\/unifi\/clients$/ },
     { path: '/api/plugins/unifi/devices', pattern: /^\/api\/plugins\/unifi\/devices$/ },
+    { path: '/api/plugins/unifi/top-traffic', pattern: /^\/api\/plugins\/unifi\/top-traffic$/ },
     { path: '/api/plugins/unifi/card-devices', pattern: /^\/api\/plugins\/unifi\/card-devices$/ },
     { path: '/api/plugins/unifi/system', pattern: /^\/api\/plugins\/unifi\/system$/ },
     { path: '/api/updates/status', pattern: /^\/api\/updates\/status$/ }

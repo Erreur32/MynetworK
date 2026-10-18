@@ -367,6 +367,18 @@ export async function listUnifiClients({ type, search, limit, raw }: UnifiListOp
   });
 }
 
+export type UnifiTrafficMode = 'live' | 'today' | 'alltime';
+
+// Shared by the MCP tool and GET /api/plugins/unifi/top-traffic.
+// 'live' asks the controller, 'today' and 'alltime' read the local accumulation tables.
+export async function getUnifiTopTraffic(mode: UnifiTrafficMode, limit?: number) {
+  const resolvedLimit = limit ?? 10;
+  if (mode === 'live') return getUnifiPlugin().fetchTopClients(resolvedLimit);
+  return mode === 'alltime'
+    ? UniFiClientTrafficRepository.getTopAllTime(resolvedLimit)
+    : UniFiClientTrafficRepository.getTopToday(resolvedLimit);
+}
+
 export function registerUnifiTools(server: McpServer): void {
   server.registerTool(
     'unifi_get_devices',
@@ -417,14 +429,7 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ mode, limit }) =>
-      wrapAsync(async () => {
-        const resolvedLimit = limit ?? 10;
-        if (mode === 'live') return getUnifiPlugin().fetchTopClients(resolvedLimit);
-        return mode === 'alltime'
-          ? UniFiClientTrafficRepository.getTopAllTime(resolvedLimit)
-          : UniFiClientTrafficRepository.getTopToday(resolvedLimit);
-      })
+    async ({ mode, limit }) => wrapAsync(() => getUnifiTopTraffic(mode, limit))
   );
 
   server.registerTool(
