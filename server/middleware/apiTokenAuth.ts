@@ -23,6 +23,7 @@ const IPV4 = String.raw`\d{1,3}(?:\.\d{1,3}){3}`;
 export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
     { path: '/api/network-scan/history', pattern: /^\/api\/network-scan\/history$/ },
     { path: '/api/network-scan/:ip', pattern: new RegExp(`^/api/network-scan/${IPV4}$`) },
+    { path: '/api/search/ip-details/:ip', pattern: new RegExp(`^/api/search/ip-details/${IPV4}$`) },
     { path: '/api/lan/devices', pattern: /^\/api\/lan\/devices$/ },
     { path: '/api/dhcp/leases', pattern: /^\/api\/dhcp\/leases$/ },
     { path: '/api/wifi/stations', pattern: /^\/api\/wifi\/stations$/ },

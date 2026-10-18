@@ -96,6 +96,7 @@ The single source of truth is `API_TOKEN_ALLOWED_ROUTES` in
 | `GET /api/health` | MyNetwork | Public, no token needed |
 | `GET /api/network-scan/history` | MyNetwork scanner DB | Full inventory, paginated |
 | `GET /api/network-scan/:ip` | MyNetwork scanner DB | One device, IPv4 only |
+| `GET /api/search/ip-details/:ip` | MyNetwork | One machine, all sources merged (scan, Freebox, UniFi), IPv4 only |
 | `GET /api/lan/devices` | Freebox | LAN hosts on all interfaces |
 | `GET /api/dhcp/leases` | Freebox | Dynamic DHCP leases (no DHCP config) |
 | `GET /api/wifi/stations` | Freebox | Connected WiFi stations |
@@ -179,6 +180,39 @@ Blacklisted IPs and IPs outside the configured scan ranges are excluded. Use
 
 Example: `GET /api/network-scan/192.168.1.20`. `result` is a single item with
 the same shape as above. Unknown IP: `404 IP_NOT_FOUND`.
+
+### `GET /api/search/ip-details/:ip`
+
+The same aggregation as the machine panel of the Search page, in one call,
+reduced to a compact projection (raw Freebox and UniFi objects are not
+returned). Example: `GET /api/search/ip-details/192.168.1.20`. Sections are
+`null` when the source does not know the IP. A live ping is done on each call,
+so `scanner.status` and `scanner.pingLatency` are current, not the stored ones.
+
+```json
+{
+  "success": true,
+  "result": {
+    "ip": "192.168.1.20",
+    "scanner": { "mac": "aa:bb:cc:dd:ee:02", "hostname": "pc-gamer", "vendor": "ASUSTek", "status": "online",
+      "pingLatency": 0.775, "firstSeen": "2026-09-01T10:00:00.000Z", "lastSeen": "2026-10-18T00:04:57.000Z", "scanCount": 120,
+      "openPorts": [{ "port": 445, "protocol": "tcp" }, { "port": 135, "protocol": "tcp" }],
+      "lastPortScan": "2026-10-18T00:04:57.000Z" },
+    "freebox": { "name": "pc-gamer", "mac": "aa:bb:cc:dd:ee:02", "active": true,
+      "dhcp": { "ip": "192.168.1.20", "static": false, "expires": 1760130000 }, "portForwarding": [] },
+    "unifi": {
+      "client": { "name": "Pc Gamer", "is_wired": true, "sw_mac": "aa:bb:cc:00:00:02", "sw_port": 1 },
+      "switch": { "name": "USW Flex 2.5G Salon", "mac": "aa:bb:cc:00:00:02", "ip": "192.168.1.4", "model": "USW Flex 2.5G" }
+    }
+  }
+}
+```
+
+Other keys: `freebox.portForwarding[]` (`id`, `enabled`, `comment`, `lan_port`,
+`wan_port_start`, `wan_port_end`, `ip_proto`, `src_ip`), `unifi.device` (when
+the IP is a UniFi device), `unifi.ap` (`name`, `mac`, `ip`, `model`, for WiFi
+clients). Port labels and categories (SMB, System...) are not provided.
+Invalid IP: `400 INVALID_IP`.
 
 ### `GET /api/lan/devices`
 
@@ -375,6 +409,7 @@ Query parameters (all optional): `type` (`all`, `wifi`, `wired`, default
 | `name` | string | Alias, else hostname, IP or MAC |
 | `hostname`? / `mac` / `ip`? / `oui`? | string | Identity |
 | `network`? | string | UniFi network name |
+| `switch_name`? / `switch_ip`? | string | Switch the wired client is plugged into (resolved from `switch_mac`) |
 | `wired` | boolean | Wired or wireless |
 | `guest`? | boolean | Present (true) only for guest clients |
 | `essid`? / `ap_mac`? / `radio`? / `channel`? / `signal_dbm`? | | WiFi clients |

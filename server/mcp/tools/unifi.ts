@@ -39,7 +39,12 @@ function assertValidMac(mac: string): void {
 
 // Compact client summary: the raw stat/sta object has ~90 fields per client.
 // tx_rate/rx_rate are the negotiated link speed, not throughput: renamed so a model can't mix them up.
-function summarizeClient(c: any) {
+function normalizeMac(mac: unknown): string {
+  return typeof mac === 'string' ? mac.toLowerCase().replace(/[:-]/g, '') : '';
+}
+
+function summarizeClient(c: any, switches: Map<string, { name?: string; ip?: string }> = new Map()) {
+  const sw = switches.get(normalizeMac(c.sw_mac));
   const wired = c.is_wired === true;
   return {
     name: c.name || c.hostname || c.ip || c.mac,
@@ -57,6 +62,8 @@ function summarizeClient(c: any) {
     signal_dbm: c.signal,
     satisfaction: c.satisfaction,
     switch_mac: c.sw_mac,
+    switch_name: sw?.name,
+    switch_ip: sw?.ip,
     switch_port: c.sw_port,
     link_rx_rate_kbps: c.rx_rate,
     link_tx_rate_kbps: c.tx_rate,
@@ -238,12 +245,19 @@ export async function listUnifiDevices({ type, search, limit, raw }: UnifiListOp
 }
 
 export async function listUnifiClients({ type, search, limit, raw }: UnifiListOptions<UnifiClientType>): Promise<ListResult> {
-  return toListResult(await getUnifiApiService().getClients(), {
+  const api = getUnifiApiService();
+  // Devices only resolve the switch name/IP of wired clients: a failure must not break the client list.
+  const [clients, devices] = await Promise.all([api.getClients(), raw ? [] : api.getDevices().catch(() => [])]);
+  const switches = new Map<string, { name?: string; ip?: string }>();
+  for (const d of devices as any[]) {
+    if (d.mac) switches.set(normalizeMac(d.mac), { name: d.name || d.model, ip: d.ip });
+  }
+  return toListResult(clients, {
     filter: (c: any) =>
       (type === 'all' || (type === 'wired') === (c.is_wired === true)) &&
       matchesSearch(search, c.name, c.hostname, c.ip, c.mac),
     limit,
-    project: raw ? undefined : summarizeClient
+    project: raw ? undefined : (c: any) => summarizeClient(c, switches)
   });
 }
 
