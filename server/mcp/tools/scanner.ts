@@ -8,6 +8,7 @@ import { networkScanService } from '../../services/networkScanService.js';
 import { NetworkScanRepository, type NetworkScan } from '../../database/models/NetworkScan.js';
 import { ipBlacklistService } from '../../services/ipBlacklistService.js';
 import { isValidIp } from '../../utils/networkValidation.js';
+import { getIpDetails, compactIpDetails } from '../../services/ipDetailsService.js';
 import { wrapAsync, ListResult, rawParam, limitParam, MAX_SEARCH_LENGTH } from './shared.js';
 
 const DEFAULT_DEVICE_LIMIT = 100;
@@ -99,6 +100,24 @@ export function registerScannerTools(server: McpServer): void {
       wrapAsync(() => {
         assertValidIp(ip);
         return NetworkScanRepository.findByIp(ip);
+      })
+  );
+
+  server.registerTool(
+    'scan_get_machine_details',
+    {
+      title: 'Get everything known about a machine',
+      description:
+        'One call for a machine by IP: scan record (MAC, hostname, vendor, live status and latency, open ports with protocol, last port scan), Freebox host and DHCP lease, Freebox port forwarding, UniFi client with its switch (name, IP, port) or AP. Sends one ping, so the IP must be inside the scan ranges.',
+      inputSchema: {
+        ip: z.string().describe('IPv4 address, e.g. 192.168.1.42')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ ip }) =>
+      wrapAsync(async () => {
+        assertScannableIp(ip);
+        return compactIpDetails(await getIpDetails(ip));
       })
   );
 

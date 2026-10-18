@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.75] - 2026-10-18
+
+### Added
+
+- MCP tool `scan_get_machine_details(ip)`: everything known about a machine in one call (scan with open ports and protocol, last port scan, Freebox host and DHCP lease, port forwarding, UniFi client with switch name, IP and port, or AP). Same compact projection as `GET /api/search/ip-details/:ip`. Read-only, the IP must be inside the scan ranges (one ping is sent)
+
+### Changed
+
+- Per-IP aggregation moved from the Search route to `ipDetailsService`, shared by the route and the MCP tool (no behaviour change)
+
+---
+
 ## [0.10.74] - 2026-10-18
 
 ### Added
