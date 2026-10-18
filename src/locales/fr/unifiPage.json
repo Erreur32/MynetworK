@@ -32,7 +32,12 @@
           "exact": "Face avant : {{key}}",
           "generic": "Face avant : générique (modèle absent du registre)",
           "ports": "{{count}} port(s)",
-      "hardwareView": "Vue matérielle du panneau avant"
+      "hardwareView": "Vue matérielle du panneau avant",
+      "dragHint": "Glisser pour réordonner",
+      "resizeHint": "Tirer le bord droit pour redimensionner",
+      "heightHint": "Tirer le bord inférieur pour régler la hauteur (la carte est réduite proportionnellement). Double-clic pour réinitialiser",
+      "cornerHint": "Tirer pour redimensionner largeur et hauteur. Double-clic pour réinitialiser la taille",
+      "resetLayout": "Réinitialiser la disposition"
     },
     "threats": {
       "title": "Analyse des menaces réseau",

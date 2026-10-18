@@ -32,7 +32,12 @@
           "exact": "Front panel: {{key}}",
           "generic": "Front panel: generic (model not in registry)",
           "ports": "{{count}} port(s)",
-      "hardwareView": "Hardware front panel view"
+      "hardwareView": "Hardware front panel view",
+      "dragHint": "Drag to reorder",
+      "resizeHint": "Drag the right edge to resize",
+      "heightHint": "Drag the lower border to set the height (the card is reduced proportionally). Double-click to reset",
+      "cornerHint": "Drag to resize width and height. Double-click to reset size",
+      "resetLayout": "Reset layout"
     },
     "threats": {
       "title": "Network Threat Analysis",

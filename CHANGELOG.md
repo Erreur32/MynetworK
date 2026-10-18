@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-10-18
+
+### Added
+
+- UniFi page, new **CARD** tab: realistic live cards for UniFi switches, gateways and access points (front panel, ports, link speed, PoE, uptime, clients), refreshed every 5 s, read-only. Built on the MIT-licensed [unifi-device-card](https://github.com/bluenazgul/unifi-device-card) (vendored in `src/vendor/unifi-device-card`, local changes listed in `VENDOR.md`) with a MyNetwork adapter feeding it UniFi controller data instead of Home Assistant entities
+- Each card shows the model code received and whether a dedicated front panel exists for it or a generic one is drawn
+- Cards follow the application theme, optional hardware front panel view (off by default)
+- Port LEDs blink slowly when the link is up and faster when the port carries traffic
+- Cards can be reordered by drag and drop, and resized with the mouse (right edge for width, lower border for height with proportional reduction, bottom-right corner for both). The layout is kept in the browser (localStorage), with a reset button
+
+### Changed
+
+- `src/vendor/**` is excluded from SonarCloud analysis
+
+---
+
 ## [0.10.75] - 2026-10-18
 
 ### Added

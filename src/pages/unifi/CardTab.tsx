@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/widgets/Card';
 import { usePluginStore } from '../../stores/pluginStore';
+import { GripVertical, RotateCcw } from 'lucide-react';
+import { applyOrder, clampSpan, DEFAULT_SPAN, GRID_COLUMNS, useCardLayout } from './cardLayout';
 import { createMynetworkHass, type MnDevice } from '../../vendor/unifi-device-card/mynetwork-adapter';
 
 const LIVE_REFRESH_MS = 5000;
@@ -26,7 +28,7 @@ const THEME_VARS: Record<string, string> = {
     '--udc-orange': 'var(--accent-warning)',
     // Compact sizing: smaller ports and AP disc than the 36px / 1.0 defaults.
     '--udc-port-size': '26px',
-    '--udc-ap-scale': '0.7'
+    '--udc-ap-scale': '0.45'
 };
 
 interface CardTabProps {
@@ -35,16 +37,29 @@ interface CardTabProps {
 
 type CardElement = HTMLElement & { setConfig: (c: Record<string, unknown>) => void; hass: unknown };
 
-const DeviceCard: React.FC<{ deviceId: string; hass: unknown; showPanel: boolean }> = ({ deviceId, hass, showPanel }) => {
+interface DeviceCardProps {
+    deviceId: string;
+    hass: unknown;
+    showPanel: boolean;
+    height?: number;
+}
+
+// With a chosen height the card keeps its natural layout and is reduced
+// proportionally to fit.
+const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, height }) => {
+    const outerRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<CardElement | null>(null);
+    const [naturalHeight, setNaturalHeight] = useState(0);
 
     useEffect(() => {
         const host = hostRef.current;
         if (!host) return;
         const el = document.createElement('unifi-device-card') as CardElement;
         for (const [name, value] of Object.entries(THEME_VARS)) el.style.setProperty(name, value);
-        el.setConfig({ type: 'custom:unifi-device-card', device_id: deviceId,
+        el.setConfig({
+            type: 'custom:unifi-device-card',
+            device_id: deviceId,
             show_panel: showPanel,
             // Up: slow blink. Port with traffic: faster blink. Kept calm on purpose.
             port_led_blink: true,
@@ -64,8 +79,40 @@ const DeviceCard: React.FC<{ deviceId: string; hass: unknown; showPanel: boolean
         if (cardRef.current) cardRef.current.hass = hass;
     });
 
-    return <div ref={hostRef} />;
+    // transform does not change the layout box, so this keeps reporting the natural height.
+    useEffect(() => {
+        const host = hostRef.current;
+        if (!host) return;
+        const observer = new ResizeObserver(() => setNaturalHeight(host.offsetHeight));
+        observer.observe(host);
+        return () => observer.disconnect();
+    }, []);
+
+    // Uniform reduction: the whole card shrinks proportionally to fit the chosen
+    // height (never enlarged, extra height is just empty space), no deformation.
+    const scale = height != null && naturalHeight > 0 ? Math.min(1, height / naturalHeight) : 1;
+    return (
+        <div ref={outerRef} data-card-area className="relative" style={height != null ? { height, overflow: 'hidden' } : undefined}>
+            <div
+                ref={hostRef}
+                style={scale < 1 ? { transform: `scale(${scale})`, transformOrigin: 'top center' } : undefined}
+            />
+        </div>
+    );
 };
+
+// Spans only apply from the md breakpoint up; below it the cards stack full width.
+function useIsWide(): boolean {
+    const query = '(min-width: 768px)';
+    const [wide, setWide] = useState(() => window.matchMedia(query).matches);
+    useEffect(() => {
+        const mql = window.matchMedia(query);
+        const onChange = () => setWide(mql.matches);
+        mql.addEventListener('change', onChange);
+        return () => mql.removeEventListener('change', onChange);
+    }, []);
+    return wide;
+}
 
 export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
     const { t, i18n } = useTranslation();
@@ -97,6 +144,56 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
         [devicesArr, i18n.language]
     );
 
+    const deviceIds = useMemo(() => devices.map((d: MnDevice) => d.id), [devices]);
+    const { order, spans, heights, move, setSpan, setHeight, reset } = useCardLayout(deviceIds);
+    const orderedDevices = useMemo(() => applyOrder<MnDevice>(devices, order), [devices, order]);
+    const isWide = useIsWide();
+    const gridRef = useRef<HTMLDivElement>(null);
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+
+    // Width follows the mouse: the span is the pointer position relative to the card's left edge, in grid columns.
+    // Pointer capture on the grabbed handle, then forward every move until release.
+    const trackPointer = useCallback((e: React.PointerEvent<HTMLDivElement>, onMove: (ev: PointerEvent) => void) => {
+        e.preventDefault();
+        const handle = e.currentTarget;
+        handle.setPointerCapture(e.pointerId);
+        const onUp = () => {
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onUp);
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+    }, []);
+
+    // Width: the span follows the pointer relative to the card's left edge, in grid columns.
+    const resizeWidth = useCallback((card: Element, id: string) => {
+        const grid = gridRef.current;
+        if (!grid) return () => undefined;
+        const columnWidth = grid.getBoundingClientRect().width / GRID_COLUMNS;
+        const left = card.getBoundingClientRect().left;
+        return (ev: PointerEvent) => setSpan(id, (ev.clientX - left) / columnWidth);
+    }, [setSpan]);
+
+    // Height: the card area's bottom edge follows the pointer.
+    const resizeHeight = useCallback((card: Element, id: string, startY: number) => {
+        const area = card.querySelector('[data-card-area]');
+        if (!area) return () => undefined;
+        const rect = area.getBoundingClientRect();
+        const offset = rect.bottom - startY;
+        return (ev: PointerEvent) => setHeight(id, ev.clientY + offset - rect.top);
+    }, [setHeight]);
+
+    const startResize = useCallback((e: React.PointerEvent<HTMLDivElement>, id: string, axis: 'width' | 'height' | 'both') => {
+        const card = e.currentTarget.parentElement;
+        if (!card) return;
+        const moveWidth = axis !== 'height' ? resizeWidth(card, id) : null;
+        const moveHeight = axis !== 'width' ? resizeHeight(card, id, e.clientY) : null;
+        trackPointer(e, (ev) => {
+            moveWidth?.(ev);
+            moveHeight?.(ev);
+        });
+    }, [resizeWidth, resizeHeight, trackPointer]);
+
     if (devices.length === 0) {
         return <div className="text-center py-8 text-gray-500">{t('unifi.card.noDevice')}</div>;
     }
@@ -109,10 +206,38 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                     <input type="checkbox" checked={showPanel} onChange={(e) => setShowPanel(e.target.checked)} />
                     {t('unifi.card.hardwareView')}
                 </label>
+                <button type="button" onClick={reset} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200">
+                    <RotateCcw size={12} />
+                    {t('unifi.card.resetLayout')}
+                </button>
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4 items-start">
-            {devices.map((d: MnDevice) => (
-                <Card key={d.id} title={d.name} className="min-w-0">
+            <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            {orderedDevices.map((d: MnDevice) => (
+                <div
+                    key={d.id}
+                    className={`relative min-w-0 ${draggedId === d.id ? 'opacity-50' : ''}`}
+                    style={isWide ? { gridColumn: `span ${clampSpan(spans[d.id] ?? DEFAULT_SPAN)}` } : undefined}
+                    onDragOver={(e) => { if (draggedId) e.preventDefault(); }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedId) move(draggedId, d.id);
+                        setDraggedId(null);
+                    }}
+                >
+                <span
+                    draggable
+                    title={t('unifi.card.dragHint')}
+                    className="absolute top-3 right-4 z-10 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-200"
+                    onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', d.id);
+                        setDraggedId(d.id);
+                    }}
+                    onDragEnd={() => setDraggedId(null)}
+                >
+                    <GripVertical size={18} />
+                </span>
+                <Card title={d.name} className="min-w-0">
                     <div className="flex flex-wrap gap-2 text-xs mb-3">
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{t('unifi.card.model')}: {d.model}</span>
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{d.type}</span>
@@ -121,8 +246,40 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                         </span>
                         <span className="px-2 py-0.5 rounded bg-gray-700 text-gray-300">{t('unifi.card.ports', { count: d.portCount })}</span>
                     </div>
-                    {cardReady && <DeviceCard deviceId={d.id} hass={hass} showPanel={showPanel} />}
+                    {cardReady && <DeviceCard
+                        deviceId={d.id}
+                        hass={hass}
+                        showPanel={showPanel}
+                        height={heights[d.id]}
+                    />}
                 </Card>
+                {/* The whole lower border is the height handle */}
+                <div
+                    title={t('unifi.card.heightHint')}
+                    className="absolute bottom-0 left-0 w-full h-2 rounded-b-xl cursor-ns-resize hover:bg-blue-500/30"
+                    onPointerDown={(e) => startResize(e, d.id, 'height')}
+                    onDoubleClick={() => setHeight(d.id, null)}
+                />
+                {isWide && (
+                    <div
+                        title={t('unifi.card.resizeHint')}
+                        className="absolute top-0 right-0 h-full w-2 cursor-ew-resize hover:bg-blue-500/30 rounded-r-xl"
+                        onPointerDown={(e) => startResize(e, d.id, 'width')}
+                    />
+                )}
+                {isWide && (
+                    <div
+                        title={t('unifi.card.cornerHint')}
+                        className="absolute bottom-1 right-1 z-20 w-4 h-4 cursor-nwse-resize text-gray-500 hover:text-blue-400"
+                        onPointerDown={(e) => startResize(e, d.id, 'both')}
+                        onDoubleClick={() => { setHeight(d.id, null); setSpan(d.id, DEFAULT_SPAN); }}
+                    >
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                            <path d="M14 6 6 14M14 10l-4 4M14 2 2 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+                        </svg>
+                    </div>
+                )}
+                </div>
             ))}
             </div>
         </div>
