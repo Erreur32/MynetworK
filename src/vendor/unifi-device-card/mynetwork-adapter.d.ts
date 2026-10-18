@@ -6,6 +6,9 @@ export interface MnDevice {
     modelKey: string | null;
     exact: boolean;
     portCount: number;
+    ports: number[];
+    uplinkPort: number | null;
+    uplinkDebug: string;
 }
 export function createMynetworkHass(
     unifiDevices: unknown[],

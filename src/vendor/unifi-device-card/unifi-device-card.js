@@ -1436,7 +1436,14 @@ class UnifiDeviceCard extends HTMLElement {
             ? null
             : `outlet:${getDefaultUpsOutlet(outlets, this._config?.default_outlet).index}`;
         } else {
-          const defaultPort = getDefaultPort(
+          // MyNetwork: the real uplink (detected from the controller, or chosen with
+          // `uplink_port`) wins over the model's special slots.
+          const configuredUplink = Number.parseInt(this._config?.uplink_port, 10);
+          const mnUplinkNumber = Number.isInteger(configuredUplink) ? configuredUplink : ctx?.uplink_port;
+          const mnUplinkSlot = Number.isInteger(mnUplinkNumber)
+            ? available.find((slot) => slot.port === mnUplinkNumber)
+            : null;
+          const defaultPort = mnUplinkSlot || getDefaultPort(
             [...slotData.specials, ...slotData.numbered],
             getDefaultPortCandidates(
               ctx?.type,
@@ -4314,6 +4321,25 @@ class UnifiDeviceCard extends HTMLElement {
     return "combined";
   }
 
+  // MyNetwork: port throughput arrives in bytes per second, show it as line rate
+  // (bit/s, kbit/s, Mbit/s, Gbit/s) with the unit picked automatically.
+  _formatRate(entityId) {
+    const obj = stateObj(this._hass, entityId);
+    const bytesPerSecond = Number.parseFloat(String(obj?.state ?? ""));
+    if (!obj || !Number.isFinite(bytesPerSecond) || obj.attributes?.unit_of_measurement !== "B/s") {
+      return formatState(this._hass, entityId);
+    }
+    const units = ["bit/s", "kbit/s", "Mbit/s", "Gbit/s"];
+    let scaled = bytesPerSecond * 8;
+    let unit = 0;
+    while (scaled >= 1000 && unit < units.length - 1) {
+      scaled /= 1000;
+      unit += 1;
+    }
+    const digits = unit === 0 || scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+    return `${scaled.toFixed(digits)} ${units[unit]}`;
+  }
+
   _renderPortDetail(selected) {
     if (!selected) return `<div class="muted">${this._escapeHtml(this._t("no_ports"))}</div>`;
 
@@ -4324,19 +4350,23 @@ class UnifiDeviceCard extends HTMLElement {
     const hasPoe = !!(selected.poe_switch_entity || selected.poe_power_entity || selected.power_cycle_entity);
     const poeOn = poeStatus.active;
     const poePower = selected.poe_power_entity ? formatState(this._hass, selected.poe_power_entity) : "—";
-    const rxVal = selected.rx_entity ? formatState(this._hass, selected.rx_entity) : null;
-    const txVal = selected.tx_entity ? formatState(this._hass, selected.tx_entity) : null;
+    const rxVal = selected.rx_entity ? this._formatRate(selected.rx_entity) : null;
+    const txVal = selected.tx_entity ? this._formatRate(selected.tx_entity) : null;
 
     const portTitle = selected.port_label
       || (selected.kind === "special" ? selected.label : `${this._t("port_label")} ${selected.label}`);
 
+    // MyNetwork: the controller sent nothing for this port, say so instead of showing a bare "no link".
+    const noControllerData = !selected.link_entity && !selected.speed_entity && !selected.rx_entity;
+
     return `
       <div class="detail-title">${this._escapeHtml(portTitle)}${selected.lag_group ? ` <span class="detail-lag-badge">LAG · ${this._escapeHtml(selected.lag_group.name)}</span>` : ""}</div>
+      ${noControllerData ? `<div class="muted">No data from the controller for this port (port ${this._escapeHtml(selected.port ?? "?")})</div>` : ""}
       <div class="detail-grid">
         <div class="detail-item">
           <div class="detail-label">${this._escapeHtml(this._t("link_status"))}</div>
           <div class="detail-value ${linkUp ? "online" : "offline"}">
-            ${this._escapeHtml(this._translateState(linkText) || (linkUp ? this._t("connected") : this._t("no_link")))}
+            ${this._escapeHtml(linkUp ? this._t("connected") : this._t("no_link"))}
           </div>
         </div>
         <div class="detail-item">
@@ -4694,8 +4724,8 @@ class UnifiDeviceCard extends HTMLElement {
       const hasPoe = !!(selected.poe_switch_entity || selected.poe_power_entity || selected.power_cycle_entity);
       const poeOn = poeStatus.active;
       const poePower = selected.poe_power_entity ? formatState(this._hass, selected.poe_power_entity) : "—";
-      const rxVal = selected.rx_entity ? formatState(this._hass, selected.rx_entity) : null;
-      const txVal = selected.tx_entity ? formatState(this._hass, selected.tx_entity) : null;
+      const rxVal = selected.rx_entity ? this._formatRate(selected.rx_entity) : null;
+      const txVal = selected.tx_entity ? this._formatRate(selected.tx_entity) : null;
 
       const portTitle = selected.port_label
         || (selected.kind === "special" ? selected.label : `${this._t("port_label")} ${selected.label}`);
@@ -4706,7 +4736,7 @@ class UnifiDeviceCard extends HTMLElement {
           <div class="detail-item">
             <div class="detail-label">${this._escapeHtml(this._t("link_status"))}</div>
             <div class="detail-value ${linkUp ? "online" : "offline"}">
-              ${this._escapeHtml(this._translateState(linkText) || (linkUp ? this._t("connected") : this._t("no_link")))}
+              ${this._escapeHtml(linkUp ? this._t("connected") : this._t("no_link"))}
             </div>
           </div>
           <div class="detail-item">
