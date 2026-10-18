@@ -124,9 +124,13 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
     // The card is a plain custom element: load it only when this tab is opened.
     useEffect(() => {
         let cancelled = false;
-        import('../../vendor/unifi-device-card/unifi-device-card.js').then(() => {
-            if (!cancelled) setCardReady(true);
-        });
+        import('../../vendor/unifi-device-card/unifi-device-card.js')
+            .then(() => {
+                if (!cancelled) setCardReady(true);
+            })
+            .catch((error: unknown) => {
+                console.error('Failed to load the device card component', error);
+            });
         return () => {
             cancelled = true;
         };
