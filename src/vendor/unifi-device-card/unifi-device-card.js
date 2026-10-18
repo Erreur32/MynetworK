@@ -1,0 +1,4960 @@
+import {
+  applyLagGroups,
+  applyPortNames,
+  applyGatewayPortOverrides,
+  discoverSpecialPorts,
+  formatState,
+  formatUptimeState,
+  getDeviceContext,
+  getDeviceTelemetry,
+  getDefaultPort,
+  getDefaultPortCandidates,
+  getLinkLedClass,
+  isApPortPanelAvailable,
+  isDynamicOutletDetailsEnabled,
+  isOutletDeviceType,
+  resolveDisplayPort,
+  getPoeStatus,
+  getPortSpeedText,
+  hasTraffic,
+  hasUpsFrontDisplay,
+  isUptimeTimestampState,
+  isSfpLikePort,
+  isUpsTower,
+  isOn,
+  isPortConnected,
+  mergePortsWithLayout,
+  mergeSpecialsWithLayout,
+  normalizeLinkLedColor,
+  normalizePositivePortNumbers,
+  normalizeUpsLayout,
+  normalizeLagGroups,
+  normalizePortNames,
+  parseLinkSpeedMbit,
+  stateObj,
+  shouldShowHybridVisualPanel,
+  supportsDeviceLayoutModes,
+} from "./helpers.js";
+import { normalizeMac } from "./identity.js";
+import { t } from "./translations.js";
+import {
+  formatUpsNumber, formatUpsRuntime, getDefaultUpsOutlet, getUpsBatteryLevel,
+  getUpsLoad, getUpsRuntimeSeconds, normalizeDefaultOutlet,
+} from "./ups.js";
+import "./unifi-device-card-editor.js";
+
+const VERSION = "mynetwork";
+const DEV_LOG_FLAG = "__UNIFI_DEVICE_CARD_VERSION_LOGGED__";
+const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3, trace: 4 };
+const CONTEXT_REFRESH_INTERVAL = 31000;
+const OUTLET_STATE_CONFIRMATION_TIMEOUT = 10000;
+const LOG_STYLES = {
+  badge: "background:#00AEEF;color:#fff;padding:2px 6px;border-radius:2px;font-weight:700;",
+  version: "background:#2a2a2a;color:#fff;padding:2px 6px;border-radius:2px;font-weight:700;",
+  error: "color:#ff5f56;font-weight:700;",
+  warn: "color:#ffbd2e;font-weight:700;",
+  info: "color:#9effa1;font-weight:700;",
+  debug: "color:#8ab4f8;font-weight:700;",
+  trace: "color:#caa7ff;font-weight:700;",
+};
+
+class UnifiDeviceCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("unifi-device-card-editor");
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+    this._ctx = null;
+    this._selectedKey = null;
+    this._fakeOutletStates = new Map();
+    this._pendingOutletActions = new Map();
+    this._outletErrors = new Map();
+    this._loading = false;
+    this._loadToken = 0;
+    this._loadedDeviceId = null;
+    this._contextLoadedAt = 0;
+    this._resizeObserver = null;
+    this._uptimeRefreshTimer = null;
+    this._lastMeasuredWidth = 0;
+    this._lastMeasuredPanelWidth = 0;
+    this._cardSize = 8;
+    this._instanceId = Math.random().toString(36).slice(2, 7);
+    // Keys of SFP-like ports that have been observed with live traffic.
+    // Used by _isPortConnected() to avoid false "offline" flickers on
+    // polling-interval gaps where rx/tx momentarily reads 0.
+    this._sfpConnectedSeen = new Set();
+  }
+
+  _configuredLogLevel() {
+    const raw = String(this._config?.log_level || "").toLowerCase().trim();
+    if (raw && Object.prototype.hasOwnProperty.call(LOG_LEVELS, raw)) return raw;
+    if (this._config?.debug === true) return "debug";
+    return "warn";
+  }
+
+  _shouldLog(level) {
+    const target = LOG_LEVELS[this._configuredLogLevel()];
+    const current = LOG_LEVELS[level];
+    if (current == null || target == null) return false;
+    return current <= target;
+  }
+
+  _log(level, message, ...args) {
+    if (!this._shouldLog(level)) return;
+    const fn = level === "error" ? "error" : level === "warn" ? "warn" : "log";
+    const levelLabel = level.toUpperCase();
+    const device = this._config?.device_id ? ` ${this._config.device_id}` : "";
+    const header = `%cUNIFI-DEVICE-CARD%c ${levelLabel}%c${device} #${this._instanceId}`;
+    console[fn](
+      header,
+      LOG_STYLES.badge,
+      LOG_STYLES[level] || LOG_STYLES.info,
+      LOG_STYLES.version,
+      message,
+      ...args
+    );
+  }
+
+  _numericState(entityId) {
+    if (!entityId || !this._hass?.states) return null;
+    const raw = this._hass.states[entityId]?.state;
+    if (raw == null || raw === "unknown" || raw === "unavailable") return null;
+    const n = Number.parseFloat(String(raw).replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  _buildPortDebugSnapshot(ctx) {
+    if (!ctx || (ctx.type !== "switch" && ctx.type !== "gateway")) {
+      return {
+        summary: null,
+        ports: [],
+      };
+    }
+
+    const slotData = this._buildSlotData(ctx);
+    const ports = [...(slotData?.specials || []), ...(slotData?.numbered || [])]
+      .filter((slot) => Number.isInteger(slot?.port))
+      .sort((a, b) => a.port - b.port);
+
+    let connected = 0;
+    let poePorts = 0;
+    let trafficPorts = 0;
+    let poeTotalW = 0;
+
+    const details = ports.map((slot) => {
+      const linkUp = this._isPortConnected(slot);
+      if (linkUp) connected += 1;
+
+      const poeStatus = getPoeStatus(this._hass, slot);
+      if (poeStatus.active) poePorts += 1;
+      const poeNum = this._numericState(slot?.poe_power_entity);
+      if (poeNum != null && poeNum > 0) poeTotalW += poeNum;
+
+      const rx = this._numericState(slot?.rx_entity) || 0;
+      const tx = this._numericState(slot?.tx_entity) || 0;
+      const traffic = rx + tx;
+      if (traffic > 0) trafficPorts += 1;
+
+      return {
+        port: slot.port,
+        link: linkUp ? "up" : "down",
+        speed: getPortSpeedText(this._hass, slot) || null,
+        poe: poeStatus.active ? (poeStatus.power || "on") : "off",
+        rx,
+        tx,
+      };
+    });
+
+    const topTraffic = [...details]
+      .sort((a, b) => (b.rx + b.tx) - (a.rx + a.tx))
+      .filter((row) => (row.rx + row.tx) > 0)
+      .slice(0, 5)
+      .map((row) => ({
+        port: row.port,
+        rx: row.rx,
+        tx: row.tx,
+      }));
+
+    return {
+      summary: {
+        ports_total: ports.length,
+        ports_connected: connected,
+        ports_with_poe: poePorts,
+        poe_total_w: Number(poeTotalW.toFixed(2)),
+        ports_with_traffic: trafficPorts,
+      },
+      ports: details,
+      top_traffic: topTraffic,
+    };
+  }
+
+  connectedCallback() {
+    if (this._resizeObserver) return;
+    this._resizeObserver = new ResizeObserver(() => {
+      const nextWidth = this._measuredCardWidth();
+      if (Math.abs(nextWidth - this._lastMeasuredWidth) < 1) return;
+      this._lastMeasuredWidth = nextWidth;
+      this._render();
+    });
+    this._resizeObserver.observe(this);
+    this._syncUptimeRefreshTimer();
+  }
+
+  disconnectedCallback() {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
+    this._panelObserver?.disconnect();
+    this._panelObserver = null;
+    this._observedFrontPanel = null;
+    this._clearUptimeRefreshTimer();
+    this._clearUpsOutletActions();
+  }
+
+  setConfig(config) {
+    const oldDeviceId = this._config?.device_id || null;
+    const oldFakeMode = this._config?.fake_device === true;
+    const oldDefaultUplinkPort = this._config?.default_uplink_port || "";
+    const oldDefaultOutlet = this._config?.default_outlet;
+    const newConfig = { ...(config || {}) };
+    const defaultOutlet = normalizeDefaultOutlet(newConfig.default_outlet);
+    if (defaultOutlet) newConfig.default_outlet = defaultOutlet;
+    else delete newConfig.default_outlet;
+    const upsLayout = normalizeUpsLayout(newConfig.ups_layout);
+    if (upsLayout === "combined") delete newConfig.ups_layout;
+    else newConfig.ups_layout = upsLayout;
+    const trustLinkSpeedPorts = normalizePositivePortNumbers(newConfig.trust_link_speed_ports);
+    if (trustLinkSpeedPorts.length) {
+      newConfig.trust_link_speed_ports = trustLinkSpeedPorts;
+    } else {
+      delete newConfig.trust_link_speed_ports;
+    }
+    const portNames = normalizePortNames(newConfig.port_name);
+    if (Object.keys(portNames).length) {
+      newConfig.port_name = portNames;
+    } else {
+      delete newConfig.port_name;
+    }
+    const lagGroups = normalizeLagGroups(newConfig.lag_groups);
+    if (lagGroups.length) {
+      newConfig.lag_groups = lagGroups;
+    } else {
+      delete newConfig.lag_groups;
+    }
+    const newDeviceId = newConfig?.device_id || null;
+    const newFakeMode = newConfig?.fake_device === true;
+    const dynamicPortDetailsEnabled = newConfig.dynamic_port_details === true;
+    const dynamicPortDetailsWasEnabled = this._config?.dynamic_port_details === true;
+    const dynamicOutletDetailsEnabled = isDynamicOutletDetailsEnabled(newConfig);
+    const dynamicOutletDetailsWasEnabled = isDynamicOutletDetailsEnabled(this._config);
+    this._config = newConfig;
+    const selectedIsOutlet = this._selectedKey?.startsWith("outlet:");
+    if ((dynamicPortDetailsEnabled && !dynamicPortDetailsWasEnabled && !selectedIsOutlet) ||
+        (dynamicOutletDetailsEnabled && !dynamicOutletDetailsWasEnabled && selectedIsOutlet)) {
+      this._selectedKey = null;
+    }
+    if (oldDeviceId === newDeviceId && isOutletDeviceType(this._ctx?.type) &&
+        oldDefaultOutlet !== newConfig.default_outlet && !dynamicOutletDetailsEnabled) {
+      const outlet = getDefaultUpsOutlet(this._ctx.outlet_entities, newConfig.default_outlet);
+      this._selectedKey = outlet ? `outlet:${outlet.index}` : null;
+    }
+    if (
+      oldDeviceId === newDeviceId &&
+      oldDefaultUplinkPort !== (newConfig.default_uplink_port || "") &&
+      !dynamicPortDetailsEnabled &&
+      this._ctx
+    ) {
+      const slotData = this._buildSlotData(this._ctx);
+      const displaySlots = this._applySpecialPortSelection(slotData.specials, slotData.numbered);
+      const defaultPort = getDefaultPort(
+        [...slotData.specials, ...slotData.numbered],
+        getDefaultPortCandidates(
+          this._ctx?.type,
+          this._ctx?.layout,
+          slotData.specials,
+          slotData.numbered
+        ),
+        newConfig.default_uplink_port,
+        (slot) => this._isPortConnected(slot)
+      );
+      this._selectedKey = resolveDisplayPort(
+        defaultPort,
+        [...displaySlots.specials, ...displaySlots.numbered]
+      )?.key || null;
+    }
+    this._log("info", "setConfig", {
+      device_id: newDeviceId || null,
+      log_level: this._configuredLogLevel(),
+    });
+
+    if (oldDeviceId !== newDeviceId || oldFakeMode !== newFakeMode) {
+      ++this._loadToken;
+      this._clearUptimeRefreshTimer();
+      this._ctx = null;
+      this._selectedKey = null;
+      this._fakeOutletStates.clear();
+      this._clearUpsOutletActions();
+      this._loadedDeviceId = null;
+      this._contextLoadedAt = 0;
+      this._loading = false;
+      if (this._hass && newDeviceId) {
+        this._ensureLoaded();
+        return;
+      }
+    }
+
+    this._render();
+  }
+
+  set hass(hass) {
+    const previousHass = this._hass;
+    this._hass = hass;
+    this._ensureLoaded();
+    const outletActionsChanged = this._finishConfirmedUpsOutletActions();
+    this._log("trace", "hass update");
+    const telemetrySelectionChanged = this._refreshTelemetrySelection(previousHass);
+    if (!previousHass || !this._ctx || telemetrySelectionChanged || outletActionsChanged || this._hasRelevantStateChanges(previousHass, hass)) {
+      this._render();
+    }
+  }
+
+  _refreshTelemetrySelection(previousHass = null) {
+    const candidates = this._ctx?.telemetry_entities;
+    if (!Array.isArray(candidates) || !candidates.length) return false;
+    if (
+      previousHass &&
+      !candidates.some((entity) => previousHass.states?.[entity.entity_id] !== this._hass?.states?.[entity.entity_id])
+    ) {
+      return false;
+    }
+
+    const telemetry = getDeviceTelemetry(candidates, this._hass);
+    let changed = false;
+    for (const [key, entityId] of Object.entries(telemetry)) {
+      if (this._ctx[key] === entityId) continue;
+      this._ctx[key] = entityId;
+      changed = true;
+    }
+    return changed;
+  }
+
+  getCardSize() {
+    return this._cardSize || this._estimateCardSize();
+  }
+
+  // Sections view sizing. Derived from the device type only, never from a
+  // measurement: getGridOptions() decides the width that a measurement would
+  // read back, so feeding one in would oscillate. Whatever width the card
+  // actually receives is handled by the row repacking in _buildEffectiveRows().
+  getGridOptions() {
+    const layoutMode = this._deviceLayoutMode(this._ctx);
+    const rendersNetworkPanel = layoutMode !== "ap" && (
+      this._ctx?.type === "switch" || this._ctx?.type === "gateway"
+    );
+    if (!rendersNetworkPanel) {
+      return { columns: 12, rows: "auto" };
+    }
+
+    // Ask for the width the front panel actually needs, counted in slots on
+    // its widest line. Odd/even panels draw one pair of declared rows as two
+    // lines, so a pair of twelve is twelve wide, not twenty-four.
+    const layout = this._ctx?.layout;
+    const rows = layout?.rows || [];
+    let widest = 0;
+    if (layout?.rj45_odd_even === true) {
+      for (let i = 0; i < rows.length; i += 2) {
+        const pair = (rows[i]?.length || 0) + (rows[i + 1]?.length || 0);
+        widest = Math.max(widest, Math.ceil(pair / 2));
+      }
+    } else {
+      widest = rows.reduce((max, row) => Math.max(max, row.length), 0);
+    }
+
+    // Slots parked beside a row add to that line. Slots without a row form
+    // their own leading line, but that line wraps (.special-row is flex-wrap),
+    // so it adapts to the width the port rows need and does not add to the
+    // request. All-special panels (aggregation switches) fall back to the
+    // 12 column minimum below.
+    const perRow = new Map();
+    for (const slot of layout?.specialSlots || []) {
+      if (Number.isInteger(slot?.row)) perRow.set(slot.row, (perRow.get(slot.row) || 0) + 1);
+    }
+    const slots = widest + Math.max(0, ...perRow.values());
+
+    // A slot occupies port_size + 4px of pitch (40 at the default 36, the same
+    // pitch _maxFittableColumns measures with) and the panel adds 28px of
+    // padding. A grid column is a twelfth of a view column, which Home
+    // Assistant keeps between 320 and 500px, so ~36px per column sits in that
+    // range. Narrower viewports fall short of the request; the row repacking
+    // absorbs that.
+    const needed = slots * (this._portSize() + 4) + 28;
+    const columns = Math.min(48, Math.max(12, Math.ceil(needed / 36)));
+    return { columns, rows: "auto" };
+  }
+
+  _estimateCardSize() {
+    if (!this._config?.device_id) return 4;
+    if (!this._ctx) return 5;
+    if (this._ctx?.type === "access_point" || this._ctx?.layout?.supportsHybridLayouts) {
+      if (this._apCompactViewEnabled()) return this._ctx?.ap_uplink ? 7 : 6;
+      return this._ctx?.ap_uplink ? 9 : 8;
+    }
+
+    const { specials, numbered } = this._buildSlotData(this._ctx);
+    const specialPortsInUse = new Set(
+      specials.map((slot) => slot?.port).filter((port) => Number.isInteger(port))
+    );
+    const visibleNumbered = numbered.filter((slot) => !specialPortsInUse.has(slot.port));
+    const panelRows = this._buildEffectiveRows(this._ctx, visibleNumbered).length + (specials.length ? 1 : 0);
+    const selected = [...specials, ...visibleNumbered].find((slot) => slot.key === this._selectedKey)
+      || (this._config?.dynamic_port_details === true ? null : specials[0] || visibleNumbered[0])
+      || null;
+    const hasPoe = !!(selected?.poe_switch_entity || selected?.poe_power_entity || selected?.power_cycle_entity);
+    const hasTraffic = !!(selected?.rx_entity || selected?.tx_entity);
+
+    return Math.max(6, Math.min(20, 5 + panelRows + (hasPoe ? 1 : 0) + (hasTraffic ? 1 : 0)));
+  }
+
+  _updateCardSize() {
+    const cardEl = this.shadowRoot?.querySelector("ha-card");
+    if (!cardEl) return;
+    const measured = Math.max(1, Math.ceil(cardEl.getBoundingClientRect().height / 50));
+    const nextSize = Number.isFinite(measured) ? measured : this._estimateCardSize();
+    if (nextSize === this._cardSize) return;
+    this._cardSize = nextSize;
+  }
+
+  // Watch the panel itself, not only the host. The host can keep its size
+  // while the panel gains room, and a sections view resizes the card after the
+  // first paint, so a host-only observer misses the change that decides how
+  // many ports fit in a row.
+  _observeFrontPanel() {
+    const panel = this.shadowRoot?.querySelector(".frontpanel");
+    if (!panel || panel === this._observedFrontPanel) return;
+
+    if (!this._panelObserver) {
+      this._panelObserver = new ResizeObserver(() => {
+        if (this._maxFittableColumns() === this._renderedFittableColumns) return;
+        this._render();
+      });
+    }
+    if (this._observedFrontPanel) this._panelObserver.unobserve(this._observedFrontPanel);
+    this._observedFrontPanel = panel;
+    this._panelObserver.observe(panel);
+  }
+
+  _finalizeRender() {
+    requestAnimationFrame(() => {
+      this._updateCardSize();
+
+      const panelWidth = this._measuredFrontPanelContentWidth();
+      if (panelWidth <= 0) return;
+
+      // The panel width alone is not enough. The card can be widened after its
+      // first paint - a sections view applies the column span in its own render
+      // pass - and the width then matches on the next measurement while the
+      // ports are still packed for the old one. Compare the column count the
+      // DOM was actually built with as well.
+      this._observeFrontPanel();
+
+      const widthChanged = Math.abs(panelWidth - this._lastMeasuredPanelWidth) >= 1;
+      const columnsChanged = this._maxFittableColumns() !== this._renderedFittableColumns;
+      if (!widthChanged && !columnsChanged) return;
+
+      this._lastMeasuredPanelWidth = panelWidth;
+      this._render();
+    });
+  }
+
+  _t(key) {
+    return t(this._hass, key);
+  }
+
+  _translateState(raw) {
+    if (!raw || raw === "—") return raw;
+    const key = `state_${String(raw).toLowerCase().replace(/\s+/g, "_")}`;
+    const translated = this._t(key);
+    return translated === key ? raw : translated;
+  }
+
+  _clearUptimeRefreshTimer() {
+    if (!this._uptimeRefreshTimer) return;
+    clearTimeout(this._uptimeRefreshTimer);
+    this._uptimeRefreshTimer = null;
+  }
+
+  _isTimestampUptimeEntity(entityId) {
+    if (!entityId || !this._hass) return false;
+    return isUptimeTimestampState(stateObj(this._hass, entityId));
+  }
+
+  _syncUptimeRefreshTimer() {
+    const needsRefresh =
+      this.isConnected &&
+      (this._ctx?.type === "access_point" || this._ctx?.layout?.supportsHybridLayouts) &&
+      this._isTimestampUptimeEntity(this._ctx?.uptime_entity);
+    if (!needsRefresh) {
+      this._clearUptimeRefreshTimer();
+      return;
+    }
+
+    if (this._uptimeRefreshTimer) return;
+
+    const now = Date.now();
+    const nextMinuteDelay = 60000 - (now % 60000);
+    this._uptimeRefreshTimer = setTimeout(() => {
+      this._uptimeRefreshTimer = null;
+      if (!this.isConnected) return;
+      this._render();
+    }, nextMinuteDelay || 60000);
+  }
+
+  _cardBgStyle() {
+    const color = this._config?.background_color || "var(--card-background-color)";
+    const opacityRaw = Number.parseInt(this._config?.background_opacity, 10);
+    const opacity = Number.isFinite(opacityRaw) ? Math.min(100, Math.max(0, opacityRaw)) : 100;
+
+    if (opacity >= 100) return color;
+    return `color-mix(in srgb, ${color} ${opacity}%, transparent)`;
+  }
+
+  _cardChromeBgStyle() {
+    if (this._ctx?.type === "switch" || this._ctx?.type === "gateway") {
+      return this._cardBgStyle();
+    }
+    return this._cardBgStyle();
+  }
+
+  _customColorVars() {
+    const vars = [];
+    const buttonThemeStyle = this._config?.button_theme_style !== false;
+    const buttonDefaultColor = this._config?.button_default_color !== false;
+    if (buttonThemeStyle) {
+      vars.push("--udc-button-bg: var(--primary-color, #0090d9)");
+      vars.push("--udc-button-text-color: var(--text-primary-color, #ffffff)");
+      vars.push("--udc-button-secondary-bg: var(--card-background-color, var(--udc-surf2))");
+      vars.push("--udc-button-secondary-text-color: var(--primary-text-color, var(--udc-text))");
+      vars.push("--udc-button-border-color: var(--divider-color, var(--udc-border))");
+    } else if (!buttonDefaultColor) {
+      vars.push(`--udc-button-bg: ${this._config?.button_color || "#0090d9"}`);
+      vars.push(`--udc-button-text-color: ${this._config?.button_text_color || "#ffffff"}`);
+      vars.push(`--udc-button-secondary-bg: ${this._config?.button_secondary_color || this._config?.button_color || "var(--udc-surf2)"}`);
+      vars.push(`--udc-button-secondary-text-color: ${this._config?.button_secondary_text_color || this._config?.button_text_color || "var(--primary-text-color, var(--udc-text))"}`);
+      vars.push(`--udc-button-border-color: ${this._config?.button_border_color || "var(--udc-border)"}`);
+    }
+    const pairs = [
+      ["title_color", "--udc-title-color"],
+      ["telemetry_color", "--udc-telemetry-color"],
+      ["label_color", "--udc-label-color"],
+      ["value_color", "--udc-value-color"],
+      ["meta_color", "--udc-meta-color"],
+      ["port_label_color", "--udc-port-label-color"],
+      ["special_port_label_color", "--udc-special-port-label-color"],
+      ["ap_color", "--udc-ap-color"],
+      ["ap_ring_color", "--udc-ap-ring-color"],
+      ["ap_inner_color", "--udc-ap-inner-color"],
+    ];
+    for (const [configKey, cssVar] of pairs) {
+      const value = this._config?.[configKey];
+      if (value) vars.push(`${cssVar}: ${value}`);
+    }
+    const linkLedColors = [
+      ["link_color_10-100", "--udc-link-color-10-100"],
+      ["link_color_1000", "--udc-link-color-1000"],
+      ["link_color_2.5g", "--udc-link-color-2-5g"],
+      ["link_color_10g", "--udc-link-color-10g"],
+    ];
+    for (const [configKey, cssVar] of linkLedColors) {
+      const value = normalizeLinkLedColor(this._config?.[configKey]);
+      if (value) vars.push(`${cssVar}: ${value}`);
+    }
+    return vars.length ? `; ${vars.join("; ")}` : "";
+  }
+
+  _portSize() {
+    const raw = Number.parseInt(this._config?.port_size, 10);
+    if (!Number.isFinite(raw)) return 36;
+    return Math.min(52, Math.max(24, raw));
+  }
+
+  _apScale() {
+    const raw = Number.parseInt(this._config?.ap_scale, 10);
+    if (!Number.isFinite(raw)) return 100;
+    return Math.min(140, Math.max(25, raw));
+  }
+
+  _apCompactViewEnabled() {
+    return (
+      this._ctx?.type === "access_point" || this._ctx?.layout?.supportsHybridLayouts
+    ) && this._config?.ap_compact_view === true;
+  }
+
+  _telemetryEnabled() {
+    return this._config?.show_telemetry !== false;
+  }
+
+  _apCompactHeaderTelemetryEnabled() {
+    return (
+      (this._ctx?.type === "access_point" || this._ctx?.layout?.supportsHybridLayouts) &&
+      this._telemetryEnabled() &&
+      this._config?.ap_compact_show_header_telemetry === true
+    );
+  }
+
+  _maxPortColumns() {
+    const rows = this._ctx?.layout?.rows || [];
+    const maxRowCols = rows.reduce((max, row) => Math.max(max, row.length || 0), 0);
+    const specialCols = (this._ctx?.layout?.specialSlots || []).length;
+    return Math.max(1, maxRowCols, specialCols);
+  }
+
+  _effectivePortSize() {
+    const configured = this._portSize();
+    return configured;
+  }
+
+  _measuredCardWidth() {
+    const hostWidth = this.getBoundingClientRect?.().width || this.offsetWidth || 0;
+    if (hostWidth > 0) return hostWidth;
+    const cardWidth = this.shadowRoot?.querySelector("ha-card")?.getBoundingClientRect?.().width || 0;
+    if (cardWidth > 0) return cardWidth;
+    return this.parentElement?.getBoundingClientRect?.().width || 0;
+  }
+
+  _measuredFrontPanelContentWidth() {
+    const frontPanel = this.shadowRoot?.querySelector(".frontpanel");
+    if (!frontPanel) return 0;
+
+    const panelWidth = frontPanel.getBoundingClientRect?.().width || frontPanel.clientWidth || 0;
+    if (panelWidth <= 0) return 0;
+
+    const computed = getComputedStyle(frontPanel);
+    const paddingLeft = Number.parseFloat(computed.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(computed.paddingRight) || 0;
+    return Math.max(0, panelWidth - paddingLeft - paddingRight);
+  }
+
+  _maxFittableColumns() {
+    // When the user has explicitly set ports_per_row, honour it unconditionally.
+    // The measured panel width must not override an intentional layout choice.
+    const configuredPPR = Number.parseInt(this._config?.ports_per_row, 10);
+    if (Number.isFinite(configuredPPR) && configuredPPR > 0) return Infinity;
+
+    const portSize = this._portSize();
+    const panelContentWidth = this._measuredFrontPanelContentWidth();
+    const hostWidth = this._measuredCardWidth();
+    if (!panelContentWidth && !hostWidth) return Infinity;
+
+    // Use a tighter slot estimate so measured width does not under-count columns.
+    const horizontalPadding = 24;
+    const gap = 6;
+    const slotWidth = Math.max(1, portSize - 2);
+    const available = panelContentWidth > 0
+      ? panelContentWidth
+      : Math.max(180, hostWidth - horizontalPadding);
+    return Math.max(1, Math.floor((available + gap) / (slotWidth + gap)));
+  }
+
+  _wholeNumberState(entityId) {
+    if (!entityId || !this._hass) return "—";
+    const obj = stateObj(this._hass, entityId);
+    if (!obj) return "—";
+
+    const raw = Number.parseFloat(String(obj.state ?? "").replace(",", "."));
+    if (!Number.isFinite(raw)) return formatState(this._hass, entityId);
+
+    const unit = obj.attributes?.unit_of_measurement;
+    const intValue = Math.round(raw);
+    return unit ? `${intValue} ${unit}` : String(intValue);
+  }
+
+  _apStatusRaw(entityId) {
+    if (!entityId || !this._hass) return "—";
+    const obj = stateObj(this._hass, entityId);
+    if (!obj?.state) return "—";
+    return String(obj.state);
+  }
+
+  _apStatusState(entityId) {
+    const raw = this._apStatusRaw(entityId);
+    return raw === "—" ? raw : this._translateState(raw);
+  }
+
+  _apUptimeState(entityId) {
+    if (!entityId || !this._hass) return "—";
+    return formatUptimeState(this._hass, entityId);
+  }
+
+  _apLedColorValue() {
+    const colorEntity = this._ctx?.led_color_entity;
+    const colorStateObj = colorEntity ? stateObj(this._hass, colorEntity) : null;
+    const raw = String(colorStateObj?.state || "").trim();
+    if (raw && raw !== "unknown" && raw !== "unavailable") {
+      if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw)) return raw;
+      if (/^rgb\(/i.test(raw)) return raw;
+    }
+
+    const ledObj = this._ctx?.led_switch_entity ? stateObj(this._hass, this._ctx.led_switch_entity) : null;
+    const rgbAttr = ledObj?.attributes?.rgb_color || colorStateObj?.attributes?.rgb_color;
+    if (Array.isArray(rgbAttr) && rgbAttr.length === 3) {
+      const [r, g, b] = rgbAttr.map((n) => Math.max(0, Math.min(255, Number(n) || 0)));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    const named = raw.toLowerCase();
+    const map = {
+      blue: "#0000ff",
+      white: "#ffffff",
+      red: "#ff3b30",
+      green: "#33d35d",
+      orange: "#efb21a",
+      amber: "#efb21a",
+      yellow: "#efb21a",
+      warm_white: "#f5deb3",
+      cool_white: "#dbeafe",
+      purple: "#8b5cf6",
+      pink: "#ec4899",
+    };
+    return map[named] || null;
+  }
+
+  _apLedState() {
+    const ledEntity = this._ctx?.led_switch_entity;
+    const ledEnabled = ledEntity ? isOn(this._hass, ledEntity) : this._isDeviceOnline();
+    const defaultColor = this._config?.ap_led_color || this._ctx?.layout?.apLedDefaultColor || "#0000ff";
+    const ringColor = ledEnabled ? (this._apLedColorValue() || defaultColor) : "#868b93";
+    return { ledEntity, ledEnabled, ringColor };
+  }
+
+  _apUplinkText(uplink) {
+    if (!uplink) return null;
+    const deviceLabel = String(uplink.via_device_name || uplink.via_mac || "").trim();
+    return deviceLabel || null;
+  }
+
+  _escapeAttr(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/'/g, "&#39;");
+  }
+
+  _escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  _safeClassToken(value, fallback = "") {
+    const token = String(value ?? "").trim();
+    if (!token) return fallback;
+    return /^[a-z0-9_-]+$/i.test(token) ? token : fallback;
+  }
+
+  _formatEntityName(entityId, fallback = "") {
+    const fallbackName = String(fallback ?? "").trim();
+    const obj = entityId ? this._hass?.states?.[entityId] : null;
+    const formatter = this._hass?.formatEntityName;
+
+    if (obj && typeof formatter === "function") {
+      try {
+        const formatted = String(formatter(obj) ?? "").trim();
+        if (formatted) return formatted;
+      } catch (err) {
+        // Keep older Home Assistant versions and unexpected formatter failures silent.
+      }
+    }
+
+    return fallbackName;
+  }
+
+  _fiveGPercent(entityId) {
+    const raw = this._numericState(entityId);
+    if (raw == null) return null;
+    return Math.max(0, Math.min(100, raw));
+  }
+
+  _fiveGBackupDisplayData(uptime) {
+    const cpuPercent = this._fiveGPercent(this._ctx?.cpu_utilization_entity);
+    const memoryPercent = this._fiveGPercent(this._ctx?.memory_utilization_entity);
+
+    return {
+      uptime: String(uptime || "—"),
+      cpuPercent,
+      memoryPercent,
+      cpuBar: cpuPercent ?? 0,
+      memoryBar: memoryPercent ?? 0,
+    };
+  }
+
+  _apUplinkTooltip(uplink) {
+    if (!uplink) return "";
+    const lines = [];
+    const kind = String(uplink.kind || "").toLowerCase();
+
+    if (kind === "mesh") lines.push("Mesh Uplink");
+    else if (kind === "wired") lines.push("Wired Uplink");
+    else lines.push("Uplink");
+
+    if (uplink.via_device_name) lines.push(`Device: ${uplink.via_device_name}`);
+    if (uplink.remote_port) lines.push(`Port: ${uplink.remote_port}`);
+    if (uplink.via_mac) lines.push(`MAC: ${uplink.via_mac}`);
+
+    return lines.join(" · ");
+  }
+
+  _toClientNames(value) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    for (const entry of value) {
+      if (typeof entry === "string" && entry.trim()) {
+        out.push(entry.trim());
+        continue;
+      }
+      if (entry && typeof entry === "object") {
+        const name =
+          entry.name ||
+          entry.hostname ||
+          entry.client_name ||
+          entry.display_name ||
+          entry.mac ||
+          "";
+        if (String(name).trim()) out.push(String(name).trim());
+      }
+    }
+    return out;
+  }
+
+  _getPortClientInfo(slot) {
+    const candidates = new Set([
+      slot?.link_entity,
+      slot?.speed_entity,
+      slot?.port_switch_entity,
+      slot?.poe_power_entity,
+      slot?.rx_entity,
+      slot?.tx_entity,
+      ...(Array.isArray(slot?.raw_entities) ? slot.raw_entities : []),
+    ].filter(Boolean));
+
+    const numericKeys = [
+      "connected_clients",
+      "client_count",
+      "clients",
+      "num_clients",
+      "active_clients",
+      "station_count",
+    ];
+    const listKeys = ["clients", "connected_clients", "client_list", "stations", "hosts"];
+
+    let bestCount = null;
+    let bestNames = [];
+
+    for (const entityId of candidates) {
+      const obj = stateObj(this._hass, entityId);
+      const attrs = obj?.attributes;
+      if (!attrs || typeof attrs !== "object") continue;
+
+      const stateNum = Number.parseInt(String(obj?.state ?? ""), 10);
+      if (
+        Number.isInteger(stateNum) &&
+        stateNum >= 0 &&
+        (entityId.includes("clients") || String(attrs?.friendly_name || "").toLowerCase().includes("clients"))
+      ) {
+        if (bestCount == null || stateNum > bestCount) bestCount = stateNum;
+      }
+
+      for (const key of numericKeys) {
+        const raw = attrs[key];
+        const num = Number.parseInt(raw, 10);
+        if (Number.isInteger(num) && num >= 0 && (bestCount == null || num > bestCount)) {
+          bestCount = num;
+        }
+      }
+
+      for (const key of listKeys) {
+        const names = this._toClientNames(attrs[key]);
+        if (names.length > bestNames.length) bestNames = names;
+      }
+    }
+
+    if ((bestCount == null || bestCount === 0) && bestNames.length === 0) return null;
+    const count = bestCount != null ? bestCount : bestNames.length;
+    return { count, names: bestNames.slice(0, 8) };
+  }
+
+  _extractClientNameFromStateObj(obj, entityId) {
+    const attrs = obj?.attributes || {};
+    const fallback =
+      String(attrs.friendly_name || "").trim() ||
+      String(entityId || "")
+        .replace(/^device_tracker\./i, "")
+        .replace(/_/g, " ")
+        .trim();
+
+    return this._formatEntityName(entityId, fallback);
+  }
+
+  _extractPortFromAttributes(attrs, entityId = "") {
+    const keys = [
+      "port",
+      "switch_port",
+      "sw_port",
+      "uplink_port",
+      "uplink_remote_port",
+      "remote_port",
+      "network_port",
+      "port_number",
+      "wired_port",
+    ];
+    for (const key of keys) {
+      const match = String(attrs?.[key] ?? "").match(/\d+/);
+      if (match) return Number.parseInt(match[0], 10);
+    }
+    const textKeys = ["connected_to", "uplink", "uplink_source", "source", "network_path", "connection_path"];
+    for (const key of textKeys) {
+      const match = String(attrs?.[key] ?? "").match(/port\D*(\d+)/i);
+      if (match) return Number.parseInt(match[1], 10);
+    }
+    const idMatch = String(entityId || "").match(/(?:^|[_-])port[_-]?(\d+)(?:[_-]|$)/i);
+    if (idMatch) return Number.parseInt(idMatch[1], 10);
+    return null;
+  }
+
+  _extractParentMacFromAttributes(attrs) {
+    const keys = [
+      "sw_mac",
+      "switch_mac",
+      "uplink_mac",
+      "uplink_device_mac",
+      "wired_uplink_mac",
+      "switch_uplink_mac",
+      "connected_to_mac",
+      "parent_mac",
+      "parent_device_mac",
+      "network_device_mac",
+    ];
+    for (const key of keys) {
+      const mac = normalizeMac(attrs?.[key]);
+      if (mac) return mac;
+    }
+    return null;
+  }
+
+  _extractParentText(attrs) {
+    const textKeys = [
+      "connected_to",
+      "uplink",
+      "uplink_source",
+      "source",
+      "network_device",
+      "network_path",
+      "connection_path",
+      "switch",
+      "parent",
+    ];
+    return textKeys
+      .map((key) => String(attrs?.[key] ?? "").trim())
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  _matchesParentDevice(attrs, deviceMac) {
+    const parentMac = this._extractParentMacFromAttributes(attrs);
+    if (parentMac) return parentMac === deviceMac;
+
+    const parentText = this._extractParentText(attrs);
+    if (!parentText) return false;
+
+    const deviceName = String(this._ctx?.name || "").toLowerCase().trim();
+    const deviceModel = String(this._ctx?.model || "").toLowerCase().trim();
+    if (deviceName && parentText.includes(deviceName)) return true;
+    if (deviceModel && parentText.includes(deviceModel)) return true;
+    return false;
+  }
+
+  _buildPortClientIndex() {
+    const deviceMac = normalizeMac(this._ctx?.identity?.primary_mac);
+    if (!deviceMac || !this._hass?.states) return new Map();
+
+    const byPort = new Map();
+    for (const [entityId, obj] of Object.entries(this._hass.states)) {
+      const attrs = obj?.attributes || {};
+      if (!this._matchesParentDevice(attrs, deviceMac)) continue;
+
+      const port = this._extractPortFromAttributes(attrs, entityId);
+      if (!Number.isInteger(port) || port < 1) continue;
+
+      if (!byPort.has(port)) {
+        byPort.set(port, { count: 0, names: new Set() });
+      }
+      const entry = byPort.get(port);
+
+      if (entityId.startsWith("device_tracker.")) {
+        const name = this._extractClientNameFromStateObj(obj, entityId);
+        if (name) entry.names.add(name);
+      }
+
+      const stateNum = Number.parseInt(String(obj?.state ?? ""), 10);
+      const friendly = String(attrs?.friendly_name || "").toLowerCase();
+      const looksLikeClientCounter =
+        entityId.includes("clients") ||
+        friendly.includes("clients") ||
+        friendly.includes("geräte");
+      if (looksLikeClientCounter && Number.isInteger(stateNum) && stateNum >= 0) {
+        entry.count = Math.max(entry.count, stateNum);
+      }
+
+      const attrNames = this._toClientNames(attrs?.clients || attrs?.connected_clients || attrs?.client_list);
+      for (const name of attrNames) {
+        entry.names.add(name);
+      }
+
+      entry.count = Math.max(entry.count, entry.names.size);
+    }
+
+    return byPort;
+  }
+
+  _buildSlotData(ctx) {
+    const discovered = Array.isArray(ctx?.numberedPorts) ? ctx.numberedPorts : [];
+    const numberedRaw = mergePortsWithLayout(ctx?.layout, discovered);
+
+    const specialsRaw = mergeSpecialsWithLayout(
+      ctx?.layout,
+      ctx?.type === "gateway" ? discoverSpecialPorts(ctx?.entities || []) : [],
+      discovered
+    );
+
+    this._applyManualPortSensorOverrides(numberedRaw, specialsRaw);
+
+    if (ctx?.type === "gateway") {
+      return applyLagGroups(applyPortNames(applyGatewayPortOverrides(
+        this._config,
+        specialsRaw,
+        numberedRaw,
+        ctx?.layout
+      ), this._config?.port_name), this._config?.lag_groups);
+    }
+
+    return applyLagGroups(
+      applyPortNames({ specials: specialsRaw, numbered: numberedRaw }, this._config?.port_name),
+      this._config?.lag_groups
+    );
+  }
+
+  _relevantStateEntityIds() {
+    const ids = new Set();
+    for (const entity of this._ctx?.entities || []) {
+      if (entity?.entity_id) ids.add(entity.entity_id);
+    }
+    for (const entity of this._ctx?.telemetry_entities || []) {
+      if (entity?.entity_id) ids.add(entity.entity_id);
+    }
+
+    const directEntityKeys = [
+      "cpu_utilization_entity",
+      "cpu_temperature_entity",
+      "memory_utilization_entity",
+      "temperature_entity",
+      "online_entity",
+      "uptime_entity",
+      "clients_entity",
+      "status_entity",
+      "ap_status_entity",
+      "led_switch_entity",
+      "led_color_entity",
+      "reboot_entity",
+    ];
+    for (const key of directEntityKeys) {
+      const entityId = this._ctx?.[key];
+      if (entityId) ids.add(entityId);
+    }
+
+    for (const outlet of this._ctx?.outlet_entities || []) {
+      if (outlet.entity_id) ids.add(outlet.entity_id);
+      if (outlet.power_entity) ids.add(outlet.power_entity);
+    }
+
+    const { specials, numbered } = this._buildSlotData(this._ctx);
+    const portEntityKeys = [
+      "link_entity",
+      "speed_entity",
+      "poe_switch_entity",
+      "poe_power_entity",
+      "port_switch_entity",
+      "power_cycle_entity",
+      "rx_entity",
+      "tx_entity",
+    ];
+    for (const slot of [...specials, ...numbered]) {
+      for (const key of portEntityKeys) {
+        if (slot?.[key]) ids.add(slot[key]);
+      }
+    }
+
+    return ids;
+  }
+
+  _hasRelevantStateChanges(previousHass, nextHass) {
+    if (previousHass?.language !== nextHass?.language ||
+        previousHass?.locale !== nextHass?.locale ||
+        previousHass?.formatEntityName !== nextHass?.formatEntityName) return true;
+
+    const entityIds = this._relevantStateEntityIds();
+    if (!entityIds.size) return true;
+
+    for (const id of entityIds) {
+      if (previousHass?.states?.[id] !== nextHass?.states?.[id]) return true;
+    }
+
+    // Port tooltips also use clients outside the device's own entity registry.
+    // Check both snapshots so joining, moving and removed clients update too.
+    const deviceMac = normalizeMac(this._ctx?.identity?.primary_mac);
+    if (deviceMac) {
+      const previousStates = previousHass?.states || {};
+      const nextStates = nextHass?.states || {};
+      for (const id of new Set([...Object.keys(previousStates), ...Object.keys(nextStates)])) {
+        const previous = previousStates[id];
+        const next = nextStates[id];
+        if (previous === next) continue;
+        if (this._matchesParentDevice(previous?.attributes || {}, deviceMac) ||
+            this._matchesParentDevice(next?.attributes || {}, deviceMac)) return true;
+      }
+    }
+
+    return false;
+  }
+
+  _manualPortSpeedOverrides() {
+    const out = new Map();
+    const entries = Object.entries(this._config || {});
+
+    for (const [key, value] of entries) {
+      const match = String(key || "").match(/^port_(\d+)$/i);
+      if (!match) continue;
+
+      const port = Number.parseInt(match[1], 10);
+      const entityId = String(value || "").trim();
+      if (!Number.isInteger(port) || port < 1 || !entityId) continue;
+
+      out.set(port, entityId);
+    }
+
+    return out;
+  }
+
+  _applyManualPortSensorOverrides(numbered, specials) {
+    const overrides = this._manualPortSpeedOverrides();
+    if (!overrides.size) return;
+
+    const allSlots = [...(Array.isArray(numbered) ? numbered : []), ...(Array.isArray(specials) ? specials : [])];
+    const overrideEntities = new Set(overrides.values());
+
+    for (const slot of allSlots) {
+      if (!slot || !overrideEntities.has(slot.speed_entity)) continue;
+      slot.speed_entity = null;
+    }
+
+    for (const [port, entityId] of overrides.entries()) {
+      const slot = allSlots.find((entry) => entry?.port === port);
+      if (!slot) continue;
+
+      slot.speed_entity = entityId;
+      if (!Array.isArray(slot.raw_entities)) slot.raw_entities = [];
+      if (!slot.raw_entities.includes(entityId)) slot.raw_entities.push(entityId);
+
+      const derivedRx = this._deriveTelemetrySibling(entityId, "rx");
+      if (derivedRx) {
+        slot.rx_entity = derivedRx;
+        if (!slot.raw_entities.includes(derivedRx)) slot.raw_entities.push(derivedRx);
+      }
+
+      const derivedTx = this._deriveTelemetrySibling(entityId, "tx");
+      if (derivedTx) {
+        slot.tx_entity = derivedTx;
+        if (!slot.raw_entities.includes(derivedTx)) slot.raw_entities.push(derivedTx);
+      }
+
+      const derivedPoePower = this._deriveTelemetrySibling(entityId, "poe_power");
+      if (derivedPoePower) {
+        slot.poe_power_entity = derivedPoePower;
+        if (!slot.raw_entities.includes(derivedPoePower)) slot.raw_entities.push(derivedPoePower);
+      }
+
+      const derivedPoeSwitch = this._deriveTelemetrySibling(entityId, "poe_switch");
+      if (derivedPoeSwitch) {
+        slot.poe_switch_entity = derivedPoeSwitch;
+        if (!slot.raw_entities.includes(derivedPoeSwitch)) slot.raw_entities.push(derivedPoeSwitch);
+      }
+    }
+  }
+
+  _deriveTelemetrySibling(speedEntityId, metric) {
+    const source = String(speedEntityId || "").trim();
+    if (!source.startsWith("sensor.") || !source.endsWith("_link_speed")) return null;
+
+    const base = source.replace(/^sensor\./i, "").replace(/_link_speed$/i, "");
+    if (!base) return null;
+
+    const candidates = metric === "rx"
+      ? [`sensor.${base}_rx`]
+      : metric === "tx"
+        ? [`sensor.${base}_tx`]
+        : metric === "poe_power"
+          ? [
+              `sensor.${base}_poe_power`,
+              `sensor.${base}_poe_consumption`,
+              `sensor.${base}_power_draw`,
+            ]
+          : metric === "poe_switch"
+            ? [
+                `switch.${base}_poe`,
+                `switch.${base}_poe_enabled`,
+                `switch.${base}_poe_port_control`,
+                `switch.${base}_port_poe`,
+              ]
+            : [];
+
+    if (!candidates.length) return null;
+    return candidates.find((candidate) => !!this._hass?.states?.[candidate]) || null;
+  }
+
+  _normalizePortList(value) {
+    if (!Array.isArray(value)) return [];
+    const numeric = value
+      .map((entry) => Number.parseInt(entry, 10))
+      .filter((num) => Number.isInteger(num) && num > 0);
+    return Array.from(new Set(numeric)).sort((a, b) => a - b);
+  }
+
+  _applySpecialPortSelection(specials, numbered) {
+    const specialPortDefaults = specials
+      .map((slot) => slot?.port)
+      .filter((port) => Number.isInteger(port));
+    const hasEditMode = this._config?.edit_special_ports === true;
+    const hasExplicitSpecialPorts =
+      hasEditMode && Object.prototype.hasOwnProperty.call(this._config || {}, "special_ports");
+
+    const selectedPorts = hasEditMode
+      ? (hasExplicitSpecialPorts
+          ? this._normalizePortList(this._config?.special_ports)
+          : this._normalizePortList(specialPortDefaults))
+      : this._normalizePortList([
+          ...specialPortDefaults,
+          ...this._normalizePortList(this._config?.custom_special_ports),
+        ]);
+
+    const allByPort = new Map();
+    for (const slot of [...specials, ...numbered]) {
+      if (!Number.isInteger(slot?.port) || allByPort.has(slot.port)) continue;
+      allByPort.set(slot.port, slot);
+    }
+
+    const selectedSet = new Set(selectedPorts);
+    const nextSpecials = selectedPorts
+      .map((port) => allByPort.get(port))
+      .filter(Boolean)
+      .map((slot) => ({ ...slot, kind: "special", label: slot.label || String(slot.port) }));
+
+    const numberedByPort = new Map(
+      numbered
+        .filter((slot) => Number.isInteger(slot?.port))
+        .map((slot) => [slot.port, slot])
+    );
+
+    const nextNumbered = numbered
+      .filter((slot) => !selectedSet.has(slot.port))
+      .map((slot) => ({ ...slot, kind: "numbered", label: slot.label || String(slot.port) }));
+
+    for (const slot of specials) {
+      if (!Number.isInteger(slot?.port) || selectedSet.has(slot.port)) continue;
+      if (numberedByPort.has(slot.port)) continue;
+      nextNumbered.push({
+        ...slot,
+        key: `port-${slot.port}`,
+        kind: "numbered",
+        label: String(slot.port),
+      });
+    }
+
+    nextNumbered.sort((a, b) => (a.port || 0) - (b.port || 0));
+    return { specials: nextSpecials, numbered: nextNumbered };
+  }
+
+  _buildEffectiveRows(ctx, numbered) {
+    const baseRows = (ctx?.layout?.rows || []).map((row) => [...row]);
+    const knownPorts = new Set(baseRows.flat());
+    const orderedPorts = numbered
+      .map((slot) => slot?.port)
+      .filter((port) => Number.isInteger(port))
+      .sort((a, b) => a - b);
+
+    const extraPorts = numbered
+      .map((slot) => slot?.port)
+      .filter((port) => Number.isInteger(port) && !knownPorts.has(port))
+      .sort((a, b) => a - b);
+
+    const fitCols = this._maxFittableColumns();
+    // Remember the column count this layout was built with, so _finalizeRender
+    // can tell a stale panel from a settled one. Record it before the empty
+    // early return: a panel with no ports must settle too, or _finalizeRender
+    // re-renders it on every frame.
+    this._renderedFittableColumns = fitCols;
+
+    if (!extraPorts.length && !baseRows.length && !orderedPorts.length) return [];
+
+    if (!baseRows.length) {
+      if (!Number.isFinite(fitCols) || extraPorts.length <= fitCols) return [extraPorts];
+      const packed = [];
+      for (let i = 0; i < extraPorts.length; i += fitCols) {
+        packed.push(extraPorts.slice(i, i + fitCols));
+      }
+      return packed;
+    }
+
+    const rows = baseRows.map((row) => [...row]);
+    if (extraPorts.length) rows[rows.length - 1].push(...extraPorts);
+    const widestRow = rows.reduce((max, row) => Math.max(max, row.length), 0);
+    if (!Number.isFinite(fitCols) || widestRow <= fitCols) return rows;
+
+    const packedRows = [];
+    for (let i = 0; i < orderedPorts.length; i += fitCols) {
+      packedRows.push(orderedPorts.slice(i, i + fitCols));
+    }
+    return packedRows;
+  }
+
+  _shouldUseOddEvenRows(ctx, numbered) {
+    if (!ctx || (ctx.type !== "switch" && ctx.type !== "gateway")) return false;
+    if (this._config?.force_sequential_ports === true) return false;
+    // Explicit per-layout overrides always win.
+    if (ctx?.layout?.rj45_odd_even === true) return true;
+    if (ctx?.layout?.rj45_odd_even === false) return false;
+    // Devices with an explicit multi-row frontStyle (six-grid, eight-grid, dual-row,
+    // quad-row) already define their own row groupings.  Applying odd/even reordering
+    // on top would break those groupings (e.g. a USW Pro 24 ending up with 6 columns
+    // instead of the declared 6-per-row layout).
+    const frontStyle = String(ctx?.layout?.frontStyle || "");
+    if (["dual-row", "six-grid", "eight-grid", "quad-row"].includes(frontStyle)) {
+      return false;
+    }
+    const portCount = (numbered || []).filter((slot) => Number.isInteger(slot?.port)).length;
+    return portCount > 8;
+  }
+
+  _applyOddEvenRows(rows) {
+    const out = [];
+    for (let i = 0; i < rows.length; i += 2) {
+      const first = rows[i] || [];
+      const second = rows[i + 1] || [];
+      const pair = [...first, ...second];
+      if (pair.length <= 1) {
+        if (first.length) out.push(first);
+        if (second.length) out.push(second);
+        continue;
+      }
+
+      const odds = pair.filter((port) => Number.isInteger(port) && port % 2 === 1);
+      const evens = pair.filter((port) => Number.isInteger(port) && port % 2 === 0);
+      if (odds.length && evens.length) {
+        out.push(odds, evens);
+      } else {
+        if (first.length) out.push(first);
+        if (second.length) out.push(second);
+      }
+    }
+    return out;
+  }
+
+  _rotate180Enabled(ctx) {
+    const type = ctx?.type;
+    const rawRotate = this._config?.rotate180;
+    const rotate180 =
+      rawRotate === true ||
+      rawRotate === "true" ||
+      rawRotate === 1 ||
+      rawRotate === "1";
+
+    return (type === "switch" || type === "gateway") && rotate180;
+  }
+
+  async _ensureLoaded() {
+    if (!this._hass || !this._config?.device_id) return;
+
+    const currentId = this._config.device_id;
+    const refreshing = this._loadedDeviceId === currentId && !!this._ctx;
+    if (refreshing && Date.now() - this._contextLoadedAt < CONTEXT_REFRESH_INTERVAL) return;
+    if (this._loading) return;
+
+    this._loading = true;
+    this._log("debug", refreshing ? "refreshing device context" : "loading device context");
+    if (!refreshing) this._render();
+    const token = ++this._loadToken;
+
+    try {
+      const ctx = await getDeviceContext(this._hass, currentId, this._config);
+      if (token !== this._loadToken) return;
+
+      this._ctx = ctx;
+      // hass may have advanced while registry requests were pending.
+      this._refreshTelemetrySelection();
+      this._loadedDeviceId = currentId;
+      this._contextLoadedAt = Date.now();
+      const portSnapshot = this._buildPortDebugSnapshot(ctx);
+      this._log("info", "context loaded", {
+        type: ctx?.type || null,
+        model: ctx?.model || null,
+        identity_mac: ctx?.identity?.primary_mac || null,
+        ...(portSnapshot.summary || {}),
+        top_traffic: portSnapshot.top_traffic || [],
+      });
+      if (this._shouldLog("debug") && portSnapshot.ports?.length) {
+        this._log("debug", "port snapshot", portSnapshot.ports);
+      }
+
+      const slotData = this._buildSlotData(ctx);
+      const displaySlots = this._applySpecialPortSelection(slotData.specials, slotData.numbered);
+      const outlets = isOutletDeviceType(ctx?.type) ? ctx.outlet_entities || [] : [];
+      const available = [
+        ...outlets.map((outlet) => ({ key: `outlet:${outlet.index}` })),
+        ...displaySlots.specials, ...displaySlots.numbered,
+      ];
+      const selectedStillExists = available.some((slot) => slot.key === this._selectedKey);
+      if (!selectedStillExists) {
+        if (outlets.length) {
+          this._selectedKey = isDynamicOutletDetailsEnabled(this._config)
+            ? null
+            : `outlet:${getDefaultUpsOutlet(outlets, this._config?.default_outlet).index}`;
+        } else {
+          const defaultPort = getDefaultPort(
+            [...slotData.specials, ...slotData.numbered],
+            getDefaultPortCandidates(
+              ctx?.type,
+              ctx?.layout,
+              slotData.specials,
+              slotData.numbered
+            ),
+            this._config?.default_uplink_port,
+            (slot) => this._isPortConnected(slot)
+          );
+          this._selectedKey = this._config?.dynamic_port_details === true
+            ? null
+            : resolveDisplayPort(defaultPort, available)?.key || null;
+        }
+      }
+    } catch (err) {
+      this._log("error", "Failed to load device context", err);
+      if (token !== this._loadToken) return;
+      if (!refreshing) {
+        this._ctx = null;
+        this._loadedDeviceId = null;
+        this._contextLoadedAt = 0;
+      } else {
+        this._contextLoadedAt = Date.now();
+      }
+    }
+
+    this._loading = false;
+    this._render();
+  }
+
+  _selectKey(key) {
+    const dynamic = key?.startsWith("outlet:")
+      ? isDynamicOutletDetailsEnabled(this._config)
+      : this._config?.dynamic_port_details === true;
+    this._selectedKey = dynamic && this._selectedKey === key
+      ? null
+      : key;
+    this._render();
+  }
+
+  async _toggleEntity(entityId) {
+    if (!entityId || !this._hass) return;
+    const [domain] = entityId.split(".");
+    this._log("debug", "toggle entity", entityId);
+    await this._hass.callService(domain, "toggle", { entity_id: entityId });
+  }
+
+  async _pressButton(entityId) {
+    if (!entityId || !this._hass) return;
+    this._log("debug", "press button", entityId);
+    await this._hass.callService("button", "press", { entity_id: entityId });
+  }
+
+  _title() {
+    if (this._config?.show_name === false) return "";
+    if (this._config?.name) return this._config.name;
+    if (this._ctx?.name) return this._ctx.name;
+    return "UniFi Device Card";
+  }
+
+  _subtitle() {
+    if (!this._config?.device_id || !this._ctx) return `Version ${VERSION}`;
+    const fw = this._ctx?.firmware;
+    const model = this._ctx?.layout?.displayModel || this._ctx?.model || "";
+    return fw ? `${model} · FW ${fw}` : model;
+  }
+
+  _openDevicePage() {
+    const deviceId = this._config?.device_id;
+    if (!deviceId || this._ctx?.fake_device === true) return;
+
+    const path = `/config/devices/device/${encodeURIComponent(deviceId)}`;
+    window.history.pushState(null, "", path);
+    window.dispatchEvent(new Event("location-changed"));
+  }
+
+  _attachDeviceLinkHandler() {
+    const link = this.shadowRoot?.querySelector("[data-action='open-device']");
+    if (!link) return;
+
+    link.addEventListener("click", () => this._openDevicePage());
+    link.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      this._openDevicePage();
+    });
+  }
+
+  _headerMetrics() {
+    if (!this._telemetryEnabled() || !this._ctx || !this._hass) return [];
+
+    const metrics = [
+      { key: "cpu_utilization", entity: this._ctx.cpu_utilization_entity },
+      { key: "cpu_temperature", entity: this._ctx.cpu_temperature_entity },
+      { key: "memory_utilization", entity: this._ctx.memory_utilization_entity },
+      { key: "temperature", entity: this._ctx.temperature_entity },
+      ...(this._ctx?.layout?.supportsIntegratedWifi
+        ? [{ key: "clients", entity: this._ctx.clients_entity, wholeNumber: true }]
+        : []),
+    ];
+
+    const seenEntities = new Set();
+    return metrics
+      .filter((item) => {
+        if (!item.entity) return false;
+        if (seenEntities.has(item.entity)) return false;
+        seenEntities.add(item.entity);
+        return (item.wholeNumber ? this._wholeNumberState(item.entity) : formatState(this._hass, item.entity)) !== "—";
+      })
+      .map((item) => ({
+        key: item.key,
+        label: this._t(item.key),
+        value: item.wholeNumber ? this._wholeNumberState(item.entity) : formatState(this._hass, item.entity),
+      }));
+  }
+
+  _headerMetricsHTML(metrics) {
+    return `<div class="meta-list"${metrics.length ? "" : " hidden"}>${metrics.map((item) => `
+      <div class="meta-row" data-metric="${this._escapeAttr(item.key)}">
+        <div class="meta-label">${this._escapeHtml(item.label)}:</div>
+        <div class="meta-value">${this._escapeHtml(item.value)}</div>
+      </div>`).join("")}</div>`;
+  }
+
+  _updateHeaderMetrics(metrics) {
+    const list = this.shadowRoot.querySelector(".header-info > .meta-list");
+    if (!list) return false;
+
+    const remaining = new Map(Array.from(list.children, (row) => [row.dataset.metric, row]));
+    for (const [index, item] of metrics.entries()) {
+      let row = remaining.get(item.key);
+      remaining.delete(item.key);
+      if (!row) {
+        row = document.createElement("div");
+        row.className = "meta-row";
+        row.dataset.metric = item.key;
+        for (const className of ["meta-label", "meta-value"]) {
+          const cell = document.createElement("div");
+          cell.className = className;
+          row.appendChild(cell);
+        }
+      }
+      const label = row.querySelector(".meta-label");
+      const value = row.querySelector(".meta-value");
+      if (label.textContent !== `${item.label}:`) label.textContent = `${item.label}:`;
+      if (value.textContent !== item.value) value.textContent = item.value;
+      if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
+    }
+    for (const row of remaining.values()) row.remove();
+    if (list.hidden !== !metrics.length) list.hidden = !metrics.length;
+    return true;
+  }
+
+  _upsMetrics() {
+    if (!this._telemetryEnabled() || !this._ctx || !this._hass) return [];
+    const battery = getUpsBatteryLevel(this._hass, this._ctx);
+    const runtime = formatUpsRuntime(this._hass, getUpsRuntimeSeconds(this._hass, this._ctx));
+    if (this._ctx.fake_device) {
+      const load = this._upsLoad();
+      return [
+        { key: "ups_battery_level", value: battery == null ? "—" : formatUpsNumber(this._hass, battery / 100, { style: "percent", maximumFractionDigits: 0 }) },
+        { key: "ups_battery_runtime", value: runtime },
+        ...(load ? [
+          { key: "ups_output_power", value: `${formatUpsNumber(this._hass, load.consumption)} W` },
+          { key: "ups_power_budget", value: `${formatUpsNumber(this._hass, load.budget)} W` },
+        ] : []),
+      ].filter((item) => item.value !== "—").map((item) => ({ ...item, label: this._t(item.key) }));
+    }
+    return [
+      "ups_battery_level",
+      "ups_battery_runtime",
+      "ups_output_power",
+      "ups_output_current",
+      "ups_output_voltage",
+      "ups_input_voltage",
+      "ups_bypass_voltage",
+      "ups_output_power_factor",
+      "ups_power_budget",
+      "ups_power_consumption",
+    ].map((key) => ({ key, entity: this._ctx[`${key}_entity`] }))
+      .filter((item) => item.entity && formatState(this._hass, item.entity) !== "—")
+      .map((item) => ({ key: item.key, label: this._t(item.key), value: item.key === "ups_battery_runtime" ? runtime
+        : item.key === "ups_battery_level" && battery != null
+          ? formatUpsNumber(this._hass, battery / 100, { style: "percent", maximumFractionDigits: 0 })
+          : formatState(this._hass, item.entity) }));
+  }
+
+  _upsLoad() {
+    if (!this._ctx?.fake_device) return getUpsLoad(this._hass, this._ctx);
+    const consumption = (this._ctx.outlet_entities || []).reduce((total, outlet) =>
+      total + (this._upsOutletState(outlet) === "on" ? outlet.preview_power || 0 : 0), 0);
+    const previewKey = this._ctx.type === "power_distribution" ? "preview_power" : "preview_ups";
+    return getUpsLoad(this._hass, { ...this._ctx, [previewKey]: {
+      ...this._ctx[previewKey], power_consumption: consumption,
+    } });
+  }
+
+  _renderUpsSummary(battery, runtime, load, loadLabel = this._t("ups_load")) {
+    if (battery == null && runtime === "—" && !load) return "";
+    const percentText = (value) => formatUpsNumber(this._hass, value / 100, { style: "percent", maximumFractionDigits: 0 });
+    return `<div class="ups-summary">
+      ${battery != null ? `<div class="ups-summary-item">
+        <div class="detail-label">${this._escapeHtml(this._t("ups_battery_level"))}</div>
+        <div class="detail-value">${this._escapeHtml(percentText(battery))}</div>
+        <div class="ups-meter" role="progressbar" aria-label="${this._escapeAttr(this._t("ups_battery_level"))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${battery}"><i style="width:${battery}%"></i></div>
+      </div>` : ""}
+      ${runtime !== "—" ? `<div class="ups-summary-item">
+        <div class="detail-label">${this._escapeHtml(this._t("ups_battery_runtime"))}</div>
+        <div class="detail-value">${this._escapeHtml(runtime)}</div>
+      </div>` : ""}
+      ${load ? `<div class="ups-summary-item">
+        <div class="detail-label">${this._escapeHtml(loadLabel)}</div>
+        <div class="detail-value">${this._escapeHtml(`${formatUpsNumber(this._hass, load.consumption)} W · ${percentText(load.percent)}`)}</div>
+        <div class="ups-meter load" title="${this._escapeAttr(`${this._t("ups_power_budget")}: ${formatUpsNumber(this._hass, load.budget)} W`)}"><i style="width:${Math.min(100, load.percent)}%"></i></div>
+      </div>` : ""}
+    </div>`;
+  }
+
+  _upsOutletState(outlet) {
+    if (this._ctx?.fake_device === true) {
+      return this._fakeOutletStates.get(outlet.index) || outlet.preview_state || "off";
+    }
+    const state = this._hass?.states?.[outlet?.entity_id]?.state;
+    return state === "on" || state === "off" ? state : null;
+  }
+
+  _upsOutletPower(outlet) {
+    if (this._ctx?.fake_device === true) {
+      if (!Number.isFinite(outlet.preview_power)) return null;
+      return `${this._upsOutletState(outlet) === "on" ? outlet.preview_power || 0 : 0} W`;
+    }
+    return outlet.power_entity ? formatState(this._hass, outlet.power_entity) : null;
+  }
+
+  async _toggleUpsOutlet(index) {
+    const outlet = this._ctx?.outlet_entities?.find((item) => item.index === index);
+    if (!outlet || this._pendingOutletActions.has(index)) return;
+    const state = this._upsOutletState(outlet);
+    if (!state) return;
+    if (state === "on" && this._config?.confirm_outlet_off === true &&
+        !window.confirm(this._t("ups_confirm_outlet_off").replace("{outlet}", outlet.label))) return;
+    this._outletErrors.delete(index);
+    if (this._ctx?.fake_device === true) {
+      this._fakeOutletStates.set(index, state === "on" ? "off" : "on");
+      this._render();
+    } else if (outlet.entity_id) {
+      const action = { entityId: outlet.entity_id, target: state === "on" ? "off" : "on", serviceComplete: false, timer: null };
+      this._pendingOutletActions.set(index, action);
+      this._render();
+      try {
+        await this._hass.callService("switch", action.target === "on" ? "turn_on" : "turn_off", { entity_id: action.entityId });
+        if (this._pendingOutletActions.get(index) !== action) return;
+        action.serviceComplete = true;
+        this._finishConfirmedUpsOutletActions();
+        if (this._pendingOutletActions.get(index) === action) {
+          action.timer = setTimeout(() => {
+            if (this._pendingOutletActions.get(index) !== action) return;
+            this._pendingOutletActions.delete(index);
+            this._outletErrors.set(index, "ups_outlet_no_confirmation");
+            this._render();
+          }, OUTLET_STATE_CONFIRMATION_TIMEOUT);
+        }
+      } catch (err) {
+        if (this._pendingOutletActions.get(index) !== action) return;
+        this._pendingOutletActions.delete(index);
+        this._outletErrors.set(index, "ups_outlet_action_failed");
+        this._log("error", "UPS outlet action failed", err);
+      }
+      this._render();
+    }
+  }
+
+  _finishConfirmedUpsOutletActions() {
+    let changed = false;
+    for (const [index, action] of this._pendingOutletActions) {
+      if (!action.serviceComplete || this._hass?.states?.[action.entityId]?.state !== action.target) continue;
+      clearTimeout(action.timer);
+      this._pendingOutletActions.delete(index);
+      changed = true;
+    }
+    return changed;
+  }
+
+  _clearUpsOutletActions() {
+    for (const action of this._pendingOutletActions.values()) clearTimeout(action.timer);
+    this._pendingOutletActions.clear();
+    this._outletErrors.clear();
+  }
+
+  _renderUpsOutletPort(outlet, light = false, selectedKey = null) {
+    const rawState = this._upsOutletState(outlet);
+    const enabled = rawState === "on";
+    const state = rawState ? this._t(enabled ? "state_on" : "state_off") : "—";
+    const key = `outlet:${outlet.index}`;
+    return `<button class="ups-outlet-port${light ? " light" : ""}${enabled ? " enabled" : ""}${selectedKey === key ? " selected" : ""}" data-outlet-key="${this._escapeAttr(key)}" aria-pressed="${selectedKey === key}" title="${this._escapeAttr([outlet.label, state, this._upsOutletPower(outlet)].filter(Boolean).join(" · "))}">
+      <span class="ups-outlet-socket"><span class="ups-outlet-recess"><i></i><i></i><i></i></span></span>
+      <span class="ups-outlet-led"></span>
+      <span class="ups-outlet-label">${this._escapeHtml(outlet.label)}</span>
+      ${this._config?.outlet_power_badges === true && this._upsOutletPower(outlet) != null ? `<span class="ups-outlet-power">${this._escapeHtml(this._upsOutletPower(outlet))}</span>` : ""}
+    </button>`;
+  }
+
+  _renderUpsOutletDetail(outlet) {
+    const rawState = this._upsOutletState(outlet);
+    const enabled = rawState === "on";
+    const state = rawState ? this._t(enabled ? "state_on" : "state_off") : "—";
+    const power = this._upsOutletPower(outlet);
+    const pending = this._pendingOutletActions.has(outlet.index);
+    const error = this._outletErrors.get(outlet.index);
+    return `<div class="detail-title">${this._escapeHtml(outlet?.label || this._t("ups_outlets"))}</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("ups_outlet_status"))}</div>
+          <div class="detail-value ${rawState ? (enabled ? "online" : "offline") : ""}">${this._escapeHtml(state)}</div>
+        </div>
+        ${power != null ? `<div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("ups_outlet_power"))}</div>
+          <div class="detail-value">${this._escapeHtml(power)}</div>
+        </div>` : ""}
+      </div>
+      ${outlet?.entity_id || this._ctx?.fake_device === true ? `<div class="actions">
+        <button class="action-btn ${enabled ? "secondary" : "primary"}" data-action="toggle-outlet" data-outlet-index="${outlet.index}" ${rawState && !pending ? "" : "disabled"} aria-busy="${pending}">
+          ${this._escapeHtml(this._t(pending ? "ups_outlet_switching" : enabled ? "ups_outlet_turn_off" : "ups_outlet_turn_on"))}
+        </button>
+      </div>` : ""}
+      ${error ? `<div class="ups-action-error" role="alert">${this._escapeHtml(this._t(error))}</div>` : ""}
+      ${this._ctx?.fake_device === true ? `<div class="muted">${this._escapeHtml(this._t("ups_outlet_preview"))}</div>` : ""}`;
+  }
+
+  _renderOutletCount(outlets) {
+    if (!outlets.length) return "";
+    const on = outlets.filter((outlet) => this._upsOutletState(outlet) === "on").length;
+    const unknown = outlets.filter((outlet) => !this._upsOutletState(outlet)).length;
+    const text = this._t("ups_outlet_count").replace("{on}", String(on)).replace("{total}", String(outlets.length));
+    const title = unknown ? this._t("ups_outlet_unknown_count").replace("{count}", String(unknown)) : text;
+    return `<span class="chip compact" title="${this._escapeAttr(title)}">${this._escapeHtml(text)}${unknown ? " · —" : ""}</span>`;
+  }
+
+  _renderPowerOutlet(outlet, selectedKey) {
+    const rawState = this._upsOutletState(outlet);
+    const state = rawState ? this._t(rawState === "on" ? "state_on" : "state_off") : "—";
+    const key = `outlet:${outlet.index}`;
+    const selected = selectedKey === key;
+    const power = this._config?.outlet_power_badges === true ? this._upsOutletPower(outlet) : null;
+    return `<button class="ups-outlet-port power-outlet-port${selected ? " selected" : ""}" data-outlet-key="${key}" aria-pressed="${selected}" title="${this._escapeAttr([outlet.label, state, this._upsOutletPower(outlet)].filter(Boolean).join(" · "))}">
+      <span class="power-outlet-symbol${rawState === "on" ? " enabled" : ""}" aria-hidden="true">⏻</span>
+      <span class="power-outlet-label">${this._escapeHtml(outlet.label)}</span>
+      <span class="power-outlet-status">${this._escapeHtml(state)}</span>
+      ${power != null ? `<span class="ups-outlet-power">${this._escapeHtml(power)}</span>` : ""}
+    </button>`;
+  }
+
+  _renderPowerCard(ctx) {
+    const outlets = ctx.outlet_entities || [];
+    const selectedOutlet = outlets.find((outlet) => `outlet:${outlet.index}` === this._selectedKey)
+      || (isDynamicOutletDetailsEnabled(this._config) ? null : getDefaultUpsOutlet(outlets, this._config?.default_outlet));
+    const load = this._telemetryEnabled() ? this._upsLoad() : null;
+    const summary = this._renderUpsSummary(null, "—", load, this._t("power_load"));
+    const metrics = this._telemetryEnabled() ? ["ups_power_budget", "ups_power_consumption"]
+      .filter((key) => !load || key === "ups_power_budget")
+      .map((key) => ({ label: this._t(key), value: ctx.fake_device && load
+        ? `${formatUpsNumber(this._hass, load.budget)} W` : formatState(this._hass, ctx[`${key}_entity`]) }))
+      .filter((item) => item.value !== "—") : [];
+    const headerTitle = this._title();
+    if (!this._setCardContent(`${this._styles()}
+      <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-chrome-bg: ${this._cardChromeBgStyle()}${this._customColorVars()}">
+        <div class="header">
+          <div class="header-info">
+            ${headerTitle ? `<div class="title">${this._escapeHtml(headerTitle)}</div>` : ""}
+            <div class="subtitle device-link" data-action="open-device" role="link" tabindex="0">${this._escapeHtml(this._subtitle())}</div>
+          </div>
+          <div class="header-actions ups-header-actions">
+            ${this._renderOutletCount(outlets)}
+            ${ctx.reboot_entity ? `<button class="chip compact" data-action="reboot-device">↻ ${this._escapeHtml(this._t("reboot"))}</button>` : ""}
+          </div>
+        </div>
+        ${summary ? `<div class="section ups-summary-section">${summary}</div>` : ""}
+        <div class="power-outlet-panel${this._config?.show_back_panel === false ? " no-panel-bg" : ""}">
+          <div class="panel-label">${this._escapeHtml(this._t("ups_outlets"))}</div>
+          ${outlets.length ? `<div class="power-outlets">${outlets.map((outlet) => this._renderPowerOutlet(outlet, selectedOutlet ? `outlet:${selectedOutlet.index}` : null)).join("")}</div>` : `<div class="muted">${this._escapeHtml(this._t("no_ports"))}</div>`}
+          ${ctx.fake_device ? `<div class="muted">${this._escapeHtml(this._t("power_preview"))}</div>` : ""}
+        </div>
+        ${selectedOutlet ? `<div class="section">${this._renderUpsOutletDetail(selectedOutlet)}</div>` : ""}
+        ${metrics.length ? `<div class="section">
+          <div class="detail-title">${this._escapeHtml(this._t("power_telemetry"))}</div>
+          <div class="detail-grid">${metrics.map((item) => `<div class="detail-item"><div class="detail-label">${this._escapeHtml(item.label)}</div><div class="detail-value">${this._escapeHtml(item.value)}</div></div>`).join("")}</div>
+        </div>` : ""}
+      </ha-card>`)) return;
+    this._attachDeviceLinkHandler();
+    this._attachPortActionHandlers();
+    this._attachOutletHandlers();
+  }
+
+  _renderUpsCard(ctx) {
+    const metrics = this._upsMetrics().filter((item) => !["ups_battery_level", "ups_battery_runtime"].includes(item.key));
+    const telemetryEnabled = this._telemetryEnabled();
+    const battery = telemetryEnabled ? getUpsBatteryLevel(this._hass, ctx) : null;
+    const runtime = telemetryEnabled ? formatUpsRuntime(this._hass, getUpsRuntimeSeconds(this._hass, ctx)) : "—";
+    const load = telemetryEnabled ? this._upsLoad() : null;
+    const summary = this._renderUpsSummary(battery, runtime, load);
+    const batteryText = battery == null ? "—" : formatUpsNumber(this._hass, battery / 100, { style: "percent", maximumFractionDigits: 0 });
+    const headerTitle = this._title();
+    const hasDisplay = hasUpsFrontDisplay(ctx?.device || ctx?.identity);
+    const tower = isUpsTower(ctx?.device || ctx?.identity);
+    const upsLayout = normalizeUpsLayout(this._config?.ups_layout);
+    const showFront = upsLayout !== "back";
+    const showBack = upsLayout !== "front";
+    const showBackPanel = this._config?.show_back_panel !== false;
+    const outlets = ctx?.outlet_entities || [];
+    const { specials, numbered } = this._buildSlotData(ctx);
+    const networkPorts = [...specials, ...numbered];
+    const selectedOutlet = outlets.find((outlet) => `outlet:${outlet.index}` === this._selectedKey)
+      || (isDynamicOutletDetailsEnabled(this._config) || this._selectedKey ? null : getDefaultUpsOutlet(outlets, this._config?.default_outlet))
+      || null;
+    const selectedPort = networkPorts.find((port) => port.key === this._selectedKey)
+      || (this._config?.dynamic_port_details === true || selectedOutlet || this._selectedKey ? null : networkPorts[0])
+      || null;
+    const portClientIndex = this._buildPortClientIndex();
+    const ventSlots = "<span></span>".repeat(5);
+    if (!this._setCardContent(`${this._styles()}
+      <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-chrome-bg: ${this._cardChromeBgStyle()}${this._customColorVars()}">
+        <div class="header">
+          <div class="header-info">
+            ${headerTitle ? `<div class="title">${this._escapeHtml(headerTitle)}</div>` : ""}
+            <div class="subtitle device-link" data-action="open-device" role="link" tabindex="0">${this._escapeHtml(this._subtitle())}</div>
+          </div>
+          <div class="header-actions ups-header-actions">
+            ${this._renderOutletCount(outlets)}
+            ${ctx?.reboot_entity ? `<button class="chip compact" data-action="reboot-device">↻ ${this._escapeHtml(this._t("reboot"))}</button>` : ""}
+          </div>
+        </div>
+        ${summary ? `<div class="section ups-summary-section">${summary}${ctx?.fake_device ? `<div class="muted">${this._escapeHtml(this._t("ups_preview"))}</div>` : ""}</div>` : ""}
+        ${showFront ? `<div class="ups-visual${tower ? " tower" : ""}" role="img" aria-label="${this._escapeAttr([ctx?.model || "UniFi UPS", ...(battery != null ? [`${this._t("ups_battery_level")}: ${batteryText}`] : []), ...(runtime !== "—" ? [runtime] : [])].join(" · "))}">
+          ${tower ? `<div class="ups-tower">
+            <div class="ups-tower-vents left"></div>
+            <div class="ups-tower-vents right"></div>
+            <div class="ups-tower-power"><span></span></div>
+            <div class="ups-tower-battery">${Array.from({ length: 5 }, (_, index) => `<i class="${battery != null && battery > index * 20 ? "active" : ""}"></i>`).join("")}</div>
+            <div class="ups-tower-seam"></div>
+            <div class="ups-tower-logo">U</div>
+            <div class="ups-tower-mark"><i></i> UPS</div>
+          </div>` : `
+          <div class="ups-chassis${hasDisplay ? " pro" : ""}">
+            <div class="ups-vents top">${ventSlots}</div>
+            <div class="ups-power"><span></span></div>
+            <div class="ups-wordmark"><i></i><strong>UPS</strong>${hasDisplay ? " Pro" : ""}</div>
+            ${hasDisplay ? `<div class="ups-display">
+              <div class="ups-display-reading"><strong>${this._escapeHtml(batteryText)}</strong><small>${this._escapeHtml(runtime)}</small></div>
+            </div>` : `<div class="ups-logo">U</div>`}
+            <div class="ups-vents bottom">${ventSlots}</div>
+          </div>
+          `}
+        </div>` : ""}
+        ${showBack && (outlets.length || networkPorts.length) ? `<div class="ups-connection-panel${tower ? " tower" : " rack"}${showBackPanel ? "" : " no-panel-bg"}">
+          <div class="panel-label">${this._escapeHtml(this._t("back_panel"))}</div>
+          ${outlets.length ? `<div class="ups-physical-outlets">${outlets.map((outlet) => this._renderUpsOutletPort(outlet, tower, selectedOutlet ? `outlet:${selectedOutlet.index}` : null)).join("")}</div>` : ""}
+          ${networkPorts.length ? `<div class="ups-network-ports">${networkPorts.map((port) => this._renderPortButton(port, selectedPort?.key, portClientIndex)).join("")}</div>` : ""}
+        </div>` : ""}
+        ${showBack && selectedOutlet ? `<div class="section">${this._renderUpsOutletDetail(selectedOutlet)}</div>` : ""}
+        ${showBack && selectedPort ? `<div class="section">${this._renderPortDetail(selectedPort)}</div>` : ""}
+        ${telemetryEnabled && (metrics.length || !summary) ? `<div class="section">
+          <div class="detail-title">${this._escapeHtml(this._t("ups_telemetry"))}</div>
+          ${metrics.length ? `<div class="detail-grid">${metrics.map((item) => `
+            <div class="detail-item">
+              <div class="detail-label">${this._escapeHtml(item.label)}</div>
+              <div class="detail-value">${this._escapeHtml(item.value)}</div>
+            </div>`).join("")}</div>` : battery == null && runtime === "—" && !load ? `<div class="muted">${this._escapeHtml(this._t("telemetry_unavailable_title"))}</div>` : ""}
+          ${ctx?.fake_device ? `<div class="muted">${this._escapeHtml(this._t("ups_preview"))}</div>` : ""}
+        </div>` : ""}
+      </ha-card>`)) return;
+    this._attachDeviceLinkHandler();
+    this._attachPortActionHandlers();
+    this._attachOutletHandlers();
+  }
+
+  _attachOutletHandlers() {
+    this.shadowRoot.querySelectorAll("[data-outlet-key]")
+      .forEach((button) => button.addEventListener("click", () => this._selectKey(button.dataset.outletKey)));
+    this.shadowRoot.querySelectorAll("[data-action='toggle-outlet'][data-outlet-index]")
+      .forEach((button) => button.addEventListener("click", () => this._toggleUpsOutlet(Number(button.dataset.outletIndex))));
+  }
+
+  /**
+   * Wrapper around the module-level isPortConnected() that adds sticky-state
+   * tracking for SFP-like ports.  When a port has been observed with live
+   * traffic, short polling-interval gaps where rx/tx momentarily reads 0 will
+   * no longer flip the LED off.  The sticky state is cleared only when the
+   * link speed itself drops to 0 (cable genuinely removed).
+   */
+  _isPortConnected(port) {
+    const trustLowSpeedLink = this._config?.trust_link_speed_ports?.includes(port?.port) === true;
+    if (isSfpLikePort(port)) {
+      const key = port?.key || port?.physical_key;
+      if (key) {
+        if (hasTraffic(this._hass, port)) this._sfpConnectedSeen.add(key);
+        const result = isPortConnected(this._hass, port, { trustLowSpeedLink });
+        if (!result && this._sfpConnectedSeen.has(key)) {
+          // Port was live before — only keep sticky when speed entity confirms
+          // the link is still up (> 0). A null means no speed entity exists so
+          // we cannot distinguish a poll-dip from a real disconnect; let it fall
+          // through. A value of 0 means the cable was removed.
+          const speedMbit = parseLinkSpeedMbit(this._hass, port?.speed_entity);
+          if (speedMbit != null && speedMbit > 0) return true;
+          // Speed is 0 or unavailable: clear sticky state.
+          this._sfpConnectedSeen.delete(key);
+        }
+        return result;
+      }
+    }
+    return isPortConnected(this._hass, port, { trustLowSpeedLink });
+  }
+
+  _connectedCount(allSlots) {
+    return allSlots.filter((s) => this._isPortConnected(s)).length;
+  }
+
+  _isDeviceOnline() {
+    const onlineEntity = this._ctx?.online_entity;
+    if (!onlineEntity) return false;
+    const raw = String(formatState(this._hass, onlineEntity) || "").toLowerCase().trim();
+    if (!raw || raw === "—") return false;
+
+    const onlineTokens = ["online", "connected", "verbunden", "available", "bereit", "up", "on", "true", "1"];
+    const offlineTokens = ["offline", "disconnected", "getrennt", "not connected", "unavailable", "down", "off", "false", "0"];
+
+    if (offlineTokens.some((token) => raw === token || raw.includes(token))) return false;
+    return onlineTokens.some((token) => raw === token || raw.includes(token));
+  }
+
+  _speedValueMbit(port) {
+    return parseLinkSpeedMbit(this._hass, port?.speed_entity);
+  }
+
+  _linkLedClass(port) {
+    const connected = this._isPortConnected(port);
+    const speed = this._speedValueMbit(port);
+    return getLinkLedClass(speed, connected);
+  }
+
+  _portLedBlinkSpeed(mediaType) {
+    const mediaSpeed = mediaType === "sfp"
+      ? this._config?.port_led_blink_speed_sfp
+      : this._config?.port_led_blink_speed_rj45;
+    const speed = Number(mediaSpeed ?? this._config?.port_led_blink_speed);
+    if (!Number.isFinite(speed)) return 1;
+    return Math.min(1, Math.max(0.1, speed));
+  }
+
+  // MyNetwork: a port with live traffic blinks faster than a port that is only up.
+  _portLedTrafficBlinkSpeed() {
+    const speed = Number(this._config?.port_led_traffic_blink_speed);
+    if (!Number.isFinite(speed)) return 0.5;
+    return Math.min(1, Math.max(0.1, speed));
+  }
+
+  _portLedBlinkEnabled(mediaType) {
+    if (this._config?.port_led_blink !== true) return false;
+    return mediaType === "sfp"
+      ? this._config?.port_led_blink_sfp !== false
+      : this._config?.port_led_blink_rj45 !== false;
+  }
+
+  _poeLedClass(port) {
+    const poe = getPoeStatus(this._hass, port);
+    return poe.active ? "orange" : "off";
+  }
+
+  _portMediaType(slot) {
+    const explicitMedia = String(slot?.media || slot?.media_type || "").toLowerCase();
+    if (["rj45", "sfp", "sfp_plus", "sfp28"].includes(explicitMedia)) return explicitMedia;
+
+    const label = String(slot?.label || "").toLowerCase();
+    const key = String(slot?.key || "").toLowerCase();
+    const physicalKey = String(slot?.physical_key || "").toLowerCase();
+    const rawEntities = Array.isArray(slot?.raw_entities)
+      ? slot.raw_entities.map((entityId) => String(entityId || "").toLowerCase())
+      : [];
+    const layoutSlot = Number.isInteger(slot?.port)
+      ? (this._ctx?.layout?.specialSlots || []).find((s) => s.port === slot.port)
+      : null;
+    const layoutMedia = String(layoutSlot?.media || layoutSlot?.media_type || "").toLowerCase();
+    if (["rj45", "sfp", "sfp_plus", "sfp28"].includes(layoutMedia)) return layoutMedia;
+
+    const layoutKey = String(layoutSlot?.key || "").toLowerCase();
+    const layoutLabel = String(layoutSlot?.label || "").toLowerCase();
+    const allHints = [label, key, physicalKey, layoutKey, layoutLabel, ...rawEntities].join(" ");
+
+    if (allHints.includes("sfp28") || allHints.includes("25g")) return "sfp28";
+    if (
+      allHints.includes("sfp+") ||
+      allHints.includes("sfpplus") ||
+      allHints.includes("sfp_plus")
+    ) {
+      return "sfp_plus";
+    }
+    if (allHints.includes("sfp")) return "sfp";
+    return "rj45";
+  }
+
+  _isSfpLike(slot) {
+    return this._portMediaType(slot) !== "rj45";
+  }
+
+  _isWanLike(slot) {
+    const key = String(slot?.key || "").toLowerCase();
+    return key === "wan" || key === "wan2";
+  }
+
+  _renderContacts() {
+    return `
+      <div class="rj45-contacts">
+        <span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span>
+      </div>
+    `;
+  }
+
+  _renderPortButton(slot, selectedKey, portClientIndex = null, oddEvenTopRow = false) {
+    const isSpecial = slot.kind === "special";
+    const mediaType = this._portMediaType(slot);
+    const isSfp = mediaType !== "rj45";
+    const isWan = this._isWanLike(slot);
+    const linkUp = this._isPortConnected(slot);
+    const poeStatus = getPoeStatus(this._hass, slot);
+    const poeOn = poeStatus.active;
+
+    const clientInfo = this._getPortClientInfo(slot);
+    const indexedPortInfo = Number.isInteger(slot?.port) ? portClientIndex?.get(slot.port) : null;
+    const indexedNames = indexedPortInfo?.names ? Array.from(indexedPortInfo.names) : [];
+    const indexedCount = indexedPortInfo?.count || indexedNames.length;
+    const mergedNames = Array.from(new Set([...(clientInfo?.names || []), ...indexedNames])).slice(0, 8);
+    const mergedCount = Math.max(clientInfo?.count || 0, indexedCount);
+    const tooltip = [
+      slot.port_label || (isSpecial ? slot.label : `${this._t("port_label")} ${slot.label}`),
+      slot.lag_group ? `LAG: ${slot.lag_group.name}` : null,
+      this._translateState(linkUp ? "connected" : "no_link"),
+      linkUp ? getPortSpeedText(this._hass, slot) : null,
+      poeOn ? `${this._t("poe")}${poeStatus.power ? ` ${poeStatus.power}` : " ON"}` : null,
+      mergedCount > 0 ? `${this._t("clients")}: ${mergedCount}` : null,
+      mergedNames.length ? mergedNames.join(", ") : null,
+    ].filter((v) => v && v !== "—").join(" · ");
+
+    const classes = [
+      "port",
+      isSpecial ? "special" : "",
+      isSfp ? "is-sfp" : "is-rj45",
+      `media-${this._safeClassToken(mediaType, "rj45")}`,
+      this._rotate180Enabled(this._ctx) ? "rotated180" : "",
+      isWan ? "is-wan" : "",
+      oddEvenTopRow && !isSpecial && !isSfp ? "odd-even-top" : "",
+      linkUp ? "up" : "down",
+      selectedKey === slot.key ? "selected" : "",
+      this._portLedBlinkEnabled(isSfp ? "sfp" : "rj45") ? "blink-link-led" : "",
+      linkUp && hasTraffic(this._hass, slot) ? "has-traffic" : "",
+    ].filter(Boolean).join(" ");
+
+    const poeLed = this._poeLedClass(slot);
+    const linkLed = this._linkLedClass(slot);
+
+    const housing = isSfp
+      ? `
+        <div class="port-sfp-wrap">
+          <div class="sfp-top-led ${linkLed}"></div>
+          <div class="port-sfp">
+            <div class="sfp-frame"></div>
+            <div class="sfp-rail top"></div>
+            <div class="sfp-rail bottom"></div>
+            <div class="sfp-slot"></div>
+            <div class="sfp-inner"></div>
+            <div class="sfp-latch"></div>
+          </div>
+        </div>
+      `
+      : `
+        <div class="port-rj45">
+          <div class="rj45-shell-top"></div>
+          ${this._renderContacts()}
+          <div class="rj45-cavity"></div>
+          <div class="rj45-led left ${poeLed}"></div>
+          <div class="rj45-led right ${linkLed}"></div>
+          <div class="rj45-notch"></div>
+          <div class="rj45-floor"></div>
+        </div>
+      `;
+
+    return `<button class="${this._escapeAttr(classes)}" data-key="${this._escapeAttr(slot.key)}" title="${this._escapeAttr(tooltip)}">
+      <div class="port-housing">
+        ${housing}
+        ${slot.lag_group ? `<span class="lag-badge" aria-label="${this._escapeAttr(`LAG: ${slot.lag_group.name}`)}">LAG${slot.lag_group.index}</span>` : ""}
+      </div>
+      <div class="port-num">${this._escapeHtml(slot.label)}</div>
+    </button>`;
+  }
+
+  _styles() {
+    return `<style>
+      :host {
+        /* Fill the grid cell a sections view assigns. The section stretches
+           its items to the row height, but the stretch ends at an inline
+           host. In a masonry view the wrapper has no fixed height, so 100%
+           resolves to auto and nothing changes. */
+        display: block;
+        height: 100%;
+        --udc-bg: #141820;
+        --udc-surface: #1e2433;
+        --udc-surf2: #252d3d;
+        --udc-border: rgba(255,255,255,0.07);
+        --udc-accent: #0090d9;
+        --udc-green: #31d35f;
+        --udc-orange: #f0b312;
+        --udc-text: #e2e8f0;
+        --udc-muted: #6f7d90;
+        --udc-dim: #9aa7b9;
+        --udc-r: 14px;
+        --udc-rsm: 8px;
+        --udc-port-size: 36px;
+        --udc-ap-scale: 1;
+      }
+
+      ha-card {
+        background: var(--udc-card-bg, var(--ha-card-background, var(--card-background-color)));
+        border-radius: var(--ha-card-border-radius, 12px);
+        overflow: hidden;
+        position: relative;
+        isolation: isolate;
+        height: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        padding: 16px 18px 13px;
+        background: var(--udc-chrome-bg, linear-gradient(160deg, var(--udc-surface) 0%, var(--udc-bg) 100%));
+        border-bottom: 1px solid var(--udc-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .header-info {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--udc-title-color, var(--primary-text-color, var(--udc-text)));
+      }
+
+      .subtitle {
+        font-size: 0.73rem;
+        color: var(--udc-meta-color, var(--udc-muted));
+      }
+
+      .subtitle.device-link {
+        cursor: pointer;
+        width: fit-content;
+      }
+
+      .subtitle.device-link:hover,
+      .subtitle.device-link:focus-visible {
+        color: var(--primary-color, var(--udc-meta-color, var(--udc-muted)));
+        text-decoration: underline;
+      }
+
+      .subtitle.device-link:focus-visible {
+        outline: 2px solid var(--primary-color, currentColor);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .meta-list {
+        display: grid;
+        gap: 2px;
+        margin-top: 4px;
+      }
+
+      .meta-list[hidden] { display: none; }
+
+      .meta-row {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+        font-size: 0.73rem;
+        min-width: 0;
+        color: var(--udc-telemetry-color, var(--primary-text-color, var(--udc-text)));
+      }
+
+      .meta-label {
+        color: inherit;
+        white-space: nowrap;
+        font-weight: 500;
+      }
+
+      .meta-value {
+        color: inherit;
+        font-weight: 600;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--udc-button-secondary-bg, var(--udc-surf2));
+        border: 1px solid var(--udc-button-border-color, var(--udc-border));
+        border-radius: 20px;
+        padding: 2px 8px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        white-space: nowrap;
+        color: var(--udc-button-secondary-text-color, var(--udc-dim));
+        flex-shrink: 0;
+      }
+
+      button.chip {
+        cursor: pointer;
+        font: inherit;
+      }
+
+      button.chip:hover {
+        filter: brightness(1.08);
+      }
+
+      .chip.compact {
+        padding: 1px 7px;
+        font-size: 0.64rem;
+      }
+
+      .chip .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--udc-green);
+        box-shadow: 0 0 5px var(--udc-green);
+        animation: blink 2.5s ease-in-out infinite;
+      }
+
+      .chip .led-indicator {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--led-indicator, #868b93);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--led-indicator, #868b93) 70%, transparent);
+      }
+
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: .4; }
+      }
+
+      .ups-header-actions { flex-wrap: wrap; justify-content: flex-end; max-width: 55%; }
+      .ups-header-actions .chip { white-space: normal; }
+
+      .ups-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .ups-summary-item { min-width: 0; }
+      .ups-meter { height: 6px; border-radius: 4px; background: var(--divider-color, #405269); overflow: hidden; margin-top: 7px; }
+      .ups-meter i { display: block; height: 100%; border-radius: inherit; background: var(--primary-color, #0090d9); }
+      .ups-action-error { margin-top: 8px; color: var(--error-color, #e86b6b); font-size: .8rem; }
+      .action-btn[aria-busy]:disabled { opacity: .55; cursor: default; }
+      .ups-outlet-power { font-size: 8px; white-space: nowrap; }
+
+      .power-outlet-panel {
+        padding: 16px 14px;
+        background: color-mix(in srgb, var(--udc-chrome-bg, var(--card-background-color)) 90%, var(--secondary-text-color) 10%);
+      }
+      .power-outlet-panel.no-panel-bg { background: var(--udc-chrome-bg, transparent); }
+      .power-outlets { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
+      .power-outlet-panel .muted { margin-top: 12px; }
+      .power-outlet-panel .power-outlet-port {
+        padding: 12px 8px;
+        border-color: var(--divider-color, #405269);
+        background: var(--udc-card-bg, var(--card-background-color));
+        color: var(--primary-text-color);
+      }
+      .power-outlet-panel .power-outlet-port.selected,
+      .power-outlet-panel .power-outlet-port:focus-visible,
+      .power-outlet-panel .power-outlet-port:hover {
+        border-color: var(--primary-color, #0090d9);
+        background: color-mix(in srgb, var(--udc-card-bg, var(--card-background-color)) 90%, var(--primary-color, #0090d9) 10%);
+      }
+      .power-outlet-symbol { font-size: 24px; line-height: 1; color: var(--secondary-text-color); }
+      .power-outlet-symbol.enabled { color: var(--primary-color, #0090d9); }
+      .power-outlet-label { width: 100%; font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+      .power-outlet-status, .power-outlet-port .ups-outlet-power { font-size: 10px; }
+
+      .ups-visual {
+        padding: 18px 20px;
+        background: color-mix(in srgb, var(--udc-card-bg, var(--card-background-color)) 94%, #7f8790);
+      }
+
+      .ups-visual.tower {
+        display: flex;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .ups-tower {
+        position: relative;
+        width: 132px;
+        height: 286px;
+        overflow: hidden;
+        border: 1px solid #d7d9dc;
+        border-radius: 31px 31px 20px 20px;
+        background: linear-gradient(100deg, #e3e5e7 0%, #fbfbfc 16%, #f5f6f7 82%, #d9dcde 100%);
+        box-shadow: inset 0 1px 3px #fff, inset 0 -5px 8px rgba(100,106,112,.12), 0 9px 13px -9px rgba(0,0,0,.65);
+      }
+
+      .ups-tower-vents {
+        position: absolute;
+        top: 22px;
+        bottom: 24px;
+        width: 5px;
+        border-radius: 4px;
+        background: repeating-linear-gradient(to bottom, #777d82 0 2px, #d9dcde 2px 4px);
+        box-shadow: inset 0 0 2px rgba(0,0,0,.7);
+      }
+
+      .ups-tower-vents.left { left: 4px; }
+      .ups-tower-vents.right { right: 4px; }
+
+      .ups-tower-power {
+        position: absolute;
+        top: 42px;
+        left: 50%;
+        width: 31px;
+        height: 31px;
+        transform: translateX(-50%);
+        border: 3px solid #70a9ff;
+        border-radius: 50%;
+        box-shadow: 0 0 5px rgba(72,143,255,.55), inset 0 0 5px rgba(104,164,255,.25);
+      }
+
+      .ups-tower-power span {
+        position: absolute;
+        top: 7px;
+        left: 13px;
+        width: 3px;
+        height: 11px;
+        border-radius: 2px;
+        background: #aab0b6;
+      }
+
+      .ups-tower-battery {
+        position: absolute;
+        top: 91px;
+        left: 50%;
+        display: flex;
+        gap: 5px;
+        transform: translateX(-50%);
+      }
+
+      .ups-tower-battery i {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: #aeb6c0;
+      }
+
+      .ups-tower-battery i.active {
+        background: #69a2ff;
+        box-shadow: 0 0 3px rgba(58,132,255,.7);
+      }
+
+      .ups-tower-seam {
+        position: absolute;
+        top: 114px;
+        right: 7px;
+        left: 7px;
+        height: 2px;
+        background: linear-gradient(#c5c8cb, #fff);
+        box-shadow: 0 1px 2px rgba(90,95,100,.2);
+      }
+
+      .ups-tower-logo {
+        position: absolute;
+        top: 190px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #e1e3e5;
+        font-size: 28px;
+        font-weight: 800;
+        text-shadow: 0 1px 1px #fff;
+      }
+
+      .ups-tower-mark {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #aaaeb2;
+        font-size: 6px;
+        white-space: nowrap;
+      }
+
+      .ups-tower-mark i {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #b9bdc0;
+        vertical-align: -1px;
+      }
+
+      .ups-connection-panel {
+        padding: 14px;
+        background: linear-gradient(145deg, #d5d7d8, #b8bbbd);
+        border-top: 1px solid rgba(255,255,255,.7);
+        border-bottom: 1px solid rgba(55,60,64,.25);
+      }
+
+      .ups-connection-panel.tower {
+        background: linear-gradient(145deg, #fafbfc, #e6e8ea);
+        border-top-color: #fff;
+        border-bottom-color: #c9cdd0;
+      }
+
+      .ups-connection-panel.no-panel-bg {
+        background: var(--udc-chrome-bg, transparent);
+        border-top-color: transparent;
+        border-bottom-color: transparent;
+      }
+
+      .ups-connection-panel.no-panel-bg .panel-label {
+        color: var(--secondary-text-color);
+      }
+
+      .ups-connection-panel.no-panel-bg .ups-outlet-port {
+        color: var(--primary-text-color);
+      }
+
+      .ups-connection-panel .panel-label {
+        color: #555c62;
+        margin-bottom: 10px;
+      }
+
+      .ups-physical-outlets {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+        gap: 9px;
+      }
+
+      .ups-outlet-port {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        min-width: 58px;
+        padding: 5px 4px 3px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: transparent;
+        color: #3f464c;
+        cursor: pointer;
+      }
+
+      .ups-outlet-port:hover:not(:disabled),
+      .ups-outlet-port:focus-visible,
+      .ups-outlet-port.selected {
+        border-color: rgba(0,112,190,.65);
+        background: rgba(255,255,255,.2);
+      }
+
+      .ups-outlet-port.selected {
+        box-shadow: 0 0 0 1px rgba(0,112,190,.22);
+      }
+
+      .ups-outlet-port:disabled { cursor: default; }
+
+      .ups-outlet-socket {
+        position: relative;
+        display: block;
+        width: 46px;
+        height: 32px;
+        box-sizing: border-box;
+        padding: 4px;
+        border: 2px solid #111416;
+        border-radius: 7px 7px 5px 5px;
+        background: linear-gradient(#272b2e, #090b0d);
+        box-shadow: inset 0 0 0 1px #42474a, 0 1px 2px rgba(0,0,0,.5);
+        clip-path: polygon(8% 0, 92% 0, 100% 18%, 100% 88%, 92% 100%, 8% 100%, 0 88%, 0 18%);
+      }
+
+      .ups-outlet-recess {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border: 1px solid #4b5053;
+        border-radius: 4px 4px 3px 3px;
+        background: #171a1c;
+        box-shadow: inset 0 1px 4px #000;
+        clip-path: polygon(8% 0, 92% 0, 100% 18%, 100% 88%, 92% 100%, 8% 100%, 0 88%, 0 18%);
+      }
+
+      .ups-outlet-recess i {
+        position: absolute;
+        width: 5px;
+        height: 9px;
+        border-radius: 1px;
+        background: #020303;
+        box-shadow: inset 0 1px 2px #000, 0 0 0 1px #34383b;
+      }
+
+      .ups-outlet-recess i:nth-child(1) { top: 11px; left: 6px; }
+      .ups-outlet-recess i:nth-child(2) { top: 11px; right: 6px; }
+      .ups-outlet-recess i:nth-child(3) {
+        top: 3px;
+        left: 50%;
+        width: 5px;
+        height: 8px;
+        transform: translateX(-50%);
+      }
+
+      .ups-outlet-port.light { color: #626970; }
+
+      .ups-outlet-port.light .ups-outlet-socket {
+        border-color: #f7f8f9;
+        background: linear-gradient(#fff, #e2e5e7);
+        box-shadow: inset 0 0 0 2px #cfd3d6, 0 1px 3px rgba(70,76,82,.35);
+      }
+
+      .ups-outlet-port.light .ups-outlet-recess {
+        border-color: #c8cdd0;
+        background: #edf0f1;
+        box-shadow: inset 0 1px 3px rgba(80,86,91,.28);
+      }
+
+      .ups-outlet-port.light .ups-outlet-recess i {
+        background: #555c61;
+        box-shadow: inset 0 1px 2px #33383c, 0 0 0 1px #bbc0c3;
+      }
+
+      .ups-outlet-led {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #667078;
+        box-shadow: inset 0 0 1px rgba(0,0,0,.8);
+      }
+
+      .ups-outlet-port.enabled .ups-outlet-led {
+        background: #4792ff;
+        box-shadow: 0 0 4px rgba(46,126,255,.9);
+      }
+
+      .ups-outlet-label {
+        max-width: 62px;
+        overflow: hidden;
+        font-size: 8px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ups-network-ports {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 13px;
+        padding-top: 11px;
+        border-top: 1px solid rgba(70,75,80,.22);
+      }
+
+      .ups-chassis {
+        position: relative;
+        box-sizing: border-box;
+        width: min(100%, 640px);
+        aspect-ratio: 4.9 / 1;
+        min-height: 92px;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid #aeb2b5;
+        border-radius: 5px 5px 3px 3px;
+        background: linear-gradient(110deg, #dadcdc 0%, #c7c9ca 48%, #e3e4e4 100%);
+        box-shadow:
+          inset 0 1px 1px rgba(255,255,255,.95),
+          inset 0 -6px 8px rgba(83,88,91,.16),
+          0 7px 8px -6px rgba(0,0,0,.7);
+      }
+
+      .ups-chassis::after {
+        content: "";
+        position: absolute;
+        right: 1.5%;
+        bottom: -3px;
+        left: 1.5%;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(66,71,74,.3);
+        filter: blur(2px);
+      }
+
+      .ups-vents {
+        position: absolute;
+        right: 3.2%;
+        left: 3.2%;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1.2%;
+      }
+
+      .ups-vents.top { top: 6%; }
+      .ups-vents.bottom { bottom: 7%; }
+
+      .ups-vents span {
+        height: 6px;
+        border-radius: 0 0 8px 8px;
+        background: linear-gradient(#787d80, #f7f8f8 45%, #9b9fa1 55%, #696e71);
+        box-shadow: inset 0 1px 1px rgba(33,37,39,.75);
+      }
+
+      .ups-vents.bottom span {
+        transform: rotate(180deg);
+      }
+
+      .ups-power {
+        position: absolute;
+        top: 38%;
+        left: 4.1%;
+        width: 16px;
+        height: 16px;
+        box-sizing: border-box;
+        border: 2px solid #0799e4;
+        border-radius: 50%;
+        box-shadow: 0 0 5px rgba(0,153,228,.45), inset 0 0 4px rgba(255,255,255,.8);
+      }
+
+      .ups-power span {
+        position: absolute;
+        top: 2px;
+        left: 5px;
+        width: 2px;
+        height: 6px;
+        border-radius: 1px;
+        background: #0799e4;
+      }
+
+      .ups-wordmark {
+        position: absolute;
+        top: 43%;
+        left: 7.2%;
+        color: #62686d;
+        font-size: clamp(5px, 1.3vw, 9px);
+        line-height: 1;
+        letter-spacing: -.02em;
+      }
+
+      .ups-wordmark i {
+        display: inline-block;
+        width: 4px;
+        height: 4px;
+        margin-right: 2px;
+        border-radius: 50%;
+        background: #168ed0;
+        vertical-align: 1px;
+      }
+
+      .ups-wordmark strong { font-weight: 700; }
+
+      .ups-logo {
+        position: absolute;
+        top: 38%;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #9ba1a5;
+        font-size: clamp(16px, 4vw, 25px);
+        font-weight: 800;
+        opacity: .8;
+      }
+
+      .ups-display {
+        position: absolute;
+        top: 31%;
+        left: 50%;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        width: 21%;
+        min-width: 82px;
+        height: 31%;
+        min-height: 27px;
+        padding: 4px 6px;
+        box-sizing: border-box;
+        transform: translateX(-50%);
+        border: 1px solid #070b22;
+        border-radius: 3px;
+        background: linear-gradient(110deg, #030618, #07103e 62%, #030515);
+        box-shadow: inset 0 0 4px rgba(21,71,181,.7), 0 1px 2px rgba(0,0,0,.35);
+      }
+
+      .ups-display-reading {
+        color: #69b6ff;
+        display: grid;
+        gap: 1px;
+        width: 100%;
+        text-align: center;
+        line-height: 1;
+        overflow: hidden;
+      }
+
+      .ups-display-reading strong { font-size: clamp(9px, 1.8vw, 13px); }
+      .ups-display-reading small { font-size: clamp(6px, 1.2vw, 8px); white-space: nowrap; }
+
+      .ups-display-grid {
+        display: grid;
+        flex: 1;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 2px;
+      }
+
+      .ups-display-grid i {
+        aspect-ratio: 1.45 / 1;
+        border: 1px solid rgba(84,154,255,.52);
+        border-radius: 1px;
+        background: linear-gradient(135deg, #073a9b, #0879e4);
+        box-shadow: inset 0 0 2px rgba(116,189,255,.65);
+      }
+
+      .ups-display > span {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #7ca6ff;
+        box-shadow: 0 0 3px #367bff;
+      }
+
+      @media (max-width: 420px) {
+        .ups-visual { padding: 14px 12px; }
+        .ups-chassis { min-height: 70px; }
+        .ups-vents span { height: 5px; }
+        .ups-physical-outlets { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); }
+      }
+
+      .frontpanel {
+        padding: 12px 14px 10px;
+        display: grid;
+        gap: 3px;
+        border-bottom: 1px solid var(--udc-border);
+        position: relative;
+        z-index: 0;
+        overflow: hidden;
+        /* In a stretched card the slack collects here, between the header
+           and the panel. Panels, details and buttons of one sections view
+           row then line up even when a device shows fewer telemetry lines.
+           As a nested block in the AP layout this resolves to 0. */
+        margin-top: auto;
+      }
+
+      .frontpanel.theme-white { background: var(--udc-panel-bg, #d6d6d9); }
+      .frontpanel.theme-silver { background: var(--udc-panel-bg, #c4c5c8); }
+      .frontpanel.theme-dark { background: var(--udc-panel-bg, #c4c5c8); }
+      .frontpanel.no-panel-bg { background: var(--udc-chrome-bg, transparent); }
+
+      .panel-label {
+        font-size: 0.63rem;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+        color: var(--udc-label-color, #7c818b);
+      }
+
+      .special-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 3px;
+      }
+
+      .port-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 6px;
+        width: 100%;
+        align-items: flex-start;
+      }
+
+      .port-row-side {
+        display: flex;
+        gap: 6px;
+        margin-left: 12px;
+      }
+
+      .frontpanel.rotate180-enabled .panel-label {
+        text-align: right;
+      }
+
+      .frontpanel.rotate180-enabled .special-row {
+        justify-content: flex-end;
+      }
+
+      .frontpanel.rotate180-enabled .port-row {
+        justify-content: end;
+      }
+
+      .frontpanel.single-row .port-row,
+      .frontpanel.gateway-single-row .port-row {
+        --udc-cols: 8;
+      }
+
+      .frontpanel.dual-row .port-row {
+        --udc-cols: 8;
+      }
+
+      .frontpanel.gateway-rack .port-row {
+        --udc-cols: 8;
+      }
+
+      .frontpanel.gateway-compact .port-row {
+        --udc-cols: 5;
+      }
+
+      .frontpanel.six-grid .port-row {
+        --udc-cols: 6;
+      }
+
+      .frontpanel.eight-grid .port-row {
+        --udc-cols: 8;
+      }
+
+      .frontpanel.quad-row .port-row {
+        --udc-cols: 12;
+      }
+
+      .frontpanel.ultra-row .port-row {
+        --udc-cols: 7;
+      }
+
+      .frontpanel.grid-4 .port-row {
+        --udc-cols: 4;
+      }
+
+      .frontpanel.grid-5 .port-row {
+        --udc-cols: 5;
+      }
+
+      .frontpanel.grid-9 .port-row {
+        --udc-cols: 9;
+      }
+
+      .frontpanel.grid-10 .port-row {
+        --udc-cols: 10;
+      }
+
+      .frontpanel.ap-disc,
+      .frontpanel.ap-in-wall,
+      .frontpanel.ap-u7-outdoor,
+      .frontpanel.ap-mesh-column,
+      .frontpanel.ap-mesh-antenna,
+      .frontpanel.ap-ac-mesh,
+      .frontpanel.ap-mesh-pro,
+      .frontpanel.ap-outdoor-panel,
+      .frontpanel.ap-extender,
+      .frontpanel.ap-sector,
+      .frontpanel.ap-bridge,
+      .frontpanel.ap-device-bridge,
+      .frontpanel.ap-device-bridge-iot,
+      .frontpanel.ap-device-bridge-pro,
+      .frontpanel.ap-device-bridge-sector,
+      .frontpanel.ap-building-bridge,
+      .frontpanel.ap-e7,
+      .frontpanel.ap-e7-audience,
+      .frontpanel.ap-basestation,
+      .frontpanel.ap-dream-machine,
+      .frontpanel.ap-dream-router,
+      .frontpanel.ap-5g-backup {
+        background: var(--udc-chrome-bg, linear-gradient(160deg, var(--udc-surface) 0%, var(--udc-bg) 100%));
+        display: grid;
+        place-items: center;
+        min-height: calc((225px * var(--udc-ap-scale)) + 34px);
+        border-bottom: 1px solid var(--udc-border);
+        position: relative;
+        overflow: hidden;
+        padding: 4px 14px;
+      }
+
+      .ap-layout > .frontpanel {
+        margin-top: 0;
+      }
+
+      .frontpanel.ap-ac-mesh {
+        min-height: calc((330px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .frontpanel.ap-mesh-antenna {
+        min-height: calc((300px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .frontpanel.ap-mesh-pro {
+        min-height: calc((280px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .frontpanel.ap-device-bridge {
+        min-height: calc((280px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .frontpanel.ap-device-bridge-iot {
+        min-height: calc((250px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .frontpanel.ap-device-bridge-sector {
+        min-height: calc((310px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .ap-layout.compact {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: stretch;
+      }
+
+      .ap-layout.panel-hidden {
+        display: block;
+      }
+
+      .ap-layout.compact .frontpanel.ap-disc,
+      .ap-layout.compact .frontpanel.ap-in-wall,
+      .ap-layout.compact .frontpanel.ap-u7-outdoor,
+      .ap-layout.compact .frontpanel.ap-mesh-column,
+      .ap-layout.compact .frontpanel.ap-mesh-antenna,
+      .ap-layout.compact .frontpanel.ap-ac-mesh,
+      .ap-layout.compact .frontpanel.ap-mesh-pro,
+      .ap-layout.compact .frontpanel.ap-outdoor-panel,
+      .ap-layout.compact .frontpanel.ap-extender,
+      .ap-layout.compact .frontpanel.ap-sector,
+      .ap-layout.compact .frontpanel.ap-bridge,
+      .ap-layout.compact .frontpanel.ap-device-bridge,
+      .ap-layout.compact .frontpanel.ap-device-bridge-iot,
+      .ap-layout.compact .frontpanel.ap-device-bridge-pro,
+      .ap-layout.compact .frontpanel.ap-device-bridge-sector,
+      .ap-layout.compact .frontpanel.ap-building-bridge,
+      .ap-layout.compact .frontpanel.ap-e7,
+      .ap-layout.compact .frontpanel.ap-e7-audience,
+      .ap-layout.compact .frontpanel.ap-basestation,
+      .ap-layout.compact .frontpanel.ap-dream-machine,
+      .ap-layout.compact .frontpanel.ap-dream-router,
+      .ap-layout.compact .frontpanel.ap-5g-backup {
+        min-height: 0;
+        border-bottom: none;
+        border-right: 1px solid var(--udc-border);
+      }
+
+      .ap-layout.compact > .frontpanel:not(.ap-disc):not(.ap-in-wall):not(.ap-u7-outdoor):not(.ap-5g-backup) {
+        min-height: calc((225px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .ap-layout.compact > .frontpanel.ap-mesh-antenna {
+        min-height: calc((280px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .ap-layout.compact > .frontpanel.ap-ac-mesh {
+        min-height: calc((250px * var(--udc-ap-scale)) + 34px);
+      }
+
+      .ap-layout.compact .ap-device {
+        width: min(100%, calc(180px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-5g-device {
+        width: min(100%, calc(118px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-in-wall-device {
+        width: min(100%, calc(112px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-u7-outdoor-device {
+        width: min(100%, calc(150px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-shaped-device {
+        width: min(100%, calc(105px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-ac-mesh-device {
+        width: min(100%, calc(48px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-device-bridge-device {
+        width: min(100%, calc(90px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-device-bridge-iot-device {
+        width: min(100%, calc(85px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .ap-device.ap-device-bridge-sector-device {
+        width: min(100%, calc(85px * var(--udc-ap-scale)));
+      }
+
+      .ap-layout.compact .section {
+        display: grid;
+        align-content: center;
+      }
+
+      .ap-layout.compact .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-bottom: 0;
+      }
+
+
+      .integrated-port-section {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(220px, .9fr);
+        gap: 0;
+        border-top: 1px solid var(--udc-border);
+      }
+
+      .frontpanel.integrated-ports {
+        border-bottom: none;
+        border-right: 1px solid var(--udc-border);
+      }
+
+      .integrated-port-detail {
+        display: grid;
+        align-content: center;
+      }
+
+      .ap-layout.has-integrated-ports {
+        border-bottom: none;
+      }
+
+      .ap-device {
+        width: calc(225px * var(--udc-ap-scale));
+        height: auto;
+        aspect-ratio: 1 / 1;
+        max-width: 100%;
+        border-radius: 50%;
+        background: var(--udc-ap-inner-color, var(--udc-ap-color, radial-gradient(circle at 30% 28%, #e9edf4 0%, #cfd5df 52%, #b6becb 100%)));
+        box-shadow:
+          inset -8px -10px 16px rgba(0,0,0,.08),
+          inset 9px 12px 17px rgba(255,255,255,.7),
+          0 12px 22px rgba(0,0,0,.18);
+        display: grid;
+        place-items: center;
+      }
+
+      .ap-5g-device {
+        width: calc(132px * var(--udc-ap-scale));
+        height: auto;
+        aspect-ratio: 132 / 320;
+        border-radius: 24.24% / 10%;
+        background: linear-gradient(90deg, #383b3e 0 13%, #f7f8f8 13% 87%, #383b3e 87% 100%);
+        box-shadow:
+          inset 11px 0 14px rgba(255,255,255,.5),
+          inset -11px 0 14px rgba(0,0,0,.08),
+          0 16px 28px rgba(0,0,0,.24);
+        position: relative;
+        overflow: hidden;
+        container-type: inline-size;
+      }
+
+      .ap-5g-face {
+        position: absolute;
+        inset: 0 15%;
+        border-radius: 18.18cqw;
+        background: linear-gradient(90deg, #f2f4f4 0%, #ffffff 44%, #eff2f2 100%);
+        box-shadow:
+          inset 8px 0 14px rgba(255,255,255,.68),
+          inset -8px 0 12px rgba(0,0,0,.04);
+      }
+
+      .ap-5g-display {
+        position: absolute;
+        left: 50%;
+        top: 61%;
+        width: 44%;
+        aspect-ratio: .74 / 1;
+        transform: translate(-50%, -50%);
+        border-radius: 5.3cqw;
+        background: linear-gradient(180deg, #071128 0%, #0d1733 64%, #07101f 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.22),
+          0 2px 5px rgba(0,0,0,.28);
+        color: #eaf3ff;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 3.03cqw;
+        padding: 4.55cqw;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-weight: 700;
+        line-height: 1;
+        box-sizing: border-box;
+      }
+
+      .ap-5g-display-top {
+        font-size: 9.85cqw;
+      }
+
+      .ap-5g-bars {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        align-items: end;
+        gap: .76cqw;
+        height: 13.64cqw;
+      }
+
+      .ap-5g-bars span {
+        display: block;
+        border-radius: 1px;
+        background: #1fc56c;
+        box-shadow: 0 0 3px rgba(31,197,108,.35);
+      }
+
+      .ap-5g-bars span:nth-child(1) { height: 45%; }
+      .ap-5g-bars span:nth-child(2) { height: 58%; }
+      .ap-5g-bars span:nth-child(3) { height: 72%; }
+      .ap-5g-bars span:nth-child(4) { height: 86%; }
+      .ap-5g-bars span:nth-child(5) { height: 100%; }
+
+      .ap-5g-bars span.inactive {
+        background: rgba(198,216,237,.24);
+        box-shadow: none;
+      }
+
+      .ap-5g-uptime {
+        color: #c6d8ed;
+        display: grid;
+        gap: .76cqw;
+        font-size: 3.79cqw;
+        line-height: 1;
+        text-align: center;
+      }
+
+      .ap-5g-uptime-value {
+        color: #eaf3ff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ap-5g-metrics {
+        align-self: end;
+        display: grid;
+        gap: 2.27cqw;
+      }
+
+      .ap-5g-metric {
+        display: grid;
+        grid-template-columns: 9.85cqw 1fr;
+        align-items: center;
+        gap: 2.27cqw;
+        color: #c6d8ed;
+        font-size: 3.79cqw;
+      }
+
+      .ap-5g-meter {
+        height: 3.03cqw;
+        border-radius: 999px;
+        background: rgba(255,255,255,.18);
+        overflow: hidden;
+      }
+
+      .ap-5g-meter span {
+        display: block;
+        width: var(--ap-5g-meter-value, 0%);
+        height: 100%;
+        border-radius: inherit;
+        background: #2aa7ff;
+      }
+
+      .ap-5g-meter.memory span {
+        background: #34d979;
+      }
+
+      .ap-5g-label {
+        position: absolute;
+        left: 50%;
+        top: 78%;
+        transform: translateX(-50%);
+        color: rgba(210,215,218,.58);
+        font-size: 7.58cqw;
+        white-space: nowrap;
+      }
+
+      .ap-in-wall-device {
+        width: calc(132px * var(--udc-ap-scale));
+        aspect-ratio: .64 / 1;
+        border-radius: calc(25px * var(--udc-ap-scale));
+        background: linear-gradient(145deg, #ffffff 0%, #f7f8f9 58%, #e9ecef 100%);
+        border: 1px solid rgba(150, 158, 166, .22);
+        box-shadow:
+          inset 8px 10px 15px rgba(255,255,255,.8),
+          inset -8px -10px 16px rgba(120,128,136,.08),
+          0 14px 24px rgba(0,0,0,.18);
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+
+      .ap-in-wall-led {
+        position: absolute;
+        top: 18%;
+        left: 50%;
+        width: calc(14px * var(--udc-ap-scale));
+        height: calc(3px * var(--udc-ap-scale));
+        transform: translateX(-50%);
+        border-radius: 999px;
+        background: var(--ap-ring-color, #62c8fa);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--ap-ring-color, #62c8fa) 55%, transparent);
+      }
+
+      .ap-in-wall-led.off {
+        background: #aeb4ba;
+        box-shadow: none;
+      }
+
+      .ap-in-wall-logo {
+        color: rgba(180, 188, 195, .48);
+        font: 700 calc(34px * var(--udc-ap-scale))/1 ui-sans-serif, system-ui, -apple-system, sans-serif;
+        transform: translateY(calc(5px * var(--udc-ap-scale)));
+        user-select: none;
+      }
+
+      .ap-u7-outdoor-device {
+        width: calc(184px * var(--udc-ap-scale));
+        aspect-ratio: .82 / 1;
+        border-radius: calc(35px * var(--udc-ap-scale));
+        background: linear-gradient(145deg, #ffffff 0%, #f5f6f7 58%, #e5e8ea 100%);
+        border: 1px solid rgba(150, 158, 166, .18);
+        box-shadow:
+          inset 9px 11px 17px rgba(255,255,255,.85),
+          inset -9px -11px 18px rgba(120,128,136,.09),
+          0 14px 24px rgba(0,0,0,.18);
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+
+      .ap-u7-outdoor-logo {
+        color: rgba(180, 188, 195, .42);
+        font: 700 calc(37px * var(--udc-ap-scale))/1 ui-sans-serif, system-ui, -apple-system, sans-serif;
+        transform: translateY(calc(-10px * var(--udc-ap-scale)));
+        user-select: none;
+      }
+
+      .ap-u7-outdoor-led {
+        position: absolute;
+        left: 50%;
+        bottom: 17%;
+        width: calc(4px * var(--udc-ap-scale));
+        height: calc(4px * var(--udc-ap-scale));
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: var(--ap-ring-color, #62c8fa);
+        box-shadow: 0 0 6px color-mix(in srgb, var(--ap-ring-color, #62c8fa) 65%, transparent);
+      }
+
+      .ap-u7-outdoor-led.off {
+        background: #aeb4ba;
+        box-shadow: none;
+      }
+
+      .ap-shaped-device {
+        width: calc(122px * var(--udc-ap-scale));
+        aspect-ratio: .48 / 1;
+        border-radius: calc(54px * var(--udc-ap-scale));
+        background: linear-gradient(145deg, #fff 0%, #f3f5f6 62%, #dfe3e6 100%);
+        border: 1px solid rgba(150, 158, 166, .2);
+        box-shadow: inset 8px 10px 15px rgba(255,255,255,.8), inset -8px -10px 16px rgba(120,128,136,.08), 0 14px 24px rgba(0,0,0,.18);
+        position: relative;
+      }
+
+      .ap-shaped-logo {
+        position: absolute;
+        left: 50%; top: 45%;
+        transform: translate(-50%, -50%);
+        color: rgba(170, 180, 187, .44);
+        font: 700 calc(30px * var(--udc-ap-scale))/1 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .ap-shaped-led {
+        position: absolute;
+        left: 50%; bottom: 10%;
+        width: calc(5px * var(--udc-ap-scale)); height: calc(5px * var(--udc-ap-scale));
+        transform: translateX(-50%); border-radius: 50%;
+        background: var(--ap-ring-color, #62c8fa);
+        box-shadow: 0 0 7px color-mix(in srgb, var(--ap-ring-color, #62c8fa) 65%, transparent);
+      }
+
+      .ap-shaped-led.off { background: #aeb4ba; box-shadow: none; }
+
+      .ap-mesh-column-device {
+        border-radius: 48% 48% 30% 30% / 12% 12% 7% 7%;
+        background: linear-gradient(90deg, #e5e8ea 0%, #fff 36%, #f8f9f9 61%, #d8dcdf 100%);
+      }
+
+      .ap-mesh-column-device::before {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        box-sizing: border-box;
+        left: -1px;
+        top: -1px;
+        width: calc(100% + 2px);
+        height: 17%;
+        border: max(2px, calc(3px * var(--udc-ap-scale))) solid var(--ap-ring-color, #62c8fa);
+        border-radius: 50%;
+        background: radial-gradient(ellipse at 50% 40%, #fff 0%, #f4f6f7 58%, #dce1e4 100%);
+        box-shadow: 0 0 calc(9px * var(--udc-ap-scale)) color-mix(in srgb, var(--ap-ring-color, #62c8fa) 58%, transparent);
+      }
+
+      .ap-mesh-column-device.off::before {
+        border-color: #aeb4ba;
+        box-shadow: none;
+      }
+
+      .ap-mesh-column-device .ap-shaped-logo {
+        z-index: 2;
+        top: 7.5%;
+        font-size: calc(17px * var(--udc-ap-scale));
+      }
+
+      .ap-mesh-column-device .ap-shaped-led { display: none; }
+
+      .ap-dream-machine-device,
+      .ap-dream-router-device {
+        width: calc(142px * var(--udc-ap-scale));
+        aspect-ratio: .61 / 1;
+        border-radius: 48% 48% 34% 34% / 15% 15% 12% 12%;
+        background: linear-gradient(90deg, #dfe2e4 0%, #fff 30%, #fafafa 64%, #d9dddf 100%);
+      }
+
+      .ap-dream-machine-device::before,
+      .ap-dream-router-device::before {
+        content: "";
+        position: absolute;
+        z-index: 1;
+        box-sizing: border-box;
+        left: -1px;
+        top: -1px;
+        width: calc(100% + 2px);
+        height: 18%;
+        border: max(2px, calc(3px * var(--udc-ap-scale))) solid var(--ap-ring-color, #62c8fa);
+        border-radius: 50%;
+        background: radial-gradient(ellipse at 50% 42%, #fff 0%, #f5f6f7 58%, #dce0e3 100%);
+        box-shadow: 0 0 calc(10px * var(--udc-ap-scale)) color-mix(in srgb, var(--ap-ring-color, #62c8fa) 58%, transparent);
+      }
+
+      .ap-dream-machine-device.off::before,
+      .ap-dream-router-device.off::before {
+        border-color: #aeb4ba;
+        box-shadow: none;
+      }
+
+      .ap-dream-machine-device .ap-shaped-logo,
+      .ap-dream-machine-device .ap-shaped-led,
+      .ap-dream-router-device .ap-shaped-logo,
+      .ap-dream-router-device .ap-shaped-led { display: none; }
+
+      .ap-dream-router-display {
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        top: 48%;
+        width: calc(16px * var(--udc-ap-scale));
+        height: calc(31px * var(--udc-ap-scale));
+        transform: translate(-50%, -50%);
+        border-radius: calc(8px * var(--udc-ap-scale));
+        background: linear-gradient(180deg, #142989 0%, #0647ac 56%, #0878c8 100%);
+        border: 1px solid rgba(0, 23, 87, .7);
+        box-shadow: inset 0 0 calc(3px * var(--udc-ap-scale)) rgba(81, 202, 255, .45), 0 1px 2px rgba(0, 0, 0, .2);
+      }
+
+      .ap-dream-router-display::before {
+        content: "";
+        position: absolute;
+        left: 28%;
+        right: 28%;
+        top: 28%;
+        height: 2px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .9);
+        box-shadow: 0 calc(5px * var(--udc-ap-scale)) rgba(113, 231, 255, .9), 0 calc(10px * var(--udc-ap-scale)) rgba(255, 255, 255, .72);
+      }
+
+      .ap-mesh-antenna-device { width: calc(105px * var(--udc-ap-scale)); aspect-ratio: .55 / 1; border-radius: calc(22px * var(--udc-ap-scale)); transform: translateY(calc(15px * var(--udc-ap-scale))); }
+      .ap-mesh-antenna-device::before,
+      .ap-mesh-antenna-device::after {
+        content: ""; position: absolute; bottom: 94%; width: 17%; height: 35%;
+        border-radius: 999px; background: linear-gradient(90deg, #dfe3e6, #fff 48%, #d9dde0);
+        box-shadow: 0 4px 5px rgba(0,0,0,.12);
+      }
+      .ap-mesh-antenna-device::before { left: 15%; transform: rotate(-5deg); }
+      .ap-mesh-antenna-device::after { right: 15%; transform: rotate(5deg); }
+
+      .ap-ac-mesh-device {
+        width: calc(72px * var(--udc-ap-scale));
+        aspect-ratio: .35 / 1;
+        border-radius: 24% 24% 50% 50% / 8% 8% 13% 13%;
+        background: linear-gradient(90deg, #e1e5e7 0%, #fff 38%, #f7f8f8 64%, #d6dbde 100%);
+        transform: translateY(calc(24px * var(--udc-ap-scale)));
+      }
+
+      .ap-ac-mesh-device::before,
+      .ap-ac-mesh-device::after {
+        content: "";
+        position: absolute;
+        bottom: 94%;
+        width: 16%;
+        height: 58%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #d9dde0, #fff 48%, #d5dadd);
+        box-shadow: 0 3px 5px rgba(0,0,0,.13);
+        transform-origin: 50% 100%;
+      }
+
+      .ap-ac-mesh-device::before { left: 12%; transform: rotate(-43deg); }
+      .ap-ac-mesh-device::after { right: 12%; transform: rotate(43deg); }
+
+      .ap-ac-mesh-device .ap-shaped-logo {
+        top: 49%;
+        font-size: calc(22px * var(--udc-ap-scale));
+      }
+
+      .ap-mesh-pro-device {
+        width: calc(145px * var(--udc-ap-scale));
+        aspect-ratio: .55 / 1;
+        border-radius: 3% / 2%;
+        background: linear-gradient(90deg, #e1e5e7 0%, #f8f9f9 13%, #f5f7f7 87%, #d8dddf 100%);
+      }
+
+      .ap-mesh-pro-device .ap-shaped-logo {
+        top: 49%;
+        font-size: calc(28px * var(--udc-ap-scale));
+      }
+
+      .ap-mesh-pro-device .ap-shaped-led {
+        bottom: 25%;
+        width: calc(18px * var(--udc-ap-scale));
+        height: calc(3px * var(--udc-ap-scale));
+        border-radius: 999px;
+      }
+
+      .ap-outdoor-panel-device { width: calc(164px * var(--udc-ap-scale)); aspect-ratio: .68 / 1; border-radius: calc(25px * var(--udc-ap-scale)); }
+      .ap-extender-device { width: calc(130px * var(--udc-ap-scale)); aspect-ratio: .62 / 1; border-radius: calc(28px * var(--udc-ap-scale)); }
+      .ap-extender-device::after { content: ""; position: absolute; left: 50%; bottom: 5%; width: 27%; height: 7%; transform: translateX(-50%); border-radius: 2px; background: #d8dcdf; }
+      .ap-sector-device { width: calc(180px * var(--udc-ap-scale)); aspect-ratio: .78 / 1; border-radius: 50% 50% 14% 14% / 18% 18% 8% 8%; }
+      .ap-sector-device::before { content: ""; position: absolute; inset: 7% 8% 12%; border: 1px solid rgba(165,174,181,.24); border-radius: inherit; }
+      .ap-bridge-device { width: calc(176px * var(--udc-ap-scale)); aspect-ratio: 1 / 1; border-radius: 50%; }
+      .ap-bridge-device::before { content: ""; position: absolute; inset: 9%; border: 2px solid rgba(177,185,191,.25); border-radius: 50%; }
+
+      .ap-device-bridge-device {
+        width: calc(115px * var(--udc-ap-scale));
+        aspect-ratio: .45 / 1;
+        border-radius: 14% / 7%;
+        background: linear-gradient(90deg, #dfe3e5 0%, #fff 34%, #f7f8f8 68%, #d7dcde 100%);
+      }
+
+      .ap-device-bridge-device::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 14%;
+        width: calc(3px * var(--udc-ap-scale));
+        height: calc(3px * var(--udc-ap-scale));
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: var(--ap-ring-color, #62c8fa);
+        box-shadow:
+          0 calc(7px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(14px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(21px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(28px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa);
+      }
+
+      .ap-device-bridge-device.off::before {
+        background: #aeb4ba;
+        box-shadow:
+          0 calc(7px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(14px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(21px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(28px * var(--udc-ap-scale)) 0 #aeb4ba;
+      }
+
+      .ap-device-bridge-device::after {
+        content: "";
+        position: absolute;
+        left: 47%;
+        bottom: 99%;
+        width: 6%;
+        height: 4%;
+        border-radius: 2px 2px 0 0;
+        background: #62686c;
+      }
+
+      .ap-device-bridge-device .ap-shaped-led { display: none; }
+
+      .ap-device-bridge-iot-device {
+        width: calc(125px * var(--udc-ap-scale));
+        aspect-ratio: .75 / 1;
+        border-radius: 8% / 6%;
+        background: linear-gradient(90deg, #dfe3e5 0%, #fff 34%, #f7f8f8 68%, #d7dcde 100%);
+      }
+
+      .ap-device-bridge-iot-device::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 27%;
+        width: calc(3px * var(--udc-ap-scale));
+        height: calc(3px * var(--udc-ap-scale));
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: var(--ap-ring-color, #62c8fa);
+        box-shadow:
+          0 calc(7px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(14px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(21px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa),
+          0 calc(28px * var(--udc-ap-scale)) 0 var(--ap-ring-color, #62c8fa);
+      }
+
+      .ap-device-bridge-iot-device.off::before {
+        background: #aeb4ba;
+        box-shadow:
+          0 calc(7px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(14px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(21px * var(--udc-ap-scale)) 0 #aeb4ba,
+          0 calc(28px * var(--udc-ap-scale)) 0 #aeb4ba;
+      }
+
+      .ap-device-bridge-iot-device::after {
+        content: "";
+        position: absolute;
+        left: 39%;
+        bottom: 98%;
+        width: 22%;
+        height: 48%;
+        border-radius: 45% 45% 10% 10% / 8% 8% 4% 4%;
+        background: linear-gradient(90deg, #d9dddf, #fff 48%, #d4d9dc);
+        border-bottom: 1px solid rgba(150,158,166,.3);
+        box-shadow: 0 3px 5px rgba(0,0,0,.12);
+      }
+
+      .ap-device-bridge-iot-device .ap-shaped-logo {
+        top: 73%;
+        font-size: calc(25px * var(--udc-ap-scale));
+      }
+
+      .ap-device-bridge-iot-device .ap-shaped-led { display: none; }
+
+      .ap-device-bridge-sector-device {
+        width: calc(120px * var(--udc-ap-scale));
+        aspect-ratio: .42 / 1;
+        border-radius: 18% 18% 24% 24% / 6% 6% 5% 5%;
+        background: linear-gradient(90deg, #dce1e3 0%, #fff 31%, #f7f8f8 67%, #d5dadd 100%);
+      }
+
+      .ap-device-bridge-sector-device .ap-shaped-logo {
+        top: 56%;
+        font-size: calc(24px * var(--udc-ap-scale));
+      }
+
+      .ap-device-bridge-sector-device .ap-shaped-led { display: none; }
+
+      .ap-building-bridge-device,
+      .ap-device-bridge-pro-device {
+        width: calc(210px * var(--udc-ap-scale));
+        aspect-ratio: 1 / 1;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 30%, #fff 0%, #f5f7f8 52%, #dfe4e7 100%);
+      }
+
+      .ap-basestation-device {
+        width: calc(235px * var(--udc-ap-scale));
+        aspect-ratio: 1.9 / 1;
+        border-radius: 12% / 22%;
+      }
+
+      .ap-basestation-device::before {
+        content: "";
+        position: absolute;
+        left: 28%;
+        top: 98%;
+        width: 44%;
+        height: 18%;
+        background: linear-gradient(90deg, transparent 0 8%, #eef0f1 8% 25%, transparent 25% 75%, #eef0f1 75% 92%, transparent 92%);
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,.15));
+      }
+
+      .ap-basestation-device::after {
+        content: "";
+        position: absolute;
+        left: 45%;
+        top: 99%;
+        width: 10%;
+        height: 7%;
+        border-radius: 0 0 4px 4px;
+        background: #30363a;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 3px rgba(0,0,0,.2);
+      }
+
+      .ap-e7-audience-device {
+        width: calc(235px * var(--udc-ap-scale));
+        aspect-ratio: 2 / 1;
+        border-radius: 11% / 22%;
+      }
+
+      .ap-e7-audience-device::after {
+        content: "";
+        position: absolute;
+        left: 43%;
+        top: 98%;
+        width: 14%;
+        height: 8%;
+        border-radius: 0 0 5px 5px;
+        background: #30363a;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 3px rgba(0,0,0,.2);
+      }
+
+      .ap-shaped-device.edge-glow {
+        box-shadow:
+          inset 8px 10px 15px rgba(255,255,255,.82),
+          inset -8px -10px 16px rgba(120,128,136,.08),
+          0 0 0 max(1px, calc(2px * var(--udc-ap-scale))) var(--ap-ring-color, #62c8fa),
+          0 0 calc(16px * var(--udc-ap-scale)) color-mix(in srgb, var(--ap-ring-color, #62c8fa) 58%, transparent),
+          0 14px 24px rgba(0,0,0,.18);
+      }
+
+      .ap-shaped-device.edge-glow.off {
+        box-shadow:
+          inset 8px 10px 15px rgba(255,255,255,.82),
+          inset -8px -10px 16px rgba(120,128,136,.08),
+          0 14px 24px rgba(0,0,0,.18);
+      }
+
+      .ap-shaped-device.edge-glow .ap-shaped-led { display: none; }
+
+      .ap-e7-device {
+        width: calc(210px * var(--udc-ap-scale));
+        aspect-ratio: 1 / 1;
+        border-radius: 23%;
+      }
+
+      .ap-ring {
+        width: 41%;
+        height: 41%;
+        border-radius: 50%;
+        border: max(2px, calc(4px * var(--udc-ap-scale))) solid var(--ap-ring-color, var(--udc-ap-ring-color, var(--udc-ap-color, #a5adb8)));
+        box-shadow: 0 0 11px rgba(165,173,184,.35);
+        display: grid;
+        place-items: center;
+        transition: border-color .18s ease, box-shadow .18s ease;
+      }
+
+      .ap-ring.online {
+        border-color: var(--ap-ring-color, var(--udc-ap-ring-color, var(--udc-ap-color, rgb(0, 0, 255))));
+        box-shadow:
+          0 0 12px color-mix(in srgb, var(--ap-ring-color, var(--udc-ap-ring-color, var(--udc-ap-color, rgb(0, 0, 255)))) 55%, transparent),
+          0 0 24px color-mix(in srgb, var(--ap-ring-color, var(--udc-ap-ring-color, var(--udc-ap-color, rgb(0, 0, 255)))) 32%, transparent);
+      }
+
+      .ap-ring.off {
+        border-color: #868b93;
+        box-shadow: inset 0 -1px 0 rgba(0,0,0,.2);
+      }
+
+      .ap-logo {
+        color: rgba(82, 89, 102, .55);
+        font-size: calc(42px * var(--udc-ap-scale));
+        font-weight: 700;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        line-height: 1;
+        transform: translateY(-1px);
+        user-select: none;
+      }
+
+      .port {
+        cursor: pointer;
+        font: inherit;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: calc(var(--udc-port-size) - 2px);
+        flex: 0 0 calc(var(--udc-port-size) - 2px);
+        padding: 0 0 1px;
+        border-radius: 2px;
+        position: relative;
+        min-width: 0;
+        border: none;
+        background: transparent;
+        transition: outline .1s ease, opacity .15s ease, filter .15s ease;
+      }
+
+      .port:focus {
+        outline: none;
+      }
+
+      .port.selected {
+        outline: 2px solid var(--udc-accent);
+        outline-offset: 1px;
+      }
+
+      .port:hover {
+        outline: 1px solid rgba(0,144,217,.5);
+        outline-offset: 1px;
+      }
+
+      .port-housing {
+        position: relative;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        transition: opacity .15s ease, filter .15s ease;
+      }
+
+      .lag-badge {
+        position: absolute;
+        top: -3px;
+        right: -2px;
+        z-index: 8;
+        padding: 1px 2px;
+        border-radius: 2px;
+        background: var(--udc-accent);
+        color: #fff;
+        font-size: 5px;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: .15px;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+        pointer-events: none;
+      }
+
+      .port.rotated180 .port-housing {
+        transform: rotate(180deg);
+      }
+
+      .port.rotated180 .lag-badge {
+        transform: rotate(180deg);
+      }
+
+      .port.down .port-housing {
+        opacity: .42;
+        filter: saturate(.45) brightness(.78);
+      }
+
+      .port.up .port-housing {
+        opacity: 1;
+        filter: saturate(1.05) brightness(1.02);
+      }
+
+      .port:hover .port-housing,
+      .port.selected .port-housing {
+        opacity: 1;
+        filter: none;
+      }
+
+      .port-rj45 {
+        position: relative;
+        width: calc(var(--udc-port-size) - 2px);
+        height: calc(var(--udc-port-size) - 2px);
+        background: linear-gradient(180deg, #2e3137 0%, #0b0c0e 100%);
+        border: 1px solid #666a72;
+        border-radius: 1px 1px 2px 2px;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.05),
+          inset 0 -1px 0 rgba(0,0,0,.45);
+        overflow: hidden;
+        z-index: 0;
+      }
+
+      .port.odd-even-top .port-rj45 {
+        transform: rotate(180deg);
+        transform-origin: 50% 50%;
+      }
+
+      .port.odd-even-top .rj45-led.left {
+        left: 50%;
+        right: 0;
+        margin-left: 3px;
+        margin-right: 0;
+      }
+
+      .port.odd-even-top .rj45-led.right {
+        right: 50%;
+        left: 0;
+        margin-right: 3px;
+        margin-left: 0;
+      }
+
+      .rj45-shell-top {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+      }
+
+      .rj45-contacts {
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        right: 4px;
+        height: 3px;
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 1px;
+        z-index: 2;
+      }
+
+      .rj45-contacts span {
+        display: block;
+        background: #caa252;
+        min-width: 0;
+      }
+
+      .rj45-cavity {
+        position: absolute;
+        top: 8px;
+        left: 3px;
+        right: 3px;
+        bottom: 2px;
+        background: linear-gradient(180deg, #14181d 0%, #060708 100%);
+        z-index: 1;
+      }
+
+      .rj45-led {
+        position: absolute;
+        bottom: 1px;
+        height: 4px;
+        border-radius: 0;
+        background: linear-gradient(180deg, #9ea3ab 0%, #767c85 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.16),
+          inset 0 -1px 0 rgba(0,0,0,.28);
+        z-index: 1;
+      }
+
+      .rj45-led.left {
+        left: 0;
+        right: 50%;
+        margin-right: 3px;
+      }
+
+      .rj45-led.right {
+        right: 0;
+        left: 50%;
+        margin-left: 3px;
+      }
+
+      .rj45-led.orange {
+        background: linear-gradient(180deg, #efc14d 0%, #efb21a 58%, #b8820d 100%);
+        box-shadow:
+          0 0 2px rgba(239,178,26,.42),
+          inset 0 1px 0 rgba(255,255,255,.22),
+          inset 0 -1px 0 rgba(0,0,0,.35);
+      }
+
+      .rj45-led.speed-10-100,
+      .rj45-led.speed-2-5g {
+        background: var(--udc-link-color-10-100, linear-gradient(180deg, #efc14d 0%, #efb21a 58%, #b8820d 100%));
+        box-shadow:
+          0 0 2px rgba(239,178,26,.42),
+          inset 0 1px 0 rgba(255,255,255,.22),
+          inset 0 -1px 0 rgba(0,0,0,.35);
+      }
+
+      .rj45-led.speed-2-5g {
+        background: var(--udc-link-color-2-5g, linear-gradient(180deg, #efc14d 0%, #efb21a 58%, #b8820d 100%));
+      }
+
+      .rj45-led.speed-1000 {
+        background: var(--udc-link-color-1000, linear-gradient(180deg, #63ea86 0%, #33d35d 58%, #1c8e3a 100%));
+        box-shadow:
+          0 0 2px rgba(51,211,93,.42),
+          inset 0 1px 0 rgba(255,255,255,.22),
+          inset 0 -1px 0 rgba(0,0,0,.35);
+      }
+
+      .rj45-led.speed-10g {
+        background: var(--udc-link-color-10g, linear-gradient(180deg, #ffffff 0%, #eef3f7 58%, #b8c1c8 100%));
+        box-shadow:
+          0 0 3px rgba(255,255,255,.72),
+          inset 0 1px 0 rgba(255,255,255,.75),
+          inset 0 -1px 0 rgba(0,0,0,.22);
+      }
+
+      .rj45-led.off {
+        background: #868b93;
+        box-shadow: inset 0 -1px 0 rgba(0,0,0,.2);
+      }
+
+      .port.is-rj45.blink-link-led .rj45-led.right:not(.off) {
+        animation: udc-port-link-blink ${this._portLedBlinkSpeed("rj45")}s step-end infinite;
+      }
+
+      .port.is-sfp.blink-link-led .sfp-top-led:not(.off) {
+        animation: udc-port-link-blink ${this._portLedBlinkSpeed("sfp")}s step-end infinite;
+      }
+
+      .port.is-rj45.blink-link-led.has-traffic .rj45-led.right:not(.off),
+      .port.is-sfp.blink-link-led.has-traffic .sfp-top-led:not(.off) {
+        animation-duration: ${this._portLedTrafficBlinkSpeed()}s;
+      }
+
+      @keyframes udc-port-link-blink {
+        50% { opacity: .22; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .port.blink-link-led .rj45-led.right:not(.off),
+        .port.blink-link-led .sfp-top-led:not(.off) {
+          animation: none;
+        }
+      }
+
+      .rj45-notch {
+        position: absolute;
+        left: 35%;
+        right: 35%;
+        bottom: 0;
+        height: 6px;
+        background: #d0d1d4;
+        border-radius: 1px 1px 0 0;
+        z-index: 6;
+      }
+
+      .rj45-floor {
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        bottom: 0;
+        height: 2px;
+        background: #0e1014;
+        z-index: 2;
+      }
+
+      .port-sfp-wrap {
+        width: 100%;
+        display: grid;
+        justify-items: center;
+        gap: 1px;
+      }
+
+      .sfp-top-led {
+        width: 16px;
+        height: 4px;
+        border-radius: 0;
+        background: linear-gradient(180deg, #9ea3ab 0%, #767c85 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,.16),
+          inset 0 -1px 0 rgba(0,0,0,.28);
+      }
+
+      .sfp-top-led.speed-10-100,
+      .sfp-top-led.speed-2-5g {
+        background: var(--udc-link-color-10-100, linear-gradient(180deg, #efc14d 0%, #efb21a 58%, #b8820d 100%));
+        box-shadow:
+          0 0 2px rgba(239,178,26,.42),
+          inset 0 1px 0 rgba(255,255,255,.22),
+          inset 0 -1px 0 rgba(0,0,0,.35);
+      }
+
+      .sfp-top-led.speed-2-5g {
+        background: var(--udc-link-color-2-5g, linear-gradient(180deg, #efc14d 0%, #efb21a 58%, #b8820d 100%));
+      }
+
+      .sfp-top-led.speed-1000 {
+        background: var(--udc-link-color-1000, linear-gradient(180deg, #63ea86 0%, #33d35d 58%, #1c8e3a 100%));
+        box-shadow:
+          0 0 2px rgba(51,211,93,.42),
+          inset 0 1px 0 rgba(255,255,255,.22),
+          inset 0 -1px 0 rgba(0,0,0,.35);
+      }
+
+      .sfp-top-led.speed-10g {
+        background: var(--udc-link-color-10g, linear-gradient(180deg, #ffffff 0%, #eef3f7 58%, #b8c1c8 100%));
+        box-shadow:
+          0 0 3px rgba(255,255,255,.72),
+          inset 0 1px 0 rgba(255,255,255,.75),
+          inset 0 -1px 0 rgba(0,0,0,.22);
+      }
+
+      .sfp-top-led.off {
+        background: #868b93;
+        box-shadow: inset 0 -1px 0 rgba(0,0,0,.2);
+      }
+
+      .port-sfp {
+        position: relative;
+        width: calc(var(--udc-port-size) - 2px);
+        height: var(--udc-port-size);
+        z-index: 0;
+      }
+
+      .sfp-frame {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, #7d828a 0%, #62676f 100%);
+        border: 1px solid #6d7279;
+        border-radius: 1px;
+      }
+
+      .sfp-rail {
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        height: 1px;
+        background: rgba(230,235,240,.28);
+        z-index: 3;
+      }
+
+      .sfp-rail.top {
+        top: 5px;
+      }
+
+      .sfp-rail.bottom {
+        bottom: 5px;
+      }
+
+      .sfp-slot {
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        top: 5px;
+        bottom: 5px;
+        background: linear-gradient(180deg, #171b22 0%, #060709 100%);
+        border: 1px solid rgba(220,225,230,.10);
+        z-index: 1;
+      }
+
+      .sfp-inner {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        top: 9px;
+        bottom: 9px;
+        background: rgba(130,140,155,.16);
+        z-index: 2;
+      }
+
+      .sfp-latch {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 2px;
+        height: 4px;
+        background: rgba(210,214,220,.48);
+        z-index: 4;
+      }
+
+      .port.special {
+        min-width: calc(var(--udc-port-size) - 2px);
+        max-width: calc(var(--udc-port-size) - 2px);
+      }
+
+      .port.special .port-num {
+        color: var(--udc-special-port-label-color, var(--udc-port-label-color, #646a76));
+      }
+
+      .port-num {
+        font-size: 7px;
+        font-weight: 800;
+        line-height: 1;
+        margin-top: 1px;
+        letter-spacing: 0;
+        user-select: none;
+        color: var(--udc-port-label-color, #646a76);
+        transition: color .15s ease, opacity .15s ease;
+      }
+
+      .port.down .port-num {
+        color: var(--udc-port-label-color, #4c5260);
+        opacity: .6;
+      }
+
+      .port.special.down .port-num {
+        color: var(--udc-special-port-label-color, var(--udc-port-label-color, #4c5260));
+      }
+
+      .port.up .port-num {
+        color: var(--udc-port-label-color, #414957);
+        opacity: 1;
+      }
+
+      .port.special.up .port-num {
+        color: var(--udc-special-port-label-color, var(--udc-port-label-color, #414957));
+      }
+
+      .port:hover .port-num,
+      .port.selected .port-num {
+        opacity: 1;
+      }
+
+      .port.is-sfp .port-num {
+        font-size: 6px;
+      }
+
+      .section {
+        padding: 12px 14px 14px;
+        background: var(--udc-chrome-bg, transparent);
+        position: relative;
+        z-index: 1;
+      }
+
+      .detail-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: var(--udc-special-port-label-color, var(--primary-text-color, var(--udc-text)));
+      }
+
+      .detail-lag-badge {
+        display: inline-block;
+        margin-left: 5px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        background: var(--udc-accent);
+        color: #fff;
+        font-size: .62rem;
+        line-height: 1.2;
+        vertical-align: 1px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 10px;
+        margin-bottom: 10px;
+      }
+
+      .detail-item {
+        display: grid;
+        gap: 2px;
+      }
+
+      .detail-label {
+        font-size: 0.67rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--udc-label-color, var(--secondary-text-color, var(--udc-muted)));
+      }
+
+      .detail-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--udc-value-color, var(--primary-text-color, var(--udc-text)));
+      }
+
+      .detail-value.online { color: var(--udc-green); }
+      .detail-value.offline { color: var(--udc-muted); }
+      .detail-value.pending { color: #efb21a; }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+
+      .action-btn {
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: var(--udc-rsm);
+        border: none;
+        cursor: pointer;
+        transition: opacity .15s, filter .15s;
+      }
+
+      .action-btn:hover { opacity: .85; }
+      .action-btn:active { filter: brightness(.9); }
+
+      .action-btn.primary {
+        background: var(--udc-button-bg, #0090d9);
+        color: var(--udc-button-text-color, #fff);
+      }
+
+      .action-btn.primary.dimmed {
+        opacity: .52;
+        filter: saturate(.6) brightness(.9);
+      }
+
+      .action-btn.secondary {
+        background: var(--udc-button-secondary-bg, var(--udc-surf2));
+        border: 1px solid var(--udc-button-border-color, var(--udc-border));
+        color: var(--udc-button-secondary-text-color, var(--primary-text-color, var(--udc-text)));
+      }
+
+      .muted {
+        color: var(--secondary-text-color, var(--udc-muted));
+        font-size: 0.82rem;
+      }
+
+      .empty-state,
+      .loading-state {
+        padding: 24px 18px;
+        color: var(--secondary-text-color, var(--udc-muted));
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--udc-border);
+        border-top-color: #0090d9;
+        border-radius: 50%;
+        animation: spin .7s linear infinite;
+        flex-shrink: 0;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @media (max-width: 420px) {
+        .integrated-port-section {
+          grid-template-columns: 1fr;
+        }
+
+        .frontpanel.integrated-ports {
+          border-right: none;
+          border-bottom: 1px solid var(--udc-border);
+        }
+
+        .ap-layout.has-integrated-ports:not(.compact) {
+          grid-template-columns: 1fr;
+        }
+
+      }
+
+    </style>`;
+  }
+
+
+  _integratedPortsEnabled(ctx) {
+    return isApPortPanelAvailable(ctx?.layout, ctx?.numberedPorts)
+      && this._deviceLayoutMode(ctx) === "combined";
+  }
+
+  _deviceLayoutMode(ctx = this._ctx) {
+    const supportsLayouts = supportsDeviceLayoutModes(ctx?.layout, ctx?.numberedPorts);
+    if (!supportsLayouts) return ctx?.type === "access_point" ? "ap" : "network";
+
+    const configured = String(this._config?.device_layout || "").toLowerCase();
+    if (["combined", "network", "ap"].includes(configured)) return configured;
+    if (this._config?.integrated_ports === false) return "ap";
+    return "combined";
+  }
+
+  _renderPortDetail(selected) {
+    if (!selected) return `<div class="muted">${this._escapeHtml(this._t("no_ports"))}</div>`;
+
+    const linkUp = this._isPortConnected(selected);
+    const linkText = linkUp ? "connected" : "no_link";
+    const speedText = getPortSpeedText(this._hass, selected);
+    const poeStatus = getPoeStatus(this._hass, selected);
+    const hasPoe = !!(selected.poe_switch_entity || selected.poe_power_entity || selected.power_cycle_entity);
+    const poeOn = poeStatus.active;
+    const poePower = selected.poe_power_entity ? formatState(this._hass, selected.poe_power_entity) : "—";
+    const rxVal = selected.rx_entity ? formatState(this._hass, selected.rx_entity) : null;
+    const txVal = selected.tx_entity ? formatState(this._hass, selected.tx_entity) : null;
+
+    const portTitle = selected.port_label
+      || (selected.kind === "special" ? selected.label : `${this._t("port_label")} ${selected.label}`);
+
+    return `
+      <div class="detail-title">${this._escapeHtml(portTitle)}${selected.lag_group ? ` <span class="detail-lag-badge">LAG · ${this._escapeHtml(selected.lag_group.name)}</span>` : ""}</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("link_status"))}</div>
+          <div class="detail-value ${linkUp ? "online" : "offline"}">
+            ${this._escapeHtml(this._translateState(linkText) || (linkUp ? this._t("connected") : this._t("no_link")))}
+          </div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("speed"))}</div>
+          <div class="detail-value">${this._escapeHtml(speedText || "—")}</div>
+        </div>
+        ${hasPoe ? `
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("poe"))}</div>
+          <div class="detail-value ${poeOn ? "online" : "offline"}">
+            ${this._escapeHtml(poeOn ? this._t("state_on") : this._t("state_off"))}
+          </div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(this._t("poe_power"))}</div>
+          <div class="detail-value">${this._escapeHtml(poePower || "—")}</div>
+        </div>` : ""}
+        ${rxVal != null ? `
+        <div class="detail-item">
+          <div class="detail-label">RX</div>
+          <div class="detail-value">${this._escapeHtml(rxVal)}</div>
+        </div>` : ""}
+        ${txVal != null ? `
+        <div class="detail-item">
+          <div class="detail-label">TX</div>
+          <div class="detail-value">${this._escapeHtml(txVal)}</div>
+        </div>` : ""}
+      </div>
+      <div class="actions">
+        ${selected.port_switch_entity ? (() => {
+          const enabled = isOn(this._hass, selected.port_switch_entity);
+          const confirmDisableAttr = enabled ? ` data-confirm-disable="true" data-port-name="${this._escapeAttr(portTitle)}"` : "";
+          return `<button class="action-btn secondary" data-action="toggle-port" data-entity="${this._escapeAttr(selected.port_switch_entity)}"${confirmDisableAttr}>
+            ${this._escapeHtml(enabled ? this._t("port_disable") : this._t("port_enable"))}
+          </button>`;
+        })() : ""}
+        ${selected.poe_switch_entity ? `<button class="action-btn primary${poeOn ? "" : " dimmed"}" data-action="toggle-poe" data-entity="${this._escapeAttr(selected.poe_switch_entity)}">
+          ⚡ ${this._escapeHtml(this._t("poe"))}
+        </button>` : ""}
+        ${selected.power_cycle_entity ? `<button class="action-btn secondary" data-action="power-cycle" data-entity="${this._escapeAttr(selected.power_cycle_entity)}">
+          ↺ ${this._escapeHtml(this._t("power_cycle"))}
+        </button>` : ""}
+      </div>`;
+  }
+
+  _renderIntegratedPortSection(ctx) {
+    if (!this._integratedPortsEnabled(ctx) || !ctx?.numberedPorts?.length) return "";
+
+    const { specials, numbered } = this._buildSlotData(ctx);
+    const specialPortNumbers = new Set(
+      specials.map((slot) => slot?.port).filter((port) => Number.isInteger(port))
+    );
+    const visibleNumbered = numbered.filter((slot) => !specialPortNumbers.has(slot.port));
+    const allSlots = [...specials, ...visibleNumbered];
+    if (!allSlots.length) return "";
+
+    const selected = allSlots.find((p) => p.key === this._selectedKey)
+      || (this._config?.dynamic_port_details === true ? null : allSlots[0])
+      || null;
+    const portClientIndex = this._buildPortClientIndex();
+    const specialRow = specials.length
+      ? `<div class="special-row">${specials.map((slot) => this._renderPortButton(slot, selected?.key, portClientIndex)).join("")}</div>`
+      : "";
+    const rows = this._buildEffectiveRows(ctx, visibleNumbered);
+    const layoutRows = rows.map((rowPorts) => {
+      const items = rowPorts
+        .map((portNumber) => numbered.find((p) => p.port === portNumber))
+        .filter(Boolean)
+        .map((slot) => this._renderPortButton(slot, selected?.key, portClientIndex))
+        .join("");
+      return items ? `<div class="port-row" style="--udc-cols: ${Math.max(1, rowPorts.length)};">${items}</div>` : "";
+    }).filter(Boolean).join("");
+
+    return `
+      <div class="integrated-port-section">
+        <div class="frontpanel integrated-ports theme-${this._safeClassToken(ctx?.layout?.theme || "white", "white")}">
+          <div class="panel-label">${this._escapeHtml(this._t("front_panel"))}</div>
+          ${specialRow}${layoutRows || (!specialRow ? `<div class="muted" style="padding:8px 0">${this._escapeHtml(this._t("no_ports"))}</div>` : "")}
+        </div>
+        ${selected ? `<div class="section integrated-port-detail">${this._renderPortDetail(selected)}</div>` : ""}
+      </div>`;
+  }
+
+  _attachPortActionHandlers() {
+    this.shadowRoot.querySelectorAll(".port")
+      .forEach((btn) => btn.addEventListener("click", () => this._selectKey(btn.dataset.key)));
+    this.shadowRoot.querySelector("[data-action='toggle-port']")
+      ?.addEventListener("click", (e) => {
+        const target = e.currentTarget;
+        if (target.dataset.confirmDisable === "true") {
+          const portName = target.dataset.portName || this._t("port_label");
+          const message = `${this._t("confirm_disable_port_title")}\n\n${this._t("confirm_disable_port_message").replace("{port}", portName)}`;
+          if (!window.confirm(message)) return;
+        }
+        this._toggleEntity(target.dataset.entity);
+      });
+    this.shadowRoot.querySelector("[data-action='toggle-poe']")
+      ?.addEventListener("click", (e) => this._toggleEntity(e.currentTarget.dataset.entity));
+    this.shadowRoot.querySelector("[data-action='power-cycle']")
+      ?.addEventListener("click", (e) => this._pressButton(e.currentTarget.dataset.entity));
+    this.shadowRoot.querySelector("[data-action='reboot-device']")
+      ?.addEventListener("click", () => this._pressButton(this._ctx?.reboot_entity));
+  }
+
+  _renderPanelAndDetail() {
+    if (this._ctx?.type === "power_distribution") {
+      this._renderPowerCard(this._ctx);
+      return;
+    }
+    if (this._ctx?.type === "ups") {
+      this._renderUpsCard(this._ctx);
+      return;
+    }
+    const layoutMode = this._deviceLayoutMode(this._ctx);
+    const renderApLayout = layoutMode !== "network" && (
+      this._ctx?.type === "access_point" || this._ctx?.layout?.supportsHybridLayouts
+    );
+    if (renderApLayout) {
+      // The AP disc renders a .frontpanel too, so _finalizeRender measures it
+      // and compares _maxFittableColumns() against _renderedFittableColumns.
+      // Record the value here as well, or an AP card re-renders every frame.
+      // In-Wall APs with an integrated port grid overwrite it in
+      // _buildEffectiveRows.
+      this._renderedFittableColumns = this._maxFittableColumns();
+      this._syncUptimeRefreshTimer();
+      const online = this._isDeviceOnline();
+      const compactApView = this._apCompactViewEnabled();
+      const showVisualPanel = shouldShowHybridVisualPanel(this._ctx?.layout, this._config);
+      const apStatusRaw = this._apStatusRaw(this._ctx?.ap_status_entity);
+      const apStatus = this._apStatusState(this._ctx?.ap_status_entity);
+      const apStatusClass = apStatusRaw === "connected" ? "online" : (apStatusRaw === "disconnected" ? "offline" : "pending");
+      const uptime = this._apUptimeState(this._ctx?.uptime_entity);
+      const clients = this._wholeNumberState(this._ctx?.clients_entity);
+      const apUplink = this._apUplinkText(this._ctx?.ap_uplink);
+      const apUplinkTooltip = this._apUplinkTooltip(this._ctx?.ap_uplink);
+      const { ledEntity, ledEnabled, ringColor } = this._apLedState();
+      const isFiveGBackup = this._ctx?.layout?.frontStyle === "ap-5g-backup";
+      const apFrontStyle = this._ctx?.layout?.apFrontStyle || this._ctx?.layout?.frontStyle;
+      const isInWallAp = apFrontStyle === "ap-in-wall";
+      const isU7Outdoor = apFrontStyle === "ap-u7-outdoor";
+      const isDreamMachine = apFrontStyle === "ap-dream-machine";
+      const isDreamRouter = apFrontStyle === "ap-dream-router";
+      const shapedApStyles = new Set([
+        "ap-mesh-column", "ap-mesh-antenna", "ap-ac-mesh", "ap-mesh-pro", "ap-outdoor-panel",
+        "ap-extender", "ap-sector", "ap-bridge", "ap-device-bridge", "ap-device-bridge-iot", "ap-device-bridge-pro", "ap-device-bridge-sector", "ap-building-bridge", "ap-e7", "ap-e7-audience", "ap-basestation",
+        "ap-dream-machine", "ap-dream-router",
+      ]);
+      const renderedApStyle = isFiveGBackup || isInWallAp || isU7Outdoor || shapedApStyles.has(apFrontStyle)
+        ? apFrontStyle
+        : "ap-disc";
+      const usesApEdgeGlow = !!this._ctx?.layout?.apEdgeGlow;
+      const fiveGDisplay = isFiveGBackup ? this._fiveGBackupDisplayData(uptime) : null;
+
+      const headerTitle = this._title();
+      const headerMetrics = compactApView && !this._apCompactHeaderTelemetryEnabled()
+        ? []
+        : this._headerMetrics();
+
+      const escapedHeaderTitle = this._escapeHtml(headerTitle);
+      const escapedSubtitle = this._escapeHtml(this._subtitle());
+      if (!this._setCardContent(`${this._styles()}
+        <ha-card class="ap-card ${compactApView ? "compact" : ""}" style="--udc-card-bg: ${this._cardBgStyle()}; --udc-chrome-bg: ${this._cardChromeBgStyle()}; --ap-ring-color: ${ringColor}; --udc-port-size: ${this._effectivePortSize()}px; --udc-ap-scale: ${this._apScale() / 100}${this._customColorVars()}">
+          <div class="header">
+            <div class="header-info">
+              ${headerTitle ? `<div class="title">${escapedHeaderTitle}</div>` : ""}
+              <div class="subtitle device-link" data-action="open-device" role="link" tabindex="0">${escapedSubtitle}</div>
+              ${this._headerMetricsHTML(headerMetrics)}
+            </div>
+            <div class="header-actions">
+              ${this._ctx?.reboot_entity ? `<button class="chip compact" data-action="reboot-device">↻ ${this._escapeHtml(this._t("reboot"))}</button>` : ""}
+              ${ledEntity ? `<button class="chip compact" data-action="toggle-led" style="--led-indicator: ${ledEnabled ? ringColor : "#868b93"}"><span class="led-indicator"></span>LED</button>` : ""}
+            </div>
+          </div>
+
+          <div class="ap-layout ${compactApView ? "compact" : ""}${showVisualPanel ? "" : " panel-hidden"}${showVisualPanel && this._integratedPortsEnabled(this._ctx) && this._ctx?.numberedPorts?.length ? " has-integrated-ports" : ""}">
+            ${showVisualPanel ? `
+            <div class="frontpanel ${renderedApStyle}">
+              ${isFiveGBackup ? `
+              <div class="ap-device ap-5g-device">
+                <div class="ap-5g-face"></div>
+                <div class="ap-5g-display">
+                  <div class="ap-5g-display-top">5G</div>
+                  <div class="ap-5g-bars">${[1, 2, 3, 4, 5].map((bar) => `<span class="${bar <= 4 ? "" : "inactive"}"></span>`).join("")}</div>
+                  <div class="ap-5g-uptime">
+                    <span>${this._escapeHtml(`${this._t("uptime")}:`)}</span>
+                    <span class="ap-5g-uptime-value">${this._escapeHtml(fiveGDisplay.uptime)}</span>
+                  </div>
+                  <div class="ap-5g-metrics">
+                    <div class="ap-5g-metric"><span>CPU</span><div class="ap-5g-meter"><span style="--ap-5g-meter-value: ${this._escapeAttr(`${fiveGDisplay.cpuBar}%`)}"></span></div></div>
+                    <div class="ap-5g-metric"><span>RAM</span><div class="ap-5g-meter memory"><span style="--ap-5g-meter-value: ${this._escapeAttr(`${fiveGDisplay.memoryBar}%`)}"></span></div></div>
+                  </div>
+                </div>
+                <div class="ap-5g-label">UniFi 5G</div>
+              </div>` : isInWallAp ? `
+              <div class="ap-device ap-in-wall-device">
+                <div class="ap-in-wall-led ${ledEnabled ? "" : "off"}"></div>
+                <div class="ap-in-wall-logo">U</div>
+              </div>` : isU7Outdoor ? `
+              <div class="ap-device ap-u7-outdoor-device">
+                <div class="ap-u7-outdoor-logo">U</div>
+                <div class="ap-u7-outdoor-led ${ledEnabled ? "" : "off"}"></div>
+              </div>` : isDreamMachine || isDreamRouter ? `
+              <div class="ap-device ap-shaped-device ${apFrontStyle}-device${ledEnabled ? "" : " off"}">
+                ${isDreamRouter ? `<div class="ap-dream-router-display"></div>` : ""}
+              </div>` : shapedApStyles.has(apFrontStyle) ? `
+              <div class="ap-device ap-shaped-device ${apFrontStyle}-device${usesApEdgeGlow ? " edge-glow" : ""}${ledEnabled ? "" : " off"}">
+                <div class="ap-shaped-logo">U</div>
+                <div class="ap-shaped-led ${ledEnabled ? "" : "off"}"></div>
+              </div>` : `
+              <div class="ap-device">
+                <div class="ap-ring ${ledEnabled ? "online" : "off"}">
+                  <div class="ap-logo">u</div>
+                </div>
+              </div>`}
+            </div>` : ""}
+
+            <div class="section">
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("ap_status"))}</div>
+                  <div class="detail-value ${apStatusClass}">${this._escapeHtml(apStatus || (online ? this._t("state_connected") : this._t("state_disconnected")))}</div>
+                </div>
+                ${compactApView ? `
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("clients"))}</div>
+                  <div class="detail-value">${this._escapeHtml(clients)}</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("uptime"))}</div>
+                  <div class="detail-value">${this._escapeHtml(uptime)}</div>
+                </div>` : `
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("uptime"))}</div>
+                  <div class="detail-value">${this._escapeHtml(uptime)}</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("clients"))}</div>
+                  <div class="detail-value">${this._escapeHtml(clients)}</div>
+                </div>`}
+                ${apUplink ? `
+                <div class="detail-item">
+                  <div class="detail-label">${this._escapeHtml(this._t("uplink"))}</div>
+                  <div class="detail-value" title="${this._escapeAttr(apUplinkTooltip)}">${this._escapeHtml(apUplink)}</div>
+                </div>` : ""}
+              </div>
+            </div>
+          </div>
+
+          ${showVisualPanel ? this._renderIntegratedPortSection(this._ctx) : ""}
+        </ha-card>`, headerMetrics)) return;
+
+      this._attachPortActionHandlers();
+      this._attachDeviceLinkHandler();
+      this.shadowRoot.querySelector("[data-action='toggle-led']")
+        ?.addEventListener("click", () => this._toggleEntity(this._ctx?.led_switch_entity));
+
+      return;
+    }
+
+    const ctx = this._ctx;
+    const slotData = this._buildSlotData(ctx);
+    const { specials: allSpecials, numbered: normalizedNumbered } = this._applySpecialPortSelection(
+      slotData.specials,
+      slotData.numbered
+    );
+
+    const allSlots = [...allSpecials, ...normalizedNumbered];
+    const selected = allSlots.find((p) => p.key === this._selectedKey)
+      || (this._config?.dynamic_port_details === true ? null : allSlots[0])
+      || null;
+    const connected = this._connectedCount(allSlots);
+    const layoutTheme = ctx?.layout?.theme;
+    const theme = this._safeClassToken(layoutTheme || "dark", "dark");
+    const frontStyle = this._safeClassToken(ctx?.layout?.frontStyle || "single-row", "single-row");
+    const showPanel = this._config?.show_panel !== false && !!layoutTheme;
+
+    const specialPortsInUse = new Set(
+      allSpecials
+        .map((slot) => slot?.port)
+        .filter((port) => Number.isInteger(port))
+    );
+
+    const visibleNumbered = normalizedNumbered.filter((slot) => !specialPortsInUse.has(slot.port));
+    const reverseFrontpanel = this._rotate180Enabled(ctx);
+    const portClientIndex = this._buildPortClientIndex();
+    const oddEvenRows = this._shouldUseOddEvenRows(ctx, visibleNumbered);
+    const baseRowsRaw = this._buildEffectiveRows(ctx, visibleNumbered);
+    const baseRows = oddEvenRows ? this._applyOddEvenRows(baseRowsRaw) : baseRowsRaw;
+    const effectiveRows = reverseFrontpanel
+      ? baseRows.map((row) => [...row].reverse()).reverse()
+      : baseRows;
+    const renderedSpecials = reverseFrontpanel ? [...allSpecials].reverse() : allSpecials;
+
+    // A slot may name the port row it belongs beside, which is how the real
+    // front panels put their SFP cages and WAN port next to the RJ45 block
+    // instead of above it. Slots without a row keep the leading row.
+    const sideSpecials = new Map();
+    const topSpecials = [];
+    for (const slot of renderedSpecials) {
+      const row = slot?.row;
+      if (!Number.isInteger(row)) {
+        topSpecials.push(slot);
+        continue;
+      }
+      const index = reverseFrontpanel ? effectiveRows.length - 1 - row : row;
+      // Repacking (force_sequential_ports, narrow cards) can leave fewer rows
+      // than the model declares. A slot that names a missing row joins the
+      // leading row instead of disappearing with it.
+      if (index < 0 || index >= effectiveRows.length) {
+        topSpecials.push(slot);
+        continue;
+      }
+      if (!sideSpecials.has(index)) sideSpecials.set(index, []);
+      sideSpecials.get(index).push(slot);
+    }
+
+    const specialRow = topSpecials.length
+      ? `<div class="special-row">${topSpecials.map((s) => this._renderPortButton(s, selected?.key, portClientIndex)).join("")}</div>`
+      : "";
+
+    const layoutRows = effectiveRows
+      .map((rowPorts, rowIndex) => {
+        const oddEvenTopRow = oddEvenRows && rowIndex % 2 === 0;
+        const items = rowPorts
+          .map((portNumber) => visibleNumbered.find((p) => p.port === portNumber))
+          .filter(Boolean)
+          .map((slot) => this._renderPortButton(slot, selected?.key, portClientIndex, oddEvenTopRow))
+          .join("");
+
+        const sideItems = (sideSpecials.get(rowIndex) || [])
+          .map((slot) => this._renderPortButton(slot, selected?.key, portClientIndex, oddEvenTopRow))
+          .join("");
+        const side = sideItems ? `<div class="port-row-side">${sideItems}</div>` : "";
+
+        const cols = Math.max(1, rowPorts.length);
+        return items || side
+          ? `<div class="port-row" style="--udc-cols: ${cols};">${items}${side}</div>`
+          : "";
+      })
+      .filter(Boolean);
+
+    const panelRowsHtml = layoutRows.join("");
+    const panelPortsHtml = reverseFrontpanel
+      ? `${panelRowsHtml}${specialRow}`
+      : `${specialRow}${panelRowsHtml}`;
+    const panelContentHtml = panelPortsHtml || `<div class="muted" style="padding:8px 0">${this._escapeHtml(this._t("no_ports"))}</div>`;
+
+    let detail = `<div class="muted">${this._escapeHtml(this._t("no_ports"))}</div>`;
+
+    if (selected) {
+      const linkUp = this._isPortConnected(selected);
+      const linkText = linkUp ? "connected" : "no_link";
+      const speedText = getPortSpeedText(this._hass, selected);
+      const poeStatus = getPoeStatus(this._hass, selected);
+      const hasPoe = !!(selected.poe_switch_entity || selected.poe_power_entity || selected.power_cycle_entity);
+      const poeOn = poeStatus.active;
+      const poePower = selected.poe_power_entity ? formatState(this._hass, selected.poe_power_entity) : "—";
+      const rxVal = selected.rx_entity ? formatState(this._hass, selected.rx_entity) : null;
+      const txVal = selected.tx_entity ? formatState(this._hass, selected.tx_entity) : null;
+
+      const portTitle = selected.port_label
+        || (selected.kind === "special" ? selected.label : `${this._t("port_label")} ${selected.label}`);
+
+      detail = `
+        <div class="detail-title">${this._escapeHtml(portTitle)}${selected.lag_group ? ` <span class="detail-lag-badge">LAG · ${this._escapeHtml(selected.lag_group.name)}</span>` : ""}</div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">${this._escapeHtml(this._t("link_status"))}</div>
+            <div class="detail-value ${linkUp ? "online" : "offline"}">
+              ${this._escapeHtml(this._translateState(linkText) || (linkUp ? this._t("connected") : this._t("no_link")))}
+            </div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">${this._escapeHtml(this._t("speed"))}</div>
+            <div class="detail-value">${this._escapeHtml(speedText || "—")}</div>
+          </div>
+          ${hasPoe ? `
+          <div class="detail-item">
+            <div class="detail-label">${this._escapeHtml(this._t("poe"))}</div>
+            <div class="detail-value ${poeOn ? "online" : "offline"}">
+              ${this._escapeHtml(poeOn ? this._t("state_on") : this._t("state_off"))}
+            </div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">${this._escapeHtml(this._t("poe_power"))}</div>
+            <div class="detail-value">${this._escapeHtml(poePower || "—")}</div>
+          </div>` : ""}
+          ${rxVal != null ? `
+          <div class="detail-item">
+            <div class="detail-label">RX</div>
+            <div class="detail-value">${this._escapeHtml(rxVal)}</div>
+          </div>` : ""}
+          ${txVal != null ? `
+          <div class="detail-item">
+            <div class="detail-label">TX</div>
+            <div class="detail-value">${this._escapeHtml(txVal)}</div>
+          </div>` : ""}
+        </div>
+        <div class="actions">
+          ${selected.port_switch_entity ? (() => {
+            const enabled = isOn(this._hass, selected.port_switch_entity);
+            const confirmDisableAttr = enabled ? ` data-confirm-disable="true" data-port-name="${this._escapeAttr(portTitle)}"` : "";
+            return `<button class="action-btn secondary" data-action="toggle-port" data-entity="${this._escapeAttr(selected.port_switch_entity)}"${confirmDisableAttr}>
+              ${this._escapeHtml(enabled ? this._t("port_disable") : this._t("port_enable"))}
+            </button>`;
+          })() : ""}
+          ${selected.poe_switch_entity ? `<button class="action-btn primary${poeOn ? "" : " dimmed"}" data-action="toggle-poe" data-entity="${this._escapeAttr(selected.poe_switch_entity)}">
+            ⚡ ${this._escapeHtml(this._t("poe"))}
+          </button>` : ""}
+          ${selected.power_cycle_entity ? `<button class="action-btn secondary" data-action="power-cycle" data-entity="${this._escapeAttr(selected.power_cycle_entity)}">
+            ↺ ${this._escapeHtml(this._t("power_cycle"))}
+          </button>` : ""}
+        </div>`;
+    }
+
+    const headerTitle = this._title();
+    const headerMetrics = this._headerMetrics();
+
+    const escapedHeaderTitle = this._escapeHtml(headerTitle);
+    const escapedSubtitle = this._escapeHtml(this._subtitle());
+    if (!this._setCardContent(`${this._styles()}
+      <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-chrome-bg: ${this._cardChromeBgStyle()}; --udc-port-size: ${this._effectivePortSize()}px; --udc-ap-scale: ${this._apScale() / 100}${this._customColorVars()}">
+        <div class="header">
+          <div class="header-info">
+            ${headerTitle ? `<div class="title">${escapedHeaderTitle}</div>` : ""}
+            <div class="subtitle device-link" data-action="open-device" role="link" tabindex="0">${escapedSubtitle}</div>
+            ${this._headerMetricsHTML(headerMetrics)}
+          </div>
+          <div class="header-actions">
+            ${ctx?.reboot_entity ? `<button class="chip compact" data-action="reboot-device">↻ ${this._escapeHtml(this._t("reboot"))}</button>` : ""}
+            <div class="chip"><div class="dot"></div>${this._escapeHtml(`${connected}/${allSlots.length}`)}</div>
+          </div>
+        </div>
+
+        <div class="frontpanel ${frontStyle} theme-${theme}${showPanel ? "" : " no-panel-bg"}${reverseFrontpanel ? " rotate180-enabled" : ""}">
+          <div class="panel-label">${this._escapeHtml(this._t("front_panel"))}</div>
+          ${panelContentHtml}
+        </div>
+
+        ${selected || this._config?.dynamic_port_details !== true ? `<div class="section">${detail}</div>` : ""}
+      </ha-card>`, headerMetrics)) return;
+
+    this.shadowRoot.querySelectorAll(".port")
+      .forEach((btn) => btn.addEventListener("click", () => this._selectKey(btn.dataset.key)));
+
+    this._attachDeviceLinkHandler();
+
+    this.shadowRoot.querySelector("[data-action='toggle-port']")
+      ?.addEventListener("click", (e) => {
+        const target = e.currentTarget;
+        if (target.dataset.confirmDisable === "true") {
+          const portName = target.dataset.portName || this._t("port_label");
+          const message = `${this._t("confirm_disable_port_title")}\n\n${this._t("confirm_disable_port_message").replace("{port}", portName)}`;
+          if (!window.confirm(message)) return;
+        }
+        this._toggleEntity(target.dataset.entity);
+      });
+
+    this.shadowRoot.querySelector("[data-action='toggle-poe']")
+      ?.addEventListener("click", (e) => this._toggleEntity(e.currentTarget.dataset.entity));
+
+    this.shadowRoot.querySelector("[data-action='power-cycle']")
+      ?.addEventListener("click", (e) => this._pressButton(e.currentTarget.dataset.entity));
+
+    this.shadowRoot.querySelector("[data-action='reboot-device']")
+      ?.addEventListener("click", () => this._pressButton(this._ctx?.reboot_entity));
+  }
+
+  _setCardContent(html, headerMetrics = null) {
+    // Compare generated strings: reading innerHTML would serialize custom
+    // elements and normalized attributes, which need not match our template.
+    if (html === this._renderedHTML) return false;
+    // Only patch telemetry when everything outside its header container is
+    // identical. Port, layout and simultaneous content changes still render.
+    const layoutHTML = headerMetrics === null
+      ? null
+      : html.replace(this._headerMetricsHTML(headerMetrics), "");
+    if (layoutHTML !== null && layoutHTML === this._renderedLayoutHTML &&
+        this._updateHeaderMetrics(headerMetrics)) {
+      this._renderedHTML = html;
+      return false; // Existing controls already have their event listeners.
+    }
+    this.shadowRoot.innerHTML = html;
+    this._renderedLayoutHTML = layoutHTML;
+    this._renderedHTML = html;
+    return true;
+  }
+
+  _render() {
+    const title = this._title();
+    const escapedTitle = this._escapeHtml(title);
+    const escapedSubtitle = this._escapeHtml(this._subtitle());
+
+    if (!this._config?.device_id) {
+      if (!this._setCardContent(`${this._styles()}
+        <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-port-size: ${this._effectivePortSize()}px; --udc-ap-scale: ${this._apScale() / 100}${this._customColorVars()}">
+          <div class="header">
+            <div class="header-info">
+              ${title ? `<div class="title">${escapedTitle}</div>` : ""}
+              <div class="subtitle">${escapedSubtitle}</div>
+            </div>
+          </div>
+          <div class="empty-state">${this._escapeHtml(this._t("select_device"))}</div>
+        </ha-card>`)) return;
+      this._finalizeRender();
+      return;
+    }
+
+    if (this._loading && !this._ctx) {
+      if (!this._setCardContent(`${this._styles()}
+        <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-port-size: ${this._effectivePortSize()}px; --udc-ap-scale: ${this._apScale() / 100}${this._customColorVars()}">
+          <div class="header">
+            <div class="header-info">
+              ${title ? `<div class="title">${escapedTitle}</div>` : ""}
+              <div class="subtitle">${escapedSubtitle}</div>
+            </div>
+          </div>
+          <div class="loading-state"><div class="spinner"></div>${this._escapeHtml(this._t("loading"))}</div>
+        </ha-card>`)) return;
+      this._finalizeRender();
+      return;
+    }
+
+    if (!this._ctx) {
+      if (!this._setCardContent(`${this._styles()}
+        <ha-card style="--udc-card-bg: ${this._cardBgStyle()}; --udc-port-size: ${this._effectivePortSize()}px; --udc-ap-scale: ${this._apScale() / 100}${this._customColorVars()}">
+          <div class="header">
+            <div class="header-info">
+              ${title ? `<div class="title">${escapedTitle}</div>` : ""}
+              <div class="subtitle">${escapedSubtitle}</div>
+            </div>
+          </div>
+          <div class="empty-state">${this._escapeHtml(this._t("no_data"))}</div>
+        </ha-card>`)) return;
+      this._finalizeRender();
+      return;
+    }
+
+    this._renderPanelAndDetail();
+    this._finalizeRender();
+  }
+}
+
+if (!customElements.get("unifi-device-card")) {
+  customElements.define("unifi-device-card", UnifiDeviceCard);
+}
+
+function getFrontendRegistryItem(collection, key) {
+  if (!collection || !key) return null;
+  if (typeof collection.get === "function") return collection.get(key) || null;
+  if (Array.isArray(collection)) {
+    return collection.find((item) => item?.entity_id === key || item?.id === key) || null;
+  }
+  return collection[key] || null;
+}
+
+function getEntitySuggestionDeviceId(hass, entityId) {
+  const registryEntity =
+    getFrontendRegistryItem(hass?.entities, entityId) ||
+    getFrontendRegistryItem(hass?.entityRegistry, entityId) ||
+    getFrontendRegistryItem(hass?.entity_registry, entityId);
+  const deviceId = registryEntity?.device_id || null;
+  if (!deviceId) return null;
+
+  const devices = hass?.devices || hass?.deviceRegistry || hass?.device_registry;
+  if (!devices) return deviceId;
+
+  const registryDevice = getFrontendRegistryItem(devices, deviceId);
+  return registryDevice ? deviceId : null;
+}
+
+function getUnifiDeviceCardEntitySuggestion(hass, entityId) {
+  const id = String(entityId || "").trim().toLowerCase();
+  if (!id || !id.includes(".")) return null;
+
+  const obj = hass?.states?.[entityId];
+  const attrs = obj?.attributes || {};
+  const friendly = String(attrs.friendly_name || "").toLowerCase();
+  const attribution = String(attrs.attribution || "").toLowerCase();
+  const hasUnifiHint =
+    id.includes("unifi") ||
+    id.includes("ubiquiti") ||
+    friendly.includes("unifi") ||
+    friendly.includes("ubiquiti") ||
+    attribution.includes("unifi") ||
+    attribution.includes("ubiquiti");
+
+  const hasUniFiPrefix = /^(sensor|switch|button|binary_sensor|number|select|update|device_tracker)\.unifi_/i.test(id);
+  const hasUnifiPortPattern = /(?:^|[_-])(port(?:[_-]\d+)?|link[_-]speed|poe[_-]power|power[_-]cycle)(?:[_-]|$)/i.test(id);
+
+  if (!hasUniFiPrefix && !(hasUnifiHint && hasUnifiPortPattern)) return null;
+
+  const deviceId = getEntitySuggestionDeviceId(hass, entityId);
+  if (!deviceId) return null;
+
+  return {
+    type: "custom:unifi-device-card",
+    config: { type: "custom:unifi-device-card", device_id: deviceId },
+  };
+}
+
+window.customCards = window.customCards || [];
+if (!window.customCards.some((card) => card?.type === "unifi-device-card")) {
+  window.customCards.push({
+    type: "unifi-device-card",
+    name: "UniFi Device Card",
+    description: `Lovelace card for UniFi devices (v${VERSION}).`,
+    preview: true,
+    documentationURL: "https://github.com/bluenazgul/unifi-device-card",
+    getEntitySuggestion: getUnifiDeviceCardEntitySuggestion,
+  });
+}
+
+if (!window[DEV_LOG_FLAG]) {
+  window[DEV_LOG_FLAG] = true;
+  console.log(
+    `%cUNIFI-DEVICE-CARD%c v${VERSION}`,
+    LOG_STYLES.badge,
+    LOG_STYLES.version
+  );
+}

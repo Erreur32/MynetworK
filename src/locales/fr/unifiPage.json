@@ -6,6 +6,7 @@
       "nat": "NAT",
       "clients": "Clients",
       "switches": "Switch",
+      "card": "CARD",
       "analyse": "Analyse",
       "bandwidth": "Bande passante",
       "traffic": "Trafic",
@@ -20,8 +21,23 @@
         "nat": "Passerelle UniFi, ports WAN/LAN et règles NAT de redirection de ports (port forwarding).",
         "clients": "Appareils réseau connectés, filtrage par type (Wi-Fi / Ethernet), statut (actif/inactif) et recherche par IP, nom ou MAC.",
         "switches": "Ports des switches UniFi, vitesse de liaison, état POE, erreurs RX/TX et nom de port.",
+        "card": "Expérimental : cartes réalistes des équipements en direct (face avant, ports, PoE, vitesse de liaison), rafraîchies toutes les quelques secondes.",
         "debug": "Données brutes de l'API UniFi, utilisé pour le diagnostic technique et le développement."
       }
+    },
+    "card": {
+          "intro": "Aperçu en direct, rafraîchi toutes les {{seconds}} s. Lecture seule.",
+          "noDevice": "Aucun switch, passerelle ou point d'accès UniFi trouvé.",
+          "model": "Modèle",
+          "exact": "Face avant : {{key}}",
+          "generic": "Face avant : générique (modèle absent du registre)",
+          "ports": "{{count}} port(s)",
+      "hardwareView": "Vue matérielle du panneau avant",
+      "dragHint": "Glisser pour réordonner",
+      "resizeHint": "Tirer le bord droit pour redimensionner",
+      "heightHint": "Tirer le bord inférieur pour régler la hauteur (la carte est réduite proportionnellement). Double-clic pour réinitialiser",
+      "cornerHint": "Tirer pour redimensionner largeur et hauteur. Double-clic pour réinitialiser la taille",
+      "resetLayout": "Réinitialiser la disposition"
     },
     "threats": {
       "title": "Analyse des menaces réseau",
