@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, ShieldAlert, FlaskConical } from 'lucide-react';
 import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
@@ -18,6 +18,7 @@ import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
 import { OverviewTab, type OverviewSubTab } from './unifi/OverviewTab';
 import { SwitchesTab } from './unifi/SwitchesTab';
+import { CardTab } from './unifi/CardTab';
 import { AnalyseTab } from './unifi/AnalyseTab';
 import { ClientsTab } from './unifi/ClientsTab';
 import { TrafficTab } from './unifi/TrafficTab';
@@ -30,7 +31,7 @@ interface UniFiPageProps {
 }
 
 // 'nat' and 'debug' are intentionally excluded: they moved to Overview sub-tabs (see redirect effect below).
-const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'analyse', 'clients', 'traffic', 'threats', 'switches']);
+const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'analyse', 'clients', 'traffic', 'threats', 'switches', 'card']);
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
@@ -237,6 +238,7 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         { id: 'analyse',  label: t('unifi.tabs.analyse'),  desc: t('unifi.tabs.desc.analyse'),  icon: Activity },
         { id: 'clients',  label: t('unifi.tabs.clients'),  desc: t('unifi.tabs.desc.clients'),  icon: Users },
         { id: 'switches', label: t('unifi.tabs.switches'), desc: t('unifi.tabs.desc.switches'), icon: Network },
+        { id: 'card', label: t('unifi.tabs.card'), desc: t('unifi.tabs.desc.card'), icon: FlaskConical },
     ];
 
     if (!unifiPlugin) {
@@ -482,6 +484,8 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             onNavigateToSearch={onNavigateToSearch}
                         />
                     )}
+
+                    {activeTab === 'card' && <CardTab devicesArr={devicesArr} />}
 
                     {activeTab === 'analyse' && (
                         <AnalyseTab onNavigateToSearch={onNavigateToSearch} />

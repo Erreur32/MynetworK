@@ -12,7 +12,7 @@ export interface BandwidthPoint {
 export type ThreatRange = 3600 | 43200 | 86400 | 172800 | 604800 | 2592000;
 export type ThreatSeverity = 'ALL' | 'LOW' | 'SUSPICIOUS' | 'CONCERNING';
 export type ThreatSortKey = 'timestamp' | 'threatLevel' | 'policy' | 'srcIp' | 'dstIp' | 'country' | 'action' | 'service' | 'direction' | 'dstPort' | 'flowCount';
-export type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'threats' | 'debug' | 'switches';
+export type TabType = 'overview' | 'nat' | 'analyse' | 'clients' | 'traffic' | 'threats' | 'debug' | 'switches' | 'card';
 export type ClientSortKey = 'name' | 'ip' | 'mac' | 'switch' | 'port' | 'speed' | 'ap' | 'ssid' | 'type';
 export type AlertFilter = 'all' | 'info' | 'warning' | 'critical';
 export type EventFilter = 'all' | 'alerts' | 'system' | 'connections';
