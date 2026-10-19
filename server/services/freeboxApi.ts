@@ -725,7 +725,7 @@ class FreeboxApiService {
             recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'cache');
             return {success: true, result: {...this.versionInfo}};
         }
-        if (this.apiVersionPromise) recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'shared');
+        if (this.apiVersionPromise !== null) recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'shared');
         this.apiVersionPromise ??= this.fetchApiVersion().finally(() => {
             this.apiVersionPromise = null;
         });

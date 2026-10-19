@@ -107,23 +107,23 @@ router.delete('/logs', requireAuth, requireAdmin, asyncHandler(async (req: Authe
  * Requests sent to the Freebox and the UniFi controller per endpoint: real calls,
  * cache hits and shared in-flight answers, last minute, last hour and since start
  */
-router.get('/upstream-calls', requireAuth, requireAdmin, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+router.get('/upstream-calls', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res) => {
   res.json({
     success: true,
     result: getUpstreamStats()
   });
-}));
+});
 
 /**
  * DELETE /api/debug/upstream-calls
  * Reset the upstream call counters (starts a new measurement window)
  */
-router.delete('/upstream-calls', requireAuth, requireAdmin, asyncHandler(async (_req: AuthenticatedRequest, res) => {
+router.delete('/upstream-calls', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res) => {
   resetUpstreamStats();
   res.json({
     success: true,
     result: { message: 'Upstream call counters reset' }
   });
-}));
+});
 
 export default router;

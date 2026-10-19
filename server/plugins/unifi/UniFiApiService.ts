@@ -322,7 +322,7 @@ export class UniFiApiService {
             return { data: structuredClone(cached.data) as T, fetchedAt: cached.at };
         }
         let pending = this.responseInFlight.get(key);
-        if (pending) {
+        if (pending !== undefined) {
             recordUpstream('unifi', UniFiApiService.upstreamLabel(key), 'shared');
         } else {
             const generation = this.cacheGeneration;
