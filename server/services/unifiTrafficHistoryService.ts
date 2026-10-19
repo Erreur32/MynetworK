@@ -13,7 +13,7 @@
  */
 
 import { pluginManager } from './pluginManager.js';
-import { UniFiClientTrafficRepository } from '../database/models/UniFiClientTraffic.js';
+import { UniFiClientTrafficRepository, type TrafficDeltaInput } from '../database/models/UniFiClientTraffic.js';
 import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { logger } from '../utils/logger.js';
 
@@ -52,11 +52,15 @@ class UniFiTrafficHistoryService {
         try {
             const clients = await unifiPlugin.getApiService().getClients();
             const seenMacs = new Set<string>();
+            const batch: TrafficDeltaInput[] = [];
 
             for (const client of clients) {
-                const mac = this.accumulateClient(client);
+                const mac = this.accumulateClient(client, batch);
                 if (mac) seenMacs.add(mac);
             }
+
+            // One SQLite transaction per poll instead of two writes per client
+            if (batch.length > 0) UniFiClientTrafficRepository.addDeltas(batch);
 
             // Forget baselines for clients no longer seen — avoids unbounded growth over time
             for (const mac of this.baselines.keys()) {
@@ -72,7 +76,7 @@ class UniFiTrafficHistoryService {
      * Returns the client's MAC (so the caller can track which clients are still around), or
      * null when the client has no usable MAC.
      */
-    private accumulateClient(client: any): string | null {
+    private accumulateClient(client: any, batch: TrafficDeltaInput[]): string | null {
         const mac = (client.mac || '').toString().toLowerCase();
         if (!mac) return null;
 
@@ -97,7 +101,7 @@ class UniFiTrafficHistoryService {
         if (deltaRx <= 0 && deltaTx <= 0) return mac;
 
         const vendor = mac.length >= 8 ? WiresharkVendorService.lookupVendor(mac.slice(0, 8)) : null;
-        UniFiClientTrafficRepository.addDelta({
+        batch.push({
             mac,
             name: client.name || client.hostname || client.ip || mac,
             ip: client.ip,

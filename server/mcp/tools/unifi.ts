@@ -7,7 +7,7 @@ import { pluginManager } from '../../services/pluginManager.js';
 import type { UniFiPlugin } from '../../plugins/unifi/UniFiPlugin.js';
 import type { UniFiApiService } from '../../plugins/unifi/UniFiApiService.js';
 import { UniFiClientTrafficRepository } from '../../database/models/UniFiClientTraffic.js';
-import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam, type ListResult } from './shared.js';
+import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam, assertHeavyCallAllowed, type ListResult } from './shared.js';
 import { isValidMac } from '../../utils/networkValidation.js';
 
 // Max range for unifi_get_bandwidth_report: 7 days of hourly buckets (168 points).
@@ -239,15 +239,36 @@ export function summarizeCardDevices(devices: any[]) {
 }
 
 // A consumer polling every few seconds must not turn into a controller request each time.
+// Concurrent callers (several CARD tabs, MyServices) share the request in flight.
 const CARD_DEVICES_TTL_MS = 3000;
 let cardDevicesCache: { at: number; items: ReturnType<typeof summarizeCardDevices> } | null = null;
+let cardDevicesInFlight: Promise<ReturnType<typeof summarizeCardDevices>> | null = null;
 
 export async function listUnifiCardDevices() {
   const now = Date.now();
   if (cardDevicesCache && now - cardDevicesCache.at < CARD_DEVICES_TTL_MS) return cardDevicesCache.items;
-  const items = summarizeCardDevices(await getUnifiApiService().getDevices());
-  cardDevicesCache = { at: now, items };
-  return items;
+  if (!cardDevicesInFlight) {
+    const pending = getUnifiApiService()
+      .getDevices()
+      .then((devices) => {
+        const items = summarizeCardDevices(devices);
+        cardDevicesCache = { at: now, items };
+        return items;
+      })
+      .finally(() => {
+        if (cardDevicesInFlight === pending) cardDevicesInFlight = null;
+      });
+    cardDevicesInFlight = pending;
+  }
+  return cardDevicesInFlight;
+}
+
+// raw=true returns controller objects as-is, which embed credentials (x_authkey, x_ssh_*,
+// SSO ids...). Same filter as the REST API token responses. Loaded lazily: a static import
+// would create a cycle (apiTokenAuth -> mcpAuthService -> toolCatalog -> server -> tools).
+async function stripSecrets<T>(value: T): Promise<T> {
+  const { stripSensitiveFields } = await import('../../middleware/apiTokenAuth.js');
+  return stripSensitiveFields(value) as T;
 }
 
 // Gateway WAN links: state, negotiated speed, latency. Public IPs are never returned.
@@ -343,7 +364,8 @@ interface UnifiListOptions<T> {
 
 // Shared by the MCP tools and the read-only REST routes (GET /api/plugins/unifi/devices|clients)
 export async function listUnifiDevices({ type, search, limit, raw }: UnifiListOptions<UnifiDeviceType>): Promise<ListResult> {
-  return toListResult(await getUnifiApiService().getDevices(), {
+  const devices = await getUnifiApiService().getDevices();
+  return toListResult(raw ? await stripSecrets(devices) : devices, {
     filter: (d: any) => deviceMatchesType(d, type) && matchesSearch(search, d.name, d.model, d.ip, d.mac),
     limit,
     project: raw ? undefined : summarizeDevice
@@ -358,7 +380,7 @@ export async function listUnifiClients({ type, search, limit, raw }: UnifiListOp
   for (const d of devices as any[]) {
     if (d.mac) switches.set(normalizeMac(d.mac), { name: d.name || d.model, ip: d.ip });
   }
-  return toListResult(clients, {
+  return toListResult(raw ? await stripSecrets(clients) : clients, {
     filter: (c: any) =>
       (type === 'all' || (type === 'wired') === (c.is_wired === true)) &&
       matchesSearch(search, c.name, c.hostname, c.ip, c.mac),
@@ -429,7 +451,12 @@ export function registerUnifiTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ mode, limit }) => wrapAsync(() => getUnifiTopTraffic(mode, limit))
+    async ({ mode, limit }, extra) =>
+      wrapAsync(() => {
+        // Only live mode hits the controller; today/alltime read SQLite
+        if (mode === 'live') assertHeavyCallAllowed(extra);
+        return getUnifiTopTraffic(mode, limit);
+      })
   );
 
   server.registerTool(
@@ -490,7 +517,8 @@ export function registerUnifiTools(server: McpServer): void {
       inputSchema: { raw: rawParam },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ raw }) => wrapAsync(() => (raw ? getUnifiApiService().getSystemInfo() : getUnifiSystemSummary()))
+    async ({ raw }) =>
+      wrapAsync(async () => (raw ? stripSecrets(await getUnifiApiService().getSystemInfo()) : getUnifiSystemSummary()))
   );
 
   server.registerTool(
