@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { param } from '../utils/params.js';
+import { parseCompactQuery, compactList, summarizeDhcpLease } from '../utils/freeboxExtras.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -21,8 +22,18 @@ router.put('/config', requireAdmin, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/dhcp/leases - Get dynamic DHCP leases (no configuration)
-router.get('/leases', asyncHandler(async (_req, res) => {
+// Opt-in compact output: ?compact=1[&active=1][&limit=N][&search=text]
+router.get('/leases', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getDhcpLeases();
+  const query = parseCompactQuery(req.query);
+  if (query.compact && result.success && Array.isArray(result.result)) {
+    res.json(compactList(result.result, query, {
+      isActive: (l) => (l.host as { active?: unknown } | undefined)?.active === true,
+      searchFields: (l) => [l.hostname, (l.host as { primary_name?: unknown } | undefined)?.primary_name, l.mac, l.ip],
+      project: summarizeDhcpLease,
+    }));
+    return;
+  }
   res.json(result);
 }));
 

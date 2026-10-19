@@ -283,3 +283,104 @@ export function getExtras(api: Api, media: string | null): Promise<FreeboxExtras
     value.catch(() => { if (cache?.value === value) cache = null; });
     return value;
 }
+
+// ===== Opt-in compact lists (?compact=1) for /api/lan/devices, /api/wifi/stations, /api/dhcp/leases =====
+// Same projections as the MCP freebox tools: the raw objects carry every name source,
+// IPv6 address and access point detail ever seen for a host.
+
+export function hostIpv4(host: unknown): string[] {
+    return list(isObj(host) ? host.l3connectivities : null).filter((c) => c.af === 'ipv4').map((c) => String(c.addr));
+}
+
+const objOf = (v: unknown): Obj => (isObj(v) ? v : {});
+
+export function summarizeLanHost(host: unknown) {
+    const h = objOf(host);
+    const ap = objOf(h.access_point);
+    const wifi = objOf(ap.wifi_information);
+    return {
+        name: h.primary_name,
+        type: h.host_type,
+        mac: objOf(h.l2ident).id,
+        vendor: h.vendor_name || undefined,
+        ipv4: hostIpv4(h),
+        active: h.active,
+        reachable: h.reachable,
+        last_activity: h.last_activity,
+        interface: h.interface,
+        connection: ap.connectivity_type,
+        ssid: wifi.ssid,
+        band: wifi.band,
+        signal_dbm: wifi.signal,
+    };
+}
+
+export function summarizeWifiStation(station: unknown) {
+    const s = objOf(station);
+    const host = objOf(s.host);
+    return {
+        name: s.hostname || host.primary_name,
+        mac: s.mac,
+        ipv4: hostIpv4(host),
+        vendor: host.vendor_name || undefined,
+        bssid: s.bssid,
+        state: s.state,
+        signal_dbm: s.signal,
+        rx_rate: s.rx_rate,
+        tx_rate: s.tx_rate,
+        rx_bytes: s.rx_bytes,
+        tx_bytes: s.tx_bytes,
+        conn_duration: s.conn_duration,
+        inactive: s.inactive,
+    };
+}
+
+export function summarizeDhcpLease(lease: unknown) {
+    const l = objOf(lease);
+    const host = objOf(l.host);
+    return {
+        name: l.hostname || host.primary_name,
+        mac: l.mac,
+        ip: l.ip,
+        is_static: l.is_static,
+        active: host.active,
+        lease_remaining: l.lease_remaining,
+        assign_time: l.assign_time,
+        refresh_time: l.refresh_time,
+    };
+}
+
+export interface CompactQuery { compact: boolean; active: boolean; limit?: number; search?: string }
+
+const MAX_COMPACT_LIMIT = 1000;
+const MAX_SEARCH_LENGTH = 200;
+const flag = (v: unknown): boolean => v === '1' || v === 'true';
+
+// Parses ?compact=1&active=1&limit=N&search=... (other values are ignored, never an error)
+export function parseCompactQuery(query: Record<string, unknown>): CompactQuery {
+    const limit = Number.parseInt(String(query.limit ?? ''), 10);
+    const search = typeof query.search === 'string' ? query.search.trim().slice(0, MAX_SEARCH_LENGTH) : '';
+    return {
+        compact: flag(query.compact),
+        active: flag(query.active),
+        limit: limit > 0 ? Math.min(limit, MAX_COMPACT_LIMIT) : undefined,
+        search: search || undefined,
+    };
+}
+
+/**
+ * Filter (active, case-insensitive search), count, truncate, then project the kept items.
+ * Same envelope as the MCP list tools: `total` is the match count before `limit`.
+ */
+export function compactList(
+    items: unknown[],
+    q: CompactQuery,
+    opts: { isActive: (item: Obj) => boolean; searchFields: (item: Obj) => unknown[]; project: (item: unknown) => unknown },
+) {
+    const needle = q.search?.toLowerCase();
+    const matched = items.filter(isObj).filter((item) =>
+        (!q.active || opts.isActive(item)) &&
+        (!needle || opts.searchFields(item).some((v) => v !== undefined && v !== null && String(v).toLowerCase().includes(needle))));
+    const kept = q.limit ? matched.slice(0, q.limit) : matched;
+    return { success: true, result: kept.map(opts.project), total: matched.length };
+}

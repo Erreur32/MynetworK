@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { asyncHandler, createError } from '../middleware/errorHandler.js';
 import { param } from '../utils/params.js';
+import { parseCompactQuery, compactList, summarizeLanHost, hostIpv4 } from '../utils/freeboxExtras.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -21,7 +22,8 @@ router.get('/interfaces', asyncHandler(async (_req, res) => {
 }));
 
 // GET /api/lan/devices - Get all devices on all interfaces
-router.get('/devices', asyncHandler(async (_req, res) => {
+// Opt-in compact output: ?compact=1[&active=1][&limit=N][&search=text]
+router.get('/devices', asyncHandler(async (req, res) => {
   // First get interfaces
   const interfaces = await freeboxApi.getLanBrowserInterfaces();
 
@@ -42,6 +44,16 @@ router.get('/devices', asyncHandler(async (_req, res) => {
         });
       }
     }
+  }
+
+  const query = parseCompactQuery(req.query);
+  if (query.compact) {
+    res.json(compactList(allDevices, query, {
+      isActive: (h) => h.active === true,
+      searchFields: (h) => [h.primary_name, (h.l2ident as { id?: unknown } | undefined)?.id, ...hostIpv4(h)],
+      project: summarizeLanHost,
+    }));
+    return;
   }
 
   res.json({

@@ -45,8 +45,40 @@ class FreeboxApiService {
     private challenge: string | null = null;
     private permissions: Record<string, boolean> = {};
     private versionInfo: VersionInfo | null = null;
-    // Endpoint locks to prevent concurrent calls to the same endpoint
+    // In-flight GET requests, shared by concurrent callers of the same endpoint
     private endpointLocks: Map<string, Promise<FreeboxApiResponse>> = new Map();
+    // Short-lived GET answers (see getCacheTtl), dropped on any write to the same path prefix
+    private getCache: Map<string, { expires: number; value: FreeboxApiResponse }> = new Map();
+    // Bumped on every invalidation: a GET started before a write must not fill the cache
+    private cacheGeneration = 0;
+    // RRD answers keyed by rounded window (see getRrdData)
+    private rrdCache: Map<string, { expires: number; value: Promise<FreeboxApiResponse> }> = new Map();
+    // Shared in-flight auth calls: concurrent callers never open two sessions at once
+    private loginPromise: Promise<SessionData> | null = null;
+    private sessionCheckPromise: Promise<boolean> | null = null;
+    private lastRenewFailure = 0;
+    // api_version is static for a given box: fetched once, reset on box/URL change, login or reboot
+    private apiVersionPromise: Promise<FreeboxApiResponse> | null = null;
+    private apiVersionCached = false;
+
+    // GET cache TTLs by path prefix, first match wins; endpoints not listed are never cached
+    private static readonly GET_CACHE_TTLS: Array<[string, number]> = [
+        ['/vm/disk/', 0],            // disk task polling must always reach the box
+        ['/wifi/wps/', 0],
+        ['/wifi/temp_disable/', 0],
+        ['/wifi/', 10_000],
+        ['/dhcp/', 10_000],
+        ['/lan/browser/', 5_000],
+        ['/lan/config/', 30_000],
+        ['/fw/redir/', 30_000],
+        ['/fw/dmz/', 30_000],
+        ['/downloads/', 2_000],
+        ['/vm/', 5_000],
+    ];
+    // POST endpoints that only read data: they never invalidate the GET cache
+    private static readonly READ_ONLY_POSTS = new Set<string>([API_ENDPOINTS.RRD, API_ENDPOINTS.VM_DISK_INFO]);
+    private static readonly SESSION_ERRORS = new Set(['auth_required', 'invalid_session']);
+    private static readonly RENEW_BACKOFF_MS = 30_000;
 
     constructor() {
         this.baseUrl = config.freebox.url;
@@ -71,7 +103,14 @@ class FreeboxApiService {
         if (!isAllowed) {
             throw new Error(`Blocked: ${parsed.hostname} is not an allowed Freebox host`);
         }
-        this.baseUrl = `${parsed.protocol}//${parsed.host}`;
+        const baseUrl = `${parsed.protocol}//${parsed.host}`;
+        if (baseUrl !== this.baseUrl) {
+            // Another box may answer at the new URL: drop everything learnt from the old one
+            this.versionInfo = null;
+            this.apiVersionCached = false;
+            this.invalidateCache();
+        }
+        this.baseUrl = baseUrl;
     }
 
     // Get current base URL
@@ -178,6 +217,7 @@ class FreeboxApiService {
         this.sessionToken = null;
         this.challenge = null;
         this.permissions = {};
+        this.invalidateCache();
         logger.info('FreeboxAPI', 'Token reset - re-registration required');
     }
 
@@ -260,10 +300,62 @@ class FreeboxApiService {
         }
     }
 
+    // TTL of the GET cache for an endpoint, 0 = never cached
+    private getCacheTtl(endpoint: string): number {
+        if (endpoint === API_ENDPOINTS.CONNECTION) return 900; // below the 1s live polling period
+        if (endpoint === API_ENDPOINTS.SYSTEM) return 5_000;
+        const match = FreeboxApiService.GET_CACHE_TTLS.find(([prefix]) => endpoint.startsWith(prefix));
+        return match ? match[1] : 0;
+    }
+
+    // Callers may mutate what they get: always hand out a copy of cached data
+    private readCache<T>(endpoint: string): FreeboxApiResponse<T> | null {
+        const entry = this.getCache.get(endpoint);
+        if (!entry) return null;
+        if (entry.expires <= Date.now() || !this.sessionToken) {
+            this.getCache.delete(endpoint);
+            return null;
+        }
+        return structuredClone(entry.value) as FreeboxApiResponse<T>;
+    }
+
+    private writeCache(endpoint: string, response: FreeboxApiResponse, generation: number): void {
+        const ttl = this.getCacheTtl(endpoint);
+        // Errors and auth endpoints are never cached; a write since the request started makes it stale
+        if (ttl <= 0 || !response.success || endpoint.startsWith('/login') || generation !== this.cacheGeneration) return;
+        this.getCache.set(endpoint, { expires: Date.now() + ttl, value: structuredClone(response) });
+    }
+
     /**
-     * Make HTTP request with lock to prevent concurrent calls to the same endpoint
-     * If a request to the same endpoint is already in progress, reuse the existing promise
-     * 
+     * Drop cached and in-flight GET answers under a path prefix (all of them when omitted),
+     * so the next read after a write reaches the box
+     */
+    invalidateCache(prefix?: string): void {
+        this.cacheGeneration++;
+        for (const key of this.getCache.keys()) {
+            if (!prefix || key.startsWith(prefix)) this.getCache.delete(key);
+        }
+        for (const key of this.endpointLocks.keys()) {
+            if (!prefix || key.startsWith(`GET:${prefix}`)) this.endpointLocks.delete(key);
+        }
+        if (!prefix || prefix === API_ENDPOINTS.RRD) this.rrdCache.clear();
+    }
+
+    // Counter bumped by every write or cache reset, lets aggregating callers drop their own caches
+    getWriteGeneration(): number {
+        return this.cacheGeneration;
+    }
+
+    // First path segment of an endpoint ('/wifi/bss/x' -> '/wifi/'), the scope invalidated by a write
+    private resourcePrefix(endpoint: string): string {
+        return `/${endpoint.split('/')[1] ?? ''}/`;
+    }
+
+    /**
+     * Make HTTP request, sharing in-flight and short-lived cached answers for GET only.
+     * Non-GET calls are never merged (each body gets its own answer) and invalidate the
+     * cache of their path prefix once done.
+     *
      * @param method HTTP method
      * @param endpoint API endpoint path
      * @param body Request body (optional)
@@ -276,29 +368,90 @@ class FreeboxApiService {
         body?: unknown,
         authenticated = true
     ): Promise<FreeboxApiResponse<T>> {
-        const lockKey = `${method}:${endpoint}`;
-        const existingLock = this.endpointLocks.get(lockKey);
-        
-        if (existingLock !== undefined) {
-            // Réutiliser la promesse existante
-            return existingLock as Promise<FreeboxApiResponse<T>>;
+        if (method !== 'GET') {
+            try {
+                return await this.requestWithRetry<T>(method, endpoint, body, authenticated);
+            } finally {
+                if (!FreeboxApiService.READ_ONLY_POSTS.has(endpoint)) {
+                    this.invalidateCache(this.resourcePrefix(endpoint));
+                }
+            }
         }
-        
+
+        const cached = this.readCache<T>(endpoint);
+        if (cached) return cached;
+
+        const lockKey = `GET:${endpoint}`;
+        const existingLock = this.endpointLocks.get(lockKey);
+        if (existingLock !== undefined) {
+            // Reuse the in-flight request, with a private copy for this caller
+            return existingLock.then((response) => structuredClone(response)) as Promise<FreeboxApiResponse<T>>;
+        }
+
         // Create promise with retry for Revolution slow endpoints
-        const promise = this.requestWithRetry<T>(method, endpoint, body, authenticated)
+        const generation = this.cacheGeneration;
+        const promise: Promise<FreeboxApiResponse<T>> = this.requestWithRetry<T>(method, endpoint, body, authenticated)
+            .then((response) => {
+                if (authenticated) this.writeCache(endpoint, response, generation);
+                return response;
+            })
             .finally(() => {
-                // Libérer le verrou après la requête (succès ou échec)
-                this.endpointLocks.delete(lockKey);
+                // Release the lock unless an invalidation already replaced it
+                if (this.endpointLocks.get(lockKey) === promise) this.endpointLocks.delete(lockKey);
             });
-        
+
         this.endpointLocks.set(lockKey, promise);
         return promise;
     }
 
     /**
+     * Send an authenticated request; when the box reports an expired session, renew it
+     * once (shared by all concurrent callers) and replay the request. A request rejected
+     * for auth was not executed, so replaying a write is safe.
+     */
+    private async requestWithSession<T>(
+        method: string,
+        endpoint: string,
+        body?: unknown,
+        authenticated = true
+    ): Promise<FreeboxApiResponse<T>> {
+        const usedToken = this.sessionToken;
+        const response = await this.request<T>(method, endpoint, body, authenticated);
+        // Only renew a session that existed: no auto-login when nobody logged in
+        if (!authenticated || response.success || !usedToken || !FreeboxApiService.SESSION_ERRORS.has(response.error_code ?? '')) {
+            return response;
+        }
+        // Another caller may already have renewed the session meanwhile
+        if (this.sessionToken === usedToken && !(await this.renewSession())) {
+            return response;
+        }
+        return this.request<T>(method, endpoint, body, authenticated);
+    }
+
+    // Failures back off, so a revoked app token does not cost a login per request
+    private async renewSession(): Promise<boolean> {
+        if (!this.appToken || Date.now() - this.lastRenewFailure < FreeboxApiService.RENEW_BACKOFF_MS) {
+            this.sessionToken = null;
+            return false;
+        }
+        try {
+            logger.info('FreeboxAPI', 'Session expired, renewing...');
+            await this.login();
+            return true;
+        } catch (error) {
+            this.lastRenewFailure = Date.now();
+            this.sessionToken = null;
+            this.invalidateCache();
+            logger.warn('FreeboxAPI', 'Session renewal failed:', error instanceof Error ? error.message : error);
+            return false;
+        }
+    }
+
+    /**
      * Make HTTP request with retry and exponential backoff for Revolution slow endpoints
-     * Only retries on AbortError (timeout) and only for Revolution model on slow endpoints
-     * 
+     * Only retries on AbortError (timeout) and only for Revolution model on slow endpoints.
+     * GET only: a timed-out write may still have been applied by the box.
+     *
      * @param method HTTP method
      * @param endpoint API endpoint path
      * @param body Request body (optional)
@@ -316,10 +469,10 @@ class FreeboxApiService {
         const isRevolution = this.isRevolutionModel();
         const isSlowEndpoint = this.isSlowEndpoint(endpoint);
         
-        // Retry uniquement pour Revolution et endpoints lents
-        const shouldRetry = isRevolution && isSlowEndpoint && maxRetries > 0;
-        
-        const response = await this.request<T>(method, endpoint, body, authenticated);
+        // Retry only idempotent reads, Revolution model and slow endpoints
+        const shouldRetry = method === 'GET' && isRevolution && isSlowEndpoint && maxRetries > 0;
+
+        const response = await this.requestWithSession<T>(method, endpoint, body, authenticated);
         
         // Check if request failed and should be retried
         if (!response.success && shouldRetry && maxRetries > 0) {
@@ -413,8 +566,15 @@ class FreeboxApiService {
         return this.challenge;
     }
 
-    // Step 4: Open session
+    // Step 4: Open session (concurrent callers share the same login)
     async login(): Promise<SessionData> {
+        this.loginPromise ??= this.doLogin().finally(() => {
+            this.loginPromise = null;
+        });
+        return this.loginPromise;
+    }
+
+    private async doLogin(): Promise<SessionData> {
         if (!this.appToken) {
             logger.error('FreeboxAPI', 'Login failed: No app_token available. Please register first.');
             throw new Error('No app_token available. Please register first.');
@@ -464,6 +624,9 @@ class FreeboxApiService {
         this.sessionToken = response.result.session_token;
         this.challenge = response.result.challenge;
         this.permissions = response.result.permissions;
+        this.lastRenewFailure = 0;
+        // A new session often follows a box reboot (maybe a firmware update): refresh api_version lazily
+        this.apiVersionCached = false;
 
         logger.info('FreeboxAPI', 'Login successful');
         logger.debug('FreeboxAPI', 'Session token received, permissions:', Object.keys(this.permissions).length);
@@ -480,17 +643,27 @@ class FreeboxApiService {
         if (this.sessionToken) {
             await this.request('POST', API_ENDPOINTS.LOGIN_LOGOUT, undefined, true);
             this.sessionToken = null;
+            this.invalidateCache();
             logger.debug('FreeboxAPI', 'Logged out');
         }
     }
 
-    // Check if session is valid
+    // Check if session is valid (concurrent callers share the same check)
     async checkSession(): Promise<boolean> {
         // If we don't have a session token, we're definitely not logged in
         if (!this.sessionToken) {
             return false;
         }
+        this.sessionCheckPromise ??= this.doCheckSession().finally(() => {
+            this.sessionCheckPromise = null;
+        });
+        return this.sessionCheckPromise;
+    }
 
+    private async doCheckSession(): Promise<boolean> {
+        // A login may replace the token while this check runs: only clear the token that was checked
+        const usedToken = this.sessionToken;
+        const clearSession = () => { if (this.sessionToken === usedToken) this.sessionToken = null; };
         try {
             // Use authenticated request to check session status
             // The /login/ endpoint returns logged_in status when called with session token
@@ -499,20 +672,20 @@ class FreeboxApiService {
                 logger.debug('FreeboxAPI', 'checkSession failed:', response.msg || response.error_code);
                 // If authentication fails, clear the session token
                 if (response.error_code === 'invalid_session' || response.msg?.includes('session')) {
-                    this.sessionToken = null;
+                    clearSession();
                 }
                 return false;
             }
             const isLoggedIn = response.result?.logged_in === true;
             if (!isLoggedIn) {
                 // Session expired, clear token
-                this.sessionToken = null;
+                clearSession();
             }
             return isLoggedIn;
         } catch (error) {
             logger.error('FreeboxAPI', 'checkSession error:', error);
             // On error, assume session is invalid
-            this.sessionToken = null;
+            clearSession();
             return false;
         }
     }
@@ -539,9 +712,22 @@ class FreeboxApiService {
 
     // ==================== SYSTEM ====================
 
-    // Get API version info (no auth required) - includes box model name
+    // Get API version info (no auth required) - includes box model name.
+    // Static data: fetched once, then served from memory (copy, callers may mutate it)
     async getApiVersion(): Promise<FreeboxApiResponse> {
-        const url = `${this.baseUrl}${API_ENDPOINTS.API_VERSION}`;
+        if (this.apiVersionCached && this.versionInfo) {
+            return {success: true, result: {...this.versionInfo}};
+        }
+        this.apiVersionPromise ??= this.fetchApiVersion().finally(() => {
+            this.apiVersionPromise = null;
+        });
+        const response = await this.apiVersionPromise;
+        return response.success ? {success: true, result: {...(response.result as object)}} : response;
+    }
+
+    private async fetchApiVersion(): Promise<FreeboxApiResponse> {
+        const baseUrl = this.baseUrl;
+        const url = `${baseUrl}${API_ENDPOINTS.API_VERSION}`;
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
@@ -557,8 +743,11 @@ class FreeboxApiService {
             const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
             const data = await response.json();
-            // Cache version info for later use
-            this.versionInfo = data as VersionInfo;
+            // Cache version info for later use (unless the base URL changed meanwhile)
+            if (baseUrl === this.baseUrl) {
+                this.versionInfo = data as VersionInfo;
+                this.apiVersionCached = response.ok;
+            }
             // api_version endpoint returns data directly, not wrapped in {success, result}
             return {success: true, result: data};
         } catch (error) {
@@ -632,6 +821,9 @@ class FreeboxApiService {
     async reboot(): Promise<FreeboxApiResponse> {
         logger.info('FreeboxAPI', 'Attempting reboot...');
         const result = await this.request('POST', API_ENDPOINTS.SYSTEM_REBOOT);
+        // Everything cached describes the box before the reboot
+        this.invalidateCache();
+        this.apiVersionCached = false;
         logger.debug('FreeboxAPI', 'Reboot result:', {
             success: result.success,
             error_code: result.error_code,
@@ -704,7 +896,29 @@ class FreeboxApiService {
         if (dateEnd) body.date_end = dateEnd;
         if (fields) body.fields = fields;
 
-        return this.requestWithLock('POST', API_ENDPOINTS.RRD, body);
+        // Charts re-request the same sliding window every few seconds: share one answer per
+        // window rounded to a step, kept for a TTL that grows with the range
+        const nowMs = Date.now();
+        const range = dateStart ? (dateEnd ?? Math.floor(nowMs / 1000)) - dateStart : 0;
+        const ttlSec = range <= 3600 ? 30 : range <= 6 * 3600 ? 120 : range <= 86400 ? 300 : 900;
+        const bucket = (t?: number) => (t ? Math.floor(t / ttlSec) : '');
+        const key = `${db}:${bucket(dateStart)}:${bucket(dateEnd)}:${fields?.join(',') ?? ''}`;
+
+        for (const [k, entry] of this.rrdCache) {
+            if (entry.expires <= nowMs) this.rrdCache.delete(k);
+        }
+        let entry = this.rrdCache.get(key);
+        if (!entry) {
+            const value = this.requestWithLock('POST', API_ENDPOINTS.RRD, body);
+            entry = { expires: nowMs + ttlSec * 1000, value };
+            this.rrdCache.set(key, entry);
+            // Never keep a failed answer
+            const dropIfCurrent = () => {
+                if (this.rrdCache.get(key)?.value === value) this.rrdCache.delete(key);
+            };
+            void value.then((response) => { if (!response.success) dropIfCurrent(); }, dropIfCurrent);
+        }
+        return structuredClone(await entry.value);
     }
 
     // ==================== WIFI ====================
@@ -964,6 +1178,7 @@ class FreeboxApiService {
             clearTimeout(timeout);
 
             const data = await response.json() as FreeboxApiResponse;
+            this.invalidateCache(API_ENDPOINTS.DOWNLOADS);
             return data;
         } catch (error) {
             logger.error('FreeboxAPI', 'addDownload error:', error);
@@ -1040,6 +1255,7 @@ class FreeboxApiService {
 
             const jsonText = rawText.substring(jsonStart);
             const data = JSON.parse(jsonText) as FreeboxApiResponse;
+            this.invalidateCache(API_ENDPOINTS.DOWNLOADS);
             return data;
         } catch (error) {
             logger.error('FreeboxAPI', 'addDownloadFromFile error:', error);
