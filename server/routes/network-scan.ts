@@ -7,7 +7,7 @@
 import { Router, type Response } from 'express';
 import cron from 'node-cron';
 import { networkScanService } from '../services/networkScanService.js';
-import { NetworkScanRepository } from '../database/models/NetworkScan.js';
+import { NetworkScanRepository, type NetworkScan } from '../database/models/NetworkScan.js';
 import { AppConfigRepository } from '../database/models/AppConfig.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
@@ -452,9 +452,10 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
     }
 
     try {
+        // 1 to 1000: a negative LIMIT means "no limit" in SQLite
+        const limitNum = Math.min(Math.max(parseInt(limit as string) || 100, 1), 1000);
+        const offsetNum = Math.max(parseInt(offset as string) || 0, 0);
         const filters: any = {
-            limit: Math.min(parseInt(limit as string) || 100, 1000), // Max 1000
-            offset: parseInt(offset as string) || 0,
             sortBy: sortBy as any,
             sortOrder: sortOrder as 'asc' | 'desc'
         };
@@ -463,9 +464,6 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
         if (ip) filters.ip = ip as string;
         if (search) filters.search = search as string;
 
-        // Get all items first
-        let items = NetworkScanRepository.find(filters);
-        
         let configuredRanges: string[] = [];
         const defaultConfigStr = AppConfigRepository.get('network_scan_default');
         if (defaultConfigStr) {
@@ -478,23 +476,29 @@ router.get('/history', requireAuth, asyncHandler(async (req: AuthenticatedReques
             }
         }
 
-        items = items.filter((item) => {
-            if (ipBlacklistService.isBlacklisted(item.ip)) {
-                return false;
-            }
-            if (configuredRanges.length > 0 && !configuredRanges.some(r => networkScanService.isIpInRange(item.ip, r))) {
-                return false;
-            }
-            return true;
-        });
-        
-        // Re-count total after filtering (before pagination)
-        const total = items.length;
-        
-        // Apply pagination after filtering
-        const offsetNum = parseInt(offset as string) || 0;
-        const limitNum = Math.min(parseInt(limit as string) || 100, 1000);
-        items = items.slice(offsetNum, offsetNum + limitNum);
+        // Blacklist loaded once (isBlacklisted() re-reads the config for every row)
+        const blacklist = new Set(ipBlacklistService.getBlacklist());
+
+        let items: NetworkScan[];
+        let total: number;
+        if (blacklist.size > 0 || configuredRanges.length > 0) {
+            // Filters SQL cannot express: fetch every match, filter, count, then paginate once
+            items = NetworkScanRepository.find(filters).filter((item) => {
+                if (blacklist.has(item.ip.trim())) {
+                    return false;
+                }
+                if (configuredRanges.length > 0 && !configuredRanges.some(r => networkScanService.isIpInRange(item.ip, r))) {
+                    return false;
+                }
+                return true;
+            });
+            total = items.length;
+            items = items.slice(offsetNum, offsetNum + limitNum);
+        } else {
+            // Nothing to filter in JS: paginate in SQL, total from COUNT(*)
+            items = NetworkScanRepository.find({ ...filters, limit: limitNum, offset: offsetNum });
+            total = NetworkScanRepository.count(filters);
+        }
 
         res.json({
             success: true,

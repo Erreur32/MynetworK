@@ -23,6 +23,33 @@ import { UniFiClientTrafficRepository } from '../database/models/UniFiClientTraf
 
 const router = Router();
 
+/**
+ * Lightweight connection status of an enabled plugin, from the live session
+ * state only: no API call, and above all no test login/logout that would
+ * drop the shared UniFi session.
+ */
+function getLightConnectionStatus(pluginId: string, configured: boolean): boolean {
+    if (pluginId === 'freebox') {
+        // Check Freebox connection status using lightweight method
+        return freeboxApi.isLoggedIn();
+    } else if (pluginId === 'unifi') {
+        // Check UniFi connection status using plugin's internal state
+        try {
+            const unifiPlugin = pluginManager.getPlugin('unifi') as any;
+            // Use the lightweight isLoggedIn() method from UniFiApiService
+            // (no apiService: plugin enabled and configured but not connected yet)
+            return unifiPlugin?.apiService ? unifiPlugin.apiService.isLoggedIn() : false;
+        } catch {
+            return false;
+        }
+    } else if (pluginId === 'scan-reseau') {
+        // Scanner plugin doesn't need external connection - if enabled, it's "connected"
+        return true;
+    }
+    // For other plugins, check if configured
+    return configured;
+}
+
 // GET /api/plugins - Get all plugins with their status
 // Optimized: Lightweight connection status check without heavy API calls
 router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -34,33 +61,7 @@ router.get('/', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res)
         const pluginId = plugin.getId();
         
         // Lightweight connection status check (no API calls)
-        let connectionStatus = false;
-        if (isEnabled) {
-            if (pluginId === 'freebox') {
-                // Check Freebox connection status using lightweight method
-                connectionStatus = freeboxApi.isLoggedIn();
-            } else if (pluginId === 'unifi') {
-                // Check UniFi connection status using plugin's internal state
-                try {
-                    const unifiPlugin = pluginManager.getPlugin('unifi') as any;
-                    if (unifiPlugin && unifiPlugin.apiService) {
-                        // Use the lightweight isLoggedIn() method from UniFiApiService
-                        connectionStatus = unifiPlugin.apiService.isLoggedIn();
-                    } else {
-                        // Fallback: if plugin is enabled and configured, assume not connected yet
-                        connectionStatus = false;
-                    }
-                } catch {
-                    connectionStatus = false;
-                }
-            } else if (pluginId === 'scan-reseau') {
-                // Scanner plugin doesn't need external connection - if enabled, it's "connected"
-                connectionStatus = isEnabled;
-            } else {
-                // For other plugins, check if configured
-                connectionStatus = dbConfig !== null;
-            }
-        }
+        const connectionStatus = isEnabled && getLightConnectionStatus(pluginId, dbConfig !== null);
         
         // Basic plugin info without heavy API calls
         const pluginData = {
@@ -104,15 +105,8 @@ router.get('/:id', requireAuth, asyncHandler(async (req: AuthenticatedRequest, r
     const dbConfig = PluginConfigRepository.findByPluginId(pluginId);
     const isEnabled = plugin.isEnabled();
     
-    let connectionStatus = false;
-    if (isEnabled) {
-        try {
-            const testResult = await pluginManager.testPluginConnection(pluginId);
-            connectionStatus = testResult.success;
-        } catch {
-            connectionStatus = false;
-        }
-    }
+    // Session state only: testPluginConnection() would log the shared UniFi session out
+    const connectionStatus = isEnabled && getLightConnectionStatus(pluginId, dbConfig !== null);
 
     res.json({
         success: true,
@@ -822,7 +816,7 @@ router.get('/unifi/nat', requireAuth, asyncHandler(async (req: AuthenticatedRequ
 /**
  * GET /api/plugins/unifi/bandwidth-history
  * Returns bandwidth history for the UniFi WAN interface
- * Data points are computed from cumulative byte counters collected every ~30s
+ * Data points are computed from cumulative byte counters collected every 2s live, 30s in the background
  */
 router.get('/unifi/bandwidth-history', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const unifiPlugin = pluginManager.getPlugin('unifi');
@@ -932,30 +926,6 @@ router.get('/unifi/bandwidth-realtime', requireAuth, asyncHandler(async (_req: A
     } catch (error) {
         logger.error('UniFi', 'Failed to get realtime bandwidth:', error);
         res.json({ success: true, result: null });
-    }
-}));
-
-/**
- * GET /api/plugins/unifi/threats/raw?path=<api-path>
- * Debug helper: proxies any GET request to the UniFi controller API and returns raw JSON.
- * Only available; use sparingly.
- */
-router.get('/unifi/threats/raw', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const unifiPlugin = pluginManager.getPlugin('unifi') as any;
-    if (!unifiPlugin?.apiService) {
-        return res.json({ success: false, error: 'UniFi API service not available' });
-    }
-
-    const apiPath = (req.query.path as string) || '';
-    if (!apiPath) {
-        return res.json({ success: false, error: 'Missing ?path= parameter' });
-    }
-
-    try {
-        const raw = await (unifiPlugin.apiService as any).controllerRequest(apiPath);
-        res.json({ success: true, path: apiPath, raw, type: Array.isArray(raw) ? 'array' : typeof raw, length: Array.isArray(raw) ? raw.length : null });
-    } catch (error) {
-        res.json({ success: false, path: apiPath, error: error instanceof Error ? error.message : String(error) });
     }
 }));
 

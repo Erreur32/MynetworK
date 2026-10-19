@@ -2,6 +2,8 @@
 // values/throwing exceptions (as opposed to freebox.ts's uniform
 // {success, result, error_code, msg} envelope, which has its own toToolResult).
 import { z } from "zod";
+import { getMcpSessionInfo } from "../sessionRegistry.js";
+import { checkTokenHeavyLimit, tokenHeavyLimiter } from "../../middleware/tokenRateLimiter.js";
 
 // Compact JSON on purpose: tool results are read by LLMs (some local, with small
 // context windows), indentation alone costs ~25% of the payload.
@@ -71,4 +73,18 @@ export function toListResult<T>(items: T[], options: ListOptions<T>): ListResult
   const matched = options.filter ? items.filter(options.filter) : items;
   const kept = options.limit ? matched.slice(0, options.limit) : matched;
   return new ListResult(options.project ? kept.map(options.project) : kept, matched.length);
+}
+
+// Expensive tools (live ping, plugin fan-out, scans) share a per-token heavy
+// bucket. The token comes from the session (bound to its owning token in
+// routes/mcp.ts); no session or token (catalog instance) means nothing to count.
+export function assertHeavyCallAllowed(extra: { sessionId?: string }): void {
+  const tokenId = extra.sessionId ? getMcpSessionInfo(extra.sessionId)?.tokenId : undefined;
+  if (tokenId === undefined) return;
+  const decision = checkTokenHeavyLimit(tokenId);
+  if (!decision.allowed) {
+    throw new Error(
+      `Rate limit reached for expensive tools (${tokenHeavyLimiter.max} calls per minute per token), retry in ${decision.retryAfterSeconds}s`,
+    );
+  }
 }

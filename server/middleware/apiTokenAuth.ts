@@ -11,6 +11,7 @@ import { Response, NextFunction } from 'express';
 import { mcpAuthService, API_TOKEN_PREFIX } from '../services/mcpAuthService.js';
 import { isTrustedNetworkClient } from './mcpAuthMiddleware.js';
 import type { AuthenticatedRequest } from './authMiddleware.js';
+import { checkTokenRateLimit } from './tokenRateLimiter.js';
 
 export interface ApiTokenRoute {
     path: string;
@@ -39,6 +40,14 @@ export const API_TOKEN_ALLOWED_ROUTES: readonly ApiTokenRoute[] = [
 ];
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
+
+const IP_DETAILS_ROUTE = new RegExp(`^/api/search/ip-details/${IPV4}/?$`);
+const TOP_TRAFFIC_ROUTE = /^\/api\/plugins\/unifi\/top-traffic\/?$/;
+
+/** Calls counted in the per-token heavy bucket: real-time ping + plugin fan-out, live controller query */
+export function isHeavyApiTokenRequest(path: string, query: Record<string, unknown> | undefined): boolean {
+    return IP_DETAILS_ROUTE.test(path) || (TOP_TRAFFIC_ROUTE.test(path) && query?.mode === 'live');
+}
 
 // Any field whose name looks like a credential is dropped from API token
 // responses, at any depth, even on allowlisted routes: relayed device
@@ -93,6 +102,13 @@ export function authenticateApiToken(
     const path = req.originalUrl.split('?')[0];
     if (!isApiTokenRouteAllowed(path)) {
         deny(res, 403, 'API_TOKEN_ROUTE_NOT_ALLOWED', `Route not available to API tokens: ${path}`);
+        return;
+    }
+
+    const limit = checkTokenRateLimit(row.id, isHeavyApiTokenRequest(path, req.query));
+    if (!limit.allowed) {
+        res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+        deny(res, 429, 'RATE_LIMITED', 'Too many requests for this API token, please try again later');
         return;
     }
 

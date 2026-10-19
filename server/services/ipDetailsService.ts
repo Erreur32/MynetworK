@@ -9,7 +9,27 @@ import { networkScanService } from './networkScanService.js';
 import { logger } from '../utils/logger.js';
 import { getErrorMessage } from '../utils/errorMessage.js';
 
-export async function getIpDetails(ip: string): Promise<any> {
+// Freebox stats then port forwarding rules, kept sequential (same Freebox session).
+// getStats() only carries the rule counts, so the rules themselves are fetched here.
+async function fetchFreeboxData(ip: string): Promise<{ stats: any; portForwardRules: any[] | null }> {
+    const stats = await pluginManager.getPluginStats('freebox');
+    let portForwardRules: any[] | null = null;
+    try {
+        const portForwardResponse = await freeboxApi.getPortForwardingRules();
+        if (portForwardResponse.success && Array.isArray(portForwardResponse.result)) {
+            portForwardRules = portForwardResponse.result as any[];
+        }
+    } catch (portForwardError: unknown) {
+        logger.debug('Search', `Failed to get port forwarding rules for IP ${ip}:`, getErrorMessage(portForwardError));
+    }
+    return { stats, portForwardRules };
+}
+
+/**
+ * @param options.ping false skips the real-time ping (status/latency then come
+ *   from the last scan), for IPs outside the scan ranges that must not be probed.
+ */
+export async function getIpDetails(ip: string, options: { ping?: boolean } = {}): Promise<any> {
 const aggregatedData: any = {
     ip,
     freebox: null,
@@ -19,21 +39,34 @@ const aggregatedData: any = {
 
 // Get Scanner data (from network_scans table)
 const scanData = NetworkScanRepository.findByIp(ip);
+const shouldPing = options.ping !== false;
 
-// Perform real-time ping to get current status
+// The ping, the Freebox calls and the UniFi stats are independent: run them concurrently
+// (allSettled: each source keeps its own error handling below)
+if (shouldPing) {
+    logger.debug('Search', `Performing real-time ping for IP ${ip} to verify current status...`);
+}
+const [pingSettled, freeboxSettled, unifiSettled] = await Promise.allSettled([
+    shouldPing ? networkScanService.pingHost(ip) : Promise.resolve(null),
+    pluginManager.getPlugin('freebox')?.isEnabled() ? fetchFreeboxData(ip) : Promise.resolve(null),
+    pluginManager.getPlugin('unifi')?.isEnabled() ? pluginManager.getPluginStats('unifi') : Promise.resolve(null)
+]);
+
+// Real-time ping result gives the current status
 let currentStatus = scanData?.status || 'unknown';
 let currentLatency = scanData?.pingLatency;
 
 try {
-    logger.debug('Search', `Performing real-time ping for IP ${ip} to verify current status...`);
-    const pingResult = await networkScanService.pingHost(ip);
-    if (pingResult.success) {
+    if (pingSettled.status === 'rejected') throw pingSettled.reason;
+    const pingResult = pingSettled.value;
+    // pingResult is null when the ping was skipped: keep the stored status
+    if (pingResult?.success) {
         currentStatus = 'online';
         if (pingResult.latency !== undefined) {
             currentLatency = pingResult.latency;
         }
         logger.debug('Search', `IP ${ip} is currently online (latency: ${currentLatency}ms)`);
-    } else {
+    } else if (pingResult) {
         currentStatus = 'offline';
         logger.debug('Search', `IP ${ip} is currently offline`);
     }
@@ -80,9 +113,10 @@ if (scanData) {
 
 // Get Freebox data
 try {
-    const freeboxPlugin = pluginManager.getPlugin('freebox');
-    if (freeboxPlugin && freeboxPlugin.isEnabled()) {
-        const freeboxStats = await pluginManager.getPluginStats('freebox');
+    if (freeboxSettled.status === 'rejected') throw freeboxSettled.reason;
+    const freeboxData = freeboxSettled.value;
+    if (freeboxData) {
+        const freeboxStats = freeboxData.stats;
         if (freeboxStats?.devices && Array.isArray(freeboxStats.devices)) {
             const freeboxDevice = freeboxStats.devices.find((d: any) => d.ip === ip);
             if (freeboxDevice) {
@@ -161,10 +195,9 @@ try {
         }
 
         // Check port forwarding rules for this IP
-        try {
-            const portForwardResponse = await freeboxApi.getPortForwardingRules();
-            if (portForwardResponse.success && Array.isArray(portForwardResponse.result)) {
-                const rules = portForwardResponse.result as any[];
+        {
+            const rules = freeboxData.portForwardRules;
+            if (rules) {
                 // Filter rules that match this IP (lan_ip)
                 const matchingRules = rules.filter((rule: any) => rule.lan_ip === ip);
                 if (matchingRules.length > 0) {
@@ -182,8 +215,6 @@ try {
                     }));
                 }
             }
-        } catch (portForwardError: unknown) {
-            logger.debug('Search', `Failed to get port forwarding rules for IP ${ip}:`, getErrorMessage(portForwardError));
         }
     }
 } catch (error: unknown) {
@@ -192,10 +223,10 @@ try {
 
 // Get UniFi data
 try {
-    const unifiPlugin = pluginManager.getPlugin('unifi');
-    if (unifiPlugin && unifiPlugin.isEnabled()) {
-        const unifiStats = await pluginManager.getPluginStats('unifi');
-        
+    if (unifiSettled.status === 'rejected') throw unifiSettled.reason;
+    const unifiStats: any = unifiSettled.value;
+    if (unifiStats) {
+
         // Check devices (APs, switches)
         if (unifiStats?.devices && Array.isArray(unifiStats.devices)) {
             const unifiDevice = unifiStats.devices.find((d: any) => d.ip === ip);
@@ -230,25 +261,6 @@ try {
         if (!unifiClient && unifiStats?.clients && Array.isArray(unifiStats.clients)) {
             unifiClient = unifiStats.clients.find((c: any) => c.ip === ip);
         }
-        
-        // Also try to get clients from the plugin's getStats if available
-        if (!unifiClient) {
-            try {
-                const unifiPlugin = pluginManager.getPlugin('unifi');
-                if (unifiPlugin) {
-                    const pluginStats = await unifiPlugin.getStats();
-                    if (pluginStats?.devices && Array.isArray(pluginStats.devices)) {
-                        unifiClient = pluginStats.devices.find((d: any) => {
-                            const isClient = d.type === 'client' || d.type === 'sta';
-                            return isClient && d.ip === ip;
-                        });
-                    }
-                }
-            } catch (error: unknown) {
-                logger.debug('Search', `Failed to get fresh UniFi stats:`, getErrorMessage(error));
-            }
-        }
-        
         if (unifiClient) {
             logger.debug('Search', `Found UniFi client for IP ${ip}:`, {
                     name: unifiClient.name,

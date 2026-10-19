@@ -65,6 +65,70 @@ const PING_FLAG = isWindows ? '-n' : '-c';
 const PING_TIMEOUT = 3000; // 3 seconds timeout (increased for Docker)
 const MAX_CONCURRENT_PINGS = 20; // Maximum number of simultaneous ping operations
 
+type GatewayPluginId = 'freebox' | 'unifi';
+
+// Devices of one plugin getStats() call, indexed once. Index maps keep the first
+// device per key so lookups match the previous Array.find() semantics.
+interface PluginStatsSnapshot {
+    devices: any[] | null;
+    byIp: Map<string, any>;
+    byMac: Map<string, any>;
+}
+
+function buildPluginSnapshot(stats: any): PluginStatsSnapshot {
+    const devices = Array.isArray(stats?.devices) ? stats.devices : null;
+    const byIp = new Map<string, any>();
+    const byMac = new Map<string, any>();
+    for (const d of devices ?? []) {
+        if (!byIp.has(d.ip)) byIp.set(d.ip, d);
+        const mac = normalizeMac(d.mac || '');
+        if (!byMac.has(mac)) byMac.set(mac, d);
+    }
+    return { devices, byIp, byMac };
+}
+
+// Resolved ping binary, memoised: the binary does not move at runtime, so
+// `which ping` only needs to run once instead of once per pinged host.
+let resolvedPingCommand: Promise<string> | null = null;
+// Same for getent (hostname lookups), only set once found
+let resolvedGetentCommand: string | null = null;
+
+async function findPingCommand(): Promise<string> {
+    if (isWindows) return 'ping';
+    // On Linux (Docker or npm), try to find ping command dynamically
+    try {
+        const { stdout: whichOutput } = await safeExecFile('which', ['ping'], { timeout: 1000 });
+        const foundPath = whichOutput.trim();
+        if (foundPath) return foundPath;
+        throw new Error('which ping returned empty');
+    } catch {
+        // If 'which' fails, try common paths
+        for (const candidate of ['/bin/ping', '/usr/bin/ping']) {
+            try {
+                await safeExecFile('test', ['-x', candidate], { timeout: 100 });
+                return candidate;
+            } catch {
+                // Try next candidate
+            }
+        }
+        return 'ping';
+    }
+}
+
+function getPingCommand(): Promise<string> {
+    if (!resolvedPingCommand) {
+        const pending = findPingCommand();
+        resolvedPingCommand = pending;
+        // Only keep an absolute path: a bare 'ping' fallback is retried next time
+        pending.then((cmd) => {
+            if (!cmd.startsWith('/')) resolvedPingCommand = null;
+        }, () => {
+            resolvedPingCommand = null;
+        });
+    }
+    return resolvedPingCommand;
+}
+
 /**
  * Detect if running in Docker container
  * @returns true if running in Docker, false otherwise
@@ -140,11 +204,10 @@ export class NetworkScanService {
         detectionSummary?: { mac: number; vendor: number; hostname: number };
     } | null = null;
     
-    // Cache for plugin stats during scan (to avoid repeated getStats() calls)
-    private cachedFreeboxStats: any | null = null;
-    private cachedUniFiStats: any | null = null;
-    private cacheTimestamp: number = 0;
-    private readonly CACHE_TTL = 30000; // 30 seconds cache validity
+    // Plugin stats snapshot shared by the MAC/hostname/vendor lookups of a scan (one
+    // getStats() per plugin instead of one per alive host), with IP/MAC indexes.
+    private pluginSnapshots = new Map<GatewayPluginId, { fetchedAt: number; promise: Promise<PluginStatsSnapshot> }>();
+    private readonly CACHE_TTL = 60000; // 60 seconds snapshot validity
     /**
      * Scan a network range for active IP addresses
      * 
@@ -1371,35 +1434,9 @@ export class NetworkScanService {
         // Detect if running in Docker (use the helper function)
         const runningInDocker = isDockerEnv();
         
-        // Determine ping command based on environment
-        let pingCommand = 'ping';
-        if (!isWindows) {
-            // On Linux (Docker or npm), try to find ping command dynamically
-            // This works for both Docker and npm dev mode
-            try {
-                const { stdout: whichOutput } = await safeExecFile('which', ['ping'], { timeout: 1000 });
-                const foundPath = whichOutput.trim();
-                if (foundPath) {
-                    pingCommand = foundPath;
-                } else {
-                    throw new Error('which ping returned empty');
-                }
-            } catch {
-                // If 'which' fails, try common paths
-                try {
-                    await safeExecFile('test', ['-x', '/bin/ping'], { timeout: 100 });
-                    pingCommand = '/bin/ping';
-                } catch {
-                    try {
-                        await safeExecFile('test', ['-x', '/usr/bin/ping'], { timeout: 100 });
-                        pingCommand = '/usr/bin/ping';
-                    } catch {
-                        pingCommand = 'ping';
-                    }
-                }
-            }
-        }
-        
+        // Determine ping command based on environment (resolved once, then memoised)
+        const pingCommand = await getPingCommand();
+
         try {
             // Use single ping with timeout
             // Note: On some systems, ping requires NET_RAW capability or root permissions
@@ -1716,47 +1753,24 @@ export class NetworkScanService {
      * This avoids repeated getStats() calls which can be slow (especially for Freebox Revolution)
      */
     private async initializePluginStatsCache(): Promise<void> {
-        // Clear existing cache
-        this.cachedFreeboxStats = null;
-        this.cachedUniFiStats = null;
-        this.cacheTimestamp = 0;
+        // Start from a fresh snapshot for this scan
+        this.pluginSnapshots.clear();
 
         // Get plugin priority config to determine which plugins are enabled
         const config = PluginPriorityConfigService.getConfig();
         const priority = config.vendorPriority;
-        const macPlugins = priority.filter(p => p === 'freebox' || p === 'unifi');
+        const macPlugins = priority.filter((p): p is GatewayPluginId => p === 'freebox' || p === 'unifi');
 
-        // Cache Freebox stats if plugin is enabled
-        if (macPlugins.includes('freebox')) {
+        for (const pluginId of macPlugins) {
+            const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
             try {
-                const freeboxPlugin = pluginManager.getPlugin('freebox');
-                if (freeboxPlugin && freeboxPlugin.isEnabled()) {
-                    logger.info('NetworkScanService', '[Cache] Initializing Freebox stats cache...');
-                    this.cachedFreeboxStats = await freeboxPlugin.getStats();
-                    this.cacheTimestamp = Date.now();
-                    logger.info('NetworkScanService', '[Cache] Freebox stats cached successfully');
+                logger.info('NetworkScanService', `[Cache] Initializing ${label} stats cache...`);
+                if (await this.getPluginSnapshot(pluginId)) {
+                    logger.info('NetworkScanService', `[Cache] ${label} stats cached successfully`);
                 }
             } catch (error: unknown) {
-                logger.warn('NetworkScanService', `[Cache] Failed to cache Freebox stats: ${getErrorMessage(error)}. Will use fallback.`);
-                // Continue without cache - getMacFromFreebox() will call getStats() directly
-            }
-        }
-
-        // Cache UniFi stats if plugin is enabled
-        if (macPlugins.includes('unifi')) {
-            try {
-                const unifiPlugin = pluginManager.getPlugin('unifi');
-                if (unifiPlugin && unifiPlugin.isEnabled()) {
-                    logger.info('NetworkScanService', '[Cache] Initializing UniFi stats cache...');
-                    this.cachedUniFiStats = await unifiPlugin.getStats();
-                    if (!this.cacheTimestamp) {
-                        this.cacheTimestamp = Date.now();
-                    }
-                    logger.info('NetworkScanService', '[Cache] UniFi stats cached successfully');
-                }
-            } catch (error: unknown) {
-                logger.warn('NetworkScanService', `[Cache] Failed to cache UniFi stats: ${getErrorMessage(error)}. Will use fallback.`);
-                // Continue without cache - getMacFromUniFi() will call getStats() directly
+                logger.warn('NetworkScanService', `[Cache] Failed to cache ${label} stats: ${getErrorMessage(error)}. Will use fallback.`);
+                // Continue without cache - lookups will fetch the snapshot again on demand
             }
         }
     }
@@ -1765,10 +1779,32 @@ export class NetworkScanService {
      * Invalidate plugin stats cache after scan completes
      */
     private invalidatePluginStatsCache(): void {
-        this.cachedFreeboxStats = null;
-        this.cachedUniFiStats = null;
-        this.cacheTimestamp = 0;
+        this.pluginSnapshots.clear();
         logger.debug('NetworkScanService', '[Cache] Plugin stats cache invalidated');
+    }
+
+    /**
+     * Plugin stats snapshot shared by all MAC/hostname/vendor lookups: one getStats()
+     * per plugin, refreshed once older than CACHE_TTL, concurrent callers share the
+     * in-flight fetch. Returns null when the plugin is missing or disabled; throws
+     * (like getStats()) when the fetch fails, failures are not cached.
+     */
+    private async getPluginSnapshot(pluginId: GatewayPluginId): Promise<PluginStatsSnapshot | null> {
+        const plugin = pluginManager.getPlugin(pluginId);
+        if (!plugin?.isEnabled()) return null;
+
+        const entry = this.pluginSnapshots.get(pluginId);
+        if (entry && Date.now() - entry.fetchedAt < this.CACHE_TTL) {
+            return entry.promise;
+        }
+
+        const promise = plugin.getStats().then(buildPluginSnapshot);
+        const newEntry = { fetchedAt: Date.now(), promise };
+        this.pluginSnapshots.set(pluginId, newEntry);
+        promise.catch(() => {
+            if (this.pluginSnapshots.get(pluginId) === newEntry) this.pluginSnapshots.delete(pluginId);
+        });
+        return promise;
     }
 
     /**
@@ -1811,28 +1847,18 @@ export class NetworkScanService {
     private async getMacFromPlugin(pluginId: 'freebox' | 'unifi', ip: string): Promise<string | null> {
         const label = pluginId === 'freebox' ? 'Freebox' : 'UniFi';
         try {
-            const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin?.isEnabled()) {
+            const snapshot = await this.getPluginSnapshot(pluginId);
+            if (!snapshot) {
                 logger.debug('NetworkScanService', `[MAC] ${label} plugin not available or disabled for ${ip}`);
                 return null;
             }
-
-            const cachedStats = pluginId === 'freebox' ? this.cachedFreeboxStats : this.cachedUniFiStats;
-            let stats: any;
-            if (cachedStats && this.cacheTimestamp && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
-                stats = cachedStats;
-                logger.debug('NetworkScanService', `[MAC] Using cached ${label} stats for ${ip}`);
-            } else {
-                stats = await plugin.getStats();
-                logger.debug('NetworkScanService', `[MAC] Fetched fresh ${label} stats for ${ip} (cache expired or unavailable)`);
-            }
-            if (!stats?.devices || !Array.isArray(stats.devices)) {
+            if (!snapshot.devices) {
                 logger.debug('NetworkScanService', `[MAC] No devices found in ${label} stats for ${ip}`);
                 return null;
             }
 
             // Find device by IP (UniFi devices can be access points, switches, or clients)
-            const device = stats.devices.find((d: any) => d.ip === ip);
+            const device = snapshot.byIp.get(ip);
             if (device && device.mac) {
                 const mac = device.mac.toLowerCase().trim();
                 if (/^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$/.test(mac)) {
@@ -1956,14 +1982,11 @@ export class NetworkScanService {
      */
     private async getHostnameFromPlugin(pluginId: 'freebox' | 'unifi', ip: string): Promise<string | null> {
         try {
-            const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin?.isEnabled()) return null;
-
-            const stats = await plugin.getStats();
-            if (!stats?.devices || !Array.isArray(stats.devices)) return null;
+            const snapshot = await this.getPluginSnapshot(pluginId);
+            if (!snapshot?.devices) return null;
 
             // Try by IP first
-            const device = stats.devices.find((d: any) => d.ip === ip);
+            const device = snapshot.byIp.get(ip);
             if (device) {
                 const hostname = (device.hostname || device.name) as string | undefined;
                 if (this.isValidHostname(hostname, ip)) {
@@ -1975,7 +1998,7 @@ export class NetworkScanService {
             const existingScan = NetworkScanRepository.findByIp(ip);
             if (existingScan?.mac) {
                 const scanMac = normalizeMac(existingScan.mac);
-                const deviceByMac = stats.devices.find((d: any) => normalizeMac(d.mac || '') === scanMac);
+                const deviceByMac = snapshot.byMac.get(scanMac);
                 if (deviceByMac) {
                     const hostname = (deviceByMac.hostname || deviceByMac.name) as string | undefined;
                     if (this.isValidHostname(hostname, ip)) {
@@ -2128,17 +2151,12 @@ export class NetworkScanService {
      */
     private async getVendorFromFreeboxByIp(ip: string): Promise<string | null> {
         try {
-            const freeboxPlugin = pluginManager.getPlugin('freebox');
-            if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
+            const snapshot = await this.getPluginSnapshot('freebox');
+            if (!snapshot?.devices) {
                 return null;
             }
-            
-            const stats = await freeboxPlugin.getStats();
-            if (!stats?.devices || !Array.isArray(stats.devices)) {
-                return null;
-            }
-            
-            const device = stats.devices.find((d: any) => d.ip === ip);
+
+            const device = snapshot.byIp.get(ip);
             if (device) {
                 const vendor = device.type || device.vendor_name;
                 if (vendor && typeof vendor === 'string' && vendor !== 'unknown' && vendor.trim().length > 0) {
@@ -2167,28 +2185,26 @@ export class NetworkScanService {
         try {
             logger.debug('NetworkScanService', `[VENDOR] ${label}: Looking up vendor for MAC ${mac}, IP ${ip}`);
 
-            const plugin = pluginManager.getPlugin(pluginId);
-            if (!plugin?.isEnabled()) {
+            const snapshot = await this.getPluginSnapshot(pluginId);
+            if (!snapshot) {
                 logger.debug('NetworkScanService', `[VENDOR] ${label}: Plugin not available or disabled`);
                 return null;
             }
-
-            const stats = await plugin.getStats();
-            if (!stats?.devices || !Array.isArray(stats.devices)) {
+            if (!snapshot.devices) {
                 logger.debug('NetworkScanService', `[VENDOR] ${label}: No devices found in stats`);
                 return null;
             }
 
-            logger.debug('NetworkScanService', `[VENDOR] ${label}: Checking ${stats.devices.length} devices`);
+            logger.debug('NetworkScanService', `[VENDOR] ${label}: Checking ${snapshot.devices.length} devices`);
 
             // Try by MAC first (more reliable)
             const normalizedMac = normalizeMac(mac);
-            const device = stats.devices.find((d: any) => normalizeMac(d.mac || '') === normalizedMac);
+            const device = snapshot.byMac.get(normalizedMac);
 
             if (!device) {
                 // Try by IP as fallback
                 logger.debug('NetworkScanService', `[VENDOR] ${label}: Device not found by MAC, trying IP ${ip}`);
-                const deviceByIp = stats.devices.find((d: any) => d.ip === ip);
+                const deviceByIp = snapshot.byIp.get(ip);
                 if (deviceByIp && deviceByIp.mac) {
                     const deviceMac = (deviceByIp.mac || '').toLowerCase().replace(/[:-]/g, '');
                     const vendor = readVendor(deviceByIp);
@@ -2471,17 +2487,20 @@ export class NetworkScanService {
             try {
                 logger.info('NetworkScanService', `[HOSTNAME] Method 2: Trying getent hosts for ${ip}...`);
                 // Try to find getent command (may be in /usr/glibc-compat/bin/getent if glibc is installed)
-                let getentCommand = 'getent';
-                try {
-                    await safeExecFile('which', ['getent'], { timeout: 500 });
-                } catch {
+                let getentCommand = resolvedGetentCommand ?? 'getent';
+                if (!resolvedGetentCommand) {
                     try {
-                        await safeExecFile('test', ['-x', '/usr/glibc-compat/bin/getent'], { timeout: 100 });
-                        getentCommand = '/usr/glibc-compat/bin/getent';
+                        await safeExecFile('which', ['getent'], { timeout: 500 });
                     } catch {
-                        logger.debug('NetworkScanService', `[HOSTNAME] ✗ getent command not found, skipping Method 2`);
-                        throw new Error('getent not available');
+                        try {
+                            await safeExecFile('test', ['-x', '/usr/glibc-compat/bin/getent'], { timeout: 100 });
+                            getentCommand = '/usr/glibc-compat/bin/getent';
+                        } catch {
+                            logger.debug('NetworkScanService', `[HOSTNAME] ✗ getent command not found, skipping Method 2`);
+                            throw new Error('getent not available');
+                        }
                     }
+                    resolvedGetentCommand = getentCommand;
                 }
 
                 const { stdout } = await safeExecFile(getentCommand, ['hosts', ip], { timeout: 2000 });
