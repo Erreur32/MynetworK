@@ -3552,8 +3552,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [showRebootScheduleModal, setShowRebootScheduleModal] = useState(false);
   const [showCustomDomainModal, setShowCustomDomainModal] = useState(false);
 
-  // Get devices from LAN store for parental control
-  const { devices } = useLanStore();
+  // Devices listed by the parental control and port forwarding modals: loaded when one
+  // of them opens (the app no longer polls them on every settings page)
+  const { devices, fetchDevices } = useLanStore();
+  useEffect(() => {
+    if (showParentalModal || showFirewallModal) fetchDevices();
+  }, [showParentalModal, showFirewallModal, fetchDevices]);
   const { reboot } = useSystemStore();
 
   // Get permissions and freebox URL from auth store
