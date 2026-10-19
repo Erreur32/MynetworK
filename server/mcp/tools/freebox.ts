@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { freeboxApi } from "../../services/freeboxApi.js";
 import { freeboxFirmwareCheckService } from "../../services/freeboxFirmwareCheckService.js";
 import { firmwareUpdate } from "../../utils/freeboxSummary.js";
+import { hostIpv4, summarizeLanHost, summarizeWifiStation } from "../../utils/freeboxExtras.js";
 import {
   textResult,
   toListResult,
@@ -38,51 +39,6 @@ function listResponse(response: FreeboxLikeResponse, options: ListOptions<any>) 
     return toToolResult(response);
   }
   return listToolResult(toListResult(response.result, options));
-}
-
-function hostIpv4(host: any): string[] {
-  const l3: any[] = Array.isArray(host?.l3connectivities) ? host.l3connectivities : [];
-  return l3.filter((c) => c.af === "ipv4").map((c) => c.addr);
-}
-
-// Compact LAN host summary: the raw object carries every name source, IPv6
-// address and access point detail ever seen for the host.
-function summarizeLanHost(h: any) {
-  const ap = h.access_point;
-  const wifi = ap?.wifi_information;
-  return {
-    name: h.primary_name,
-    type: h.host_type,
-    mac: h.l2ident?.id,
-    vendor: h.vendor_name || undefined,
-    ipv4: hostIpv4(h),
-    active: h.active,
-    reachable: h.reachable,
-    last_activity: h.last_activity,
-    interface: h.interface,
-    connection: ap?.connectivity_type,
-    ssid: wifi?.ssid,
-    band: wifi?.band,
-    signal_dbm: wifi?.signal,
-  };
-}
-
-function summarizeWifiStation(s: any) {
-  return {
-    name: s.hostname || s.host?.primary_name,
-    mac: s.mac,
-    ipv4: hostIpv4(s.host),
-    vendor: s.host?.vendor_name || undefined,
-    bssid: s.bssid,
-    state: s.state,
-    signal_dbm: s.signal,
-    rx_rate: s.rx_rate,
-    tx_rate: s.tx_rate,
-    rx_bytes: s.rx_bytes,
-    tx_bytes: s.tx_bytes,
-    conn_duration: s.conn_duration,
-    inactive: s.inactive,
-  };
 }
 
 export function registerFreeboxTools(server: McpServer): void {
@@ -181,7 +137,7 @@ export function registerFreeboxTools(server: McpServer): void {
       }
 
       return listToolResult(
-        toListResult(allHosts, {
+        toListResult<any>(allHosts, {
           filter: (h) =>
             (!activeOnly || h.active === true) &&
             matchesSearch(search, h.primary_name, h.l2ident?.id, ...hostIpv4(h)),
@@ -207,20 +163,53 @@ export function registerFreeboxTools(server: McpServer): void {
     "freebox_get_dhcp_leases",
     {
       title: "Freebox DHCP leases",
-      description: "List current dynamic DHCP leases.",
+      description:
+        "List current dynamic DHCP leases. Optional search/limit filter the list and add a total count.",
+      inputSchema: {
+        search: searchParam,
+        limit: limitParam(),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getDhcpLeases()),
+    async ({ search, limit }) => {
+      const response = await freeboxApi.getDhcpLeases();
+      // No option given: unchanged full response
+      if (!search && !limit) return toToolResult(response);
+      return listResponse(response, {
+        filter: (l: any) => matchesSearch(search, l.hostname, l.host?.primary_name, l.ip, l.mac),
+        limit,
+      });
+    },
   );
 
   server.registerTool(
     "freebox_get_switch_ports",
     {
       title: "Freebox switch ports",
-      description: "Get the status of the Freebox Ethernet switch ports.",
+      description:
+        "Get the status of the Freebox Ethernet switch ports. Optional search (port id/name or a connected MAC/hostname) and limit filter the list and add a total count.",
+      inputSchema: {
+        search: z
+          .string()
+          .max(MAX_SEARCH_LENGTH)
+          .optional()
+          .describe("Case-insensitive substring match on port id/name or a connected device MAC/hostname"),
+        limit: limitParam(),
+      },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => toToolResult(await freeboxApi.getSwitchPorts()),
+    async ({ search, limit }) => {
+      const response = await freeboxApi.getSwitchPorts();
+      // No option given: unchanged full response
+      if (!search && !limit) return toToolResult(response);
+      return listResponse(response, {
+        filter: (p: any) => {
+          const macList: any[] = Array.isArray(p.mac_list) ? p.mac_list : [];
+          return matchesSearch(search, p.id, p.name, ...macList.flatMap((m) => [m.mac, m.hostname]));
+        },
+        limit,
+      });
+    },
   );
 
   server.registerTool(

@@ -13,7 +13,6 @@ import { config, getPublicUrl } from "./config.js";
 import { AppConfigRepository } from "./database/models/AppConfig.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { connectionWebSocket } from "./services/connectionWebSocket.js";
-import { freeboxNativeWebSocket } from "./services/freeboxNativeWebSocket.js";
 import { logsWebSocket } from "./services/logsWebSocket.js";
 import { unifiWebSocket } from "./services/unifiWebSocket.js";
 import { unifiTrafficHistoryService } from "./services/unifiTrafficHistoryService.js";

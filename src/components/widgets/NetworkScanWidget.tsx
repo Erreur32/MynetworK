@@ -137,9 +137,11 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
         fetchTopTraffic();
     }, [hasUniFi, trafficPeriod]);
 
+    // First load done by the effect above
     usePolling(fetchTopTraffic, {
         enabled: hasUniFi && trafficPeriod !== 'live',
-        interval: 60000
+        interval: 60000,
+        immediate: false
     });
 
     const trafficRows = trafficPeriod === 'live'

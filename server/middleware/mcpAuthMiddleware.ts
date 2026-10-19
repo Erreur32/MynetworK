@@ -19,6 +19,7 @@ import {
 } from "../utils/networkValidation.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { checkTokenRateLimit } from "./tokenRateLimiter.js";
 
 export interface McpAuthenticatedRequest extends Request {
   mcpTokenId?: number;
@@ -128,6 +129,14 @@ export const mcpAuthMiddleware = (
   const tokenRow = mcpAuthService.verifyToken(token, "mcp");
   if (!tokenRow) {
     jsonRpcError(res, 401, -32000, "Invalid bearer token");
+    return;
+  }
+
+  // Per-token budget on top of the per-IP limiter (heavy tools add their own check)
+  const limit = checkTokenRateLimit(tokenRow.id, false);
+  if (!limit.allowed) {
+    res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+    jsonRpcError(res, 429, -32000, "Too many requests for this MCP token, please try again later");
     return;
   }
 

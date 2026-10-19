@@ -47,6 +47,9 @@ export interface UpdateCheckResult {
 
 let cachedResult: UpdateCheckResult | null = null;
 let cachedAt: number = 0;
+// Shared by concurrent cache misses, so parallel requests (several tabs, API
+// tokens) trigger one GitHub check instead of one each
+let inFlightCheck: Promise<UpdateCheckResult> | null = null;
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 
 function getCurrentVersion(): string {
@@ -374,9 +377,18 @@ export async function getCheckResult(): Promise<CheckResultWithTime> {
     };
   }
 
-  const result = await performUpdateCheck();
-  cachedResult = result;
-  cachedAt = now;
+  if (!inFlightCheck) {
+    inFlightCheck = performUpdateCheck()
+      .then((checked) => {
+        cachedResult = checked;
+        cachedAt = Date.now();
+        return checked;
+      })
+      .finally(() => {
+        inFlightCheck = null;
+      });
+  }
+  const result = await inFlightCheck;
   return {
     ...result,
     lastCheckAt: new Date(cachedAt).toISOString()

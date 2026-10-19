@@ -1,4 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { randomFraction } from '../utils/random';
+
+// Upper bound of the random delay before the catch-up call when the tab becomes visible again
+const MAX_RESUME_JITTER_MS = 2000;
 
 interface UsePollingOptions {
   enabled?: boolean;
@@ -56,27 +60,44 @@ export const usePolling = (
       return;
     }
 
-    // Execute immediately if requested
-    if (immediate) {
-      savedCallback.current();
+    // Enabled while the tab is hidden: wait for it to be visible again (handled below)
+    if (!document.hidden) {
+      // Execute immediately if requested
+      if (immediate) {
+        savedCallback.current();
+      }
+
+      // Start interval
+      startInterval();
     }
 
-    // Start interval
-    startInterval();
-
-    // Pause when tab is hidden, resume when visible
+    // Pause when tab is hidden, resume when visible. The resume call is delayed by
+    // a 0-2s random jitter so all pollers do not fire in the same instant.
+    let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearResumeTimer = () => {
+      if (resumeTimer) {
+        clearTimeout(resumeTimer);
+        resumeTimer = null;
+      }
+    };
     const handleVisibilityChange = () => {
+      clearResumeTimer();
       if (document.hidden) {
         stopInterval();
       } else if (enabledRef.current) {
-        savedCallback.current();
-        startInterval();
+        resumeTimer = setTimeout(() => {
+          resumeTimer = null;
+          if (document.hidden || !enabledRef.current) return;
+          savedCallback.current();
+          startInterval();
+        }, randomFraction() * MAX_RESUME_JITTER_MS);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      clearResumeTimer();
       stopInterval();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };

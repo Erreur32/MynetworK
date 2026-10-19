@@ -2,7 +2,7 @@
  * Dashboard routes - aggregated data for the main dashboard (e.g. network summary)
  */
 
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { freeboxApi } from '../services/freeboxApi.js';
 import { pluginManager } from '../services/pluginManager.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -34,6 +34,48 @@ function findUniFiGateway(devices: any[]): { ip: string; name: string } | null {
   };
 }
 
+// network-summary is polled every 30s by two widgets: one shared computation per TTL
+// (concurrent requests wait for the running one), dropped as soon as a Freebox write went through
+const SUMMARY_TTL_MS = 30_000;
+type SummaryBody = { success?: boolean };
+let summaryCache: { key: string; at: number; generation: number; body: SummaryBody } | null = null;
+const summaryInFlight = new Map<string, Promise<SummaryBody | null>>();
+
+const networkSummaryCache: RequestHandler = (_req, res, next) => {
+  const enabled = (id: string) => !!pluginManager.getPlugin(id)?.isEnabled();
+  const key = `${enabled('freebox')}:${enabled('unifi')}`;
+  const generation = freeboxApi.getWriteGeneration();
+  const cached = summaryCache;
+  if (cached && cached.key === key && cached.generation === generation && Date.now() - cached.at < SUMMARY_TTL_MS) {
+    res.json(cached.body);
+    return;
+  }
+  const pending = summaryInFlight.get(key);
+  if (pending !== undefined) {
+    // A failed computation lets this request compute on its own
+    pending.then((body) => (body ? res.json(body) : next()), next);
+    return;
+  }
+
+  let settle: (body: SummaryBody | null) => void = () => undefined;
+  const promise = new Promise<SummaryBody | null>((resolve) => { settle = resolve; });
+  summaryInFlight.set(key, promise);
+  const done = (body: SummaryBody | null) => {
+    if (summaryInFlight.get(key) === promise) summaryInFlight.delete(key);
+    settle(body);
+  };
+  // The handler below answers through res.json: capture its body (errors resolve to null)
+  const json = res.json.bind(res);
+  res.json = ((body: SummaryBody) => {
+    const ok = body?.success === true;
+    if (ok) summaryCache = { key, at: Date.now(), generation, body };
+    done(ok ? body : null);
+    return json(body);
+  }) as typeof res.json;
+  res.on('close', () => done(null));
+  next();
+};
+
 /**
  * GET /api/dashboard/network-summary
  * Aggregates Freebox (LAN, DMZ, DHCP, NAT) + UniFi (gateway, deployment) and deduces
@@ -42,6 +84,7 @@ function findUniFiGateway(devices: any[]): { ip: string; name: string } | null {
 router.get(
   '/network-summary',
   requireAuth,
+  networkSummaryCache,
   asyncHandler(async (_req: AuthenticatedRequest, res) => {
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     const unifiPlugin = pluginManager.getPlugin('unifi');
@@ -77,8 +120,16 @@ router.get(
 
     // --- Freebox data (only when plugin enabled) ---
     if (hasFreebox) {
+      // Independent reads fired together (the box already gets such bursts from /api/connection/summary).
+      // The no-op catch only marks them handled: each one is still awaited in its own try below
+      const started = <T>(p: Promise<T>): Promise<T> => { p.catch(() => undefined); return p; };
+      const lanP = started(freeboxApi.getLanConfig());
+      const dmzP = started(freeboxApi.getDmzConfig());
+      const dhcpP = started(freeboxApi.getDhcpConfig());
+      const natP = started(freeboxApi.getPortForwardingRules());
+
       try {
-        const lanRes = await freeboxApi.getLanConfig();
+        const lanRes = await lanP;
         if (lanRes.success && lanRes.result) {
           const lan = lanRes.result as any;
           freebox.mode = lan.mode || lan.type || 'router';
@@ -90,7 +141,7 @@ router.get(
       }
 
       try {
-        const dmzRes = await freeboxApi.getDmzConfig();
+        const dmzRes = await dmzP;
         if (dmzRes.success && dmzRes.result) {
           const dmz = dmzRes.result as any;
           freebox.dmz = {
@@ -103,7 +154,7 @@ router.get(
       }
 
       try {
-        const dhcpRes = await freeboxApi.getDhcpConfig();
+        const dhcpRes = await dhcpP;
         if (dhcpRes.success && dhcpRes.result) {
           const raw = dhcpRes.result as any;
           const dhcp = raw.dhcp || raw;
@@ -171,7 +222,7 @@ router.get(
       }
 
       try {
-        const natRes = await freeboxApi.getPortForwardingRules();
+        const natRes = await natP;
         if (natRes.success && Array.isArray(natRes.result)) {
           const rules = natRes.result as any[];
           freebox.natRules = rules.map((r: any) => ({

@@ -40,11 +40,29 @@ type ClientWebSocket = WsType & { isAlive?: boolean };
 const CONNECTION_POLLING_INTERVAL = 1000; // 1 second for real-time connection data (bandwidth)
 const SYSTEM_POLLING_INTERVAL = 10000; // 10 seconds for system data (less frequent, aligned with session keep-alive)
 
+// A slow box (Revolution: up to 25s timeouts) must not pile up requests:
+// a tick is skipped while the previous one is still running
+function skipWhileRunning(task: () => Promise<void>): () => void {
+  let running = false;
+  return () => {
+    if (running) return;
+    running = true;
+    // Both tasks log their own errors: nothing left to report here
+    task()
+      .catch(() => undefined)
+      .finally(() => {
+        running = false;
+      });
+  };
+}
+
 class ConnectionWebSocketService {
   private wss: WebSocketServer | null = null;
   private connectionPollingInterval: NodeJS.Timeout | null = null;
   private systemPollingInterval: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
+  private readonly runConnectionTick = skipWhileRunning(() => this.fetchConnectionAndBroadcast());
+  private readonly runSystemTick = skipWhileRunning(() => this.fetchSystemAndBroadcast());
 
   /**
    * Initialize the WebSocket server
@@ -176,18 +194,18 @@ class ConnectionWebSocketService {
     logger.debug('WS', 'Starting connection and system status polling');
 
     // Connection status polling (every 1 second)
-    this.connectionPollingInterval = setInterval(async () => {
-      await this.fetchConnectionAndBroadcast();
+    this.connectionPollingInterval = setInterval(() => {
+      this.runConnectionTick();
     }, CONNECTION_POLLING_INTERVAL);
 
-    // System status polling (every 5 seconds)
-    this.systemPollingInterval = setInterval(async () => {
-      await this.fetchSystemAndBroadcast();
+    // System status polling (every 10 seconds)
+    this.systemPollingInterval = setInterval(() => {
+      this.runSystemTick();
     }, SYSTEM_POLLING_INTERVAL);
 
     // Fetch immediately
-    this.fetchConnectionAndBroadcast();
-    this.fetchSystemAndBroadcast();
+    this.runConnectionTick();
+    this.runSystemTick();
   }
 
   /**

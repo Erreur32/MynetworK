@@ -129,10 +129,11 @@ export const SystemServerWidget: React.FC = () => {
         fetchDbStats();
     }, []);
 
-    // Poll every 30 seconds
+    // Poll every 30 seconds (first load done by the effect above)
     usePolling(fetchSystemInfo, {
         enabled: true,
-        interval: POLLING_INTERVALS.system
+        interval: POLLING_INTERVALS.system,
+        immediate: false
     });
 
     // Poll network data every 5 seconds (kept as no-op for backward compatibility)

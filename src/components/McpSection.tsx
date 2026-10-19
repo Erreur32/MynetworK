@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect, useState } from "react";
+import { usePolling } from "../hooks/usePolling";
 import { useTranslation } from "react-i18next";
 import {
   Cable,
@@ -267,12 +268,14 @@ export const McpSection: React.FC<{
   useEffect(() => {
     loadStatus();
     loadTokens();
-
-    // Active sessions (client connect/disconnect) can change without any
-    // action in this tab, so poll instead of relying on a manual refresh.
-    const interval = setInterval(() => loadStatus({ silent: true }), 15000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Active sessions (client connect/disconnect) can change without any
+  // action in this tab, so poll instead of relying on a manual refresh.
+  usePolling(() => loadStatus({ silent: true }), {
+    interval: 15000,
+    immediate: false,
+  });
 
   useEffect(() => {
     if (expandedTokenId === null) {

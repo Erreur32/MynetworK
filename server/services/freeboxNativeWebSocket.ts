@@ -64,13 +64,22 @@ class FreeboxNativeWebSocketService {
   private isConnecting: boolean = false;
   private shouldReconnect: boolean = false;
   private apiVersion: number = 8; // Default, will be updated
+  private startPromise: Promise<void> | null = null;
 
   /**
    * Start the native Freebox WebSocket connection
    * Only works with API v8+ (Delta, Pop, Ultra)
    * Only starts if Freebox plugin is enabled
+   * Idempotent: concurrent calls share one start, a live connection is kept as is
    */
-  async start() {
+  start(): Promise<void> {
+    this.startPromise ??= this.doStart().finally(() => {
+      this.startPromise = null;
+    });
+    return this.startPromise;
+  }
+
+  private async doStart() {
     const freeboxPlugin = pluginManager.getPlugin('freebox');
     if (!freeboxPlugin || !freeboxPlugin.isEnabled()) {
       logger.debug('FBX-WS', 'Freebox plugin is not enabled, skipping WebSocket connection');
@@ -124,10 +133,12 @@ class FreeboxNativeWebSocketService {
 
     try {
       const sessionToken = freeboxApi.getSessionToken();
-      const freeboxHost = process.env.FREEBOX_HOST || 'mafreebox.freebox.fr';
+      // Same box as the REST calls (configured plugin URL), not the FREEBOX_HOST env default
+      const base = new URL(freeboxApi.getBaseUrl());
+      const freeboxHost = base.host;
       // Certificate checks are disabled below (self-signed Freebox cert): same
       // LAN-only safeguard as insecureAgent, never for a public IP literal.
-      if (!isInsecureTlsAllowedFor(freeboxHost.replace(/:\d+$/, ''))) {
+      if (!isInsecureTlsAllowedFor(base.hostname)) {
         logger.error('FBX-WS', `Refusing to disable certificate verification for non-private IP "${freeboxHost}"`);
         this.shouldReconnect = false;
         this.isConnecting = false;
@@ -137,30 +148,36 @@ class FreeboxNativeWebSocketService {
 
       logger.debug('FBX-WS', `Connecting to Freebox native WebSocket: ${wsUrl}`);
 
-      this.ws = new WebSocket(wsUrl, {
+      const ws = new WebSocket(wsUrl, {
         headers: { 'X-Fbx-App-Auth': sessionToken || '' },
         rejectUnauthorized: false
       });
+      this.ws = ws;
 
-      this.ws.on('open', () => {
+      // Events of a socket replaced by stop()/start() must not touch the current one
+      ws.on('open', () => {
+        if (this.ws !== ws) return;
         logger.debug('FBX-WS', 'Connected to Freebox native WebSocket');
         this.isConnecting = false;
         this.registerEvents();
       });
 
-      this.ws.on('message', (data: WebSocket.Data) => {
+      ws.on('message', (data: WebSocket.Data) => {
+        if (this.ws !== ws) return;
         this.handleMessage(data);
       });
 
-      this.ws.on('close', (code, reason) => {
+      ws.on('close', (code, reason) => {
         logger.debug('FBX-WS', `Disconnected: ${code} ${reason.toString()}`);
+        if (this.ws !== ws) return;
         this.isConnecting = false;
         this.ws = null;
         this.scheduleReconnect();
       });
 
-      this.ws.on('error', (error) => {
+      ws.on('error', (error) => {
         logger.error('FBX-WS', `WebSocket error: ${error.message}`);
+        if (this.ws !== ws) return;
         this.isConnecting = false;
       });
 
@@ -226,14 +243,18 @@ class FreeboxNativeWebSocketService {
 
     logger.debug('FBX-WS', `Received event: ${fullEvent}`);
 
+    // Pushed changes make the matching short-lived REST caches stale
     switch (fullEvent) {
       case 'lan_host_l3addr_reachable':
+        freeboxApi.invalidateCache('/lan/browser/');
         this.handleLanHostReachable(result as LanHostEventData);
         break;
       case 'lan_host_l3addr_unreachable':
+        freeboxApi.invalidateCache('/lan/browser/');
         this.handleLanHostUnreachable(result as LanHostEventData);
         break;
       case 'vm_state_changed':
+        freeboxApi.invalidateCache('/vm/');
         this.handleVmStateChanged(result as VmStateChangeData);
         break;
       case 'vm_disk_task_done':
@@ -310,6 +331,8 @@ class FreeboxNativeWebSocketService {
   stop() {
     logger.debug('FBX-WS', 'Stopping native WebSocket service');
     this.shouldReconnect = false;
+    // A socket still connecting is dropped too: the next start() must be able to connect
+    this.isConnecting = false;
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);

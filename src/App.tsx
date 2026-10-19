@@ -497,7 +497,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (isUserAuthenticated) {
       fetchPlugins();
-      fetchAllStats();
 
       // Load update check config and check for updates if enabled
       loadConfig().then(() => {
@@ -509,16 +508,15 @@ const App: React.FC = () => {
 
       // Check Freebox firmware updates (backend caches blog scrape result)
       checkFirmware();
-
-      // Refresh stats periodically
-      const interval = setInterval(() => {
-        fetchAllStats();
-      }, 30000); // Every 30 seconds
-
-      return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserAuthenticated]); // Zustand functions are stable, no need to include them
+
+  // Single poller of /api/plugins/stats/all for the whole app (paused while the tab is hidden)
+  usePolling(fetchAllStats, {
+    enabled: isUserAuthenticated,
+    interval: 30000, // Every 30 seconds
+  });
 
   // Start/stop periodic permissions refresh based on Freebox login state
   useEffect(() => {
@@ -558,32 +556,13 @@ const App: React.FC = () => {
   });
 
   // Fallback: If WebSocket is not connected, fetch connection status via HTTP polling
-  // When WebSocket IS connected, it handles updates — no need for HTTP polling
-  useEffect(() => {
-    if (isFreeboxLoggedIn && isUserAuthenticated) {
-      // Initial fetch to populate data immediately (don't wait for WebSocket)
-      if (import.meta.env.DEV) {
-        console.log(
-          "[App] Freebox logged in, fetching initial connection status...",
-        );
-      }
-      fetchConnectionStatus();
-
-      // Only poll via HTTP if WebSocket is not connected
-      if (!wsConnected) {
-        const fallbackInterval = setInterval(() => {
-          fetchConnectionStatus();
-        }, 5000); // Every 5 seconds as fallback when WebSocket is down
-
-        return () => clearInterval(fallbackInterval);
-      }
-    }
-  }, [
-    isFreeboxLoggedIn,
-    isUserAuthenticated,
-    wsConnected,
-    fetchConnectionStatus,
-  ]);
+  // When WebSocket IS connected, it handles updates: no need for HTTP polling.
+  // The first call (WebSocket not connected yet) populates data immediately on login.
+  // Paused while the tab is hidden.
+  usePolling(fetchConnectionStatus, {
+    enabled: isFreeboxLoggedIn && isUserAuthenticated && !wsConnected,
+    interval: 5000, // Every 5 seconds as fallback when WebSocket is down
+  });
 
   // Polling only if user is authenticated AND Freebox is connected
   usePolling(fetchSystemInfo, {
@@ -596,24 +575,37 @@ const App: React.FC = () => {
     interval: POLLING_INTERVALS.wifi,
   });
 
+  // Devices, downloads, VMs and history are only shown by some Freebox pages:
+  // poll them only while one of those pages is open (enabling fetches immediately).
+  const freeboxPolling = isUserAuthenticated && isFreeboxLoggedIn;
+  const onFreeboxPage = currentPage === "freebox";
+
+  // LAN devices: Freebox dashboard, Analytics, Settings (parental control)
   usePolling(fetchDevices, {
-    enabled: isUserAuthenticated && isFreeboxLoggedIn,
+    enabled:
+      freeboxPolling &&
+      (onFreeboxPage ||
+        currentPage === "analytics" ||
+        currentPage === "settings"),
     interval: POLLING_INTERVALS.devices,
   });
 
   usePolling(fetchDownloads, {
-    enabled: isUserAuthenticated && isFreeboxLoggedIn,
+    enabled: freeboxPolling && (onFreeboxPage || currentPage === "files"),
     interval: POLLING_INTERVALS.downloads,
   });
 
   // Only poll VMs if the model supports them
   usePolling(fetchVms, {
-    enabled: isUserAuthenticated && isFreeboxLoggedIn && supportsVm(),
+    enabled:
+      freeboxPolling &&
+      (onFreeboxPage || currentPage === "vms") &&
+      supportsVm(),
     interval: POLLING_INTERVALS.vm,
   });
 
   usePolling(fetchHistory, {
-    enabled: isUserAuthenticated && isFreeboxLoggedIn,
+    enabled: freeboxPolling && onFreeboxPage,
     interval: 60000, // Refresh history every minute
   });
 

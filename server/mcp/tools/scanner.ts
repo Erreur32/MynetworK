@@ -9,7 +9,7 @@ import { NetworkScanRepository, type NetworkScan } from '../../database/models/N
 import { ipBlacklistService } from '../../services/ipBlacklistService.js';
 import { isValidIp } from '../../utils/networkValidation.js';
 import { getIpDetails, compactIpDetails } from '../../services/ipDetailsService.js';
-import { wrapAsync, ListResult, rawParam, limitParam, MAX_SEARCH_LENGTH } from './shared.js';
+import { wrapAsync, ListResult, rawParam, limitParam, MAX_SEARCH_LENGTH, assertHeavyCallAllowed } from './shared.js';
 
 const DEFAULT_DEVICE_LIMIT = 100;
 
@@ -27,6 +27,15 @@ function assertScannableIp(ip: string): void {
   assertValidIp(ip);
   if (!networkScanService.isIpScanAuthorized(ip)) {
     throw new Error(`IP ${ip} is outside the configured scan ranges and the host's local networks`);
+  }
+}
+
+// Same rule for an already known host: IPs an admin added by hand outside the
+// ranges stay reachable for details and rescans.
+function assertKnownProbeableIp(ip: string): void {
+  assertValidIp(ip);
+  if (!networkScanService.isKnownIpProbeAuthorized(ip)) {
+    throw new Error(`IP ${ip} is outside the configured scan ranges and was never added to the scanner`);
   }
 }
 
@@ -97,16 +106,21 @@ export function registerScannerTools(server: McpServer): void {
     'scan_get_device_by_ip',
     {
       title: 'Get a scanned device by IP',
-      description: 'Get the scan record for a specific IP address, if known.',
+      description: 'Get the scan record for a specific IP address, if known. compact=true returns the same summary as scan_get_devices.',
       inputSchema: {
-        ip: z.string().describe('IP address to look up, e.g. 192.168.1.42')
+        ip: z.string().describe('IP address to look up, e.g. 192.168.1.42'),
+        compact: z
+          .boolean()
+          .optional()
+          .describe('Return the compact summary (IP, MAC, hostname, vendor, status, latency, open ports) instead of the full record')
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ ip }) =>
+    async ({ ip, compact }) =>
       wrapAsync(() => {
         assertValidIp(ip);
-        return NetworkScanRepository.findByIp(ip);
+        const scan = NetworkScanRepository.findByIp(ip);
+        return compact && scan ? summarizeScan(scan) : scan;
       })
   );
 
@@ -121,9 +135,10 @@ export function registerScannerTools(server: McpServer): void {
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ ip }) =>
+    async ({ ip }, extra) =>
       wrapAsync(async () => {
-        assertScannableIp(ip);
+        assertKnownProbeableIp(ip);
+        assertHeavyCallAllowed(extra);
         return compactIpDetails(await getIpDetails(ip));
       })
   );
@@ -154,8 +169,9 @@ export function registerScannerTools(server: McpServer): void {
         openWorldHint: false
       }
     },
-    async ({ range }) =>
+    async ({ range }, extra) =>
       wrapAsync(async () => {
+        assertHeavyCallAllowed(extra);
         const scanRange = range || networkScanService.getNetworkRange();
         if (!scanRange) {
           throw new Error('Could not auto-detect network range. Provide one explicitly, e.g. 192.168.1.0/24.');
@@ -179,9 +195,10 @@ export function registerScannerTools(server: McpServer): void {
         openWorldHint: false
       }
     },
-    async ({ ip }) =>
+    async ({ ip }, extra) =>
       wrapAsync(async () => {
-        assertScannableIp(ip);
+        assertKnownProbeableIp(ip);
+        assertHeavyCallAllowed(extra);
         const result = await networkScanService.rescanSingleIpWithPorts(ip);
         if (!result) {
           throw new Error(`Failed to rescan ${ip} (may be blacklisted or unreachable)`);
@@ -207,9 +224,10 @@ export function registerScannerTools(server: McpServer): void {
         openWorldHint: false
       }
     },
-    async ({ ip, mac, hostname }) =>
+    async ({ ip, mac, hostname }, extra) =>
       wrapAsync(async () => {
         assertScannableIp(ip);
+        assertHeavyCallAllowed(extra);
         const result = await networkScanService.scanSingleIp(ip, true, mac, hostname);
         if (!result) {
           throw new Error(`Failed to scan ${ip}`);

@@ -90,7 +90,21 @@ export class UniFiApiService {
     private sessionCookie: string | null = null;
     private csrfToken: string | null = null; // UniFiOS v2 POST requests require X-Csrf-Token
     private lastLoginAt: number | null = null;
-    private readonly sessionTtlMs: number = 15 * 60 * 1000; // 15 minutes
+    // No proactive re-login: an expired session answers 401/403, which controllerRequest and
+    // controllerWrite already handle by logging in again once and retrying.
+
+    /**
+     * Short-lived response cache with in-flight sharing, used by every caller of the service
+     * (routes, WebSocket sampler, MCP tools, background services). Entries are deep-cloned on
+     * the way out, so callers can never mutate a shared object. Errors are never cached.
+     * cacheGeneration is bumped on every invalidation: a request started before a write or a
+     * connection change will not store its (possibly outdated) result.
+     */
+    private responseCache = new Map<string, { at: number; data: unknown }>();
+    private responseInFlight = new Map<string, Promise<{ at: number; data: unknown }>>();
+    private cacheGeneration = 0;
+    // Gateway-only stat/device POST (filtered by MAC): disabled for a while after it fails or returns nothing
+    private gatewayFilterDisabledUntilMs = 0;
 
     /**
      * Set UniFi controller connection details (local Controller API)
@@ -129,6 +143,7 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
+        this.resetCachesForNewConnection();
     }
 
     /**
@@ -159,6 +174,7 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
+        this.resetCachesForNewConnection();
         logger.debug('UniFi', `Site Manager (cloud) connection configured (apiKeyLength: ${this.apiKey.length})`);
     }
 
@@ -252,6 +268,76 @@ export class UniFiApiService {
         this.isAuthenticated = false;
         this.sessionCookie = null; this.csrfToken = null;
         this.lastLoginAt = null;
+        this.invalidateResponseCache();
+    }
+
+    /**
+     * Drop every cached controller/Site Manager response. Called after writes, on logout,
+     * after a fresh login and when the connection settings change.
+     */
+    invalidateResponseCache(): void {
+        this.cacheGeneration++;
+        this.responseCache.clear();
+        this.responseInFlight.clear();
+    }
+
+    /**
+     * Generation counter of the response cache, bumped by every invalidation. Lets callers
+     * holding their own derived cache (e.g. UniFiPlugin.getStats) drop it after a write.
+     */
+    getCacheGeneration(): number {
+        return this.cacheGeneration;
+    }
+
+    /**
+     * Connection settings changed: forget every cache, including the ones tied to the
+     * controller itself (threat endpoint, gateway filter support).
+     */
+    private resetCachesForNewConnection(): void {
+        this.invalidateResponseCache();
+        this._threatCache.clear();
+        this._threatInFlight.clear();
+        this._flowEndpoint = null;
+        this.gatewayFilterDisabledUntilMs = 0;
+    }
+
+    /**
+     * Return a cached value younger than ttlMs, join an identical request already in flight,
+     * or run load() once and share its result. The returned data is always a deep clone.
+     */
+    private async cachedFetch<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<{ data: T; fetchedAt: number }> {
+        const cached = this.responseCache.get(key);
+        if (cached && Date.now() - cached.at < ttlMs) {
+            return { data: structuredClone(cached.data) as T, fetchedAt: cached.at };
+        }
+        let pending = this.responseInFlight.get(key);
+        if (!pending) {
+            const generation = this.cacheGeneration;
+            pending = load()
+                .then((data) => {
+                    const entry = { at: Date.now(), data: data as unknown };
+                    if (generation === this.cacheGeneration) this.responseCache.set(key, entry);
+                    return entry;
+                })
+                .finally(() => {
+                    if (this.responseInFlight.get(key) === pending) this.responseInFlight.delete(key);
+                });
+            this.responseInFlight.set(key, pending);
+        }
+        const entry = await pending;
+        return { data: structuredClone(entry.data) as T, fetchedAt: entry.at };
+    }
+
+    /**
+     * Cache TTL of a controller GET path, 0 = not cached.
+     * Live counters stay 1.5s, below the 2s live WebSocket interval, so every live tick still
+     * reads fresh data while concurrent callers (routes, MCP, CARD tab) share one request.
+     */
+    private static responseCacheTtlMs(path: string): number {
+        const p = path.split('?')[0];
+        if (p.endsWith('/stat/device') || p.endsWith('/stat/sta') || p.endsWith('/stat/dashboard')) return 1500;
+        if (p.endsWith('/stat/sysinfo') || p.endsWith('/rest/wlanconf') || p.endsWith('/rest/networkconf') || p.endsWith('/rest/portforward')) return 60_000;
+        return 0;
     }
 
     /**
@@ -330,8 +416,10 @@ export class UniFiApiService {
 
     /**
      * Detect the type of UniFi deployment (UniFiOS Gateway vs Classic Controller)
+     * The UniFiOS probe is a real login: when it succeeds its response is returned too,
+     * so the caller can keep that session instead of logging in a second time.
      */
-    private async detectDeploymentType(): Promise<'unifios' | 'controller'> {
+    private async detectDeploymentType(): Promise<{ type: 'unifios' | 'controller'; loginResponse?: Response }> {
         if (!this.url || !this.username || !this.password) {
             throw new Error('UniFi connection details not set');
         }
@@ -376,14 +464,14 @@ export class UniFiApiService {
                     logger.debug('UniFi', `UniFiOS detection failed: ${errorMessage}. Will try classic controller endpoint.`);
                 }
                 // Fall through to classic controller detection
-                return 'controller';
+                return { type: 'controller' };
             }
-            
+
             if (response.ok) {
                 const setCookie = response.headers.get('set-cookie');
                 if (setCookie) {
                     logger.debug('UniFi', 'Detected UniFiOS Gateway (UDM Pro, UCG, etc.)');
-                    return 'unifios';
+                    return { type: 'unifios', loginResponse: response };
                 }
             } else {
                 // Log the error for debugging
@@ -400,7 +488,7 @@ export class UniFiApiService {
 
         // If UniFiOS failed, assume classic controller
         logger.debug('UniFi', 'Detected Classic UniFi Controller');
-        return 'controller';
+        return { type: 'controller' };
     }
 
     /**
@@ -429,9 +517,15 @@ export class UniFiApiService {
 
         // Detect deployment type if not already detected (skip if forced)
         if (this.deploymentType === 'unknown') {
-            this.deploymentType = await this.detectDeploymentType();
+            const detection = await this.detectDeploymentType();
+            this.deploymentType = detection.type;
             if (this.deploymentType === 'unifios') {
                 this.apiMode = 'unifios' as UniFiApiMode;
+            }
+            // The UniFiOS probe already logged in: keep that session rather than logging in twice
+            if (detection.loginResponse && this.username.trim() && this.password.trim()) {
+                this.storeLoginSession(detection.loginResponse);
+                return;
             }
         }
 
@@ -569,6 +663,13 @@ export class UniFiApiService {
             }
         }
 
+        this.storeLoginSession(response);
+    }
+
+    /**
+     * Keep the session returned by a successful login response (cookie + CSRF token).
+     */
+    private storeLoginSession(response: Response): void {
         // UniFi returns session information in the Set-Cookie header.
         // We need to transform it into a proper Cookie header value:
         //   "name=value; Path=/; HttpOnly, other=value2; Path=/; HttpOnly"
@@ -606,6 +707,8 @@ export class UniFiApiService {
             this.csrfToken = csrfToken;
             logger.debug('UniFi', 'Captured CSRF token for v2 API');
         }
+        // Fresh session: do not serve data cached under the previous one
+        this.invalidateResponseCache();
 
         // Session stored successfully (logged at verbose level if needed)
     }
@@ -634,10 +737,8 @@ export class UniFiApiService {
         }
 
         const force = options?.force === true;
-        const hasValidSession =
-            !!this.sessionCookie &&
-            !!this.lastLoginAt &&
-            (now - this.lastLoginAt) <= this.sessionTtlMs;
+        // A session is kept until the controller rejects it (401/403, handled by the callers)
+        const hasValidSession = !!this.sessionCookie;
 
         if (!force && hasValidSession) {
             return;
@@ -673,6 +774,31 @@ export class UniFiApiService {
     }
 
     /**
+     * GET request to the UniFi controller API, served from the short-lived response cache
+     * when the path is cacheable (see responseCacheTtlMs), with in-flight sharing.
+     */
+    private async controllerRequest<T>(path: string): Promise<T> {
+        return (await this.controllerRequestWithMeta<T>(path)).data;
+    }
+
+    /**
+     * Same as controllerRequest, plus the time the data was fetched from the controller
+     * (older than now when served from the cache). bypassCache forces a real request.
+     */
+    private async controllerRequestWithMeta<T>(path: string, options?: { bypassCache?: boolean }): Promise<{ data: T; fetchedAt: number }> {
+        const ttlMs = options?.bypassCache ? 0 : UniFiApiService.responseCacheTtlMs(path);
+        if (ttlMs <= 0) {
+            const data = await this.fetchControllerJson<T>(path);
+            return { data, fetchedAt: Date.now() };
+        }
+        return this.cachedFetch<T>(this.controllerCacheKey(path), ttlMs, () => this.fetchControllerJson<T>(path));
+    }
+
+    private controllerCacheKey(path: string): string {
+        return `ctl|${this.deploymentType}|${this.url}|${path}`;
+    }
+
+    /**
      * Perform a GET request to the UniFi controller API using the stored session cookie.
      * This method:
      * - Ensures the session is valid (refreshes it if expired)
@@ -681,7 +807,7 @@ export class UniFiApiService {
      * - Handles 401/403 by retrying once after re-login
      * - Normalizes the JSON response, returning either data.data or data
      */
-    private async controllerRequest<T>(path: string): Promise<T> {
+    private async fetchControllerJson<T>(path: string): Promise<T> {
         if (!this.url) {
             throw new Error('UniFi controller URL not set');
         }
@@ -791,6 +917,19 @@ export class UniFiApiService {
      * Shared by controllerPost and controllerPut, which only differ by HTTP method.
      */
     private async controllerWrite<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
+        // Read-only POST queries (stat/report, filtered stat/device, v2 traffic-flows) change nothing.
+        // Anything else (cmd/stamgr, cmd/devmgr, rest/* PUT...) may: drop cached reads once it is done.
+        const p = path.split('?')[0];
+        const isReadQuery = method === 'POST' && (p.includes('/stat/') || p.endsWith('/traffic-flows'));
+        if (isReadQuery) return this.controllerWriteRequest<T>(method, path, body);
+        try {
+            return await this.controllerWriteRequest<T>(method, path, body);
+        } finally {
+            this.invalidateResponseCache();
+        }
+    }
+
+    private async controllerWriteRequest<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
         if (!this.url) throw new Error('UniFi controller URL not set');
         await this.ensureControllerSession();
         const baseUrl = stripTrailingSlashes(this.url);
@@ -913,75 +1052,106 @@ export class UniFiApiService {
     }
 
     /**
+     * Site Manager site list, cached 10 minutes (sites are created/removed very rarely).
+     */
+    private async getSiteManagerSites(): Promise<Array<{ id: string; name: string }>> {
+        const { data } = await this.cachedFetch('sm|/sites', 10 * 60 * 1000,
+            () => this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites'));
+        return data;
+    }
+
+    /**
+     * Raw device list of every Site Manager site, fetched in parallel and cached 1.5s.
+     * Shared by getDevices() and getClients(), which read the same /sites/{id}/devices payload.
+     * A site that fails is logged and contributes no device, as before.
+     */
+    private async getSiteManagerDevicesBySite(): Promise<{ data: Array<{ site: { id: string; name: string }; devices: any[] }>; fetchedAt: number }> {
+        return this.cachedFetch('sm|devices', 1500, async () => {
+            const sites = await this.getSiteManagerSites();
+            return Promise.all(sites.map(async (site) => {
+                try {
+                    const devices = await this.siteManagerRequest<Array<any>>(`/sites/${site.id}/devices`);
+                    return { site, devices: Array.isArray(devices) ? devices : [] };
+                } catch (error) {
+                    logger.debug('UniFi', `Failed to get devices for site ${site.name}:`, error);
+                    return { site, devices: [] as any[] };
+                }
+            }));
+        });
+    }
+
+    /**
      * Get all devices (access points, switches, etc.)
      */
     async getDevices(): Promise<UniFiDevice[]> {
+        return (await this.getDevicesWithFetchTime()).devices;
+    }
+
+    /**
+     * getDevices() plus the time the device list was fetched from the controller
+     * (it can be up to 1.5s old when served from the shared cache). Byte-counter rates
+     * must be computed with this time, not with the time of the call.
+     */
+    async getDevicesWithFetchTime(): Promise<{ devices: UniFiDevice[]; fetchedAt: number }> {
         await this.ensureLoggedIn();
 
         try {
             if (this.apiMode === 'site-manager') {
                 // Site Manager API: Get devices from all sites
-                const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+                const { data: bySite, fetchedAt } = await this.getSiteManagerDevicesBySite();
                 const allDevices: UniFiDevice[] = [];
 
-                for (const site of sites) {
-                    try {
-                        const devices = await this.siteManagerRequest<Array<any>>(`/sites/${site.id}/devices`);
-                        if (Array.isArray(devices)) {
-                            allDevices.push(...devices.map((d: any) => ({
-                                _id: d.id || d.mac || '',
-                                name: d.name || d.model || 'Unknown',
-                                ip: d.ip,
-                                mac: d.mac,
-                                type: d.type || d.model,
-                                model: d.model,
-                                state: d.state === 'connected' ? 1 : 0,
-                                uptime: d.uptime,
-                                last_seen: d.last_seen ? Math.floor(new Date(d.last_seen).getTime() / 1000) : undefined,
-                                // Firmware information
-                                firmware_version: d.version || d.fw || d.firmware_version,
-                                version: d.version || d.fw,
-                                firmware: d.version || d.fw,
-                                // Port information (for switches)
-                                port_table: d.port_table,
-                                eth_port_table: d.eth_port_table,
-                                ports: d.ports,
-                                port_overrides: d.port_overrides,
-                                num_port: d.num_port,
-                                // CPU and system info
-                                cpu_usage: d.cpu_usage || d.cpu?.usage,
-                                cpu: d.cpu,
-                                proc_usage: d.proc_usage,
-                                // Power information
-                                power: d.power,
-                                watt: d.watt,
-                                poe_power: d.poe_power,
-                                // Radio information (for APs)
-                                radio_table: d.radio_table,
-                                radio_ng: d.radio_ng,
-                                radio_na: d.radio_na,
-                                radio_2g: d.radio_2g,
-                                radio_5g: d.radio_5g,
-                                radio_6g: d.radio_6g,
-                                // Additional device info
-                                active: d.state === 'connected',
-                                // Include all other fields
-                                ...d
-                            })));
-                        }
-                    } catch (error) {
-                        logger.debug('UniFi', `Failed to get devices for site ${site.name}:`, error);
-                    }
+                for (const { devices } of bySite) {
+                    allDevices.push(...devices.map((d: any) => ({
+                        _id: d.id || d.mac || '',
+                        name: d.name || d.model || 'Unknown',
+                        ip: d.ip,
+                        mac: d.mac,
+                        type: d.type || d.model,
+                        model: d.model,
+                        state: d.state === 'connected' ? 1 : 0,
+                        uptime: d.uptime,
+                        last_seen: d.last_seen ? Math.floor(new Date(d.last_seen).getTime() / 1000) : undefined,
+                        // Firmware information
+                        firmware_version: d.version || d.fw || d.firmware_version,
+                        version: d.version || d.fw,
+                        firmware: d.version || d.fw,
+                        // Port information (for switches)
+                        port_table: d.port_table,
+                        eth_port_table: d.eth_port_table,
+                        ports: d.ports,
+                        port_overrides: d.port_overrides,
+                        num_port: d.num_port,
+                        // CPU and system info
+                        cpu_usage: d.cpu_usage || d.cpu?.usage,
+                        cpu: d.cpu,
+                        proc_usage: d.proc_usage,
+                        // Power information
+                        power: d.power,
+                        watt: d.watt,
+                        poe_power: d.poe_power,
+                        // Radio information (for APs)
+                        radio_table: d.radio_table,
+                        radio_ng: d.radio_ng,
+                        radio_na: d.radio_na,
+                        radio_2g: d.radio_2g,
+                        radio_5g: d.radio_5g,
+                        radio_6g: d.radio_6g,
+                        // Additional device info
+                        active: d.state === 'connected',
+                        // Include all other fields
+                        ...d
+                    })));
                 }
 
-                return allDevices;
+                return { devices: allDevices, fetchedAt };
             } else {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/device
                 const encodedSite = encodeURIComponent(this.site);
                 logger.debug('UniFi', `Getting devices for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
-                const devices = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/device`);
+                const { data: devices, fetchedAt } = await this.controllerRequestWithMeta<any[]>(`/api/s/${encodedSite}/stat/device`);
 
-                return devices.map((d: any) => ({
+                return { fetchedAt, devices: devices.map((d: any) => ({
                     _id: d._id || d.mac || '',
                     name: d.name || d.model || 'Unknown Device',
                     ip: d.ip,
@@ -1020,12 +1190,47 @@ export class UniFiApiService {
                     active: d.state === 1 || d.state === 'connected',
                     // Include all other fields
                     ...d
-                }));
+                })) };
             }
         } catch (error) {
             logger.error('UniFi', 'Failed to get devices:', error);
             throw error;
         }
+    }
+
+    /**
+     * Gateway device only, with its fetch time, for the live WAN byte counters.
+     * Order: a fresh full device list already in the cache, else POST stat/device filtered
+     * on the known gateway MAC (a much smaller payload), else the full device list.
+     * isGateway picks the gateway out of a full list (the caller owns that rule).
+     */
+    async getGatewayDeviceSample(isGateway: (d: any) => boolean, gatewayMac?: string | null): Promise<{ device: any | null; fetchedAt: number }> {
+        await this.ensureLoggedIn();
+
+        if (this.apiMode !== 'site-manager') {
+            const encodedSite = encodeURIComponent(this.site);
+            const path = `/api/s/${encodedSite}/stat/device`;
+            const fullList = this.responseCache.get(this.controllerCacheKey(path));
+            const fullListFresh = !!fullList && Date.now() - fullList.at < UniFiApiService.responseCacheTtlMs(path);
+            const mac = (gatewayMac || '').toLowerCase();
+            if (mac && !fullListFresh && Date.now() >= this.gatewayFilterDisabledUntilMs) {
+                try {
+                    const list = await this.controllerPost<any[]>(path, { macs: [mac] });
+                    const fetchedAt = Date.now();
+                    const device = Array.isArray(list)
+                        ? list.find((d: any) => (d?.mac || '').toString().toLowerCase() === mac)
+                        : undefined;
+                    if (device) return { device, fetchedAt };
+                    logger.debug('UniFi', 'Gateway-only stat/device returned no gateway, using the full device list for a while');
+                } catch (error) {
+                    logger.debug('UniFi', 'Gateway-only stat/device failed, using the full device list for a while:', error);
+                }
+                this.gatewayFilterDisabledUntilMs = Date.now() + 30 * 60 * 1000;
+            }
+        }
+
+        const { devices, fetchedAt } = await this.getDevicesWithFetchTime();
+        return { device: devices.find(isGateway) ?? null, fetchedAt };
     }
 
     /**
@@ -1037,28 +1242,21 @@ export class UniFiApiService {
         try {
             if (this.apiMode === 'site-manager') {
                 // Site Manager API: Get clients from all sites
-                const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+                // Site Manager API might have a clients endpoint, or we get them from devices.
+                // For now, we filter the same (cached) per-site device list getDevices() reads.
+                const { data: bySite } = await this.getSiteManagerDevicesBySite();
                 const allClients: any[] = [];
 
-                for (const site of sites) {
-                    try {
-                        // Site Manager API might have a clients endpoint, or we get them from devices
-                        // For now, we'll get devices and filter for clients
-                        const devices = await this.siteManagerRequest<Array<any>>(`/sites/${site.id}/devices`);
-                        if (Array.isArray(devices)) {
-                            const clients = devices.filter((d: any) => d.type === 'client' || d.device_type === 'client');
-                            allClients.push(...clients.map((c: any) => ({
-                                _id: c.id || c.mac || '',
-                                name: c.name || c.hostname || 'Unknown',
-                                ip: c.ip,
-                                mac: c.mac,
-                                hostname: c.hostname,
-                                last_seen: c.last_seen ? Math.floor(new Date(c.last_seen).getTime() / 1000) : undefined
-                            })));
-                        }
-                    } catch (error) {
-                        logger.debug('UniFi', `Failed to get clients for site ${site.name}:`, error);
-                    }
+                for (const { devices } of bySite) {
+                    const clients = devices.filter((d: any) => d.type === 'client' || d.device_type === 'client');
+                    allClients.push(...clients.map((c: any) => ({
+                        _id: c.id || c.mac || '',
+                        name: c.name || c.hostname || 'Unknown',
+                        ip: c.ip,
+                        mac: c.mac,
+                        hostname: c.hostname,
+                        last_seen: c.last_seen ? Math.floor(new Date(c.last_seen).getTime() / 1000) : undefined
+                    })));
                 }
 
                 return allClients;
@@ -1084,7 +1282,7 @@ export class UniFiApiService {
         try {
             if (this.apiMode === 'site-manager') {
                 // Site Manager API: Get WLANs from all sites
-                const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+                const sites = await this.getSiteManagerSites();
                 const allWlans: Array<{ name: string; enabled: boolean; ssid?: string }> = [];
 
                 for (const site of sites) {
@@ -1204,6 +1402,21 @@ export class UniFiApiService {
             return [];
         }
 
+        // Range rounded to the minute so close requests share one 60s cache entry (5-minute
+        // buckets at best, a minute of shift is invisible). A failed report is not cached.
+        const roundedRange = Math.max(60, Math.round(rangeSeconds / 60) * 60);
+        const interval = roundedRange <= 86400 ? '5minutes' : 'hourly';
+        try {
+            const { data } = await this.cachedFetch(`report|${this.url}|${this.site}|${interval}|${roundedRange}`, 60_000,
+                () => this.fetchBandwidthReport(roundedRange));
+            return data;
+        } catch (error) {
+            logger.debug('UniFi', `getBandwidthReport(${interval}) failed:`, error);
+            return [];
+        }
+    }
+
+    private async fetchBandwidthReport(rangeSeconds: number): Promise<Array<{ time: string; timestamp: number; download: number; upload: number }>> {
         const encodedSite = encodeURIComponent(this.site);
         const now = Date.now();
         const start = now - rangeSeconds * 1000;
@@ -1212,53 +1425,56 @@ export class UniFiApiService {
         const interval = rangeSeconds <= 86400 ? '5minutes' : 'hourly';
         const path = `/api/s/${encodedSite}/stat/report/${interval}.site`;
 
-        try {
-            const data = await this.controllerPost<any[]>(path, {
-                attrs: ['wan-tx_bytes', 'wan-rx_bytes'],
-                start: start,
-                end: now,
+        const data = await this.controllerPost<any[]>(path, {
+            attrs: ['wan-tx_bytes', 'wan-rx_bytes'],
+            start: start,
+            end: now,
+        });
+
+        if (!Array.isArray(data) || data.length === 0) return [];
+
+        // UniFi stat/report returns average bytes per bucket (not cumulative).
+        // No timestamp field: buckets are ordered chronologically, each covering bucketSec.
+        const bucketSec = rangeSeconds <= 86400 ? 300 : 3600;
+        const showSeconds = rangeSeconds <= 3600;
+        const result: Array<{ time: string; timestamp: number; download: number; upload: number }> = [];
+
+        for (let i = 0; i < data.length; i++) {
+            const entry = data[i];
+            // Compute timestamp from start + bucket index
+            const ts = start + i * bucketSec * 1000;
+            // Values are average bytes per bucket period, convert to KB/s
+            const dlKBs = Math.max(0, Math.round((entry['wan-rx_bytes'] || 0) / bucketSec / 1024));
+            const ulKBs = Math.max(0, Math.round((entry['wan-tx_bytes'] || 0) / bucketSec / 1024));
+
+            const d = new Date(ts);
+            const time = d.toLocaleTimeString('fr-FR', {
+                hour: '2-digit', minute: '2-digit', ...(showSeconds ? { second: '2-digit' } : {})
             });
 
-            if (!Array.isArray(data) || data.length === 0) return [];
-
-            // UniFi stat/report returns average bytes per bucket (not cumulative).
-            // No timestamp field — buckets are ordered chronologically, each covering bucketSec.
-            const bucketSec = rangeSeconds <= 86400 ? 300 : 3600;
-            const showSeconds = rangeSeconds <= 3600;
-            const result: Array<{ time: string; timestamp: number; download: number; upload: number }> = [];
-
-            for (let i = 0; i < data.length; i++) {
-                const entry = data[i];
-                // Compute timestamp from start + bucket index
-                const ts = start + i * bucketSec * 1000;
-                // Values are average bytes per bucket period — convert to KB/s
-                const dlKBs = Math.max(0, Math.round((entry['wan-rx_bytes'] || 0) / bucketSec / 1024));
-                const ulKBs = Math.max(0, Math.round((entry['wan-tx_bytes'] || 0) / bucketSec / 1024));
-
-                const d = new Date(ts);
-                const time = d.toLocaleTimeString('fr-FR', {
-                    hour: '2-digit', minute: '2-digit', ...(showSeconds ? { second: '2-digit' } : {})
-                });
-
-                result.push({ time, timestamp: ts, download: dlKBs, upload: ulKBs });
-            }
-            return result;
-        } catch (error) {
-            logger.debug('UniFi', `getBandwidthReport(${interval}) failed:`, error);
-            return [];
+            result.push({ time, timestamp: ts, download: dlKBs, upload: ulKBs });
         }
+        return result;
     }
 
     /**
      * Get network statistics
      */
     async getNetworkStats(): Promise<UniFiStats> {
+        return (await this.getNetworkStatsWithFetchTime()).stats;
+    }
+
+    /**
+     * getNetworkStats() plus the time the WAN counters were fetched from the controller
+     * (older than now when served from the shared cache).
+     */
+    async getNetworkStatsWithFetchTime(): Promise<{ stats: UniFiStats; fetchedAt: number }> {
         await this.ensureLoggedIn();
 
         try {
             if (this.apiMode === 'site-manager') {
                 // Site Manager API: Get ISP metrics
-                const sites = await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+                const sites = await this.getSiteManagerSites();
                 let totalRxBytes = 0;
                 let totalTxBytes = 0;
 
@@ -1274,12 +1490,12 @@ export class UniFiApiService {
                     }
                 }
 
-                return {
+                return { fetchedAt: Date.now(), stats: {
                     wan: {
                         rx_bytes: totalRxBytes,
                         tx_bytes: totalTxBytes
                     }
-                };
+                } };
             } else {
                 // Controller API (local) - Reproduce node-unifi's getSitesStats() pattern
                 // node-unifi calls /api/s/<site>/stat/dashboard which contains WAN stats
@@ -1287,7 +1503,7 @@ export class UniFiApiService {
                 
                 try {
                     // Try to get dashboard stats (contains WAN data) - this is what node-unifi does
-                    const dashboardResponse = await this.controllerRequest<any>(`/api/s/${encodedSite}/stat/dashboard`);
+                    const { data: dashboardResponse, fetchedAt } = await this.controllerRequestWithMeta<any>(`/api/s/${encodedSite}/stat/dashboard`);
                     
                     // Extract WAN stats from dashboard response
                     // UniFi returns dashboard data in various formats depending on version
@@ -1310,14 +1526,14 @@ export class UniFiApiService {
                     
                     if (rxBytes > 0 || txBytes > 0) {
                         logger.verbose('UniFi', `Found WAN stats from dashboard (node-unifi pattern): rx=${rxBytes}, tx=${txBytes}`);
-                        return {
+                        return { fetchedAt, stats: {
                             wan: {
                                 rx_bytes: rxBytes,
                                 tx_bytes: txBytes,
                                 rx_packets: rxPackets,
                                 tx_packets: txPackets
                             }
-                        };
+                        } };
                     }
                     } catch (error) {
                         logger.debug('UniFi', 'Failed to get dashboard stats (node-unifi pattern), trying sysinfo:', error);
@@ -1325,18 +1541,18 @@ export class UniFiApiService {
                 
                 // Fallback: Try to get WAN stats from sysinfo (some controllers expose it there)
                 try {
-                    const sysinfo = await this.getSystemInfo();
+                    const { info: sysinfo, fetchedAt } = await this.getSystemInfoWithFetchTime();
                     if (sysinfo && sysinfo.wan) {
                         const wan = sysinfo.wan;
                         logger.verbose('UniFi', `Found WAN stats from sysinfo: rx=${wan.rx_bytes || 0}, tx=${wan.tx_bytes || 0}`);
-                        return {
+                        return { fetchedAt, stats: {
                             wan: {
                                 rx_bytes: wan.rx_bytes || 0,
                                 tx_bytes: wan.tx_bytes || 0,
                                 rx_packets: wan.rx_packets || 0,
                                 tx_packets: wan.tx_packets || 0
                             }
-                        };
+                        } };
                     }
                 } catch (error) {
                     logger.debug('UniFi', 'Failed to get WAN stats from sysinfo:', error);
@@ -1344,12 +1560,12 @@ export class UniFiApiService {
                 
                 // If all methods fail, return empty stats (graceful degradation)
                 logger.debug('UniFi', 'No WAN stats available, returning empty stats');
-                return {
+                return { fetchedAt: Date.now(), stats: {
                     wan: {
                         rx_bytes: 0,
                         tx_bytes: 0
                     }
-                };
+                } };
             }
         } catch (error) {
             logger.error('UniFi', 'Failed to get network stats:', error);
@@ -1361,6 +1577,13 @@ export class UniFiApiService {
      * Get system information
      */
     async getSystemInfo(): Promise<any> {
+        return (await this.getSystemInfoWithFetchTime()).info;
+    }
+
+    /**
+     * getSystemInfo() plus the time it was fetched from the controller (sysinfo is cached 60s).
+     */
+    private async getSystemInfoWithFetchTime(): Promise<{ info: any; fetchedAt: number }> {
         await this.ensureLoggedIn();
 
         try {
@@ -1368,16 +1591,16 @@ export class UniFiApiService {
                 // Site Manager API: Get hosts information
                 const hosts = await this.siteManagerRequest<Array<any>>('/hosts');
                 // Aggregate system info from hosts
-                return {
+                return { fetchedAt: Date.now(), info: {
                     uptime: 0, // Not directly available in Site Manager API
                     hosts: hosts.length
-                };
+                } };
             } else {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/sysinfo
                 const encodedSite = encodeURIComponent(this.site);
                 logger.debug('UniFi', `Getting system info for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
 
-                const sysinfoResponse = await this.controllerRequest<any>(`/api/s/${encodedSite}/stat/sysinfo`);
+                const { data: sysinfoResponse, fetchedAt } = await this.controllerRequestWithMeta<any>(`/api/s/${encodedSite}/stat/sysinfo`);
 
                 let sysinfoData: any = {};
 
@@ -1388,7 +1611,7 @@ export class UniFiApiService {
                 }
 
                 logger.verbose('UniFi', 'getSystemInfo - extracted sysinfo via HTTP');
-                return sysinfoData || {};
+                return { fetchedAt, info: sysinfoData || {} };
             }
         } catch (error) {
             logger.error('UniFi', 'Failed to get system info:', error);
@@ -1408,7 +1631,7 @@ export class UniFiApiService {
         }
 
         try {
-            return await this.siteManagerRequest<Array<{ id: string; name: string }>>('/sites');
+            return await this.getSiteManagerSites();
         } catch (error) {
             logger.error('UniFi', 'Failed to get sites:', error);
             throw error;
@@ -1418,8 +1641,17 @@ export class UniFiApiService {
     /**
      * Test connection to UniFi (Controller or Site Manager)
      * Verifies that we can not only connect, but also retrieve data from the site
+     *
+     * keepSession: the plugin is enabled and relies on this session, so the test must not log
+     * out afterwards. A session that already exists before the test is never logged out either
+     * (it is the live session shared by the dashboard, WebSocket and MCP), and it is reused
+     * instead of forcing a new login.
      */
-    async testConnection(): Promise<boolean> {
+    async testConnection(options?: { keepSession?: boolean }): Promise<boolean> {
+        const keepSession = options?.keepSession === true || this.isLoggedIn();
+        const releaseSession = async (): Promise<void> => {
+            if (!keepSession) await this.logout();
+        };
         try {
             if (this.apiMode === 'site-manager') {
                 if (!this.apiKey) {
@@ -1452,7 +1684,7 @@ export class UniFiApiService {
 
                 // Try to login
                 try {
-                    const loggedIn = await this.login();
+                    const loggedIn = this.isLoggedIn() || await this.login();
                     if (!loggedIn) {
                         const errorMsg = 'Login failed. Verify URL, username, and password';
                         logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
@@ -1491,15 +1723,15 @@ export class UniFiApiService {
                 try {
                     const encodedSite = encodeURIComponent(this.site);
                     logger.debug('UniFi', `Testing data retrieval from site: ${this.site} (encoded: ${encodedSite})`);
-                    const devices = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/device`);
+                    const { data: devices } = await this.controllerRequestWithMeta<any[]>(`/api/s/${encodedSite}/stat/device`, { bypassCache: true });
                     if (!Array.isArray(devices)) {
                         const errorMsg = `Could not retrieve devices from site "${this.site}". Invalid response format. The site name may be incorrect. Available sites can be checked in UniFi Network settings.`;
                         logger.debug('UniFi', `Test connection failed: ${errorMsg}`);
-                        await this.logout();
+                        await releaseSession();
                         throw new Error(errorMsg);
                     }
                     logger.debug('UniFi', `Test connection successful: Found ${devices.length} device(s) on site "${this.site}"`);
-                    await this.logout();
+                    await releaseSession();
                     return true;
                 } catch (dataError) {
                     const deploymentType = this.getDeploymentType();
@@ -1527,7 +1759,7 @@ export class UniFiApiService {
                     }
                     
                     logger.error('UniFi', `Test connection failed: ${errorMsg}`, dataError);
-                    await this.logout();
+                    await releaseSession();
                     throw new Error(errorMsg);
                 }
             }
@@ -1538,7 +1770,7 @@ export class UniFiApiService {
                 // Try to logout if we're logged in
                 try {
                     if (this.isAuthenticated) {
-                        await this.logout();
+                        await releaseSession();
                     }
                 } catch {
                     // Ignore logout errors
@@ -1551,7 +1783,7 @@ export class UniFiApiService {
             // Try to logout if we're logged in
             try {
                 if (this.isAuthenticated) {
-                    await this.logout();
+                    await releaseSession();
                 }
             } catch {
                 // Ignore logout errors
@@ -1578,10 +1810,15 @@ export class UniFiApiService {
     }
 
     // ── Threat cache ──────────────────────────────────────────────────────────
-    // Cache threats per range bucket (3600/86400/604800) for 5 minutes to avoid
-    // hammering the UniFi controller on every tab open / refresh.
+    // Cache threats per range bucket for 5 minutes to avoid hammering the UniFi
+    // controller on every tab open / refresh. Ranges are normalised to the buckets
+    // offered by the Threats tab, so the cache keys stay bounded.
     private _threatCache: Map<number, { ts: number; data: any }> = new Map();
+    private _threatInFlight: Map<number, Promise<any>> = new Map();
+    // Endpoint that last returned flow data, tried first on the next cache miss (same deployment type only)
+    private _flowEndpoint: { deploymentType: string; id: string } | null = null;
     private readonly THREAT_CACHE_TTL = 5 * 60 * 1000; // 5 min
+    private static readonly THREAT_RANGE_BUCKETS = [3600, 43200, 86400, 172800, 604800, 2592000];
 
     /**
      * Get threat flow insights from UniFi IDS/IPS.
@@ -1593,7 +1830,8 @@ export class UniFiApiService {
      *  4. stat/alarm (IPS-tagged alarms)
      *  5. stat/event (IPS-tagged events)
      *
-     * Results are cached for 5 min per range bucket.
+     * Results are cached for 5 min per range bucket (range rounded up to 1h, 12h, 24h,
+     * 48h, 7d or 30d), and concurrent requests for the same bucket share one probe.
      */
     async getFlowInsights(rangeSeconds: number = 86400): Promise<{
         available: boolean;
@@ -1623,13 +1861,27 @@ export class UniFiApiService {
     }> {
         await this.ensureLoggedIn();
 
+        const buckets = UniFiApiService.THREAT_RANGE_BUCKETS;
+        const bucket = buckets.find((b) => rangeSeconds <= b) ?? buckets[buckets.length - 1];
+
         // ── Cache check ───────────────────────────────────────────────────────
-        const cached = this._threatCache.get(rangeSeconds);
+        const cached = this._threatCache.get(bucket);
         if (cached && Date.now() - cached.ts < this.THREAT_CACHE_TTL) {
-            logger.debug('UniFi', `getFlowInsights(${rangeSeconds}s) — serving from cache (age ${Math.round((Date.now() - cached.ts) / 1000)}s)`);
+            logger.debug('UniFi', `getFlowInsights(${bucket}s): serving from cache (age ${Math.round((Date.now() - cached.ts) / 1000)}s)`);
             return cached.data;
         }
 
+        let pending = this._threatInFlight.get(bucket);
+        if (!pending) {
+            pending = this._fetchFlowInsights(bucket).finally(() => {
+                if (this._threatInFlight.get(bucket) === pending) this._threatInFlight.delete(bucket);
+            });
+            this._threatInFlight.set(bucket, pending);
+        }
+        return pending;
+    }
+
+    private async _fetchFlowInsights(rangeSeconds: number): ReturnType<UniFiApiService['getFlowInsights']> {
         const encodedSite = encodeURIComponent(this.site);
         const endMs = Date.now();
         const startMs = endMs - rangeSeconds * 1000;
@@ -1654,67 +1906,145 @@ export class UniFiApiService {
         let ipsEndpointReachable = false;
         let bestEmptySource = 'none';
 
+        // A result probed before a connection change or a write is returned but not cached
+        const generation = this.cacheGeneration;
         const cache = (result: any) => {
-            this._threatCache.set(rangeSeconds, { ts: Date.now(), data: result });
+            if (generation === this.cacheGeneration) this._threatCache.set(rangeSeconds, { ts: Date.now(), data: result });
             return result;
         };
+        // An endpoint returned flow data: remember it for the next cache miss, then cache the result
+        const found = (id: string, events: any[], source: string) => {
+            this._flowEndpoint = { deploymentType: this.deploymentType, id };
+            return cache(this._aggregateFlows(events, source, rangeSeconds));
+        };
 
-        // ── Attempt 0: UniFiOS v2 — POST traffic-flows (real IPS/threat data) ──
+        const isIpsAlarm = (e: any): boolean =>
+            (e.subsystem || '') === 'ips' ||
+            (e.key || '').startsWith('EVT_IPS') ||
+            (e.key || '').startsWith('EVT_AD');
+        const isIpsEvent = (e: any): boolean =>
+            (e.key || '').startsWith('EVT_IPS') ||
+            (e.key || '').startsWith('EVT_AD') ||
+            (e.subsystem || '') === 'ids' ||
+            (e.subsystem || '') === 'ips' ||
+            (e.subsystem || '') === 'threat';
+
+        // ── Attempt 0 helper: UniFiOS v2, POST traffic-flows (real IPS/threat data) ──
         // The UniFi Network web app uses POST /v2/api/site/{site}/traffic-flows
         // with a JSON body to fetch firewall/IPS flow data.
         // controllerRequest auto-adds /proxy/network for unifios.
         // Supports pagination: pageNumber + pageSize, response includes count field.
-        if (this.deploymentType === 'unifios') {
-            const trafficFlowPath = `/v2/api/site/${encodedSite}/traffic-flows`;
-            tried.push('v2:traffic-flows');
-            try {
-                const PAGE_SIZE = 500;
-                // Scale safety cap with range: short ranges need less, 30d may have a lot
-                const MAX_ENTRIES = rangeSeconds <= 86400 ? 5000
-                    : rangeSeconds <= 604800 ? 10000
-                    : 20000;
-                const allEvents: any[] = [];
-                let pageNumber = 0;
-                let totalCount = Infinity; // Will be set from first response
+        const trafficFlowPath = `/v2/api/site/${encodedSite}/traffic-flows`;
+        const fetchTrafficFlows = async (): Promise<any[]> => {
+            const PAGE_SIZE = 500;
+            // Scale safety cap with range: short ranges need less, 30d may have a lot
+            const MAX_ENTRIES = rangeSeconds <= 86400 ? 5000
+                : rangeSeconds <= 604800 ? 10000
+                : 20000;
+            const allEvents: any[] = [];
+            let pageNumber = 0;
+            let totalCount = Infinity; // Will be set from first response
 
-                // Paginate through all results
-                while (allEvents.length < MAX_ENTRIES) {
-                    const body = {
-                        risk: [], action: ['blocked'], direction: [], protocol: [],
-                        policy: [], policy_type: [], service: [],
-                        source_host: [], source_mac: [], source_ip: [], source_port: [],
-                        source_network_id: [], source_domain: [], source_zone_id: [], source_region: [],
-                        destination_host: [], destination_mac: [], destination_ip: [], destination_port: [],
-                        destination_network_id: [], destination_domain: [], destination_zone_id: [], destination_region: [],
-                        in_network_id: [], out_network_id: [], next_ai_query: [], except_for: [],
-                        timestampFrom: startMs,
-                        timestampTo: endMs,
-                        pageNumber,
-                        search_text: '',
-                        pageSize: PAGE_SIZE,
-                        skip_count: pageNumber > 0, // Only need count on first page
-                    };
-                    const raw = await this.controllerPost<any>(trafficFlowPath, body);
+            // Paginate through all results
+            while (allEvents.length < MAX_ENTRIES) {
+                const body = {
+                    risk: [], action: ['blocked'], direction: [], protocol: [],
+                    policy: [], policy_type: [], service: [],
+                    source_host: [], source_mac: [], source_ip: [], source_port: [],
+                    source_network_id: [], source_domain: [], source_zone_id: [], source_region: [],
+                    destination_host: [], destination_mac: [], destination_ip: [], destination_port: [],
+                    destination_network_id: [], destination_domain: [], destination_zone_id: [], destination_region: [],
+                    in_network_id: [], out_network_id: [], next_ai_query: [], except_for: [],
+                    timestampFrom: startMs,
+                    timestampTo: endMs,
+                    pageNumber,
+                    search_text: '',
+                    pageSize: PAGE_SIZE,
+                    skip_count: pageNumber > 0, // Only need count on first page
+                };
+                const raw = await this.controllerPost<any>(trafficFlowPath, body);
 
-                    // Extract total count from first response (raw.count or raw.totalCount)
-                    if (pageNumber === 0) {
-                        totalCount = raw?.count ?? raw?.totalCount ?? raw?.total ?? Infinity;
-                    }
-
-                    const events = toArray(raw);
-                    if (events.length === 0) break; // No more results
-                    allEvents.push(...events);
-
-                    logger.debug('UniFi', `v2 traffic-flows page ${pageNumber} → ${events.length} entries (${allEvents.length}/${totalCount})`);
-
-                    // Stop if we got all entries or this page was not full
-                    if (allEvents.length >= totalCount || events.length < PAGE_SIZE) break;
-                    pageNumber++;
+                // Extract total count from first response (raw.count or raw.totalCount)
+                if (pageNumber === 0) {
+                    totalCount = raw?.count ?? raw?.totalCount ?? raw?.total ?? Infinity;
                 }
 
-                logger.info('UniFi', `v2 traffic-flows → ${allEvents.length} entries (${pageNumber + 1} page(s))`);
+                const events = toArray(raw);
+                if (events.length === 0) break; // No more results
+                allEvents.push(...events);
 
-                if (allEvents.length > 0) return cache(this._aggregateFlows(allEvents, 'v2-traffic-flows', rangeSeconds));
+                logger.debug('UniFi', `v2 traffic-flows page ${pageNumber} → ${events.length} entries (${allEvents.length}/${totalCount})`);
+
+                // Stop if we got all entries or this page was not full
+                if (allEvents.length >= totalCount || events.length < PAGE_SIZE) break;
+                pageNumber++;
+            }
+
+            logger.info('UniFi', `v2 traffic-flows → ${allEvents.length} entries (${pageNumber + 1} page(s))`);
+            return allEvents;
+        };
+
+        const v2GetPaths = [
+            `/v2/api/site/${encodedSite}/intrusion-prevention/events?start=${startMs}&end=${endMs}&limit=1000`,
+            `/v2/api/site/${encodedSite}/insights/flows?start=${startMs}&end=${endMs}&limit=1000`,
+        ];
+        const v2Label = (path: string): string => path.split('?')[0].split('/').slice(-2).join('/');
+        // On UniFiOS, controllerRequest auto-adds /proxy/network.
+        // Three param variants: within (hours), start/end (unix sec), no filter.
+        const ipsEventVariants = [
+            `/api/s/${encodedSite}/stat/ips/event?within=${withinHours}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips/event?start=${startSec}&end=${endSec}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips/event?_limit=500`,
+        ];
+        const ipsVariants = [
+            `/api/s/${encodedSite}/stat/ips?within=${withinHours}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips?start=${startSec}&end=${endSec}&_limit=1000`,
+            `/api/s/${encodedSite}/stat/ips?_limit=500`,
+        ];
+        const alarmPath = `/api/s/${encodedSite}/stat/alarm?_limit=1000&archived=false`;
+        // Try several paths/param combos: on UniFiOS `within` causes 404
+        const eventPaths = [
+            `/api/s/${encodedSite}/stat/event?_limit=1000`,
+            `/api/s/${encodedSite}/stat/events?_limit=1000`,
+        ];
+
+        // ── Remembered endpoint first: the one that returned data last time ──
+        // Avoids re-probing up to a dozen endpoints on every cache miss. If it now
+        // fails or returns nothing, the full probe below runs as before.
+        const remembered = this._flowEndpoint;
+        if (remembered && remembered.deploymentType === this.deploymentType) {
+            const [kind, idxText] = remembered.id.split(':');
+            const idx = Number(idxText) || 0;
+            try {
+                let hit: { events: any[]; source: string } | null = null;
+                if (kind === 'v2-traffic-flows') {
+                    hit = { events: await fetchTrafficFlows(), source: 'v2-traffic-flows' };
+                } else if (kind === 'v2-get' && v2GetPaths[idx]) {
+                    hit = { events: toArray(await this.controllerRequest<any>(v2GetPaths[idx])), source: `v2-${v2Label(v2GetPaths[idx]).replace('/', '-')}` };
+                } else if (kind === 'ips-event' && ipsEventVariants[idx]) {
+                    hit = { events: toArray(await this.controllerRequest<any>(ipsEventVariants[idx])), source: 'ips-event' };
+                } else if (kind === 'ips' && ipsVariants[idx]) {
+                    hit = { events: toArray(await this.controllerRequest<any>(ipsVariants[idx])), source: 'ips' };
+                } else if (kind === 'alarm') {
+                    hit = { events: toArray(await this.controllerRequest<any>(alarmPath)).filter(isIpsAlarm), source: 'alarm' };
+                } else if (kind === 'events' && eventPaths[idx]) {
+                    hit = { events: toArray(await this.controllerRequest<any>(eventPaths[idx])).filter(isIpsEvent), source: 'events' };
+                }
+                if (hit && hit.events.length > 0) {
+                    logger.debug('UniFi', `getFlowInsights: remembered endpoint ${remembered.id} → ${hit.events.length} entries`);
+                    return found(remembered.id, hit.events, hit.source);
+                }
+            } catch (err) {
+                logger.debug('UniFi', `getFlowInsights: remembered endpoint ${remembered.id} failed: ${(err as Error).message.substring(0, 100)}`);
+            }
+        }
+
+        // ── Attempt 0: UniFiOS v2, POST traffic-flows ──────────────────────
+        if (this.deploymentType === 'unifios') {
+            tried.push('v2:traffic-flows');
+            try {
+                const allEvents = await fetchTrafficFlows();
+                if (allEvents.length > 0) return found('v2-traffic-flows', allEvents, 'v2-traffic-flows');
                 ipsEndpointReachable = true;
                 bestEmptySource = 'v2-traffic-flows-empty';
             } catch (err) {
@@ -1723,19 +2053,15 @@ export class UniFiApiService {
             }
 
             // ── Also try other v2 GET endpoints ──────────────────────────────
-            const v2GetPaths = [
-                `/v2/api/site/${encodedSite}/intrusion-prevention/events?start=${startMs}&end=${endMs}&limit=1000`,
-                `/v2/api/site/${encodedSite}/insights/flows?start=${startMs}&end=${endMs}&limit=1000`,
-            ];
             if (!ipsEndpointReachable) {
-                for (const path of v2GetPaths) {
-                    const label = path.split('?')[0].split('/').slice(-2).join('/');
+                for (const [i, path] of v2GetPaths.entries()) {
+                    const label = v2Label(path);
                     tried.push(`v2:${label}`);
                     try {
                         const raw = await this.controllerRequest<any>(path);
                         const events = toArray(raw);
                         logger.debug('UniFi', `v2 ${label} → ${events.length} events`);
-                        if (events.length > 0) return cache(this._aggregateFlows(events, `v2-${label.replace('/', '-')}`, rangeSeconds));
+                        if (events.length > 0) return found(`v2-get:${i}`, events, `v2-${label.replace('/', '-')}`);
                         ipsEndpointReachable = true;
                         bestEmptySource = `v2-${label}-empty`;
                         break;
@@ -1747,14 +2073,7 @@ export class UniFiApiService {
         }
 
         // ── Attempt 1: stat/ips/event — primary IPS endpoint (all controllers) ─
-        // On UniFiOS, controllerRequest auto-adds /proxy/network.
-        // Try three param variants: within (hours), start/end (unix sec), no filter.
-        const ipsEventVariants = [
-            `/api/s/${encodedSite}/stat/ips/event?within=${withinHours}&_limit=1000`,
-            `/api/s/${encodedSite}/stat/ips/event?start=${startSec}&end=${endSec}&_limit=1000`,
-            `/api/s/${encodedSite}/stat/ips/event?_limit=500`,
-        ];
-        for (const url of ipsEventVariants) {
+        for (const [i, url] of ipsEventVariants.entries()) {
             tried.push(`ips/event:${url.split('?')[1]}`);
             try {
                 const raw = await this.controllerRequest<any>(url);
@@ -1762,7 +2081,7 @@ export class UniFiApiService {
                 // Log raw type + sample to catch format mismatches
                 logger.debug('UniFi', `stat/ips/event [${url.split('?')[1]}] → ${events.length} entries`);
                 ipsEndpointReachable = true;
-                if (events.length > 0) return cache(this._aggregateFlows(events, 'ips-event', rangeSeconds));
+                if (events.length > 0) return found(`ips-event:${i}`, events, 'ips-event');
                 bestEmptySource = 'ips-event-empty';
             } catch (err) {
                 logger.debug('UniFi', `stat/ips/event [${url.split('?')[1]}] error: ${(err as Error).message}`);
@@ -1771,19 +2090,14 @@ export class UniFiApiService {
 
         // ── Attempt 2: stat/ips — shorter path (some firmware versions) ──────
         if (!ipsEndpointReachable) {
-            const ipsVariants = [
-                `/api/s/${encodedSite}/stat/ips?within=${withinHours}&_limit=1000`,
-                `/api/s/${encodedSite}/stat/ips?start=${startSec}&end=${endSec}&_limit=1000`,
-                `/api/s/${encodedSite}/stat/ips?_limit=500`,
-            ];
-            for (const url of ipsVariants) {
+            for (const [i, url] of ipsVariants.entries()) {
                 tried.push(`stat/ips:${url.split('?')[1]}`);
                 try {
                     const raw = await this.controllerRequest<any>(url);
                     const events = toArray(raw);
                     logger.debug('UniFi', `stat/ips [${url.split('?')[1]}] → ${events.length} entries`);
                     ipsEndpointReachable = true;
-                    if (events.length > 0) return cache(this._aggregateFlows(events, 'ips', rangeSeconds));
+                    if (events.length > 0) return found(`ips:${i}`, events, 'ips');
                     bestEmptySource = 'ips-empty';
                 } catch (err) {
                     logger.debug('UniFi', `stat/ips [${url.split('?')[1]}] → ${(err as Error).message}`);
@@ -1794,17 +2108,11 @@ export class UniFiApiService {
         // ── Attempt 3: stat/alarm filtered to IPS subsystem ──────────────────
         tried.push('stat/alarm');
         try {
-            const raw = await this.controllerRequest<any>(
-                `/api/s/${encodedSite}/stat/alarm?_limit=1000&archived=false`
-            );
+            const raw = await this.controllerRequest<any>(alarmPath);
             const list = toArray(raw);
-            const ipsAlarms = list.filter((e: any) =>
-                (e.subsystem || '') === 'ips' ||
-                (e.key || '').startsWith('EVT_IPS') ||
-                (e.key || '').startsWith('EVT_AD')
-            );
+            const ipsAlarms = list.filter(isIpsAlarm);
             logger.debug('UniFi', `stat/alarm → ${list.length} total, ${ipsAlarms.length} IPS alarms`);
-            if (ipsAlarms.length > 0) return cache(this._aggregateFlows(ipsAlarms, 'alarm', rangeSeconds));
+            if (ipsAlarms.length > 0) return found('alarm', ipsAlarms, 'alarm');
             if (list.length > 0) {
                 ipsEndpointReachable = true;
                 if (bestEmptySource === 'none') bestEmptySource = 'alarm-no-ips';
@@ -1814,15 +2122,13 @@ export class UniFiApiService {
         }
 
         // ── Attempt 4: stat/event filtered to IPS keys ───────────────────────
-        // Try several paths/param combos — on UniFiOS `within` causes 404
         tried.push('stat/event');
         let statEventRaw: any = null;
-        for (const evtUrl of [
-            `/api/s/${encodedSite}/stat/event?_limit=1000`,
-            `/api/s/${encodedSite}/stat/events?_limit=1000`,
-        ]) {
+        let statEventIdx = 0;
+        for (const [i, evtUrl] of eventPaths.entries()) {
             try {
                 statEventRaw = await this.controllerRequest<any>(evtUrl);
+                statEventIdx = i;
                 logger.debug('UniFi', `stat/event hit on: ${evtUrl.split('?')[0].split('/').pop()}`);
                 break;
             } catch (err) {
@@ -1832,16 +2138,9 @@ export class UniFiApiService {
         try {
             const raw = statEventRaw;
             const events = toArray(raw);
-            const allKeys = [...new Set(events.map((e: any) => e.key).filter(Boolean))].slice(0, 15);
-            const ipsEvents = events.filter((e: any) =>
-                (e.key || '').startsWith('EVT_IPS') ||
-                (e.key || '').startsWith('EVT_AD') ||
-                (e.subsystem || '') === 'ids' ||
-                (e.subsystem || '') === 'ips' ||
-                (e.subsystem || '') === 'threat'
-            );
+            const ipsEvents = events.filter(isIpsEvent);
             logger.debug('UniFi', `stat/event → ${events.length} total, ${ipsEvents.length} IPS`);
-            if (ipsEvents.length > 0) return cache(this._aggregateFlows(ipsEvents, 'events', rangeSeconds));
+            if (ipsEvents.length > 0) return found(`events:${statEventIdx}`, ipsEvents, 'events');
             if (events.length > 0) {
                 ipsEndpointReachable = true;
                 if (bestEmptySource === 'none') bestEmptySource = `events-no-ips(${events.length}evts)`;

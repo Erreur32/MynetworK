@@ -419,9 +419,7 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_logs_action ON logs(action);
         CREATE INDEX IF NOT EXISTS idx_user_plugin_permissions_user_id ON user_plugin_permissions(user_id);
         CREATE INDEX IF NOT EXISTS idx_user_plugin_permissions_plugin_id ON user_plugin_permissions(plugin_id);
-        CREATE INDEX IF NOT EXISTS idx_network_scans_ip ON network_scans(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scans_last_seen ON network_scans(last_seen);
-        CREATE INDEX IF NOT EXISTS idx_network_scans_status ON network_scans(status);
         CREATE INDEX IF NOT EXISTS idx_network_scans_status_last_seen ON network_scans(status, last_seen);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_ip ON network_scan_history(ip);
         CREATE INDEX IF NOT EXISTS idx_network_scan_history_seen_at ON network_scan_history(seen_at);
@@ -434,6 +432,14 @@ export function initializeDatabase(): void {
         CREATE INDEX IF NOT EXISTS idx_token_blacklist_token_hash ON token_blacklist(token_hash);
         CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires_at ON token_blacklist(expires_at);
         CREATE INDEX IF NOT EXISTS idx_unifi_client_traffic_daily_date ON unifi_client_traffic_daily(date);
+    `);
+
+    // Redundant network_scans indexes, dropped from existing databases (every
+    // write paid for them): ip is covered by the UNIQUE constraint autoindex,
+    // status by the (status, last_seen) composite index, of which it is a prefix.
+    database.exec(`
+        DROP INDEX IF EXISTS idx_network_scans_ip;
+        DROP INDEX IF EXISTS idx_network_scans_status;
     `);
 
     logger.success('Database', 'Schema initialized');

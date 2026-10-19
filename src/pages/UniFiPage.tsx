@@ -128,19 +128,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         }
     }, [urlTab, navigate]);
 
-    useEffect(() => {
-        if (isActive) {
-            fetchPluginStats('unifi');
-        }
-    }, [isActive, fetchPluginStats]);
-
-    // Poll stats every 30 seconds if active
+    // Poll stats every 30 seconds if active (first call on mount). The CARD tab runs
+    // its own faster poll of the same stats, so this one is off while it is open.
     usePolling(() => {
         if (isActive) {
             fetchPluginStats('unifi');
         }
     }, {
-        enabled: isActive,
+        enabled: isActive && activeTab !== 'card',
         interval: POLLING_INTERVALS.system
     });
 
@@ -171,13 +166,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
             setIsLoadingBandwidth(false);
         }
     };
-
-    useEffect(() => {
-        if (isActive && activeTab === 'traffic') {
-            fetchBandwidthHistory();
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isActive, activeTab]);
 
     // Re-fetch history when selected WAN changes
     useEffect(() => {

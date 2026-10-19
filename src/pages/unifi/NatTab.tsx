@@ -66,7 +66,8 @@ export const NatTab: React.FC<NatTabProps> = ({ isActive, systemStats }) => {
         }
     }, {
         enabled: isActive,
-        interval: POLLING_INTERVALS.system
+        interval: POLLING_INTERVALS.system,
+        immediate: false // First load done by the effect above
     });
 
     const filteredRules = filterStatus === 'active'

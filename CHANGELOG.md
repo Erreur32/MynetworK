@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-10-19
+
+Request optimisation release: far fewer calls to the UniFi controller and the Freebox, with the same data on screen and in the API.
+
+### Added
+
+- Per-token rate limits for API and MCP tokens: 300 requests per minute, 30 per minute for expensive calls (ip-details, `scan_get_machine_details`, rescans, live top traffic). Answers `429 RATE_LIMITED` with `Retry-After`
+- Opt-in compact output for `GET /api/lan/devices`, `/api/wifi/stations` and `/api/dhcp/leases`: `?compact=1`, with `active=1`, `limit=N` and `search=`. Default output unchanged
+- MCP: optional `search` and `limit` on `freebox_get_dhcp_leases` and `freebox_get_switch_ports`, optional `compact` on `scan_get_device_by_ip`
+
+### Changed
+
+- UniFi: short shared cache with in-flight sharing for controller reads (devices, clients, dashboard 1.5 s; sysinfo and configuration 60 s), cleared after every write
+- UniFi: live WebSocket polls every 2 s (was 1 s); with no client connected the background sampler runs every 30 s (was 1 s, around the clock). No tick starts while the previous one is still running
+- UniFi: WAN sampling asks the controller for the gateway only, one client list per tick instead of two, stats cached 10 s, bandwidth reports cached 60 s, threat lookups remember the endpoint that answered
+- UniFi: no forced re-login every 15 minutes, a single login at startup, and the connection test no longer logs the live session out
+- Freebox: short shared cache for GET requests (per endpoint, 0.9 s to 30 s), cleared after every write; API version fetched once; login and session checks shared between concurrent callers; stats cached 10 s; RRD history cached according to its range; network summary cached 30 s
+- Freebox: an expired session is renewed once and the request replayed, instead of waiting for the keep-alive
+- Freebox: the native WebSocket (host and VM events) now starts with the plugin and uses the configured box address
+- Network scan: plugin data is read once per scan instead of twice per host
+- ip-details: one UniFi stats read instead of two, sources fetched in parallel; IPs outside the scan ranges are no longer pinged, unless already recorded by the scanner (for example added by hand)
+- MCP `scan_get_machine_details` and `scan_rescan_ip` also accept IPs added by hand outside the scan ranges
+- Frontend: a single app-wide stats poller paused on hidden tabs; Freebox devices, downloads, VMs and history only polled on the pages that show them; Speedtest widget reads the live connection stream instead of polling every 2 s; CARD tab is the only UniFi stats poller while open
+- Frontend: WebSockets close after 2 minutes on a hidden tab and reopen when it is visible again; the UniFi live chart is refilled from the server so it shows no gap; one shared UniFi socket for all components
+- Network scan page: lighter polling during scans, latency and traffic data refreshed only when needed
+- SQLite: one transaction per traffic poll, two redundant indexes removed
+
+### Fixed
+
+- Freebox: concurrent requests to the same endpoint with different bodies got the same answer (temperature history showed network data, every VM showed the first VM's disk size, a second concurrent write was never sent)
+- Freebox: a timed-out write could be sent twice on Freebox Revolution
+- Freebox WebSocket gave up after one failed reconnect in production and stayed on 5 s HTTP polling until reload
+- `GET /api/network-scan/history`: `offset` returned an empty page and `total` was the page size
+- `GET /api/plugins/:id` logged the shared UniFi session out
+
+### Security
+
+- Removed the debug route `GET /api/plugins/unifi/threats/raw`, which relayed any controller path to any logged-in user
+- MCP `raw=true` on UniFi devices, clients and system info no longer returns device secrets (`x_authkey`, SSH and SSO fields)
+
+---
+
 ## [0.11.2] - 2026-10-18
 
 ### Added

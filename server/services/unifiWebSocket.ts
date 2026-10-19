@@ -6,8 +6,9 @@ import { applyWsRateLimit } from './wsRateLimiter.js';
 
 type ClientWebSocket = WsType & { isAlive?: boolean };
 
-const UNIFI_POLLING_INTERVAL = 1000; // 1 second, live mode
-const TOP_CLIENTS_EVERY_N_TICKS = 3; // stat/sta is extra load on top of the existing WAN poll, throttle to ~3s
+const UNIFI_LIVE_INTERVAL = 2000; // 2s, while at least one WebSocket client is connected
+const UNIFI_BACKGROUND_INTERVAL = 30_000; // 30s with no client, only keeps the bandwidth history warm
+const TOP_CLIENTS_EVERY_N_TICKS = 2; // stat/sta is extra load on top of the WAN poll, throttle to ~4s
 // Enough for the full traffic overlay; compact views (widgets, UniFi traffic tab) slice to 10 themselves
 const TOP_CLIENTS_LIMIT = 50;
 
@@ -18,6 +19,9 @@ class UnifiWebSocketService {
   private topClientsTick = 0;
   private lastTopClients: unknown[] = [];
   private lastTotalClientTraffic: { download: number; upload: number } = { download: 0, upload: 0 };
+  // Overlap guard shared by the live and background loops: a tick is skipped while the
+  // previous sample is still in flight (slow controller), instead of stacking requests.
+  private sampling = false;
 
   getWss(): WebSocketServer | null { return this.wss; }
 
@@ -27,7 +31,7 @@ class UnifiWebSocketService {
     logger.info('WS-UniFi', 'Initializing UniFi WebSocket server...');
 
     // Start background bandwidth sampling immediately so data is ready when the first client connects.
-    // This runs every 3s regardless of WebSocket clients, keeps _bandwidthHistories warm.
+    // This runs every 30s while no WebSocket client is connected, keeps _bandwidthHistories warm.
     this.startBackgroundSampling();
 
     this.wss = new WebSocketServer({
@@ -62,9 +66,9 @@ class UnifiWebSocketService {
         }
       });
 
-      // Start broadcasting when first client connects (data is already warm from background sampling)
+      // Start broadcasting when first client connects (history is already warm from background sampling)
       if (this.wss && this.wss.clients.size === 1) {
-        logger.debug('WS-UniFi', 'Starting bandwidth broadcasting (3s)');
+        logger.debug('WS-UniFi', `Starting bandwidth broadcasting (${UNIFI_LIVE_INTERVAL / 1000}s)`);
         this.startPolling();
       }
     });
@@ -97,37 +101,55 @@ class UnifiWebSocketService {
     // Wait a few seconds for plugins to finish initializing
     setTimeout(async () => {
       const unifiPlugin = pluginManager.getPlugin('unifi');
-      if (!unifiPlugin || !unifiPlugin.isEnabled()) return;
       const pluginAny = unifiPlugin as any;
-      if (typeof pluginAny.fetchWanBandwidth !== 'function') return;
-
-      // Force a getStats() call first to populate the cached gateway device
-      // (fetchWanBandwidth uses it as fallback when dashboard API returns 0)
-      try {
-        if (typeof pluginAny.getStats === 'function') {
-          await pluginAny.getStats();
-          logger.debug('WS-UniFi', 'Gateway device cache primed via getStats()');
-        }
-      } catch { /* ignore, getStats may fail if controller not ready */ }
-
-      // Two rapid fetches to prime the delta-based rate computation
-      try {
-        await pluginAny.fetchWanBandwidth();
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await pluginAny.fetchWanBandwidth();
-        logger.debug('WS-UniFi', 'Bandwidth history primed (2 samples)');
-      } catch { /* ignore */ }
-
-      // Continue sampling every 3s in the background
-      this.backgroundInterval = setInterval(async () => {
+      if (unifiPlugin && unifiPlugin.isEnabled() && typeof pluginAny.fetchWanBandwidth === 'function') {
+        this.sampling = true;
         try {
-          const plugin = pluginManager.getPlugin('unifi');
-          if (plugin && plugin.isEnabled()) {
-            await (plugin as any).fetchWanBandwidth();
-          }
-        } catch { /* ignore */ }
-      }, UNIFI_POLLING_INTERVAL);
+          // Force a getStats() call first to learn the gateway MAC, which lets
+          // fetchWanBandwidth request the gateway alone
+          try {
+            if (typeof pluginAny.getStats === 'function') {
+              await pluginAny.getStats();
+              logger.debug('WS-UniFi', 'Gateway device cache primed via getStats()');
+            }
+          } catch { /* ignore, getStats may fail if controller not ready */ }
+
+          // Two rapid fetches to prime the delta-based rate computation. The pause is longer
+          // than the API service's 1.5s response cache, so the second sample is a fresh one.
+          try {
+            await pluginAny.fetchWanBandwidth();
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await pluginAny.fetchWanBandwidth();
+            logger.debug('WS-UniFi', 'Bandwidth history primed (2 samples)');
+          } catch { /* ignore */ }
+        } finally {
+          this.sampling = false;
+        }
+      }
+
+      // Continue sampling in the background, unless a client connected meanwhile (live polling runs)
+      if (!this.pollingInterval) this.startBackgroundInterval();
     }, 3000);
+  }
+
+  /**
+   * Background loop (no WebSocket client): one WAN sample every 30s, enough to keep the
+   * bandwidth history covering 7 days without polling the controller every second.
+   */
+  private startBackgroundInterval() {
+    if (this.backgroundInterval) return;
+    this.backgroundInterval = setInterval(async () => {
+      if (this.sampling) return;
+      this.sampling = true;
+      try {
+        const plugin = pluginManager.getPlugin('unifi');
+        if (plugin && plugin.isEnabled()) {
+          await (plugin as any).fetchWanBandwidth();
+        }
+      } catch { /* ignore */ } finally {
+        this.sampling = false;
+      }
+    }, UNIFI_BACKGROUND_INTERVAL);
   }
 
   private startPolling() {
@@ -141,9 +163,10 @@ class UnifiWebSocketService {
 
     this.pollingInterval = setInterval(() => {
       this.fetchAndBroadcast();
-    }, UNIFI_POLLING_INTERVAL);
+    }, UNIFI_LIVE_INTERVAL);
 
-    // Broadcast immediately, data is already primed by background sampling
+    // Sample and broadcast immediately: the last background point is at most 30s old, so the
+    // first rate is available right away; the next tick (2s) gives the live rate.
     this.fetchAndBroadcast();
   }
 
@@ -154,16 +177,7 @@ class UnifiWebSocketService {
       this.pollingInterval = null;
     }
     // Restart background sampling to keep history warm for next client
-    if (!this.backgroundInterval) {
-      this.backgroundInterval = setInterval(async () => {
-        try {
-          const plugin = pluginManager.getPlugin('unifi');
-          if (plugin && plugin.isEnabled()) {
-            await (plugin as any).fetchWanBandwidth();
-          }
-        } catch { /* ignore */ }
-      }, UNIFI_POLLING_INTERVAL);
-    }
+    this.startBackgroundInterval();
   }
 
   private async fetchAndBroadcast() {
@@ -171,6 +185,10 @@ class UnifiWebSocketService {
 
     const unifiPlugin = pluginManager.getPlugin('unifi');
     if (!unifiPlugin || !unifiPlugin.isEnabled()) return;
+
+    // Previous tick still waiting for the controller: skip this one
+    if (this.sampling) return;
+    this.sampling = true;
 
     try {
       const pluginAny = unifiPlugin as any;
@@ -183,13 +201,13 @@ class UnifiWebSocketService {
 
       // getClients() is extra load on top of the WAN poll already happening every tick,
       // only refresh it every TOP_CLIENTS_EVERY_N_TICKS, reuse the last value in between.
+      // Top clients and the total come from the same stat/sta response.
       this.topClientsTick = (this.topClientsTick + 1) % TOP_CLIENTS_EVERY_N_TICKS;
-      if (this.topClientsTick === 0) {
-        if (typeof pluginAny.fetchTopClients === 'function') {
-          this.lastTopClients = await pluginAny.fetchTopClients(TOP_CLIENTS_LIMIT).catch(() => this.lastTopClients);
-        }
-        if (typeof pluginAny.fetchTotalClientTraffic === 'function') {
-          this.lastTotalClientTraffic = await pluginAny.fetchTotalClientTraffic().catch(() => this.lastTotalClientTraffic);
+      if (this.topClientsTick === 0 && typeof pluginAny.fetchClientTraffic === 'function') {
+        const traffic = await pluginAny.fetchClientTraffic(TOP_CLIENTS_LIMIT).catch(() => null);
+        if (traffic) {
+          this.lastTopClients = traffic.topClients;
+          this.lastTotalClientTraffic = traffic.total;
         }
       }
       const topClients = this.lastTopClients;
@@ -223,6 +241,8 @@ class UnifiWebSocketService {
       });
     } catch (error) {
       logger.debug('WS-UniFi', 'fetchAndBroadcast error:', error);
+    } finally {
+      this.sampling = false;
     }
   }
 

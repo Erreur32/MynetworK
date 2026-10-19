@@ -155,11 +155,16 @@ export const TrafficTab: React.FC<TrafficTabProps> = ({
         }
     }, [trafficPeriod]);
 
+    // Fetch on mount and period change, then refresh every minute (not in live mode)
     useEffect(() => {
         fetchTopTraffic();
-        const interval = setInterval(fetchTopTraffic, 60000);
-        return () => clearInterval(interval);
     }, [fetchTopTraffic]);
+
+    usePolling(fetchTopTraffic, {
+        enabled: trafficPeriod !== 'live',
+        interval: 60000,
+        immediate: false
+    });
 
     // Sortable "Volume de données" table. Live mode reads straight from the WebSocket-fed
     // realtime store (no REST call); today/all-time read from topTraffic (fetched above).

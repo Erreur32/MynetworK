@@ -7,6 +7,8 @@
 import { Router } from 'express';
 import { getIpDetails, compactIpDetails } from '../services/ipDetailsService.js';
 import { searchService } from '../services/searchService.js';
+import { networkScanService } from '../services/networkScanService.js';
+import { isValidIp } from '../utils/networkValidation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { autoLog } from '../middleware/loggingMiddleware.js';
@@ -101,9 +103,8 @@ router.post('/', requireAuth, autoLog('search', 'search'), asyncHandler(async (r
 router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
     const ip = param(req, 'ip');
 
-    // Validate IP format (basic IPv4 validation)
-    const ipRegex = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-    if (!ipRegex.test(ip)) {
+    // Validate IP format (IPv4, octets 0-255)
+    if (!isValidIp(ip)) {
         return res.status(400).json({
             success: false,
             error: {
@@ -114,7 +115,10 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
     }
 
     try {
-        const aggregatedData = await getIpDetails(ip);
+        // Same scope rule as the MCP machine-details tool: only IPs inside the scan
+        // ranges (or the host's LANs) or already recorded (e.g. added by hand) get the
+        // real-time ping, others are not probed
+        const aggregatedData = await getIpDetails(ip, { ping: networkScanService.isKnownIpProbeAuthorized(ip) });
 
         res.json({
             success: true,

@@ -34,14 +34,20 @@ export interface PortScanProgress {
 let _portScanProgress: PortScanProgress = { active: false, current: 0, total: 0 };
 let _portScanAbortRequested = false;
 
+// Memoised positive result: once nmap is found it stays available, a negative
+// result is re-checked on the next call (nmap may be installed later).
+let nmapFound = false;
+
 /**
  * Check if nmap is available on the system
  */
 export async function isNmapAvailable(): Promise<boolean> {
+    if (nmapFound) return true;
     try {
         const isWin = process.platform === 'win32';
         const cmd = isWin ? 'where' : 'which';
         await execFileAsync(cmd, ['nmap'], { timeout: 5000 });
+        nmapFound = true;
         return true;
     } catch {
         return false;

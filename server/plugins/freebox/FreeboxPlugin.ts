@@ -24,9 +24,12 @@ export class FreeboxPlugin extends BasePlugin {
     // Protection against concurrent calls to getStats()
     private isGettingStats = false;
     private statsPromise: Promise<PluginStats> | null = null;
+    // Last full stats, reused for a short time by the many pollers (stats/all, metrics, scans...)
+    private statsCache: { at: number; generation: number; value: PluginStats } | null = null;
+    private readonly STATS_TTL_MS = 10_000;
 
     constructor() {
-        super('freebox', 'Freebox', '0.11.2');
+        super('freebox', 'Freebox', '0.12.0');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
@@ -84,6 +87,7 @@ export class FreeboxPlugin extends BasePlugin {
 
             // Start keep-alive mechanism to maintain session
             this.startKeepAlive();
+            this.startNativeWebSocket();
             logger.info('FreeboxPlugin', 'Plugin started successfully');
 
         } catch (error) {
@@ -97,9 +101,27 @@ export class FreeboxPlugin extends BasePlugin {
     async stop(): Promise<void> {
         // Stop keep-alive mechanism
         this.stopKeepAlive();
-        
+        this.statsCache = null;
+        // The session is closed below: the native event stream would only get rejected
+        try {
+            const { freeboxNativeWebSocket } = await import('../../services/freeboxNativeWebSocket.js');
+            freeboxNativeWebSocket.stop();
+        } catch (error) {
+            logger.warn('FreeboxPlugin', 'Failed to stop native WebSocket:', error);
+        }
+
         await this.apiService.logout();
         await super.stop();
+    }
+
+    /**
+     * Start the native Freebox event stream (API v8+), idempotent. Lazy import: the
+     * service depends on pluginManager, which loads this plugin. Polling stays the fallback.
+     */
+    private startNativeWebSocket(): void {
+        import('../../services/freeboxNativeWebSocket.js')
+            .then(({ freeboxNativeWebSocket }) => freeboxNativeWebSocket.start())
+            .catch((error) => logger.warn('FreeboxPlugin', 'Failed to start native WebSocket:', error));
     }
 
     /**
@@ -134,9 +156,12 @@ export class FreeboxPlugin extends BasePlugin {
                     logger.info('FreeboxPlugin', 'Session expired, renewing...');
                     await this.apiService.login();
                     logger.debug('FreeboxPlugin', 'Session renewed successfully');
+                    // Native event stream may have given up while logged out (no-op when connected)
+                    this.startNativeWebSocket();
                 } else {
                     // Session is valid, make a light request to keep it alive
-                    // Using getSystemInfo as it's a lightweight endpoint
+                    // Using getSystemInfo as it's a lightweight endpoint. checkSession above already
+                    // reached the box, so a fresh /system/ answer from the short GET cache is enough
                     try {
                         await this.apiService.getSystemInfo();
                         // Silently succeed - session is maintained
@@ -176,19 +201,31 @@ export class FreeboxPlugin extends BasePlugin {
     }
 
     async getStats(): Promise<PluginStats> {
+        // Short result cache, dropped as soon as a write went through the Freebox API.
+        // Callers get their own copy: the cached object is never handed out.
+        const cache = this.statsCache;
+        if (cache && Date.now() - cache.at < this.STATS_TTL_MS && cache.generation === this.apiService.getWriteGeneration()) {
+            return structuredClone(cache.value);
+        }
+
         // Protection against concurrent calls: if a call is already in progress, return the same promise
         if (this.isGettingStats && this.statsPromise !== null) {
             logger.debug('FreeboxPlugin', 'getStats() already in progress, reusing existing promise');
-            return this.statsPromise;
+            return structuredClone(await this.statsPromise);
         }
-        
+
         // Start new stats retrieval
         this.isGettingStats = true;
+        const generation = this.apiService.getWriteGeneration();
         this.statsPromise = this._getStatsInternal();
-        
+
         try {
             const result = await this.statsPromise;
-            return result;
+            // Only full answers are cached, never the minimal one returned without a session
+            if (this.apiService.isLoggedIn()) {
+                this.statsCache = { at: Date.now(), generation, value: result };
+            }
+            return structuredClone(result);
         } finally {
             this.isGettingStats = false;
             this.statsPromise = null;
@@ -214,20 +251,12 @@ export class FreeboxPlugin extends BasePlugin {
             throw new Error('Freebox plugin not registered. Please register first via /api/auth/register');
         }
 
-        // Check if logged in, try to reconnect if needed
-        let isLoggedIn = await this.apiService.checkSession();
-        if (!isLoggedIn) {
+        // No session: open one. An expired session is renewed by the API layer itself
+        // (one shared re-login on auth_required, then the request is replayed once)
+        if (!this.apiService.isLoggedIn()) {
             try {
-                logger.info('FreeboxPlugin', 'Session expired in getStats(), attempting to reconnect...');
+                logger.info('FreeboxPlugin', 'No session in getStats(), attempting to reconnect...');
                 await this.apiService.login();
-                // Wait a bit for the session to be fully established
-                await new Promise(resolve => setTimeout(resolve, 100));
-                // Verify login was successful
-                isLoggedIn = await this.apiService.checkSession();
-                if (!isLoggedIn) {
-                    logger.error('FreeboxPlugin', 'Login succeeded but session verification failed - session token may be invalid');
-                    throw new Error('Login appeared successful but session verification failed');
-                }
                 logger.debug('FreeboxPlugin', 'Reconnection successful in getStats()');
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -281,9 +310,9 @@ export class FreeboxPlugin extends BasePlugin {
                 this.apiService.getWifiBss()
             ]);
             
-            // Verify we're still authenticated after API calls
-            // If session expired during calls, clear sensitive data
-            const stillLoggedIn = await this.apiService.checkSession();
+            // Verify we're still authenticated after API calls (the API layer drops the
+            // token when a renewal failed). If session expired during calls, clear sensitive data
+            const stillLoggedIn = this.apiService.isLoggedIn();
             if (!stillLoggedIn) {
                 logger.warn('FreeboxPlugin', 'Session expired during getStats() calls, clearing sensitive data');
             }

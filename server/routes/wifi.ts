@@ -7,6 +7,7 @@ import { param, requireIntParam } from '../utils/params.js';
 
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
+import { parseCompactQuery, compactList, summarizeWifiStation, hostIpv4 } from '../utils/freeboxExtras.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -142,8 +143,18 @@ router.get('/full', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/wifi/stations - Get all WiFi stations (connected devices)
-router.get('/stations', asyncHandler(async (_req, res) => {
+// Opt-in compact output: ?compact=1[&active=1][&limit=N][&search=text]
+router.get('/stations', asyncHandler(async (req, res) => {
   const result = await freeboxApi.getWifiStations();
+  const query = parseCompactQuery(req.query);
+  if (query.compact && result.success && Array.isArray(result.result)) {
+    res.json(compactList(result.result, query, {
+      isActive: (s) => (s.host as { active?: unknown } | undefined)?.active !== false,
+      searchFields: (s) => [s.hostname, (s.host as { primary_name?: unknown } | undefined)?.primary_name, s.mac, ...hostIpv4(s.host)],
+      project: summarizeWifiStation,
+    }));
+    return;
+  }
   res.json(result);
 }));
 

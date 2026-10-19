@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/widgets/Card';
 import { usePluginStore } from '../../stores/pluginStore';
+import { usePolling } from '../../hooks/usePolling';
 import { GripVertical, RotateCcw } from 'lucide-react';
 import { applyOrder, clampSpan, DEFAULT_SPAN, GRID_COLUMNS, useCardLayout } from './cardLayout';
 import { createMynetworkHass, type MnDevice } from '../../vendor/unifi-device-card/mynetwork-adapter';
@@ -141,12 +142,8 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
         };
     }, []);
 
-    useEffect(() => {
-        const id = setInterval(() => {
-            if (document.visibilityState === 'visible') void fetchPluginStats('unifi');
-        }, LIVE_REFRESH_MS);
-        return () => clearInterval(id);
-    }, [fetchPluginStats]);
+    // Only UniFi stats poller while this tab is open (UniFiPage pauses its 30s poll).
+    usePolling(() => fetchPluginStats('unifi'), { interval: LIVE_REFRESH_MS });
 
     const { hass, devices } = useMemo(
         () => createMynetworkHass(devicesArr, i18n.language?.slice(0, 2) || 'en'),

@@ -140,6 +140,87 @@ function extractWanBytesFromGatewayDevice(
 }
 
 /**
+ * Gateway device rule shared by getStats() and the live WAN sampler.
+ */
+function isGatewayDevice(d: any): boolean {
+    const type = (d.type || '').toString().toLowerCase();
+    const model = (d.model || '').toString().toLowerCase();
+    return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
+        || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
+}
+
+type TopClient = { mac: string; name: string; ip?: string; vendor?: string | null; download: number; upload: number };
+
+/**
+ * Live "top talkers" from one stat/sta result. See fetchTopClients() for why only the
+ * '*_bytes-r' fields are used.
+ */
+function computeTopClients(clients: any[], limit: number): TopClient[] {
+    const rates: Array<Omit<TopClient, 'vendor'>> = [];
+
+    for (const client of clients) {
+        const mac = (client.mac || '').toString().toLowerCase();
+        if (!mac) continue;
+
+        // Only '*_bytes-r' fields are an actual measured rate (bytes/sec, computed by the
+        // controller). 'rx_rate' / 'tx_rate' / 'phy_*_rate' / 'sw_*_rate' are NOT
+        // throughput, they're the negotiated WiFi PHY rate or Ethernet port speed (link
+        // capability, not usage). Confirmed the hard way: two different IoT devices both
+        // showed exactly "307 Mb/s" simultaneously, a real traffic rate would never
+        // coincidentally match another device's to the Mb/s, that's a fixed link-rate
+        // constant. Those fields must never be used here again.
+        const rxBytesPerSec = Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
+        const txBytesPerSec = Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
+
+        const download = Math.round(rxBytesPerSec / 1024);
+        const upload = Math.round(txBytesPerSec / 1024);
+
+        if (download === 0 && upload === 0) continue;
+
+        rates.push({
+            mac,
+            name: client.name || client.hostname || client.ip || mac,
+            ip: client.ip,
+            download,
+            upload
+        });
+    }
+
+    if (rates.length === 0) return [];
+
+    rates.sort((a, b) => (b.download + b.upload) - (a.download + a.upload));
+    const result = rates.slice(0, limit);
+
+    return result.map(r => ({
+        ...r,
+        vendor: r.mac.length >= 8 ? WiresharkVendorService.lookupVendor(r.mac.slice(0, 8)) : null
+    }));
+}
+
+/**
+ * Sum of every currently-connected client's real-time rate from one stat/sta result (same
+ * '*_bytes-r' fields as computeTopClients, totalled across ALL clients instead of ranking the top N).
+ * Used as the "total_clients" side of the LAN estimate: LAN ≈ total_clients − WAN. This is an
+ * approximation, not a direct measurement, UniFi has no single "LAN interface" counter the
+ * way it has one clear WAN interface, and this total includes internet-bound traffic too
+ * (subtracting WAN accounts for that, imperfectly, since the two are sampled independently).
+ */
+function computeTotalClientTraffic(clients: any[]): { download: number; upload: number } {
+    let totalRxBytesPerSec = 0;
+    let totalTxBytesPerSec = 0;
+
+    for (const client of clients) {
+        totalRxBytesPerSec += Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
+        totalTxBytesPerSec += Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
+    }
+
+    return {
+        download: Math.round(totalRxBytesPerSec / 1024),
+        upload: Math.round(totalTxBytesPerSec / 1024)
+    };
+}
+
+/**
  * Detect available WAN interfaces from a gateway device entry.
  */
 function detectWanInterfaces(device: any): WanInterface[] {
@@ -192,11 +273,25 @@ export class UniFiPlugin extends BasePlugin {
     private apiService: UniFiApiService;
     private _bandwidthHistories: Map<string, BandwidthRawPoint[]> = new Map();
     private _wanInterfaces: WanInterface[] = [];
-    private _cachedGatewayDevice: any = null;
-    private readonly BANDWIDTH_MAX = 20160; // 7 days at 30s polling
+    // Gateway MAC, lets the live sampler request only the gateway instead of every device
+    private _gatewayMac: string | null = null;
+    // stat/dashboard returns 0 on many controllers: once seen, stop asking for a while
+    private _dashboardZeroUntilMs = 0;
+    private static readonly DASHBOARD_ZERO_RETRY_MS = 5 * 60 * 1000;
+    // getStats() result shared for a few seconds (dashboard, ip-details, scan, metrics, search...)
+    private _statsCache: { at: number; generation: number; stats: PluginStats } | null = null;
+    private _statsInFlight: { generation: number; promise: Promise<PluginStats> } | null = null;
+    private static readonly STATS_TTL_MS = 10_000;
+    // History points: 30s apart from the background sampler (no WebSocket client) and 2s apart
+    // while the live WebSocket runs. 20160 points cover 7 days at 30s; live points older than
+    // HISTORY_LIVE_DETAIL_MS are thinned to one per HISTORY_COMPACT_STEP_MS when the buffer is
+    // full, so live sessions do not shrink the 7-day window (see _trimHistory).
+    private readonly BANDWIDTH_MAX = 20160;
+    private static readonly HISTORY_LIVE_DETAIL_MS = 10 * 60 * 1000;
+    private static readonly HISTORY_COMPACT_STEP_MS = 30_000;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.11.2');
+        super('unifi', 'UniFi Controller', '0.12.0');
         this.apiService = new UniFiApiService();
     }
 
@@ -214,21 +309,47 @@ export class UniFiPlugin extends BasePlugin {
         return this._bandwidthHistories.get(wanId)!;
     }
 
-    private _pushToHistory(wanId: string, rxBytes: number, txBytes: number): void {
+    /**
+     * fetchedAt is the time the counters were fetched from the controller, not the time of
+     * this call: the API service may serve a cached response, and stamping it with Date.now()
+     * would skew the computed rates.
+     */
+    private _pushToHistory(wanId: string, rxBytes: number, txBytes: number, fetchedAt: number = Date.now()): void {
         const history = this._getOrCreateHistory(wanId);
         const last = history[history.length - 1];
         if (!last) {
-            history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
+            history.push({ timestamp: fetchedAt, rx_bytes: rxBytes, tx_bytes: txBytes });
+        } else if (fetchedAt <= last.timestamp) {
+            // Same (cached) or older sample than the last point, nothing new
+            return;
         } else if (rxBytes < last.rx_bytes || txBytes < last.tx_bytes) {
             // Counter reset (reboot), clear history and start fresh
-            this._bandwidthHistories.set(wanId, [{ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes }]);
+            this._bandwidthHistories.set(wanId, [{ timestamp: fetchedAt, rx_bytes: rxBytes, tx_bytes: txBytes }]);
         } else if (rxBytes > last.rx_bytes || txBytes > last.tx_bytes) {
             // Only push when bytes actually changed, avoids zero-rate entries
             // when the controller hasn't updated its counters yet
-            history.push({ timestamp: Date.now(), rx_bytes: rxBytes, tx_bytes: txBytes });
-            if (history.length > this.BANDWIDTH_MAX) history.shift();
+            history.push({ timestamp: fetchedAt, rx_bytes: rxBytes, tx_bytes: txBytes });
+            if (history.length > this.BANDWIDTH_MAX) this._trimHistory(wanId, history);
         }
         // If bytes are identical to last entry → skip (controller hasn't refreshed yet)
+    }
+
+    /**
+     * Keep the history under BANDWIDTH_MAX. First thin the dense live points older than
+     * HISTORY_LIVE_DETAIL_MS to one per HISTORY_COMPACT_STEP_MS: counters are cumulative, so
+     * dropping intermediate points keeps the average rate between the kept points exact.
+     * Only then drop the oldest points.
+     */
+    private _trimHistory(wanId: string, history: BandwidthRawPoint[]): void {
+        const cutoff = history[history.length - 1].timestamp - UniFiPlugin.HISTORY_LIVE_DETAIL_MS;
+        const kept: BandwidthRawPoint[] = [];
+        for (const point of history) {
+            const prev = kept[kept.length - 1];
+            if (prev && point.timestamp < cutoff && point.timestamp - prev.timestamp < UniFiPlugin.HISTORY_COMPACT_STEP_MS) continue;
+            kept.push(point);
+        }
+        if (kept.length > this.BANDWIDTH_MAX) kept.splice(0, kept.length - this.BANDWIDTH_MAX);
+        this._bandwidthHistories.set(wanId, kept);
     }
 
     getBandwidthHistory(wanId = 'wan1', rangeSeconds = 0): Array<{ time: string; timestamp: number; download: number; upload: number }> {
@@ -245,7 +366,9 @@ export class UniFiPlugin extends BasePlugin {
                 filtered = idxFirst > 0 ? history.slice(idxFirst - 1) : history;
             }
         } else {
-            // Live: last 10 points (~5 min at 30s polling), keeps it visually distinct from 1h range
+            // Live: last 10 points, used to seed the live chart before WebSocket points arrive.
+            // Points are 2s apart while the live WebSocket runs and 30s apart otherwise, so this
+            // spans ~20s to ~5 min; rates stay correct as each one uses the real time delta.
             filtered = history.slice(-10);
         }
 
@@ -285,8 +408,9 @@ export class UniFiPlugin extends BasePlugin {
     }
 
     /**
-     * Lightweight WAN bandwidth fetch for real-time WebSocket polling.
-     * Only calls getNetworkStats() (stat/dashboard), much lighter than full getStats().
+     * Lightweight WAN bandwidth fetch for real-time WebSocket polling and background sampling.
+     * Reads the gateway's byte counters (gateway-only stat/device request when its MAC is known),
+     * much lighter than full getStats(). stat/dashboard is only a fallback for WAN1.
      * Pushes new byte counters to history and returns computed KB/s rates for each WAN.
      */
     async fetchWanBandwidth(): Promise<Record<string, { download: number; upload: number }> | null> {
@@ -295,47 +419,41 @@ export class UniFiPlugin extends BasePlugin {
         try {
             const wans = this._wanInterfaces.length > 0 ? this._wanInterfaces : [{ id: 'wan1', name: 'WAN' }];
 
-            // Fetch fresh device data to get current byte counters
+            // Fetch fresh gateway data to get current byte counters
             // (getNetworkStats/dashboard API returns 0 on many controllers,
             //  and cached gateway device has stale counters)
             let freshGateway: any = null;
+            let gatewayFetchedAt = 0;
             try {
-                const devices = await this.apiService.getDevices();
-                freshGateway = devices.find((d: any) => {
-                    const type = (d.type || '').toString().toLowerCase();
-                    const model = (d.model || '').toString().toLowerCase();
-                    return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
-                        || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
-                });
+                const sample = await this.apiService.getGatewayDeviceSample(isGatewayDevice, this._gatewayMac);
+                freshGateway = sample.device;
+                gatewayFetchedAt = sample.fetchedAt;
+                if (freshGateway?.mac) this._gatewayMac = String(freshGateway.mac);
             } catch { /* ignore, will fall back to networkStats */ }
 
             for (const wan of wans) {
                 const wanIdx = (parseInt(wan.id.replace('wan', ''), 10) || 1) as 1 | 2;
-                let rxBytes = 0;
-                let txBytes = 0;
 
                 // Priority 1: fresh gateway device (live byte counters)
-                if (freshGateway) {
-                    const deviceWan = extractWanBytesFromGatewayDevice(freshGateway, wanIdx);
-                    if (deviceWan) {
-                        rxBytes = deviceWan.rx_bytes;
-                        txBytes = deviceWan.tx_bytes;
-                    }
+                const deviceWan = freshGateway ? extractWanBytesFromGatewayDevice(freshGateway, wanIdx) : null;
+                if (deviceWan && (deviceWan.rx_bytes > 0 || deviceWan.tx_bytes > 0)) {
+                    this._pushToHistory(wan.id, deviceWan.rx_bytes, deviceWan.tx_bytes, gatewayFetchedAt);
+                    continue;
                 }
 
-                // Priority 2: networkStats (dashboard API, works on some controllers)
-                if (rxBytes === 0 && txBytes === 0) {
+                // Priority 2: networkStats (dashboard API, WAN1 only, works on some controllers).
+                // Asked once per tick at most, and not again for a while once it returned 0.
+                if (wanIdx === 1 && Date.now() >= this._dashboardZeroUntilMs) {
                     try {
-                        const stats = await this.apiService.getNetworkStats();
-                        if (wanIdx === 1 && stats.wan && (stats.wan.rx_bytes > 0 || stats.wan.tx_bytes > 0)) {
-                            rxBytes = stats.wan.rx_bytes;
-                            txBytes = stats.wan.tx_bytes || 0;
+                        const { stats, fetchedAt } = await this.apiService.getNetworkStatsWithFetchTime();
+                        const rxBytes = stats.wan?.rx_bytes || 0;
+                        const txBytes = stats.wan?.tx_bytes || 0;
+                        if (rxBytes > 0 || txBytes > 0) {
+                            this._pushToHistory(wan.id, rxBytes, txBytes, fetchedAt);
+                        } else {
+                            this._dashboardZeroUntilMs = Date.now() + UniFiPlugin.DASHBOARD_ZERO_RETRY_MS;
                         }
                     } catch { /* ignore */ }
-                }
-
-                if (rxBytes > 0 || txBytes > 0) {
-                    this._pushToHistory(wan.id, rxBytes, txBytes);
                 }
             }
 
@@ -376,50 +494,11 @@ export class UniFiPlugin extends BasePlugin {
      * git history for why, 'rx_rate'/'tx_rate'/'phy_*_rate'/'sw_*_rate' are NOT throughput, they
      * are the negotiated WiFi PHY rate or Ethernet port speed).
      */
-    async fetchTopClients(limit = 10): Promise<Array<{ mac: string; name: string; ip?: string; vendor?: string | null; download: number; upload: number }>> {
+    async fetchTopClients(limit = 10): Promise<TopClient[]> {
         if (!this.isEnabled() || !this.config) return [];
 
         try {
-            const clients = await this.apiService.getClients();
-            const rates: Array<{ mac: string; name: string; ip?: string; download: number; upload: number }> = [];
-
-            for (const client of clients) {
-                const mac = (client.mac || '').toString().toLowerCase();
-                if (!mac) continue;
-
-                // Only '*_bytes-r' fields are an actual measured rate (bytes/sec, computed by the
-                // controller). 'rx_rate' / 'tx_rate' / 'phy_*_rate' / 'sw_*_rate' are NOT
-                // throughput, they're the negotiated WiFi PHY rate or Ethernet port speed (link
-                // capability, not usage). Confirmed the hard way: two different IoT devices both
-                // showed exactly "307 Mb/s" simultaneously, a real traffic rate would never
-                // coincidentally match another device's to the Mb/s, that's a fixed link-rate
-                // constant. Those fields must never be used here again.
-                const rxBytesPerSec = Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
-                const txBytesPerSec = Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
-
-                const download = Math.round(rxBytesPerSec / 1024);
-                const upload = Math.round(txBytesPerSec / 1024);
-
-                if (download === 0 && upload === 0) continue;
-
-                rates.push({
-                    mac,
-                    name: client.name || client.hostname || client.ip || mac,
-                    ip: client.ip,
-                    download,
-                    upload
-                });
-            }
-
-            if (rates.length === 0) return [];
-
-            rates.sort((a, b) => (b.download + b.upload) - (a.download + a.upload));
-            const result = rates.slice(0, limit);
-
-            return result.map(r => ({
-                ...r,
-                vendor: r.mac.length >= 8 ? WiresharkVendorService.lookupVendor(r.mac.slice(0, 8)) : null
-            }));
+            return computeTopClients(await this.apiService.getClients(), limit);
         } catch (error) {
             logger.debug('UniFiPlugin', 'fetchTopClients failed:', error);
             return [];
@@ -427,39 +506,28 @@ export class UniFiPlugin extends BasePlugin {
     }
 
     /**
-     * Sum of every currently-connected client's real-time rate (same 'rx_bytes-r' / 'tx_bytes-r'
-     * fields as fetchTopClients, just totalled across ALL clients instead of ranking the top N).
-     * Used as the "total_clients" side of the LAN estimate: LAN ≈ total_clients − WAN. This is an
-     * approximation, not a direct measurement, UniFi has no single "LAN interface" counter the
-     * way it has one clear WAN interface, and this total includes internet-bound traffic too
-     * (subtracting WAN accounts for that, imperfectly, since the two are sampled independently).
+     * Top clients and total client rate from a single stat/sta request, for the live
+     * WebSocket which needs both on the same tick. On error: empty list, zero totals.
      */
-    async fetchTotalClientTraffic(): Promise<{ download: number; upload: number }> {
-        if (!this.isEnabled() || !this.config) return { download: 0, upload: 0 };
+    async fetchClientTraffic(limit = 10): Promise<{ topClients: TopClient[]; total: { download: number; upload: number } }> {
+        if (!this.isEnabled() || !this.config) return { topClients: [], total: { download: 0, upload: 0 } };
 
         try {
             const clients = await this.apiService.getClients();
-            let totalRxBytesPerSec = 0;
-            let totalTxBytesPerSec = 0;
-
-            for (const client of clients) {
-                totalRxBytesPerSec += Number(client['rx_bytes-r']) || Number(client['wired-rx_bytes-r']) || 0;
-                totalTxBytesPerSec += Number(client['tx_bytes-r']) || Number(client['wired-tx_bytes-r']) || 0;
-            }
-
-            return {
-                download: Math.round(totalRxBytesPerSec / 1024),
-                upload: Math.round(totalTxBytesPerSec / 1024)
-            };
+            return { topClients: computeTopClients(clients, limit), total: computeTotalClientTraffic(clients) };
         } catch (error) {
-            logger.debug('UniFiPlugin', 'fetchTotalClientTraffic failed:', error);
-            return { download: 0, upload: 0 };
+            logger.debug('UniFiPlugin', 'fetchClientTraffic failed:', error);
+            return { topClients: [], total: { download: 0, upload: 0 } };
         }
     }
 
     async initialize(config: PluginConfig): Promise<void> {
         await super.initialize(config);
-        
+        // New settings may point to another controller/site: forget derived state
+        this._clearStatsCache();
+        this._gatewayMac = null;
+        this._dashboardZeroUntilMs = 0;
+
         const settings = config.settings;
         const apiMode = (settings?.apiMode as 'controller' | 'site-manager') || 'controller';
 
@@ -605,6 +673,7 @@ export class UniFiPlugin extends BasePlugin {
         if (this.isEnabled() && this.apiService.isLoggedIn()) {
             await this.apiService.logout();
         }
+        this._clearStatsCache();
         await super.stop();
     }
 
@@ -628,12 +697,54 @@ export class UniFiPlugin extends BasePlugin {
         return { devices, clients };
     }
 
+    /**
+     * Full stats (devices + clients + WAN + system + WLANs + NAT), shared for STATS_TTL_MS and
+     * between concurrent callers: many routes and services call this, each call used to cost
+     * 7 controller requests. The cache is dropped after any controller write (block client,
+     * WLAN toggle, restart) and on configuration changes. Every caller gets its own deep copy.
+     */
     async getStats(): Promise<PluginStats> {
         if (!this.isEnabled()) {
             throw new Error('UniFi plugin is not enabled');
         }
 
         // Check if we have configuration
+        if (!this.config) {
+            throw new Error('UniFi plugin is not configured');
+        }
+
+        const generation = this.apiService.getCacheGeneration();
+        const cached = this._statsCache;
+        if (cached && cached.generation === generation && Date.now() - cached.at < UniFiPlugin.STATS_TTL_MS) {
+            return structuredClone(cached.stats);
+        }
+
+        // Join a request in flight only if no write happened since it started
+        let inFlight = this._statsInFlight;
+        if (!inFlight || inFlight.generation !== generation) {
+            const promise: Promise<PluginStats> = this._computeStats()
+                .then((stats) => {
+                    // A write or a reconnection during the request makes the result possibly outdated: not cached
+                    if (this.apiService.getCacheGeneration() === generation) {
+                        this._statsCache = { at: Date.now(), generation, stats };
+                    }
+                    return stats;
+                })
+                .finally(() => {
+                    if (this._statsInFlight?.promise === promise) this._statsInFlight = null;
+                });
+            inFlight = { generation, promise };
+            this._statsInFlight = inFlight;
+        }
+        return structuredClone(await inFlight.promise);
+    }
+
+    private _clearStatsCache(): void {
+        this._statsCache = null;
+        this._statsInFlight = null;
+    }
+
+    private async _computeStats(): Promise<PluginStats> {
         if (!this.config) {
             throw new Error('UniFi plugin is not configured');
         }
@@ -686,15 +797,17 @@ export class UniFiPlugin extends BasePlugin {
         }
 
         try {
-            const [devices, clients, stats, sysinfo, wlans, networkConf, portForwardRules] = await Promise.all([
-                this.apiService.getDevices(),
+            const [devicesSample, clients, statsSample, sysinfo, wlans, networkConf, portForwardRules] = await Promise.all([
+                this.apiService.getDevicesWithFetchTime(),
                 this.apiService.getClients(),
-                this.apiService.getNetworkStats(),
+                this.apiService.getNetworkStatsWithFetchTime(),
                 this.apiService.getSystemInfo(),
                 this.apiService.getWlans().catch(() => []), // Get WLANs, but don't fail if unavailable
                 this.apiService.getNetworkConfig().catch(() => ({ dhcpEnabled: false, dhcpRange: undefined })), // DHCP on UniFi (rest/networkconf)
                 this.apiService.getPortForwardingRules().catch(() => []) // NAT rules count and list for dashboard
             ]);
+            const devices = devicesSample.devices;
+            const stats = statsSample.stats;
 
             // Log summary only if debug is enabled
             logger.debug('UniFiPlugin', `Retrieved ${devices.length} devices, ${clients.length} clients`);
@@ -756,14 +869,9 @@ export class UniFiPlugin extends BasePlugin {
             const deploymentType = this.apiService.getDeploymentType();
 
             // Build NAT / gateway summary from gateway device (WAN/LAN ports, rule count)
-            const gatewayDevice = devices.find((d: any) => {
-                const type = (d.type || '').toString().toLowerCase();
-                const model = (d.model || '').toString().toLowerCase();
-                return type.includes('ugw') || type.includes('udm') || type.includes('ucg') || type.includes('gateway')
-                    || model.includes('ugw') || model.includes('udm') || model.includes('ucg') || model.includes('gateway');
-            });
-            // Cache gateway device for real-time bandwidth fallback (used by fetchWanBandwidth)
-            if (gatewayDevice) this._cachedGatewayDevice = gatewayDevice;
+            const gatewayDevice = devices.find(isGatewayDevice);
+            // Remember the gateway MAC: it lets fetchWanBandwidth request the gateway alone
+            if (gatewayDevice?.mac) this._gatewayMac = String(gatewayDevice.mac);
             const gatewaySummary = buildGatewayNatSummary(gatewayDevice, portForwardRules);
 
             // Detect WAN interfaces from gateway device and update cached list
@@ -781,11 +889,14 @@ export class UniFiPlugin extends BasePlugin {
 
                 let rxBytes: number;
                 let txBytes: number;
+                // Time the counters were fetched (cached responses can be slightly older than now)
+                let fetchedAt = devicesSample.fetchedAt;
 
                 if (wanIdx === 1 && (stats.wan?.rx_bytes || 0) > 0) {
                     // Use stats from API (stat/dashboard or site-manager)
                     rxBytes = stats.wan!.rx_bytes!;
                     txBytes = stats.wan!.tx_bytes || 0;
+                    fetchedAt = statsSample.fetchedAt;
                 } else {
                     // Fallback: extract from gateway device directly (UniFiOS CloudGateway)
                     const deviceWan = extractWanBytesFromGatewayDevice(gatewayDevice, wanIdx);
@@ -797,7 +908,7 @@ export class UniFiPlugin extends BasePlugin {
                 }
 
                 if (rxBytes > 0 || txBytes > 0) {
-                    this._pushToHistory(wan.id, rxBytes, txBytes);
+                    this._pushToHistory(wan.id, rxBytes, txBytes, fetchedAt);
                 }
             }
 
@@ -952,8 +1063,9 @@ export class UniFiPlugin extends BasePlugin {
     }
 
     async testConnection(): Promise<boolean> {
-        // Let errors propagate so they can be caught and displayed to the user
-        return await this.apiService.testConnection();
+        // Let errors propagate so they can be caught and displayed to the user.
+        // An enabled plugin relies on this session (dashboard, WebSocket, MCP): no logout after the test.
+        return await this.apiService.testConnection({ keepSession: this.isEnabled() });
     }
 }
 

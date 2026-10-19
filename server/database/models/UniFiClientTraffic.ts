@@ -8,6 +8,7 @@
  * handled upstream — only positive deltas ever reach this repository.
  */
 
+import type Database from 'better-sqlite3';
 import { getDatabase } from '../connection.js';
 import { logger } from '../../utils/logger.js';
 
@@ -40,47 +41,73 @@ function mapRow(row: TrafficRow): UniFiClientTrafficEntry {
     };
 }
 
+export interface TrafficDeltaInput {
+    mac: string;
+    name: string;
+    ip?: string;
+    vendor?: string | null;
+    deltaRx: number;
+    deltaTx: number;
+}
+
+// Prepared statements + transaction, built once per database handle (a restore
+// reopens the database, hence the WeakMap instead of a module-level singleton).
+type DeltaWriter = (inputs: TrafficDeltaInput[], today: string) => void;
+const deltaWriters = new WeakMap<Database.Database, DeltaWriter>();
+
+function getDeltaWriter(db: Database.Database): DeltaWriter {
+    let writer = deltaWriters.get(db);
+    if (!writer) {
+        const daily = db.prepare(`
+            INSERT INTO unifi_client_traffic_daily (mac, date, name, ip, vendor, rx_bytes, tx_bytes, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(mac, date) DO UPDATE SET
+                name = excluded.name,
+                ip = excluded.ip,
+                vendor = excluded.vendor,
+                rx_bytes = rx_bytes + excluded.rx_bytes,
+                tx_bytes = tx_bytes + excluded.tx_bytes,
+                updated_at = CURRENT_TIMESTAMP
+        `);
+        const totals = db.prepare(`
+            INSERT INTO unifi_client_traffic_totals (mac, name, ip, vendor, rx_bytes, tx_bytes, first_seen, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(mac) DO UPDATE SET
+                name = excluded.name,
+                ip = excluded.ip,
+                vendor = excluded.vendor,
+                rx_bytes = rx_bytes + excluded.rx_bytes,
+                tx_bytes = tx_bytes + excluded.tx_bytes,
+                updated_at = CURRENT_TIMESTAMP
+        `);
+        writer = db.transaction((inputs: TrafficDeltaInput[], today: string) => {
+            for (const input of inputs) {
+                daily.run(input.mac, today, input.name, input.ip ?? null, input.vendor ?? null, input.deltaRx, input.deltaTx);
+                totals.run(input.mac, input.name, input.ip ?? null, input.vendor ?? null, input.deltaRx, input.deltaTx);
+            }
+        });
+        deltaWriters.set(db, writer);
+    }
+    return writer;
+}
+
 export class UniFiClientTrafficRepository {
-    /** Adds a positive delta to both today's row and the all-time total for this client. */
-    static addDelta(input: {
-        mac: string;
-        name: string;
-        ip?: string;
-        vendor?: string | null;
-        deltaRx: number;
-        deltaTx: number;
-    }): void {
-        if (input.deltaRx <= 0 && input.deltaTx <= 0) return;
+    /**
+     * Adds each client's positive delta to both today's row and its all-time total.
+     * One poll's upserts run in a single transaction (one commit instead of two per
+     * client every 30s). Deltas that are not positive are skipped.
+     */
+    static addDeltas(inputs: TrafficDeltaInput[]): void {
+        const positive = inputs.filter((input) => input.deltaRx > 0 || input.deltaTx > 0);
+        if (positive.length === 0) return;
 
         try {
             const db = getDatabase();
-            const today = new Date().toISOString().slice(0, 10);
-
-            db.prepare(`
-                INSERT INTO unifi_client_traffic_daily (mac, date, name, ip, vendor, rx_bytes, tx_bytes, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(mac, date) DO UPDATE SET
-                    name = excluded.name,
-                    ip = excluded.ip,
-                    vendor = excluded.vendor,
-                    rx_bytes = rx_bytes + excluded.rx_bytes,
-                    tx_bytes = tx_bytes + excluded.tx_bytes,
-                    updated_at = CURRENT_TIMESTAMP
-            `).run(input.mac, today, input.name, input.ip ?? null, input.vendor ?? null, input.deltaRx, input.deltaTx);
-
-            db.prepare(`
-                INSERT INTO unifi_client_traffic_totals (mac, name, ip, vendor, rx_bytes, tx_bytes, first_seen, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT(mac) DO UPDATE SET
-                    name = excluded.name,
-                    ip = excluded.ip,
-                    vendor = excluded.vendor,
-                    rx_bytes = rx_bytes + excluded.rx_bytes,
-                    tx_bytes = tx_bytes + excluded.tx_bytes,
-                    updated_at = CURRENT_TIMESTAMP
-            `).run(input.mac, input.name, input.ip ?? null, input.vendor ?? null, input.deltaRx, input.deltaTx);
+            // Same date for the whole batch (a poll spanning midnight lands on one day)
+            getDeltaWriter(db)(positive, new Date().toISOString().slice(0, 10));
         } catch (err) {
-            logger.error('UniFiClientTraffic', `addDelta failed for mac=${input.mac}: ${(err as Error).message}`);
+            const macs = positive.length === 1 ? `mac=${positive[0].mac}` : `${positive.length} clients`;
+            logger.error('UniFiClientTraffic', `addDeltas failed for ${macs}: ${(err as Error).message}`);
         }
     }
 

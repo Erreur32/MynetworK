@@ -15,6 +15,7 @@ import { PluginConfigModal } from './modals/PluginConfigModal';
 import { LoginModal } from './modals/LoginModal';
 import { NetworkScanConfigModal } from './modals/NetworkScanConfigModal';
 import { getFreeboxSettingsUrl } from '../utils/permissions';
+import { usePolling } from '../hooks/usePolling';
 
 export const PluginsManagementSection: React.FC = () => {
     const { t } = useTranslation();
@@ -36,31 +37,24 @@ export const PluginsManagementSection: React.FC = () => {
         fetchAllStats(); // Also fetch stats to get API versions
     }, []); // Empty deps - load once only
     
-    // Refresh plugins and stats periodically to update connection status (silent refresh)
+    // Refresh plugins periodically to update connection status (silent refresh).
+    // Stats (API versions) are already refreshed every 30s by the app-wide poller (App.tsx).
     // DISABLED when config modal is open to prevent form reset during editing
-    useEffect(() => {
-        // Don't refresh if modal is open
-        if (configModalOpen) {
-            return;
+    usePolling(async () => {
+        setIsRefreshing(true);
+        try {
+            // Silent refresh - don't show global loading state
+            await fetchPlugins(true); // Force refresh
+        } catch (error) {
+            console.error('Silent refresh error:', error);
+        } finally {
+            setIsRefreshing(false);
         }
-        
-        const interval = setInterval(async () => {
-            setIsRefreshing(true);
-            try {
-                // Silent refresh - don't show global loading state
-                await Promise.all([
-                    fetchPlugins(true), // Force refresh
-                    fetchAllStats() // Refresh stats to get updated API versions
-                ]);
-            } catch (error) {
-                console.error('Silent refresh error:', error);
-            } finally {
-                setIsRefreshing(false);
-            }
-        }, 30000); // Refresh every 30 seconds (less frequent)
-        
-        return () => clearInterval(interval);
-    }, [fetchPlugins, fetchAllStats, configModalOpen]);
+    }, {
+        enabled: !configModalOpen,
+        interval: 30000, // Refresh every 30 seconds (less frequent)
+        immediate: false
+    });
 
     // Check Freebox auth status when Freebox plugin is enabled (only when plugin enabled state changes)
     useEffect(() => {

@@ -75,7 +75,16 @@ These rules are always enforced, in this order:
    for example Freebox `flags.authorized` on WiFi stations.
 
 The usual per-IP rate limits apply: 300 requests per minute on most routes,
-60 per minute on `/api/network-scan/*`.
+60 per minute on `/api/network-scan/*`. Each token also has its own limits:
+300 requests per minute in total, and 30 per minute for the expensive calls
+(`/api/search/ip-details/:ip` and `top-traffic?mode=live`). Past a limit the
+API answers `429 RATE_LIMITED` with a `Retry-After` header (seconds).
+
+`/api/lan/devices`, `/api/wifi/stations` and `/api/dhcp/leases` accept an
+opt-in compact form: `?compact=1`, plus optional `active=1`, `limit=N` (1 to
+1000) and `search=` (case-insensitive). It returns `{success, result, total}`
+with the same summaries as the MCP tools; `total` counts the matches before
+`limit`. Without `compact` the output is unchanged.
 
 Each request updates the token's "last used" date, shown in the admin UI at
 most once per minute. Audit log entries show the token as `api:<name>`.
@@ -224,6 +233,9 @@ reduced to a compact projection (raw Freebox and UniFi objects are not
 returned). Example: `GET /api/search/ip-details/192.168.1.20`. Sections are
 `null` when the source does not know the IP. A live ping is done on each call,
 so `scanner.status` and `scanner.pingLatency` are current, not the stored ones.
+IPs outside the configured scan ranges are not pinged (the stored values are
+returned), unless they are already recorded by the scanner, for example added
+by hand.
 
 ```json
 {
