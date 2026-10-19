@@ -1,9 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useConnectionStore } from '../stores/connectionStore';
 import { useSystemStore } from '../stores/systemStore';
-import { useUserAuthStore } from '../stores/userAuthStore';
 import type { ConnectionStatus } from '../types/api';
-import { getBasePath } from '../utils/ingress';
+import { buildWsUrl, wsReconnectDelay, WS_HIDDEN_CLOSE_MS, WS_MAX_RECONNECT_ATTEMPTS } from '../utils/wsReconnect';
 
 interface SystemStatusData {
   temp_cpu0?: number;
@@ -52,114 +51,72 @@ interface UseConnectionWebSocketOptions {
   onFreeboxEvent?: (eventType: string, data: LanHostEventData | VmEventData) => void;
 }
 
+type TimerRef = { current: ReturnType<typeof setTimeout> | null };
+
+function clearTimer(ref: TimerRef) {
+  if (ref.current) {
+    clearTimeout(ref.current);
+    ref.current = null;
+  }
+}
+
 /**
  * Hook to manage WebSocket connection for real-time connection status updates
  * Replaces polling for /api/connection
  * Also receives native Freebox WebSocket events (lan_host, vm_state, etc.)
+ * Reconnects with a capped exponential backoff, closes the socket after the tab
+ * has been hidden for a while and reopens it when the tab is visible again.
  */
 export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = {}) {
   const { enabled = true, onFreeboxEvent } = options;
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fallbackFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hiddenCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
-  // In production, stop after 1 failed attempt to avoid console spam
-  // In dev, allow 3 attempts for debugging
-  const maxReconnectAttempts = import.meta.env.PROD ? 1 : 3;
-  const isPermanentlyDisabledRef = useRef<boolean>(false); // Flag pour désactiver définitivement si échecs répétés
-  const isConnectingRef = useRef<boolean>(false); // Flag pour éviter les connexions multiples simultanées
+  // Set by the first connection_status message. A ref, not the isConnected state,
+  // so the open handler's fallback check never reads a stale value.
+  const receivedStatusRef = useRef<boolean>(false);
+  const enabledRef = useRef(enabled);
+  const onFreeboxEventRef = useRef(onFreeboxEvent);
   const [isConnected, setIsConnected] = useState(false);
 
   const { fetchConnectionStatus } = useConnectionStore();
 
+  useEffect(() => {
+    enabledRef.current = enabled;
+    onFreeboxEventRef.current = onFreeboxEvent;
+  }, [enabled, onFreeboxEvent]);
+
   const connect = useCallback(() => {
-    // Ne pas essayer de se connecter si désactivé de manière permanente
-    if (isPermanentlyDisabledRef.current) {
-      return;
-    }
-    
-    // Ne pas essayer si on a dépassé le nombre max de tentatives
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      isPermanentlyDisabledRef.current = true;
-      return;
-    }
-    
-    // Éviter les connexions multiples simultanées
-    if (isConnectingRef.current) {
-      return;
-    }
-    
-    // Ne pas créer de nouvelle connexion si une existe déjà
-    if (wsRef.current) {
-      // Si la connexion est ouverte ou en cours, ne rien faire
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-        return;
-      }
-      // Si la connexion est en cours de fermeture, attendre qu'elle se ferme
-      if (wsRef.current.readyState === WebSocket.CLOSING) {
-        return;
-      }
-      // Sinon, fermer proprement avant de créer une nouvelle connexion
-      try {
-        wsRef.current.close();
-      } catch (e) {
-        // Ignorer les erreurs de fermeture
-      }
-      wsRef.current = null;
-    }
-    
-    // Marquer qu'on est en train de se connecter
-    isConnectingRef.current = true;
+    if (!enabledRef.current) return;
+    // An open, connecting or closing socket already exists: its onclose decides what comes next
+    if (wsRef.current) return;
+    clearTimer(reconnectTimeoutRef);
 
-    // Build WebSocket URL (include base path when under Ingress so WS stays same-origin)
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const rawBase = getBasePath(); // '' or '/api/hassio_ingress/xxx/'
-    // Ensure the base path always ends with '/' so concatenating 'ws/connection' is valid
-    const basePath = rawBase.endsWith('/') ? rawBase : rawBase ? rawBase + '/' : '/';
-
-    let wsUrl: string;
-    if (import.meta.env.DEV) {
-      // In dev, Vite's WS server on port 5173 conflicts with HMR on the same /ws path,
-      // causing "Invalid frame header". Connect directly to the backend port instead.
-      // VITE_BACKEND_PORT is injected by vite.config.ts from SERVER_PORT (Docker host port)
-      // or PORT (local dev port), defaulting to 3003.
-      const backendPort = import.meta.env.VITE_BACKEND_PORT || '3003';
-      wsUrl = `${protocol}//${window.location.hostname}:${backendPort}${basePath}ws/connection`;
-    } else {
-      // Production: same origin, reverse proxy forwards /ws/* to backend.
-      wsUrl = `${protocol}//${window.location.host}${basePath}ws/connection`;
-    }
-
-    // Append JWT token for WebSocket authentication
-    const token = useUserAuthStore.getState().getToken();
-    if (token) {
-      wsUrl += `${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-    }
-
+    const wsUrl = buildWsUrl('connection');
     if (import.meta.env.DEV) {
       console.log('[WS Client] Connecting to:', wsUrl);
     }
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    receivedStatusRef.current = false;
 
     ws.onopen = () => {
-      isConnectingRef.current = false; // Connexion établie
+      if (wsRef.current !== ws) return;
       if (import.meta.env.DEV) {
         console.log('[WS Client] Connected successfully');
       }
       setIsConnected(true);
       reconnectAttemptsRef.current = 0; // Reset counter on successful connection
-      isPermanentlyDisabledRef.current = false; // Réactiver en cas de succès
       // Don't fetch immediately - wait for WebSocket to send data
       // The server will send connection_status and system_status via WebSocket
       // Only fetch if WebSocket doesn't send data within a reasonable time
-      if (fallbackFetchTimeoutRef.current) {
-        clearTimeout(fallbackFetchTimeoutRef.current);
-      }
+      clearTimer(fallbackFetchTimeoutRef);
       fallbackFetchTimeoutRef.current = setTimeout(() => {
         fallbackFetchTimeoutRef.current = null;
         // If still connected but no data received, do a fallback fetch
-        if (wsRef.current?.readyState === WebSocket.OPEN && !isConnected) {
+        if (wsRef.current === ws && ws.readyState === WebSocket.OPEN && !receivedStatusRef.current) {
           fetchConnectionStatus();
         }
       }, 2000); // Wait 2 seconds for WebSocket data
@@ -171,6 +128,7 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
 
         if (message.type === 'connection_status' && message.data) {
           const status = message.data as ConnectionStatus;
+          receivedStatusRef.current = true;
 
           // When tab is hidden, update status only — don't grow the history array.
           // Prevents a render storm in chart components when the tab becomes visible again.
@@ -254,8 +212,8 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
         } else if (message.type === 'freebox_event' && message.eventType && message.data) {
           // Native Freebox WebSocket event (lan_host, vm_state, etc.)
           // console.log('[WS Client] Freebox event:', message.eventType, message.data); // Debug only
-          if (onFreeboxEvent) {
-            onFreeboxEvent(message.eventType, message.data as LanHostEventData | VmEventData);
+          if (onFreeboxEventRef.current) {
+            onFreeboxEventRef.current(message.eventType, message.data as LanHostEventData | VmEventData);
           }
         }
       } catch (error) {
@@ -264,125 +222,87 @@ export function useConnectionWebSocket(options: UseConnectionWebSocketOptions = 
     };
 
     ws.onclose = (event) => {
-      isConnectingRef.current = false; // Connexion fermée
-      setIsConnected(false);
+      // Closed on purpose (disconnect, hidden tab) or already replaced: nothing to do
+      if (wsRef.current !== ws) return;
       wsRef.current = null;
+      clearTimer(fallbackFetchTimeoutRef);
+      setIsConnected(false);
 
-      // Only log disconnections with error codes (not normal closures)
-      // Code 1006 (abnormal closure) is normal during development when backend restarts
-      // In production, code 1006 is also common when nginx is not configured for WebSocket
-      // Suppress these logs to avoid flooding the console
-      if (event.code !== 1000 && event.code !== 1001) {
-        // Code 1006 is expected in both dev and prod (backend restart, proxy issues, nginx misconfiguration)
-        if (event.code === 1006) {
-          // Increment reconnect attempts counter
-          reconnectAttemptsRef.current += 1;
-          
-          // Stop trying after max attempts to avoid infinite flood
-          if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-            // Silently stop - nginx is probably not configured correctly
-            // User will need to fix nginx configuration
-            // In production, HTTP polling fallback is already active
-            isPermanentlyDisabledRef.current = true;
-          return;
-        }
-        } else {
-          // Only log unexpected error codes (not 1006)
-          if (import.meta.env.DEV) {
-            console.warn('[WS Client] Disconnected:', event.code, event.reason);
-      }
-        }
-      } else {
-        // Normal closure - reset counter
-        reconnectAttemptsRef.current = 0;
+      // Code 1006 (abnormal closure) is expected on backend restarts and proxy issues: not logged
+      if (import.meta.env.DEV && event.code !== 1000 && event.code !== 1001 && event.code !== 1006) {
+        console.warn('[WS Client] Disconnected:', event.code, event.reason);
       }
 
-      // Reconnect after delay if still enabled and under max attempts
-      // In production, stop after 1 attempt to avoid console spam
-      // HTTP polling fallback is already active and will handle data updates
-      if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts && !isPermanentlyDisabledRef.current) {
-        const delay = Math.min(3000 * (reconnectAttemptsRef.current + 1), 10000); // Exponential backoff, max 10s
-        reconnectTimeoutRef.current = setTimeout(() => {
-          // console.log('[WS Client] Attempting reconnect...'); // Debug only
-          connect();
-        }, delay);
-      }
-    };
-
-    ws.onerror = (error) => {
-      isConnectingRef.current = false; // Erreur, on peut réessayer
-      // Intercepter l'erreur pour éviter qu'elle soit loggée par le navigateur
-      // On ne peut pas complètement supprimer les erreurs natives du navigateur,
-      // mais on peut éviter de créer de nouvelles connexions si elles échouent
-      
-      // Incrémenter le compteur d'échecs
+      // Hidden tab: the visibility handler reconnects when it is visible again
+      if (!enabledRef.current || document.hidden) return;
       reconnectAttemptsRef.current += 1;
-      
-      // Si on a dépassé le max, désactiver définitivement
-      if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-        isPermanentlyDisabledRef.current = true;
-        // Fermer la connexion pour éviter d'autres erreurs
-        if (wsRef.current) {
-          try {
-            wsRef.current.close();
-          } catch (e) {
-            // Ignorer les erreurs de fermeture
-          }
-          wsRef.current = null;
-        }
-        // En dev, logger un message informatif
-        if (import.meta.env.DEV) {
-          console.warn('[WS Client] WebSocket permanently disabled after', maxReconnectAttempts, 'failed attempts. Using HTTP polling fallback.');
-        }
-      }
-      
-      // Ne rien logger - le navigateur affichera ses propres erreurs qu'on ne peut pas supprimer
-      // Mais on évite au moins de créer de nouvelles connexions qui échoueront
+      // Past the last attempt, retried on visibilitychange / online. HTTP polling fallback covers the gap.
+      if (reconnectAttemptsRef.current > WS_MAX_RECONNECT_ATTEMPTS) return;
+      reconnectTimeoutRef.current = setTimeout(connect, wsReconnectDelay(reconnectAttemptsRef.current));
     };
-  }, [enabled, fetchConnectionStatus, onFreeboxEvent]);
+
+    // onclose always follows an error and schedules the retry
+    ws.onerror = () => undefined;
+  }, [fetchConnectionStatus]);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
+    clearTimer(reconnectTimeoutRef);
+    clearTimer(fallbackFetchTimeoutRef);
 
-    if (fallbackFetchTimeoutRef.current) {
-      clearTimeout(fallbackFetchTimeoutRef.current);
-      fallbackFetchTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    const ws = wsRef.current;
+    wsRef.current = null; // before close(), so onclose does not schedule a reconnect
+    if (ws) {
+      ws.close();
     }
 
     setIsConnected(false);
     reconnectAttemptsRef.current = 0; // Reset counter on manual disconnect
-    isPermanentlyDisabledRef.current = false; // Réactiver si déconnecté manuellement
   }, []);
 
   useEffect(() => {
-    if (enabled) {
-      // Add a small delay to ensure backend is ready (especially after npm run dev restart)
-      const connectTimeout = setTimeout(() => {
-      connect();
-      }, 500);
-      
-      return () => {
-        clearTimeout(connectTimeout);
-        disconnect();
-      };
-    } else {
+    if (!enabled) {
       disconnect();
+      return;
+    }
+
+    // Add a small delay to ensure backend is ready (especially after npm run dev restart)
+    const connectTimeout = setTimeout(connect, 500);
+
+    // Retry right away (fresh attempt counter) when no socket is open
+    const retryNow = () => {
+      if (wsRef.current) return;
+      reconnectAttemptsRef.current = 0;
+      connect();
+    };
+    const startHiddenClose = () => {
+      clearTimer(hiddenCloseTimeoutRef);
+      hiddenCloseTimeoutRef.current = setTimeout(disconnect, WS_HIDDEN_CLOSE_MS);
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        startHiddenClose();
+      } else {
+        clearTimer(hiddenCloseTimeoutRef);
+        retryNow();
+      }
+    };
+    if (document.hidden) startHiddenClose();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', retryNow);
+
     return () => {
+      clearTimeout(connectTimeout);
+      clearTimer(hiddenCloseTimeoutRef);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', retryNow);
       disconnect();
     };
-    }
   }, [enabled, connect, disconnect]);
 
   return { isConnected };
 }
+
 
 // Export types for use in components
 export type { LanHostEventData, VmEventData };

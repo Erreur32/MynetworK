@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -237,26 +238,24 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ onBack }) => {
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
 
   // Fetch extended history on mount and when time range changes
-  useEffect(() => {
+  const refreshHistory = useCallback(() => {
     const durations: Record<TimeRange, number> = {
       '1h': 3600,
       '6h': 21600,
       '24h': 86400,
       '7d': 604800
     };
-
-    // Initial fetch
     fetchExtendedHistory(durations[timeRange]);
     fetchTemperatureHistory(durations[timeRange]);
-
-    // Auto-refresh every 30 seconds
-    const refreshInterval = setInterval(() => {
-      fetchExtendedHistory(durations[timeRange]);
-      fetchTemperatureHistory(durations[timeRange]);
-    }, 30000);
-
-    return () => clearInterval(refreshInterval);
   }, [timeRange, fetchExtendedHistory, fetchTemperatureHistory]);
+
+  // Initial fetch
+  useEffect(() => {
+    refreshHistory();
+  }, [refreshHistory]);
+
+  // Auto-refresh every 30 seconds (paused while the tab is hidden)
+  usePolling(refreshHistory, { interval: 30000, immediate: false });
 
   // Calculate bandwidth stats
   const bandwidthStats = React.useMemo(() => {

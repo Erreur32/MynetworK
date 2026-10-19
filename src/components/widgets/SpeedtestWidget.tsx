@@ -1,8 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { ArrowDown, ArrowUp, RefreshCw, Info, Wifi, Zap, Clock } from 'lucide-react';
 import { SparkLine } from './SparkLine';
 import { Tooltip } from '../ui/Tooltip';
 import { api } from '../../api/client';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { usePolling } from '../../hooks/usePolling';
 
 interface BandwidthInfo {
   downloadMax: number; // Gbps
@@ -21,31 +23,33 @@ interface PingResult {
 }
 
 export const SpeedtestWidget: React.FC = () => {
-  const [bandwidthInfo, setBandwidthInfo] = useState<BandwidthInfo | null>(null);
+  // Line status comes from the connection store, kept live by the connection WebSocket
+  // (App.tsx polls /api/connection every 5s as fallback while the socket is down).
+  const connectionStatus = useConnectionStore((s) => s.status);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  // Fetch bandwidth only (fast, for real-time rate)
-  const fetchBandwidth = useCallback(async () => {
-    try {
-      const bandwidthResponse = await api.get<BandwidthInfo>('/api/speedtest/bandwidth');
-      if (bandwidthResponse.success && bandwidthResponse.result) {
-        setBandwidthInfo(bandwidthResponse.result);
-        setLastUpdate(new Date());
-      }
-    } catch (err) {
-      console.error('[Speedtest] Bandwidth error:', err);
-    }
-  }, []);
+  // Same values as GET /api/speedtest/bandwidth (bytes/s -> Gbps, bits/s -> Gbps)
+  const bandwidthInfo = useMemo<BandwidthInfo | null>(() => {
+    if (!connectionStatus) return null;
+    return {
+      downloadRate: (connectionStatus.rate_down * 8) / 1_000_000_000,
+      uploadRate: (connectionStatus.rate_up * 8) / 1_000_000_000,
+      downloadMax: connectionStatus.bandwidth_down / 1_000_000_000,
+      uploadMax: connectionStatus.bandwidth_up / 1_000_000_000,
+      state: connectionStatus.state,
+      type: connectionStatus.type,
+      media: connectionStatus.media
+    };
+  }, [connectionStatus]);
 
-  // Fetch all data including ping (slower)
-  const fetchAllData = useCallback(async () => {
+  // Derived, not an effect + state: avoids a second render on every WebSocket status update
+  const lastUpdate = useMemo(() => (connectionStatus ? new Date() : null), [connectionStatus]);
+
+  // Fetch ping (slower); line status is already live from the store
+  const fetchPing = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch bandwidth info
-      await fetchBandwidth();
-
       // Fetch ping (quick 5 pings)
       const pingResponse = await api.get<{ latency: number; jitter: number; packetLoss: number }>(
         '/api/speedtest/ping?count=5'
@@ -62,23 +66,10 @@ export const SpeedtestWidget: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchBandwidth]);
+  }, []);
 
-  useEffect(() => {
-    // Initial fetch with ping
-    fetchAllData();
-
-    // Fast refresh for bandwidth only (every 2 seconds)
-    const bandwidthInterval = setInterval(fetchBandwidth, 2000);
-
-    // Slow refresh for ping (every 60 seconds)
-    const pingInterval = setInterval(fetchAllData, 60000);
-
-    return () => {
-      clearInterval(bandwidthInterval);
-      clearInterval(pingInterval);
-    };
-  }, [fetchAllData, fetchBandwidth]);
+  // Initial fetch with ping, then slow refresh for ping (every 60 seconds)
+  usePolling(fetchPing, { interval: 60000 });
 
   // Format speed for display (speed is in Gbps)
   const formatSpeedValue = (speedGbps: number | undefined): { value: string; unit: string } => {
@@ -108,7 +99,7 @@ export const SpeedtestWidget: React.FC = () => {
           <span>{bandwidthInfo?.type ?? '--'} {bandwidthInfo?.media ?? ''}</span>
         </div>
         <button
-          onClick={fetchAllData}
+          onClick={fetchPing}
           disabled={isLoading}
           className="p-1.5 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
           title="Actualiser"

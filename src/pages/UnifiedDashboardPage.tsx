@@ -9,9 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { MultiSourceWidget, SystemServerWidget, PluginSummaryCard, BandwidthHistoryWidget, NetworkScanWidget, NetworkSummaryDashboardWidget } from '../components/widgets';
 import { TrafficHistoryModal } from '../components/modals';
 import { usePluginStore } from '../stores/pluginStore';
-import { usePolling } from '../hooks/usePolling';
 import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
-import { POLLING_INTERVALS } from '../utils/constants';
 
 interface UnifiedDashboardPageProps {
     onNavigateToFreebox?: () => void;
@@ -39,12 +37,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
             fetchAllStats();
         }
     }, [plugins, fetchAllStats]);
-
-    // Poll plugin stats every 30 seconds
-    usePolling(fetchAllStats, {
-        enabled: plugins.some(p => p.enabled),
-        interval: POLLING_INTERVALS.system
-    });
+    // Periodic stats refresh is done once for the whole app (App.tsx)
 
     const activePlugins = plugins.filter(p => p.enabled && p.connectionStatus);
     const hasUniFi = activePlugins.some(p => p.id === 'unifi');

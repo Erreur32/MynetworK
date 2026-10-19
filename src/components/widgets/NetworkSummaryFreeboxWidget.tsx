@@ -79,7 +79,8 @@ export const NetworkSummaryFreeboxWidget: React.FC = () => {
 
   usePolling(fetchNetworkSummary, {
     enabled: true,
-    interval: POLLING_INTERVALS.system
+    interval: POLLING_INTERVALS.system,
+    immediate: false // First load done by the effect above
   });
 
   if (isLoading && !data) {

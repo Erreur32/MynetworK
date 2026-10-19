@@ -160,14 +160,15 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
         }
     }, [fetchExtendedHistory, selectedRange, source]);
 
-    // Freebox: keep history ranges updated over time
+    // Freebox: keep history ranges updated over time (first load done by the effect above)
     usePolling(() => {
         if (selectedRange > 0) {
             fetchExtendedHistory(selectedRange).catch(() => {});
         }
     }, {
         enabled: source === 'freebox' && selectedRange > 0,
-        interval: POLLING_INTERVALS.system
+        interval: POLLING_INTERVALS.system,
+        immediate: false
     });
 
     // UniFi: fetch bandwidth history
@@ -182,15 +183,21 @@ const [selectedRangeState, setSelectedRangeState] = useState<BandwidthRange>(() 
         }
     };
 
+    // Live mode reads the WebSocket store: the HTTP history is only needed for
+    // ranges, or as live fallback while the socket is down.
+    const unifiFetchEnabled = source === 'unifi' && (selectedRange > 0 || !unifiWsConnected);
+
     useEffect(() => {
-        if (source === 'unifi') {
+        if (unifiFetchEnabled) {
             fetchUnifiData();
         }
-    }, [source, selectedRange]);
+    }, [unifiFetchEnabled, selectedRange]);
 
+    // First load done by the effect above
     usePolling(fetchUnifiData, {
-        enabled: source === 'unifi',
-        interval: POLLING_INTERVALS.system
+        enabled: unifiFetchEnabled,
+        interval: POLLING_INTERVALS.system,
+        immediate: false
     });
 
     let freeboxChartData = extendedHistory.length > 0 ? extendedHistory : history;

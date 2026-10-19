@@ -25,6 +25,21 @@ import { TopTrafficOverlay } from '../components/ui/TopTrafficOverlay';
 import { ModalBackdropButton } from '../components/ui/ModalBackdropButton';
 import { useTranslation } from 'react-i18next';
 
+// Minimum delay between two refreshes of per-device data (latency, traffic) when the device set is unchanged
+const SCAN_DERIVED_REFRESH_MS = 25000;
+// During a manual scan/refresh, progress is polled every 2s and the list every SCAN_LIST_REFRESH_TICKS ticks
+const SCAN_POLL_MS = 2000;
+const SCAN_LIST_REFRESH_TICKS = 3;
+
+/** True (and records the fetch) when the key changed or the last fetch is older than SCAN_DERIVED_REFRESH_MS */
+function isDerivedRefreshDue(last: { key: string; at: number }, key: string): boolean {
+    const now = Date.now();
+    if (last.key === key && now - last.at < SCAN_DERIVED_REFRESH_MS) return false;
+    last.key = key;
+    last.at = now;
+    return true;
+}
+
 /** Ports connus : numéro → nom du service (pour les tooltips) */
 const WELL_KNOWN_PORTS: Record<number, string> = {
     20: 'FTP-DATA', 21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP', 110: 'POP3',
@@ -351,7 +366,35 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [showRefreshDropdown, setShowRefreshDropdown] = useState(false); // État pour afficher/masquer le dropdown
     const refreshDropdownRef = useRef<HTMLDivElement>(null); // Référence pour fermer le dropdown au clic extérieur
     const [defaultConfigLoaded, setDefaultConfigLoaded] = useState(false);
-    const scanPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    // Manual scan / refresh progress polling (driven by usePolling, paused while the tab is hidden)
+    const [scanPollMode, setScanPollModeState] = useState<'scan' | 'refresh' | null>(null);
+    const scanPollModeRef = useRef<'scan' | 'refresh' | null>(null);
+    const scanPollTickRef = useRef(0);
+    const scanPollCountersRef = useRef('');
+    // Tick set by handleScan / handleRefresh (captures that run's values, like the former setInterval callback)
+    const scanPollTickFnRef = useRef<(() => Promise<void>) | null>(null);
+    usePolling(() => {
+        if (!scanPollModeRef.current || !scanPollTickFnRef.current) return;
+        scanPollTickRef.current += 1;
+        return scanPollTickFnRef.current();
+    }, {
+        enabled: scanPollMode !== null,
+        interval: SCAN_POLL_MS,
+        immediate: false
+    });
+    const setScanPollMode = (mode: 'scan' | 'refresh' | null) => {
+        scanPollModeRef.current = mode;
+        scanPollTickRef.current = 0;
+        scanPollCountersRef.current = '';
+        setScanPollModeState(mode);
+    };
+    // True when the found/updated counters moved since the last tick: the list is refreshed right away
+    const scanCountersChanged = (found?: number, updated?: number): boolean => {
+        const key = `${found ?? 0}:${updated ?? 0}`;
+        const changed = key !== scanPollCountersRef.current;
+        scanPollCountersRef.current = key;
+        return changed;
+    };
     const [showAddIpModal, setShowAddIpModal] = useState(false);
     const [manualIp, setManualIp] = useState('');
     const [manualMac, setManualMac] = useState('');
@@ -835,64 +878,57 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     }, [defaultConfigLoaded, fetchHistory]);
 
-    // Fetch monitoring data when scans change
+    // Fetch monitoring and traffic data when scans change: right away when the set of
+    // IPs / MACs changes, otherwise at most every SCAN_DERIVED_REFRESH_MS (the list is
+    // refetched every 2-6s during a scan, the per-device data does not need that rate).
+    const scanIpKey = useMemo(() => scans.map(scan => scan.ip).sort().join(','), [scans]);
+    const scanMacKey = useMemo(() => scans.map(scan => scan.mac?.trim().toLowerCase() || '').sort().join(','), [scans]);
+    const monitoringFetchRef = useRef({ key: '', at: 0 });
+    const trafficFetchRef = useRef({ key: '', at: 0 });
+
     useEffect(() => {
-        if (scans.length > 0) {
+        if (scans.length > 0 && isDerivedRefreshDue(monitoringFetchRef.current, scanIpKey)) {
             fetchMonitoringData();
         }
-    }, [scans, fetchMonitoringData]);
+    }, [scans, scanIpKey, fetchMonitoringData]);
 
-    // Fetch traffic data when scans change
     useEffect(() => {
-        if (scans.length > 0) {
+        if (scans.length > 0 && isDerivedRefreshDue(trafficFetchRef.current, scanMacKey)) {
             fetchTrafficData();
         }
-    }, [scans, fetchTrafficData]);
+    }, [scans, scanMacKey, fetchTrafficData]);
 
-    // Cleanup polling interval on unmount
+    // Poll scan progress during auto scans (a boolean dependency: autoStatus itself is refetched every 30s)
+    const isAutoScanRunning = !!autoStatus && (
+        autoStatus.fullScan.scheduler.running ||
+        autoStatus.refresh.scheduler.running
+    );
+
     useEffect(() => {
-        return () => {
-            if (scanPollingIntervalRef.current) {
-                clearInterval(scanPollingIntervalRef.current);
-                scanPollingIntervalRef.current = null;
-            }
-        };
-    }, []);
+        // Clear progress when auto scan stops
+        if (!isAutoScanRunning && !isScanning && !isRefreshing) {
+            setScanProgress(null);
+        }
+    }, [isAutoScanRunning, isScanning, isRefreshing]);
 
-    // Poll scan progress during auto scans
-    useEffect(() => {
-        const isAutoScanRunning = autoStatus && (
-            autoStatus.fullScan.scheduler.running ||
-            autoStatus.refresh.scheduler.running
-        );
-
-        if (!isAutoScanRunning) {
-            // Clear progress when auto scan stops
-            if (!isScanning && !isRefreshing) {
+    // Poll progress every 2 seconds during auto scans
+    usePolling(async () => {
+        try {
+            const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
+            if (progressResponse.success && progressResponse.result) {
+                setScanProgress(progressResponse.result);
+            } else if (progressResponse.success && !progressResponse.result) {
+                // Scan completed, clear progress
                 setScanProgress(null);
             }
-            return;
+        } catch (error) {
+            // Ignore errors, progress is optional
         }
-
-        // Poll progress every 2 seconds during auto scans
-        const progressInterval = setInterval(async () => {
-            try {
-                const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
-                if (progressResponse.success && progressResponse.result) {
-                    setScanProgress(progressResponse.result);
-                } else if (progressResponse.success && !progressResponse.result) {
-                    // Scan completed, clear progress
-                    setScanProgress(null);
-                }
-            } catch (error) {
-                // Ignore errors, progress is optional
-            }
-        }, 2000);
-
-        return () => {
-            clearInterval(progressInterval);
-        };
-    }, [autoStatus, isScanning, isRefreshing]);
+    }, {
+        enabled: isAutoScanRunning,
+        interval: 2000,
+        immediate: false
+    });
 
     // Poll stats every 30 seconds if active
     // Optimized: Only fetch essential data, stagger requests to avoid blocking
@@ -917,11 +953,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     });
 
     // Poll port-scan progress when it is active (nmap running in background after full scan)
-    useEffect(() => {
-        if (!portScanProgress?.active) return;
-        const t = setInterval(fetchPortScanProgress, 2000);
-        return () => clearInterval(t);
-    }, [portScanProgress?.active, fetchPortScanProgress]);
+    usePolling(fetchPortScanProgress, {
+        enabled: !!portScanProgress?.active,
+        interval: 2000,
+        immediate: false
+    });
 
     const handleResultsPerPageChange = (value: string) => {
         if (value === 'full') {
@@ -946,19 +982,11 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         setScanProgress(null);
         setLastScanSummary(null);
 
-        // Clear any existing polling interval before creating a new one
-        if (scanPollingIntervalRef.current) {
-            clearInterval(scanPollingIntervalRef.current);
-            scanPollingIntervalRef.current = null;
-        }
+        // Start polling to refresh the list and progress during scan: progress every 2s,
+        // list every SCAN_LIST_REFRESH_TICKS ticks or as soon as the found/updated counters move
+        scanPollTickFnRef.current = async () => {
+            let refreshList = scanPollTickRef.current % SCAN_LIST_REFRESH_TICKS === 0;
 
-        // Start polling to refresh the list and progress during scan
-        // Reduced frequency to 2 seconds to improve performance
-        const interval = setInterval(async () => {
-            fetchHistory();
-            fetchStats();
-            fetchPortScanProgress();
-            
             // Fetch scan progress or final results
             try {
                 const progressResponse = await api.get<{
@@ -989,15 +1017,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                         setScanProgress(null);
                         setIsScanning(false);
                         setCurrentScanRange('');
-                        if (scanPollingIntervalRef.current) {
-                            clearInterval(scanPollingIntervalRef.current);
-                            scanPollingIntervalRef.current = null;
-                        }
-                        
+                        setScanPollMode(null);
+
                         // Final refresh after scan completes; then check if port scan started (nmap in background)
                         await fetchStats();
                         await fetchHistory();
                         await fetchPortScanProgress();
+                        return;
                     } else if (result && result.status === 'in_progress') {
                         // Scan still in progress, update progress
                         setScanProgress({
@@ -1017,6 +1043,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                             });
                         }
                     }
+                    if (scanCountersChanged(result.found, result.updated)) refreshList = true;
                 } else if (progressResponse.success && !progressResponse.result) {
                     // No scan in progress and no results (shouldn't happen during scan, but handle gracefully)
                     setScanProgress(null);
@@ -1024,9 +1051,14 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             } catch (error) {
                 // Ignore errors, progress is optional
             }
-        }, 2000); // Refresh every 2 seconds during scan (reduced from 1s for better performance)
-        scanPollingIntervalRef.current = interval;
-        
+
+            if (refreshList) {
+                fetchHistory(); // also refreshes the port scan progress
+                fetchStats();
+            }
+        };
+        setScanPollMode('scan');
+
         try {
             // Start scan (returns immediately with "scan started" status)
             const response = await api.post<{
@@ -1049,10 +1081,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
                 setIsScanning(false);
                 setCurrentScanRange('');
                 setScanProgress(null);
-                if (scanPollingIntervalRef.current) {
-                    clearInterval(scanPollingIntervalRef.current);
-                    scanPollingIntervalRef.current = null;
-                }
+                setScanPollMode(null);
                 alert(response.error?.message || t('networkScan.errors.scanStart'));
             }
         } catch (error: any) {
@@ -1060,10 +1089,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setIsScanning(false);
             setCurrentScanRange('');
             setScanProgress(null);
-            if (scanPollingIntervalRef.current) {
-                clearInterval(scanPollingIntervalRef.current);
-                scanPollingIntervalRef.current = null;
-            }
+            setScanPollMode(null);
             alert(t('networkScan.errors.scanStartWithError', { error: error.message || t('networkScan.errors.unknown') }));
         }
     };
@@ -1137,23 +1163,17 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         setScanProgress(null);
         setLastScanSummary(null);
 
-        // Clear any existing polling interval before creating a new one
-        if (scanPollingIntervalRef.current) {
-            clearInterval(scanPollingIntervalRef.current);
-            scanPollingIntervalRef.current = null;
-        }
+        // Start polling to refresh the list during refresh: progress every 2s, list every
+        // SCAN_LIST_REFRESH_TICKS ticks or as soon as the found/updated counters move
+        scanPollTickFnRef.current = async () => {
+            let refreshList = scanPollTickRef.current % SCAN_LIST_REFRESH_TICKS === 0;
 
-        // Start polling to refresh the list during refresh
-        // Reduced frequency to 2 seconds to improve performance
-        const interval = setInterval(async () => {
-            fetchHistory();
-            fetchStats();
-            
             // Fetch scan progress (refresh also uses the same progress system)
             try {
                 const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
                 if (progressResponse.success && progressResponse.result) {
                     setScanProgress(progressResponse.result);
+                    if (scanCountersChanged(progressResponse.result.found, progressResponse.result.updated)) refreshList = true;
                 } else if (progressResponse.success && !progressResponse.result) {
                     // Refresh completed, clear progress
                     setScanProgress(null);
@@ -1161,8 +1181,13 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             } catch (error) {
                 // Ignore errors, progress is optional
             }
-        }, 2000); // Refresh every 2 seconds during refresh (reduced from 1s for better performance)
-        scanPollingIntervalRef.current = interval;
+
+            if (refreshList) {
+                fetchHistory();
+                fetchStats();
+            }
+        };
+        setScanPollMode('refresh');
 
         try {
             const response = await api.post<{
@@ -1203,10 +1228,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             setIsRefreshing(false);
             setCurrentScanRange('');
             setScanProgress(null);
-            if (scanPollingIntervalRef.current) {
-                clearInterval(scanPollingIntervalRef.current);
-                scanPollingIntervalRef.current = null;
-            }
+            setScanPollMode(null);
         }
     };
 
