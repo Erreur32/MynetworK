@@ -9,6 +9,7 @@ import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
 import { logBuffer } from '../utils/logBuffer.js';
+import { getUpstreamStats, resetUpstreamStats } from '../utils/upstreamCallStats.js';
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -100,5 +101,29 @@ router.delete('/logs', requireAuth, requireAdmin, asyncHandler(async (req: Authe
     result: { message: 'Logs cleared' }
   });
 }));
+
+/**
+ * GET /api/debug/upstream-calls
+ * Requests sent to the Freebox and the UniFi controller per endpoint: real calls,
+ * cache hits and shared in-flight answers, last minute, last hour and since start
+ */
+router.get('/upstream-calls', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res) => {
+  res.json({
+    success: true,
+    result: getUpstreamStats()
+  });
+});
+
+/**
+ * DELETE /api/debug/upstream-calls
+ * Reset the upstream call counters (starts a new measurement window)
+ */
+router.delete('/upstream-calls', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res) => {
+  resetUpstreamStats();
+  res.json({
+    success: true,
+    result: { message: 'Upstream call counters reset' }
+  });
+});
 
 export default router;

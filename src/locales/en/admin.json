@@ -602,6 +602,20 @@
       "activeFeatureNotifications": "Security notifications",
       "saveSettings": "Save settings"
     },
+    "upstream": {
+      "title": "Freebox and UniFi requests",
+      "since": "Counting since {{date}} ({{minutes}} min)",
+      "reset": "Reset",
+      "help": "Calls = requests really sent to the device. Cache hits = reads answered from the short cache or by sharing a request already in flight. Last minute and last hour count complete minutes.",
+      "lastMinute": "Last minute",
+      "lastHour": "Last hour",
+      "perMinute": "Average per minute ({{minutes}} min)",
+      "totalCalls": "Calls",
+      "cacheHits": "Cache hits",
+      "saved": "Saved",
+      "endpoint": "Endpoint",
+      "empty": "No request yet"
+    },
     "debug": {
       "filterAll": "All",
       "filterError": "Errors",

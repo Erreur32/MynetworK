@@ -4,6 +4,7 @@ import path from 'path';
 import type { Agent } from 'undici';
 import {config, API_ENDPOINTS} from '../config.js';
 import { logger } from '../utils/logger.js';
+import { recordUpstream } from '../utils/upstreamCallStats.js';
 import { insecureAgent } from '../utils/insecureAgent.js';
 
 // Export the class for use in plugins
@@ -270,6 +271,7 @@ class FreeboxApiService {
             if (agent && agent.constructor && agent.constructor.name === 'Agent') {
                 (fetchOptions as any).dispatcher = agent;
             }
+            recordUpstream('freebox', `${method} ${endpoint}`, 'call');
             const response = await fetch(url, fetchOptions);
             clearTimeout(timeout);
             // Check if response is JSON
@@ -379,11 +381,15 @@ class FreeboxApiService {
         }
 
         const cached = this.readCache<T>(endpoint);
-        if (cached) return cached;
+        if (cached) {
+            recordUpstream('freebox', `GET ${endpoint}`, 'cache');
+            return cached;
+        }
 
         const lockKey = `GET:${endpoint}`;
         const existingLock = this.endpointLocks.get(lockKey);
         if (existingLock !== undefined) {
+            recordUpstream('freebox', `GET ${endpoint}`, 'shared');
             // Reuse the in-flight request, with a private copy for this caller
             return existingLock.then((response) => structuredClone(response)) as Promise<FreeboxApiResponse<T>>;
         }
@@ -716,8 +722,10 @@ class FreeboxApiService {
     // Static data: fetched once, then served from memory (copy, callers may mutate it)
     async getApiVersion(): Promise<FreeboxApiResponse> {
         if (this.apiVersionCached && this.versionInfo) {
+            recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'cache');
             return {success: true, result: {...this.versionInfo}};
         }
+        if (this.apiVersionPromise !== null) recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'shared');
         this.apiVersionPromise ??= this.fetchApiVersion().finally(() => {
             this.apiVersionPromise = null;
         });
@@ -728,6 +736,7 @@ class FreeboxApiService {
     private async fetchApiVersion(): Promise<FreeboxApiResponse> {
         const baseUrl = this.baseUrl;
         const url = `${baseUrl}${API_ENDPOINTS.API_VERSION}`;
+        recordUpstream('freebox', `GET ${API_ENDPOINTS.API_VERSION}`, 'call');
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.freebox.requestTimeout);
@@ -908,7 +917,9 @@ class FreeboxApiService {
             if (entry.expires <= nowMs) this.rrdCache.delete(k);
         }
         let entry = this.rrdCache.get(key);
-        if (!entry) {
+        if (entry) {
+            recordUpstream('freebox', `POST ${API_ENDPOINTS.RRD}`, 'cache');
+        } else {
             const value = this.requestWithLock('POST', API_ENDPOINTS.RRD, body);
             entry = { expires: nowMs + ttlSec * 1000, value };
             this.rrdCache.set(key, entry);
@@ -1144,6 +1155,7 @@ class FreeboxApiService {
     async addDownload(downloadUrl: string, downloadDir?: string): Promise<FreeboxApiResponse> {
         // The Freebox API requires application/x-www-form-urlencoded for downloads/add
         const url = this.buildUrl(API_ENDPOINTS.DOWNLOADS_ADD);
+        recordUpstream('freebox', `POST ${API_ENDPOINTS.DOWNLOADS_ADD}`, 'call');
         const headers: Record<string, string> = {
             'Content-Type': 'application/x-www-form-urlencoded'
         };
@@ -1217,6 +1229,7 @@ class FreeboxApiService {
         const fullBody = Buffer.concat([bodyPrefix, fileBuffer, bodySuffixBuffer]);
 
         const url = this.buildUrl(API_ENDPOINTS.DOWNLOADS_ADD);
+        recordUpstream('freebox', `POST ${API_ENDPOINTS.DOWNLOADS_ADD}`, 'call');
         const headers: Record<string, string> = {
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
             'Content-Length': fullBody.length.toString()
