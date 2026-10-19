@@ -66,6 +66,7 @@ import { useUserAuthStore, type User } from '../stores/userAuthStore';
 import { ExporterSection, ConfigExportImportSection } from '../components/ExporterSection';
 import { PluginsManagementSection } from '../components/PluginsManagementSection';
 import { McpSection } from '../components/McpSection';
+import { UpstreamCallsSection } from '../components/UpstreamCallsSection';
 import { ApiTokensSection } from '../components/ApiTokensSection';
 import logoMynetworK from '../icons/logo_mynetwork.svg';
 import { APP_VERSION, getVersionString } from '../constants/version';
@@ -5299,6 +5300,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 </Section>
                 <Section title={t('admin.logLevels')} icon={Monitor} iconColor="violet">
                   <DebugLogSection />
+                </Section>
+                <Section title={t('admin.upstream.title')} icon={Network} iconColor="cyan">
+                  <UpstreamCallsSection />
                 </Section>
 
                 <Section title={t('admin.debugDiagnostics')} icon={Monitor} iconColor="violet">

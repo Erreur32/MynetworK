@@ -11,6 +11,7 @@ import type { Agent } from 'undici';
 import { logger } from '../../utils/logger.js';
 import { insecureAgent } from '../../utils/insecureAgent.js';
 import { getErrorMessage } from '../../utils/errorMessage.js';
+import { recordUpstream } from '../../utils/upstreamCallStats.js';
 
 // Strip trailing '/' characters without using a regex (avoids SonarCloud S5852 ReDoS hotspot)
 const stripTrailingSlashes = (s: string): string => {
@@ -257,6 +258,7 @@ export class UniFiApiService {
                 if (agent && agent.constructor && agent.constructor.name === 'Agent') {
                     (fetchOptions as any).dispatcher = agent;
                 }
+                recordUpstream('unifi', 'POST logout', 'call');
                 await fetch(logoutUrl, fetchOptions).catch(() => {
                     // Ignore errors on logout, as the session may already be invalid
                 });
@@ -301,6 +303,14 @@ export class UniFiApiService {
         this.gatewayFilterDisabledUntilMs = 0;
     }
 
+    // Counter label of a cachedFetch key: the controller path, or the cache family (sm, report)
+    private static upstreamLabel(key: string): string {
+        const parts = key.split('|');
+        if (parts[0] === 'ctl') return `GET ${parts.slice(3).join('|')}`;
+        if (parts[0] === 'sm') return `GET sm:${parts[1]}`;
+        return parts[0];
+    }
+
     /**
      * Return a cached value younger than ttlMs, join an identical request already in flight,
      * or run load() once and share its result. The returned data is always a deep clone.
@@ -308,10 +318,13 @@ export class UniFiApiService {
     private async cachedFetch<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<{ data: T; fetchedAt: number }> {
         const cached = this.responseCache.get(key);
         if (cached && Date.now() - cached.at < ttlMs) {
+            recordUpstream('unifi', UniFiApiService.upstreamLabel(key), 'cache');
             return { data: structuredClone(cached.data) as T, fetchedAt: cached.at };
         }
         let pending = this.responseInFlight.get(key);
-        if (!pending) {
+        if (pending) {
+            recordUpstream('unifi', UniFiApiService.upstreamLabel(key), 'shared');
+        } else {
             const generation = this.cacheGeneration;
             pending = load()
                 .then((data) => {
@@ -381,6 +394,7 @@ export class UniFiApiService {
         if (agent && agent.constructor && agent.constructor.name === 'Agent') {
             (fetchOptions as any).dispatcher = agent;
         }
+        recordUpstream('unifi', `GET sm:${endpoint}`, 'call');
         const response = await fetch(`${this.siteManagerBaseUrl}${endpoint}`, fetchOptions);
 
         if (!response.ok) {
@@ -449,6 +463,7 @@ export class UniFiApiService {
             
             let response: Response;
             try {
+                recordUpstream('unifi', 'POST login', 'call');
                 response = await fetch(unifiosLoginUrl, fetchOptions);
             } catch (fetchError: unknown) {
                 // Network error during detection - log but don't throw, fall back to classic controller
@@ -566,6 +581,7 @@ export class UniFiApiService {
         
         let response: Response;
         try {
+            recordUpstream('unifi', 'POST login', 'call');
             response = await fetch(loginUrl, fetchOptions);
         } catch (fetchError: unknown) {
             // Fetch failed - this is a network/connection error, not an HTTP error
@@ -838,6 +854,7 @@ export class UniFiApiService {
             }
             let response: Response;
             try {
+                recordUpstream('unifi', `GET ${normalizedPath}`, 'call');
                 response = await fetch(url, fetchOptions);
             } catch (fetchError: unknown) {
                 // Fetch failed - this is a network/connection error, not an HTTP error
@@ -950,11 +967,13 @@ export class UniFiApiService {
             body: JSON.stringify(body),
         };
         if (agent?.constructor?.name === 'Agent') (opts as any).dispatcher = agent;
+        recordUpstream('unifi', `${method} ${normalizedPath}`, 'call');
         const response = await fetch(url, opts);
         if (response.status === 401 || response.status === 403) {
             // Re-auth once and retry
             this.sessionCookie = null; this.csrfToken = null; this.isAuthenticated = false;
             await this.ensureControllerSession({ force: true });
+            recordUpstream('unifi', `${method} ${normalizedPath}`, 'call');
             const r2 = await fetch(url, opts);
             if (!r2.ok) throw new Error(`UniFi ${method} ${r2.status} (${normalizedPath})`);
             const j2: any = await r2.json();

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1] - 2026-10-19
+
+### Added
+
+- Upstream request counter: every request sent to the Freebox and the UniFi controller is counted per endpoint, with the reads answered without a request (cache hit or shared in-flight request). Shown in Administration > Debug ("Freebox and UniFi requests": last minute, average per minute over the last hour, total, share saved) and available to admins at `GET /api/debug/upstream-calls`, reset with `DELETE /api/debug/upstream-calls`. Counters live in memory and restart with the server
+
+---
+
 ## [0.12.0] - 2026-10-19
 
 Request optimisation release: far fewer calls to the UniFi controller and the Freebox, with the same data on screen and in the API.

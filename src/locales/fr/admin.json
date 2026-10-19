@@ -602,6 +602,20 @@
       "activeFeatureNotifications": "Notifications de sécurité",
       "saveSettings": "Sauvegarder les paramètres"
     },
+    "upstream": {
+      "title": "Requêtes Freebox et UniFi",
+      "since": "Comptage depuis le {{date}} ({{minutes}} min)",
+      "reset": "Remettre à zéro",
+      "help": "Appels = requêtes réellement envoyées à l'équipement. Hits cache = lectures servies par le cache court ou par une requête déjà en cours partagée. Dernière minute et dernière heure comptent des minutes complètes.",
+      "lastMinute": "Dernière minute",
+      "lastHour": "Dernière heure",
+      "perMinute": "Moyenne par minute ({{minutes}} min)",
+      "totalCalls": "Appels",
+      "cacheHits": "Hits cache",
+      "saved": "Évités",
+      "endpoint": "Endpoint",
+      "empty": "Aucune requête pour l'instant"
+    },
     "debug": {
       "filterAll": "Tous",
       "filterError": "Erreurs",
