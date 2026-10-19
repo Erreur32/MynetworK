@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.2] - 2026-10-19
+
+### Changed
+
+- Freebox LAN devices are no longer polled every 10 s on every settings page: the parental control and port forwarding dialogs load them when they open
+- Freebox WiFi status refreshes every 15 s on the Freebox page and every 60 s elsewhere (header and plugin summary)
+- App-wide plugin stats refresh every 30 s on the dashboard and every 60 s on other pages
+
+---
+
 ## [0.12.1] - 2026-10-19
 
 ### Added

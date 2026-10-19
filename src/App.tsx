@@ -512,10 +512,11 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserAuthenticated]); // Zustand functions are stable, no need to include them
 
-  // Single poller of /api/plugins/stats/all for the whole app (paused while the tab is hidden)
+  // Single poller of /api/plugins/stats/all for the whole app (paused while the tab is hidden).
+  // The dashboard shows these stats in full; other pages only use them for summaries.
   usePolling(fetchAllStats, {
     enabled: isUserAuthenticated,
-    interval: 30000, // Every 30 seconds
+    interval: currentPage === "dashboard" ? 30000 : 60000,
   });
 
   // Start/stop periodic permissions refresh based on Freebox login state
@@ -570,23 +571,23 @@ const App: React.FC = () => {
     interval: POLLING_INTERVALS.system,
   });
 
-  usePolling(fetchWifiStatus, {
-    enabled: isUserAuthenticated && isFreeboxLoggedIn,
-    interval: POLLING_INTERVALS.wifi,
-  });
-
   // Devices, downloads, VMs and history are only shown by some Freebox pages:
   // poll them only while one of those pages is open (enabling fetches immediately).
   const freeboxPolling = isUserAuthenticated && isFreeboxLoggedIn;
   const onFreeboxPage = currentPage === "freebox";
 
-  // LAN devices: Freebox dashboard, Analytics, Settings (parental control)
+  // WiFi details are shown on the Freebox page; elsewhere only the header and the
+  // plugin summary read the WiFi state, which a slower refresh covers
+  usePolling(fetchWifiStatus, {
+    enabled: freeboxPolling,
+    interval: onFreeboxPage ? POLLING_INTERVALS.wifi : 60000,
+  });
+
+  // LAN devices: Freebox dashboard and Analytics. Settings loads them when a
+  // modal that lists devices opens (parental control, port forwarding).
   usePolling(fetchDevices, {
     enabled:
-      freeboxPolling &&
-      (onFreeboxPage ||
-        currentPage === "analytics" ||
-        currentPage === "settings"),
+      freeboxPolling && (onFreeboxPage || currentPage === "analytics"),
     interval: POLLING_INTERVALS.devices,
   });
 
