@@ -1,5 +1,6 @@
 import { useUserAuthStore } from '../stores/userAuthStore';
 import { getBasePath } from './ingress';
+import { randomFraction } from './random';
 
 // Reconnection policy shared by the real-time WebSocket hooks.
 // After the last attempt the hook stops retrying until the tab becomes visible
@@ -15,7 +16,7 @@ export const WS_HIDDEN_CLOSE_MS = 2 * 60 * 1000;
 export function wsReconnectDelay(attempt: number): number {
   const exp = WS_BASE_RECONNECT_DELAY_MS * 2 ** Math.max(0, attempt - 1);
   const delay = Math.min(exp, WS_MAX_RECONNECT_DELAY_MS);
-  return delay + Math.random() * delay * 0.2;
+  return delay + randomFraction() * delay * 0.2;
 }
 
 /** WebSocket URL for a backend channel (/ws/<channel>), with the JWT used for authentication. */
@@ -24,7 +25,8 @@ export function buildWsUrl(channel: 'connection' | 'unifi'): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const rawBase = getBasePath(); // '' or '/api/hassio_ingress/xxx/'
   // Ensure the base path always ends with '/' so concatenating 'ws/<channel>' is valid
-  const basePath = rawBase.endsWith('/') ? rawBase : rawBase ? rawBase + '/' : '/';
+  let basePath = '/';
+  if (rawBase) basePath = rawBase.endsWith('/') ? rawBase : rawBase + '/';
 
   let wsUrl: string;
   if (import.meta.env.DEV) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { randomFraction } from '../utils/random';
 
 // Upper bound of the random delay before the catch-up call when the tab becomes visible again
 const MAX_RESUME_JITTER_MS = 2000;
@@ -89,7 +90,7 @@ export const usePolling = (
           if (document.hidden || !enabledRef.current) return;
           savedCallback.current();
           startInterval();
-        }, Math.random() * MAX_RESUME_JITTER_MS);
+        }, randomFraction() * MAX_RESUME_JITTER_MS);
       }
     };
 

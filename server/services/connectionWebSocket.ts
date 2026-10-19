@@ -47,9 +47,12 @@ function skipWhileRunning(task: () => Promise<void>): () => void {
   return () => {
     if (running) return;
     running = true;
-    task().finally(() => {
-      running = false;
-    });
+    // Both tasks log their own errors: nothing left to report here
+    task()
+      .catch(() => undefined)
+      .finally(() => {
+        running = false;
+      });
   };
 }
 

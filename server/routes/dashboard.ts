@@ -51,7 +51,7 @@ const networkSummaryCache: RequestHandler = (_req, res, next) => {
     return;
   }
   const pending = summaryInFlight.get(key);
-  if (pending) {
+  if (pending !== undefined) {
     // A failed computation lets this request compute on its own
     pending.then((body) => (body ? res.json(body) : next()), next);
     return;
