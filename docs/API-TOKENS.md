@@ -233,8 +233,9 @@ reduced to a compact projection (raw Freebox and UniFi objects are not
 returned). Example: `GET /api/search/ip-details/192.168.1.20`. Sections are
 `null` when the source does not know the IP. A live ping is done on each call,
 so `scanner.status` and `scanner.pingLatency` are current, not the stored ones.
-IPs outside the configured scan ranges are not pinged: the stored values are
-returned.
+IPs outside the configured scan ranges are not pinged (the stored values are
+returned), unless they are already recorded by the scanner, for example added
+by hand.
 
 ```json
 {

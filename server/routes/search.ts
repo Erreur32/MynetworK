@@ -116,9 +116,9 @@ router.get('/ip-details/:ip', requireAuth, asyncHandler(async (req: Authenticate
 
     try {
         // Same scope rule as the MCP machine-details tool: only IPs inside the scan
-        // ranges (or the host's LANs) get the real-time ping, others are not probed
-        // and keep their stored status
-        const aggregatedData = await getIpDetails(ip, { ping: networkScanService.isIpScanAuthorized(ip) });
+        // ranges (or the host's LANs) or already recorded (e.g. added by hand) get the
+        // real-time ping, others are not probed
+        const aggregatedData = await getIpDetails(ip, { ping: networkScanService.isKnownIpProbeAuthorized(ip) });
 
         res.json({
             success: true,

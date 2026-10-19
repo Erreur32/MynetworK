@@ -22,7 +22,8 @@ Request optimisation release: far fewer calls to the UniFi controller and the Fr
 - Freebox: an expired session is renewed once and the request replayed, instead of waiting for the keep-alive
 - Freebox: the native WebSocket (host and VM events) now starts with the plugin and uses the configured box address
 - Network scan: plugin data is read once per scan instead of twice per host
-- ip-details: one UniFi stats read instead of two, sources fetched in parallel; IPs outside the scan ranges are no longer pinged
+- ip-details: one UniFi stats read instead of two, sources fetched in parallel; IPs outside the scan ranges are no longer pinged, unless already recorded by the scanner (for example added by hand)
+- MCP `scan_get_machine_details` and `scan_rescan_ip` also accept IPs added by hand outside the scan ranges
 - Frontend: a single app-wide stats poller paused on hidden tabs; Freebox devices, downloads, VMs and history only polled on the pages that show them; Speedtest widget reads the live connection stream instead of polling every 2 s; CARD tab is the only UniFi stats poller while open
 - Frontend: WebSockets close after 2 minutes on a hidden tab and reopen when it is visible again; the UniFi live chart is refilled from the server so it shows no gap; one shared UniFi socket for all components
 - Network scan page: lighter polling during scans, latency and traffic data refreshed only when needed

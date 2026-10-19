@@ -1196,6 +1196,14 @@ export class NetworkScanService {
     }
 
     /**
+     * Probing an already known host: in scope, or already recorded in network_scans
+     * (an admin added it by hand outside the ranges, or a past scan found it).
+     */
+    isKnownIpProbeAuthorized(ip: string): boolean {
+        return this.isIpScanAuthorized(ip) || NetworkScanRepository.findByIp(ip) !== null;
+    }
+
+    /**
      * Resolves range for scheduled scans using the same rules as the API (defaultRange + defaultAutoDetect).
      */
     resolveScanRangeFromAppConfig(): string | null {

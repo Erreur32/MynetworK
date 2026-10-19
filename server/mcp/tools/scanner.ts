@@ -30,6 +30,15 @@ function assertScannableIp(ip: string): void {
   }
 }
 
+// Same rule for an already known host: IPs an admin added by hand outside the
+// ranges stay reachable for details and rescans.
+function assertKnownProbeableIp(ip: string): void {
+  assertValidIp(ip);
+  if (!networkScanService.isKnownIpProbeAuthorized(ip)) {
+    throw new Error(`IP ${ip} is outside the configured scan ranges and was never added to the scanner`);
+  }
+}
+
 // Drops icon/source bookkeeping fields and flattens openPorts to a plain port list.
 function summarizeScan(s: NetworkScan) {
   const openPorts = s.additionalInfo?.openPorts;
@@ -128,7 +137,7 @@ export function registerScannerTools(server: McpServer): void {
     },
     async ({ ip }, extra) =>
       wrapAsync(async () => {
-        assertScannableIp(ip);
+        assertKnownProbeableIp(ip);
         assertHeavyCallAllowed(extra);
         return compactIpDetails(await getIpDetails(ip));
       })
@@ -188,7 +197,7 @@ export function registerScannerTools(server: McpServer): void {
     },
     async ({ ip }, extra) =>
       wrapAsync(async () => {
-        assertScannableIp(ip);
+        assertKnownProbeableIp(ip);
         assertHeavyCallAllowed(extra);
         const result = await networkScanService.rescanSingleIpWithPorts(ip);
         if (!result) {
