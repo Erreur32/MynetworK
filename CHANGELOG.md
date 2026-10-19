@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.3] - 2026-10-19
+
+### Security
+
+- `undici` 6.28.1 to 6.29.1: fixes SNYK-JS-UNDICI-21181005 (TLS options passed as `tls` ignored by `Agent`; MyNetwork passes them through `connect`, so it was not exposed) and four denial-of-service issues (SNYK-JS-UNDICI-21181013, 21181015, 21181019, 21185768)
+
+---
+
 ## [0.12.2] - 2026-10-19
 
 ### Changed
