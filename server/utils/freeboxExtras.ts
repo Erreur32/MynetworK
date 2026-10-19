@@ -175,6 +175,8 @@ interface Api {
     getWifiAps(): Promise<Resp>;
     getWifiStations(): Promise<Resp>;
     getVms(): Promise<Resp>;
+    // Bumped by every write to the box (freeboxApi), drops the long-lived blocks
+    getWriteGeneration?(): number;
 }
 
 export interface FreeboxExtras {
@@ -230,23 +232,55 @@ async function fetchHosts(api: Api, missing: Rights) {
     return countHosts(perInterface.map((r) => (r.ok && Array.isArray(r.result) ? r.result : [])));
 }
 
-export async function collectExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
+// Blocks that rarely change: configuration, disks, FTTH optics, VM disk sizes and VM host info
+interface SlowExtras {
+    lan: Fetched; dhcp: Fetched; disks: Fetched; ftth: Fetched | null;
+    wcfg: Fetched; aps: Fetched; bss: Fetched; vmInfo: Fetched | null;
+    diskSizeByPath: Map<string, VmDiskSize | null>;
+    missing: Rights;
+}
+
+async function collectSlowExtras(api: Api, media: string | null): Promise<SlowExtras> {
     const missing: Rights = new Set();
     const get = (call: () => Promise<Resp>, right: string) => fetchBlock(call, right, missing);
 
-    const [lan, dhcp, sw, hostCounts, disks, ftth, wcfg, aps, stations, bss, vms] = await Promise.all([
+    const [lan, dhcp, disks, ftth, wcfg, aps, bss, vms] = await Promise.all([
         get(() => api.getLanConfig(), RIGHT.lan),
         get(() => api.getDhcpConfig(), RIGHT.dhcp),
-        get(() => api.getSwitchStatus(), RIGHT.switch),
-        fetchHosts(api, missing),
         get(() => api.getDisks(), RIGHT.storage),
         media === 'ftth' ? get(() => api.getFtthInfo(), RIGHT.ftth) : Promise.resolve(null),
         get(() => api.getWifiConfig(), RIGHT.wifi),
         get(() => api.getWifiAps(), RIGHT.wifi),
-        get(() => api.getWifiStations(), RIGHT.wifi),
         get(() => api.getWifiBss(), RIGHT.bss),
         get(() => api.getVms(), RIGHT.vm),
     ]);
+
+    // Disk sizes are keyed by path: the VM list itself is refreshed with the live blocks
+    const diskSizeByPath = new Map<string, VmDiskSize | null>();
+    let vmInfo: Fetched | null = null;
+    if (vms.ok) {
+        const sizes = await vmDiskSizes(api, vms.result, missing);
+        list(vms.result).forEach((v, i) => {
+            const path = str(v.disk_path);
+            if (path) diskSizeByPath.set(path, sizes[i] ?? null);
+        });
+        vmInfo = await get(() => api.getVmInfo(), RIGHT.vm);
+    }
+    return { lan, dhcp, disks, ftth, wcfg, aps, bss, vmInfo, diskSizeByPath, missing };
+}
+
+export async function collectExtras(api: Api, media: string | null, slowExtras?: Promise<SlowExtras>): Promise<FreeboxExtras> {
+    const missing: Rights = new Set();
+    const get = (call: () => Promise<Resp>, right: string) => fetchBlock(call, right, missing);
+
+    const [slow, sw, hostCounts, stations, vms] = await Promise.all([
+        slowExtras ?? collectSlowExtras(api, media),
+        get(() => api.getSwitchStatus(), RIGHT.switch),
+        fetchHosts(api, missing),
+        get(() => api.getWifiStations(), RIGHT.wifi),
+        get(() => api.getVms(), RIGHT.vm),
+    ]);
+    const { lan, dhcp, disks, ftth, wcfg, aps, bss, vmInfo, diskSizeByPath } = slow;
 
     const out: FreeboxExtras = {
         lan_ip: lan.ok && isObj(lan.result) ? str(lan.result.ip) : null,
@@ -261,24 +295,40 @@ export async function collectExtras(api: Api, media: string | null): Promise<Fre
     if (ftth) out.ftth = ftth.ok ? mapFtth(ftth.result) : null;
     // No VM support (Revolution/Pop): block omitted. Denied rights: explicit null.
     if (vms.ok) {
-        out.vms = mapVms(vms.result, await vmDiskSizes(api, vms.result, missing));
-        const vmInfo = await get(() => api.getVmInfo(), RIGHT.vm);
-        out.vm_system = vmInfo.ok ? mapVmSystem(vmInfo.result) : null;
+        const sizes = list(vms.result).map((v) => diskSizeByPath.get(str(v.disk_path) ?? '') ?? null);
+        out.vms = mapVms(vms.result, sizes);
+        out.vm_system = vmInfo?.ok ? mapVmSystem(vmInfo.result) : null;
     } else if (vms.denied) {
         out.vms = null;
     }
-    out.missing_rights = [...missing].sort((a, b) => a.localeCompare(b));
+    out.missing_rights = [...new Set([...missing, ...slow.missing])].sort((a, b) => a.localeCompare(b));
     return out;
 }
 
+// Live counts (hosts, WiFi stations, VM states, switch links) stay at 30 s; the rarely
+// changing blocks are kept 5 min, and any write to the box drops them
 const TTL_MS = 30_000;
+const SLOW_TTL_MS = 5 * 60_000;
 let cache: { key: string; at: number; value: Promise<FreeboxExtras> } | null = null;
+let slowCache: { key: string; at: number; generation: number; value: Promise<SlowExtras> } | null = null;
 
-// Short shared cache: several consumers polling the summary must not multiply Freebox calls.
+function getSlowExtras(api: Api, media: string | null): Promise<SlowExtras> {
+    const key = media ?? '';
+    const generation = api.getWriteGeneration?.() ?? 0;
+    if (slowCache?.key === key && slowCache.generation === generation && Date.now() - slowCache.at < SLOW_TTL_MS) {
+        return slowCache.value;
+    }
+    const value = collectSlowExtras(api, media);
+    slowCache = { key, at: Date.now(), generation, value };
+    value.catch(() => { if (slowCache?.value === value) slowCache = null; });
+    return value;
+}
+
+// Shared caches: several consumers polling the summary must not multiply Freebox calls.
 export function getExtras(api: Api, media: string | null): Promise<FreeboxExtras> {
     const key = media ?? '';
     if (cache?.key === key && Date.now() - cache.at < TTL_MS) return cache.value;
-    const value = collectExtras(api, media);
+    const value = collectExtras(api, media, getSlowExtras(api, media));
     cache = { key, at: Date.now(), value };
     value.catch(() => { if (cache?.value === value) cache = null; });
     return value;

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.4] - 2026-10-19
+
+### Changed
+
+- `GET /api/connection/summary`: the rarely changing extra blocks (LAN, DHCP and WiFi configuration, disks, FTTH optics, VM disk sizes, VM host info) are cached 5 minutes and dropped by any write to the box; live counts (hosts, WiFi stations, VM states, switch links) stay at 30 s. Disk temperature and usage can be up to 5 minutes old in this summary
+- `GET /api/auth/check` (permissions refresh of every open tab) no longer asks the Freebox for its session status when an authenticated request succeeded in the last minute; the keep-alive still checks it
+
+---
+
 ## [0.12.3] - 2026-10-19
 
 ### Security
