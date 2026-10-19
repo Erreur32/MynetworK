@@ -94,7 +94,9 @@ router.post('/logout', asyncHandler(async (_req, res) => {
 
 // GET /api/auth/check - Check session status
 router.get('/check', asyncHandler(async (_req, res) => {
-  const isLoggedIn = await freeboxApi.checkSession();
+  // Every open tab polls this route: a request the box accepted in the last minute
+  // already proves the session, so skip the /login/ round trip
+  const isLoggedIn = freeboxApi.hasRecentSessionSuccess(60_000) || await freeboxApi.checkSession();
 
   // Include capabilities if logged in
   let capabilities = null;

@@ -57,6 +57,8 @@ class FreeboxApiService {
     // Shared in-flight auth calls: concurrent callers never open two sessions at once
     private loginPromise: Promise<SessionData> | null = null;
     private sessionCheckPromise: Promise<boolean> | null = null;
+    // Last authenticated request the box accepted, and the session token it used
+    private lastSessionSuccess: { token: string; at: number } | null = null;
     private lastRenewFailure = 0;
     // api_version is static for a given box: fetched once, reset on box/URL change, login or reboot
     private apiVersionPromise: Promise<FreeboxApiResponse> | null = null;
@@ -287,6 +289,11 @@ class FreeboxApiService {
             }
 
             const data = await response.json() as FreeboxApiResponse<T>;
+            // /login/ answers success even for an expired session: only other endpoints prove it is alive
+            const usedToken = headers['X-Fbx-App-Auth'];
+            if (data.success && usedToken && !endpoint.startsWith(API_ENDPOINTS.LOGIN)) {
+                this.lastSessionSuccess = { token: usedToken, at: Date.now() };
+            }
             return data;
         } catch (error) {
             const isAbortError = error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'));
@@ -655,6 +662,16 @@ class FreeboxApiService {
     }
 
     // Check if session is valid (concurrent callers share the same check)
+    /**
+     * True when the current session token served an accepted request within maxAgeMs:
+     * lets frequent status checks skip a /login/ round trip. The keep-alive still
+     * calls checkSession() to detect a session that expired since.
+     */
+    hasRecentSessionSuccess(maxAgeMs: number): boolean {
+        const last = this.lastSessionSuccess;
+        return !!this.sessionToken && last?.token === this.sessionToken && Date.now() - last.at < maxAgeMs;
+    }
+
     async checkSession(): Promise<boolean> {
         // If we don't have a session token, we're definitely not logged in
         if (!this.sessionToken) {
