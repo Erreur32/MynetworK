@@ -6,6 +6,7 @@ import { RichTooltip } from '../../components/ui/RichTooltip';
 import { VendorIcon } from '../../components/ui/VendorIcon';
 import { ClientSortKey } from './types';
 import { getClientRateBytesPerSec } from '../../utils/unifiClientRate';
+import { zebraRowClass } from './tableStyles';
 import { formatSpeed } from '../../utils/constants';
 
 interface ClientsTabProps {
@@ -411,7 +412,7 @@ export const ClientsTab: React.FC<ClientsTabProps> = ({
                                         {sortedClients.map((c: any, index: number) => (
                                             <tr
                                                 key={c.id || c.mac || index}
-                                                className={index % 2 === 0 ? 'bg-unifi-card/30' : 'bg-unifi-card/20'}
+                                                className={zebraRowClass(index)}
                                             >
                                                 <td className="px-3 py-1.5 text-left font-semibold text-[13px] text-gray-300">
                                                     <div className="flex items-center gap-1.5">

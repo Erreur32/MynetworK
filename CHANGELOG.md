@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1] - 2026-10-20
+
+### Added
+
+- Port errors on the home cards and UniFi pages: a total badge with an hover detail (which port, RX / TX, usual causes). UniFi: System info on the Overview page, a badge in the home card system state, an "Err." column in the switches table of the Analysis tab and an exact-counter tooltip in the Switch tab (RX / TX errors, dropped packets)
+- Freebox: port error badge on the home card, by cause (bad CRC, receive errors, fragments, oversized / undersized frames, collisions). New `GET /api/settings/switch/errors` reads `/switch/port/{id}/stats` (one call per port) and keeps the result 5 minutes
+- UniFi home card: DHCP client count over the pool size, like Freebox
+- Switch tab: the switch badges in the title filter the table to one switch (click again to show all)
+
+### Changed
+
+- Clients and Switch tables share the same zebra and row height
+- Home cards: Freebox firmware / LAN header cells stay on a single line (the model name drops the word "Freebox"), the UniFi DHCP range fits on one line, and the system state frames of both cards have the same minimum height. The Freebox Wi-Fi access points list is now a separate block under it
+
+---
+
 ## [0.13.0] - 2026-10-20
 
 ### Changed

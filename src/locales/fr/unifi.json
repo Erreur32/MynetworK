@@ -62,6 +62,9 @@
     "switches": "Switches",
     "pointsAccess": "Points d'accès",
     "devicesTitle": "Équipements",
+    "errorsShort": "Err.",
+    "dhcpLeasesHint": "Clients actifs avec une adresse IPv4 / taille de la plage DHCP",
+    "portErrorsLabel": "Erreurs ports",
     "clientsConnected": "Clients connectés",
     "clients": "Clients",
     "aps": "APs",
@@ -227,7 +230,16 @@
         "title": "Erreurs réseau",
         "desc": "Total des erreurs RX (réception) + TX (émission) sur ce port depuis le dernier redémarrage du switch.",
         "noneValue": "Pas d'erreur détectée",
-        "presentValue": "Erreurs présentes, câble ou duplex mismatch ?"
+        "presentValue": "Erreurs présentes, câble ou duplex mismatch ?",
+        "portTitle": "Port {{port}} · {{name}}",
+        "rxErrors": "Erreurs RX (réception)",
+        "txErrors": "Erreurs TX (émission)",
+        "rxDropped": "Paquets perdus RX",
+        "txDropped": "Paquets perdus TX",
+        "switchTitle": "Erreurs · {{name}}",
+        "portLabel": "Port {{port}}",
+        "morePorts": "+ {{count}} autres ports avec erreurs",
+        "whyDesc": "RX : trames reçues corrompues (câble, connecteur, interférences). TX : collisions ou duplex mismatch."
       },
       "gateway": {
         "title": "Passerelle & ports réseau",

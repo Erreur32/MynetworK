@@ -8,6 +8,8 @@ import { DebugTab } from './DebugTab';
 import { CardTab } from './CardTab';
 import { DeviceDetails } from './DeviceDetails';
 import { AlertFilter, EventFilter } from './types';
+import { summarizePortErrors } from '../../utils/unifiPortErrors';
+import { PortErrorsTooltip } from '../../components/unifi/PortErrorsTooltip';
 
 export type OverviewSubTab = 'info' | 'events' | 'nat' | 'debug';
 
@@ -120,6 +122,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         return Object.values(counts).some((v) => v !== undefined) ? counts : null;
     })();
 
+    // Port errors over every device with a port table: total, and the ports concerned (device, port, RX / TX).
+    const portErrors = nonClientDevices.reduce<{ total?: number; rows: Array<{ device: string; port: number; rx: number; tx: number }> }>((acc, d) => {
+        const rawPorts = d.eth_port_table || d.port_table || d.ports;
+        const summary = summarizePortErrors(Array.isArray(rawPorts) ? rawPorts : []);
+        if (summary.total === undefined) return acc;
+        const device = (d.name || d.model || 'Switch') as string;
+        return {
+            total: (acc.total ?? 0) + summary.total,
+            rows: [...acc.rows, ...summary.ports.map((p) => ({ device, ...p }))],
+        };
+    }, { rows: [] });
+    portErrors.rows.sort((a, b) => b.rx + b.tx - (a.rx + a.tx));
+
     const clientsArr = devicesArr.filter(d => (d.type || '').toString().toLowerCase() === 'client');
 
     return (
@@ -212,6 +227,16 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                                     <span className="text-gray-400">{t('unifi.clientsLabel')}</span>
                                     <span>{clientsArr.length}</span>
                                 </div>
+                                {portErrors.total !== undefined && (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-400">{t('unifi.portErrorsLabel')}</span>
+                                        <PortErrorsTooltip rows={portErrors.rows} position="bottom">
+                                            <span className={`cursor-help ${portErrors.total > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                                {portErrors.total.toLocaleString()}
+                                            </span>
+                                        </PortErrorsTooltip>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Colonne 1b - Deployment type */}

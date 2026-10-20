@@ -62,6 +62,9 @@
     "switches": "Switches",
     "pointsAccess": "Access points",
     "devicesTitle": "Devices",
+    "errorsShort": "Err.",
+    "dhcpLeasesHint": "Active clients with an IPv4 address / DHCP pool size",
+    "portErrorsLabel": "Port errors",
     "clientsConnected": "Connected clients",
     "clients": "Clients",
     "aps": "APs",
@@ -227,7 +230,16 @@
         "title": "Network errors",
         "desc": "Total RX (receive) + TX (transmit) errors on this port since last switch reboot.",
         "noneValue": "No error detected",
-        "presentValue": "Errors present, cable or duplex mismatch?"
+        "presentValue": "Errors present, cable or duplex mismatch?",
+        "portTitle": "Port {{port}} · {{name}}",
+        "rxErrors": "RX errors (receive)",
+        "txErrors": "TX errors (transmit)",
+        "rxDropped": "RX dropped packets",
+        "txDropped": "TX dropped packets",
+        "switchTitle": "Errors · {{name}}",
+        "portLabel": "Port {{port}}",
+        "morePorts": "+ {{count}} more ports with errors",
+        "whyDesc": "RX: corrupted frames received (cable, connector, interference). TX: collisions or duplex mismatch."
       },
       "gateway": {
         "title": "Gateway & network ports",
