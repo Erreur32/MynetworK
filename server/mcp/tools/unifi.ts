@@ -9,6 +9,7 @@ import type { UniFiApiService } from '../../plugins/unifi/UniFiApiService.js';
 import { UniFiClientTrafficRepository } from '../../database/models/UniFiClientTraffic.js';
 import { wrapAsync, toListResult, matchesSearch, searchParam, rawParam, limitParam, assertHeavyCallAllowed, type ListResult } from './shared.js';
 import { isValidMac } from '../../utils/networkValidation.js';
+import { summarizeSfpModules } from '../../utils/unifiSfp.js';
 
 // Max range for unifi_get_bandwidth_report: 7 days of hourly buckets (168 points).
 const MAX_BANDWIDTH_RANGE_SECONDS = 7 * 24 * 3600;
@@ -117,6 +118,7 @@ export function summarizeDevice(d: any) {
   const ports: any[] = Array.isArray(d.port_table) ? d.port_table : [];
   const radios: any[] = Array.isArray(d.radio_table_stats) ? d.radio_table_stats : [];
   const isGateway = isGatewayDevice(d);
+  const sfpModules = summarizeSfpModules(ports);
   return {
     name: d.name || d.model,
     model: d.model,
@@ -137,6 +139,7 @@ export function summarizeDevice(d: any) {
       ? { type: d.uplink.type, mac: d.uplink.uplink_mac, port: d.uplink.uplink_remote_port, speed: d.uplink.speed }
       : undefined,
     ports: ports.length ? { total: ports.length, up: ports.filter((p) => p.up === true).length } : undefined,
+    sfp_modules: sfpModules.length ? sfpModules : undefined,
     radios: radios.length
       ? radios.map((r) => ({ radio: r.radio, channel: r.channel, clients: r.num_sta, satisfaction: r.satisfaction }))
       : undefined,
@@ -168,6 +171,20 @@ function cardPortRow(row: any, knownMacs: Set<string>) {
     port_poe: cardBool(row?.port_poe),
     poe_enable: cardBool(row?.poe_enable),
     poe_power: toNumber(row?.poe_power),
+    // Transceiver readings (strings from switches, numbers from gateways): serial numbers stay out.
+    sfp_found: cardBool(row?.sfp_found),
+    sfp_part: cardString(row?.sfp_part),
+    sfp_vendor: cardString(row?.sfp_vendor),
+    sfp_compliance: cardString(row?.sfp_compliance),
+    sfp_temperature: toNumber(row?.sfp_temperature),
+    sfp_voltage: toNumber(row?.sfp_voltage),
+    sfp_current: toNumber(row?.sfp_current),
+    sfp_rxpower: toNumber(row?.sfp_rxpower),
+    sfp_txpower: toNumber(row?.sfp_txpower),
+    sfp_rx_los: cardBool(row?.sfp_rx_los),
+    sfp_tx_fault: cardBool(row?.sfp_tx_fault),
+    sfp_rxfault: cardBool(row?.sfp_rxfault),
+    sfp_txfault: cardBool(row?.sfp_txfault),
     'rx_bytes-r': toNumber(row?.['rx_bytes-r']),
     'tx_bytes-r': toNumber(row?.['tx_bytes-r']),
     lldp_table: neighbours.length ? neighbours : undefined

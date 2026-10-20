@@ -289,6 +289,25 @@
           "desc": "Le type de déploiement n'a pas encore été détecté. Il sera déterminé lors de la première connexion."
         }
       }
+    },
+    "sfp": {
+      "title": "Modules SFP",
+      "port": "Port {{port}}",
+      "electrical": "Électrique",
+      "optical": "Optique",
+      "tooltipTitle": "Module SFP, port {{port}}",
+      "module": "Module",
+      "compliance": "Norme",
+      "temperature": "Température",
+      "voltage": "Tension",
+      "current": "Courant",
+      "fault": "Défaut",
+      "rxLos": "Aucun signal reçu (LOS)",
+      "txFault": "Défaut d'émission",
+      "electricalNote": "Transceiver cuivre (RJ45) : la puissance optique qu'il remonte n'a pas de sens, seule sa température est évaluée.",
+      "thresholds": "Température : orange dès {{tempWarn}} °C, rouge dès {{tempCrit}} °C. RX optique : orange sous {{rxWarn}} dBm, rouge sous {{rxCrit}} dBm.",
+      "alertTitle": "SFP à surveiller",
+      "alertDesc": "Module trop chaud, ou optique sans signal / au signal faible."
     }
   }
 }

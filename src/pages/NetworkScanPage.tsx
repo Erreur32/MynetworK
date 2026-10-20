@@ -340,6 +340,9 @@ const formatDuration = (durationMs: number): string => {
     return `${(durationMs / 1000).toFixed(1)}s`;
 };
 
+// Deep-link presets from the home widget, e.g. /network-scan?status=offline
+const urlParam = (name: string): string | null => new URLSearchParams(window.location.search).get(name);
+
 export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t, i18n } = useTranslation();
     const { plugins, fetchPlugins } = usePluginStore();
@@ -504,7 +507,8 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Filters - Load from localStorage or use defaults
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>(() => {
         try {
-            const saved = localStorage.getItem('networkScan_statusFilter');
+            // Deep link from the home widget (/network-scan?status=offline) wins over the saved filter
+            const saved = urlParam('status') ?? localStorage.getItem('networkScan_statusFilter');
             if (saved && ['all', 'online', 'offline'].includes(saved)) {
                 return saved as 'all' | 'online' | 'offline';
             }
@@ -517,7 +521,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     const [debouncedSearchFilter, setDebouncedSearchFilter] = useState<string>('');
     const [sortBy, setSortBy] = useState<'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'monitoring' | 'download' | 'upload'>(() => {
         try {
-            const saved = localStorage.getItem('networkScan_sortBy');
+            const saved = urlParam('sortBy') ?? localStorage.getItem('networkScan_sortBy');
             if (saved && ['ip', 'last_seen', 'first_seen', 'ping_latency', 'hostname', 'mac', 'vendor', 'monitoring', 'download', 'upload'].includes(saved)) {
                 return saved as 'ip' | 'last_seen' | 'first_seen' | 'ping_latency' | 'hostname' | 'mac' | 'vendor' | 'monitoring' | 'download' | 'upload';
             }
@@ -528,7 +532,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     });
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
         try {
-            const saved = localStorage.getItem('networkScan_sortOrder');
+            const saved = urlParam('sortOrder') ?? localStorage.getItem('networkScan_sortOrder');
             if (saved && ['asc', 'desc'].includes(saved)) {
                 return saved as 'asc' | 'desc';
             }

@@ -51,6 +51,11 @@ export function mapFtth(ftth: unknown) {
         link: bool(f.link),
         sfp_pwr_rx: dbm(f.sfp_pwr_rx),
         sfp_pwr_tx: dbm(f.sfp_pwr_tx),
+        // Module identity and state; the serial number is deliberately left out.
+        sfp_model: str(f.sfp_model),
+        sfp_vendor: str(f.sfp_vendor),
+        sfp_alim_ok: bool(f.sfp_alim_ok),
+        link_type: str(f.link_type),
     };
 }
 

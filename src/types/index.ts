@@ -19,6 +19,9 @@ export interface Device {
   mac?: string;
   ip?: string;
   vendor?: string;
+  // Unix seconds, from the box's LAN browser
+  firstSeen?: number;
+  lastSeen?: number;
 }
 
 export interface WifiNetwork {

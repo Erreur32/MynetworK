@@ -319,7 +319,9 @@
       "viewAllTraffic": "Voir tous les appareils",
       "liveRateNote": "Débit en direct (mis à jour toutes les ~3s), seuls les appareils avec du trafic en cours sont listés",
       "noTrafficData": "Aucune donnée de trafic pour le moment",
-      "trafficFreeboxUnavailable": "Le suivi du trafic par appareil nécessite UniFi (bornes/switch) — l'API Freebox ne fournit aucun compteur de trafic par appareil."
+      "trafficFreeboxUnavailable": "Le suivi du trafic par appareil nécessite UniFi (bornes/switch) — l'API Freebox ne fournit aucun compteur de trafic par appareil.",
+      "viewOffline": "Voir les IP offline ({{count}})",
+      "viewWorstLatency": "Trier par latence, la plus haute en premier"
     },
     "vendorIconPicker": {
       "title": "Choisir l'icône du vendeur",

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { SfpModules } from '../../components/unifi/SfpModules';
 
 interface DeviceDetailsProps {
     device: any;
@@ -150,6 +151,7 @@ export const DeviceDetails: React.FC<DeviceDetailsProps> = ({ device, kind, clie
                     {kind !== 'gateway' && row(t('unifi.clients'), clientsCount, 'text-gray-300 font-semibold')}
                 </div>
             </div>
+            <SfpModules device={device} />
         </div>
     );
 };

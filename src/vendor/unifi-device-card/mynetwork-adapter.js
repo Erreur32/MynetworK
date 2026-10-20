@@ -8,6 +8,7 @@
 import { applyPortsPerRowOverride, getDeviceLayout, MODEL_REGISTRY, resolveModelKey } from "./model-registry.js";
 import { buildNormalizedDeviceIdentity } from "./identity.js";
 import { mergeSpecialsWithLayout } from "./helpers.js";
+import { readSfp } from "./mynetwork-sfp.js";
 
 export const MN_DEVICE_PREFIX = "mn:";
 
@@ -110,6 +111,7 @@ function buildPortEntities(states, prefix, row, index) {
     tx_entity: putState(states, `sensor.${id("tx")}`, num(row["tx_bytes-r"]) ?? 0, { unit_of_measurement: "B/s" }),
     port_label: row.name || null,
     media: row.media || undefined,
+    sfp: readSfp(row) ?? undefined,
     raw_entities: [],
   };
   if (poeCapable) {

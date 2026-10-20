@@ -62,7 +62,9 @@ export const useLanStore = create<LanState>((set, get) => ({
             active: host.active && host.reachable,
             mac,
             ip: ipv4?.addr,
-            vendor: host.vendor_name
+            vendor: host.vendor_name,
+            firstSeen: host.first_activity,
+            lastSeen: host.last_time_reachable
           };
         });
 
