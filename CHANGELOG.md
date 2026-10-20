@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.3] - 2026-10-20
+
+### Security
+
+- Bump `hono` from 4.13.7 to 4.13.13 (transitive dependency of the MCP SDK) to fix GHSA-5r4p-p66f-jhc7 (`serveStatic` decoded the request path twice, which could bypass middleware on static paths). The application does not use `serveStatic`
+
+---
+
 ## [0.13.2] - 2026-10-20
 
 ### Added
