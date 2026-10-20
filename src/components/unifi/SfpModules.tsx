@@ -1,5 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Zap } from 'lucide-react';
+import { StatusBadge } from '../ui';
 import { RichTooltip } from '../ui/RichTooltip';
 import { readSfpModules, TEMP_CRIT_C, TEMP_WARN_C, RX_CRIT_DBM, RX_WARN_DBM, type SfpInfo, type SfpLevel } from '../../vendor/unifi-device-card/mynetwork-sfp.js';
 
@@ -72,5 +74,56 @@ export const SfpModules: React.FC<{ device: unknown }> = ({ device }) => {
             <div className="text-gray-500">{t('unifi.sfp.title')}</div>
             {modules.map((sfp, i) => <SfpModuleRow key={sfp.port ?? i} sfp={sfp} />)}
         </div>
+    );
+};
+
+interface SfpIssue {
+    key: string;
+    label: string;
+    detail: string;
+    level: SfpLevel;
+}
+
+// Hot modules (temperature) and failing optics (no signal, low RX, TX fault) across UniFi devices.
+export function findSfpIssues(devices: unknown[]): SfpIssue[] {
+    return devices.flatMap((device: any) =>
+        readSfpModules(device)
+            .filter((sfp) => sfp.level !== 'ok')
+            .map((sfp) => {
+                const parts: string[] = [];
+                if (sfp.tempLevel !== 'ok' && sfp.temperature !== undefined) parts.push(`${sfp.temperature.toFixed(0)} °C`);
+                if (sfp.rxLos) parts.push('LOS');
+                else if (sfp.txFault) parts.push('TX');
+                else if (sfp.signalLevel !== 'ok' && sfp.rx !== undefined) parts.push(`${sfp.rx.toFixed(1)} dBm`);
+                return {
+                    key: `${device.mac ?? device.name}-${sfp.port}`,
+                    label: `${device.name || device.model || 'UniFi'} · ${sfp.port ?? '?'}`,
+                    detail: parts.join(' · '),
+                    level: sfp.level
+                };
+            })
+    );
+}
+
+// Icon for the home card "system state" frame: only present when an SFP needs attention.
+export const SfpAlertBadge: React.FC<{ issues: SfpIssue[] }> = ({ issues }) => {
+    const { t } = useTranslation();
+    if (issues.length === 0) return null;
+    const worst: SfpLevel = issues.some((i) => i.level === 'crit') ? 'crit' : 'warn';
+    return (
+        <RichTooltip
+            title={t('unifi.sfp.alertTitle')}
+            description={t('unifi.sfp.alertDesc')}
+            rows={issues.slice(0, 6).map((i) => ({ label: i.label, value: i.detail, color: SFP_LEVEL_TOOLTIP[i.level], dot: true }))}
+            footer={issues.length > 6 ? t('unifi.tooltip.errors.morePorts', { count: issues.length - 6 }) : undefined}
+            position="top"
+            width={300}
+        >
+            <StatusBadge
+                icon={<Zap size={14} />}
+                value={`SFP ${issues[0].detail}`}
+                color={SFP_LEVEL_TEXT[worst]}
+            />
+        </RichTooltip>
     );
 };

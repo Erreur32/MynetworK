@@ -305,7 +305,9 @@
       "rxLos": "No signal received (LOS)",
       "txFault": "Transmit fault",
       "electricalNote": "Copper (RJ45) transceiver: the optical power it reports is not meaningful, so only its temperature is graded.",
-      "thresholds": "Temperature: orange from {{tempWarn}} °C, red from {{tempCrit}} °C. Optical RX: orange below {{rxWarn}} dBm, red below {{rxCrit}} dBm."
+      "thresholds": "Temperature: orange from {{tempWarn}} °C, red from {{tempCrit}} °C. Optical RX: orange below {{rxWarn}} dBm, red below {{rxCrit}} dBm.",
+      "alertTitle": "SFP to check",
+      "alertDesc": "Module too hot, or optic without signal / with a weak signal."
     }
   }
 }

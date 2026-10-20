@@ -1,48 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../widgets/Card';
-import { api } from '../../api/client';
-import { usePolling } from '../../hooks/usePolling';
+import { PON_RX_CRIT_DBM, PON_RX_WARN_DBM, useFreeboxSfp, wanSignalLevel, type FreeboxSfpLan, type FreeboxSfpWan } from '../../hooks/useFreeboxSfp';
 import { SFP_LEVEL_TEXT } from '../unifi/SfpModules';
-import type { SfpLevel } from '../../vendor/unifi-device-card/mynetwork-sfp.js';
-
-interface WanModule {
-    role: 'wan';
-    present: boolean | null;
-    has_signal: boolean | null;
-    link: boolean | null;
-    alim_ok: boolean | null;
-    link_type: string | null;
-    model: string | null;
-    vendor: string | null;
-    serial: string | null;
-    rx_dbm: number | null;
-    tx_dbm: number | null;
-}
-
-interface LanModule {
-    role: 'lan';
-    id: number | null;
-    name: string;
-    link: string | null;
-    speed: number | null;
-    mode: string | null;
-    hosts: string[];
-}
-
-interface SfpResult {
-    modules: Array<WanModule | LanModule>;
-}
-
-// PON receivers work down to about -27 dBm (GPON class B+), far below the 10G Ethernet optics.
-const PON_RX_WARN_DBM = -24;
-const PON_RX_CRIT_DBM = -27;
-
-const wanSignalLevel = (m: WanModule): SfpLevel => {
-    if (m.present === false || m.has_signal === false || m.alim_ok === false || m.link === false) return 'crit';
-    if (m.rx_dbm === null) return 'ok';
-    return m.rx_dbm < PON_RX_CRIT_DBM ? 'crit' : m.rx_dbm < PON_RX_WARN_DBM ? 'warn' : 'ok';
-};
 
 const Row: React.FC<{ label: string; value: React.ReactNode; className?: string }> = ({ label, value, className = 'text-gray-200' }) => (
     <div className="flex items-center justify-between gap-3">
@@ -54,7 +14,7 @@ const Row: React.FC<{ label: string; value: React.ReactNode; className?: string 
 const flag = (ok: boolean | null, good: string, bad: string): [string, string] =>
     ok === null ? ['-', 'text-gray-400'] : ok ? [good, 'text-emerald-400'] : [bad, 'text-red-400'];
 
-const WanBlock: React.FC<{ module: WanModule }> = ({ module: m }) => {
+const WanBlock: React.FC<{ module: FreeboxSfpWan }> = ({ module: m }) => {
     const { t } = useTranslation();
     const level = wanSignalLevel(m);
     const [signal, signalClass] = flag(m.has_signal, t('freebox.sfp.signalOk'), t('freebox.sfp.signalLost'));
@@ -81,7 +41,7 @@ const WanBlock: React.FC<{ module: WanModule }> = ({ module: m }) => {
     );
 };
 
-const LanBlock: React.FC<{ module: LanModule }> = ({ module: m }) => {
+const LanBlock: React.FC<{ module: FreeboxSfpLan }> = ({ module: m }) => {
     const { t } = useTranslation();
     const up = m.link === 'up';
     const speed = m.speed === null ? '-' : m.speed >= 1000 ? `${m.speed / 1000} Gbit/s` : `${m.speed} Mbit/s`;
@@ -104,11 +64,7 @@ const LanBlock: React.FC<{ module: LanModule }> = ({ module: m }) => {
 // Nothing is rendered when the box reports none.
 export const FreeboxSfpCard: React.FC<{ enabled: boolean }> = ({ enabled }) => {
     const { t } = useTranslation();
-    const [sfp, setSfp] = useState<SfpResult | null>(null);
-    usePolling(async () => {
-        const res = await api.get<SfpResult>('/api/settings/sfp').catch(() => null);
-        if (res?.success) setSfp(res.result ?? null);
-    }, { enabled, interval: 2 * 60_000 });
+    const sfp = useFreeboxSfp(enabled);
 
     if (!sfp || sfp.modules.length === 0) return null;
     return (

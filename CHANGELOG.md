@@ -14,8 +14,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Home page: an SFP icon appears in the "system state" frame of the UniFi card (hot module, or optic without signal / weak RX / fault) and of the Freebox card (fibre module without signal or weak RX; the box reports no module temperature), with a hover detail. Nothing is shown while the modules are fine
 - Freebox page: the SFP and latest devices cards sit in columns 3 and 4, so column 1 is no longer the only loaded one
-- Home Network scan card: the "Offline IPs" and "Top worst latency" titles are links to the scan page with the matching filter and sort (`/network-scan?status=offline`, `?status=online&sortBy=ping_latency&sortOrder=desc`); the offline list shows 5 entries at most; the stat rectangles are flatter; the data volume block sits before the offline list; the last scan line fits on one line
+- Home Network scan card: the "Offline IPs" and "Top worst latency" titles are links to the scan page with the matching filter and sort (`/network-scan?status=offline`, `?status=online&sortBy=ping_latency&sortOrder=desc`); the offline list shows 5 entries at most; the stat rectangles are flatter; the data volume block sits before the offline list in a fixed 8-row frame, and the data volume, offline and latency rows have no frame; the last scan line fits on one line, with a single separator above the data volume
 
 ---
 

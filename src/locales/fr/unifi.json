@@ -305,7 +305,9 @@
       "rxLos": "Aucun signal reçu (LOS)",
       "txFault": "Défaut d'émission",
       "electricalNote": "Transceiver cuivre (RJ45) : la puissance optique qu'il remonte n'a pas de sens, seule sa température est évaluée.",
-      "thresholds": "Température : orange dès {{tempWarn}} °C, rouge dès {{tempCrit}} °C. RX optique : orange sous {{rxWarn}} dBm, rouge sous {{rxCrit}} dBm."
+      "thresholds": "Température : orange dès {{tempWarn}} °C, rouge dès {{tempCrit}} °C. RX optique : orange sous {{rxWarn}} dBm, rouge sous {{rxCrit}} dBm.",
+      "alertTitle": "SFP à surveiller",
+      "alertDesc": "Module trop chaud, ou optique sans signal / au signal faible."
     }
   }
 }

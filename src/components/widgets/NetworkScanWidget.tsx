@@ -533,6 +533,8 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     </button>
                                 </div>
                             </div>
+                            {/* Fixed height of 8 rows, whatever the number of devices, so the cards do not jump */}
+                            <div className="h-56 overflow-y-auto">
                             {(() => {
                                 if (topTrafficLoading && trafficRows.length === 0) {
                                     return <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>;
@@ -541,13 +543,13 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     return <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noTrafficData')}</div>;
                                 }
                                 return (
-                                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                                    <div className="space-y-1">
                                         {trafficRows.map((c) => (
                                             <button
                                                 key={c.mac}
                                                 type="button"
                                                 onClick={() => navigate(`/search?s=${encodeURIComponent(c.ip || c.mac)}`)}
-                                                className="w-full flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] hover:bg-[#232323] rounded border border-gray-800 transition-colors"
+                                                className="w-full flex items-center justify-between text-[11px] py-1 px-2 hover:bg-[#232323] rounded transition-colors"
                                             >
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     {/* Dominant direction of this device's traffic (download vs upload) */}
@@ -568,6 +570,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     </div>
                                 );
                             })()}
+                            </div>
                         </div>
                     )}
 
@@ -591,7 +594,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     {offlineIpsList.map((item) => (
                                         <div 
                                             key={item.id} 
-                                            className="flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] rounded border border-gray-800"
+                                            className="flex items-center justify-between text-[11px] py-1 px-2"
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className="w-2 h-2 rounded-full bg-red-400"></span>
@@ -648,7 +651,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                     {worstLatencyIps.slice(0, latencyLimit).map((item) => (
                                         <div 
                                             key={item.id} 
-                                            className="flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] rounded border border-gray-800"
+                                            className="flex items-center justify-between text-[11px] py-1 px-2"
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className="w-2 h-2 rounded-full bg-orange-400"></span>

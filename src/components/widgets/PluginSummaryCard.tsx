@@ -13,6 +13,8 @@ import { StatusBadge } from '../ui';
 import { RichTooltip } from '../ui/RichTooltip';
 import { summarizePortErrors, type PortErrorCount } from '../../utils/unifiPortErrors';
 import { PortErrorsTooltip } from '../unifi/PortErrorsTooltip';
+import { SfpAlertBadge, findSfpIssues } from '../unifi/SfpModules';
+import { FreeboxSfpAlert } from '../freebox/FreeboxSfpAlert';
 import { usePluginStore } from '../../stores/pluginStore';
 import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
@@ -204,6 +206,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     let unifiControllerUpdateAvailable: boolean | undefined;
     let unifiControllerIp: string | undefined;
     let unifiWlans: Array<{ name: string; enabled: boolean; ssid?: string }> = [];
+
+    // UniFi SFP modules that are hot or have a failing optic (icon in the system state frame)
+    const unifiSfpIssues = pluginId === 'unifi' && Array.isArray((stats as any)?.devices) ? findSfpIssues((stats as any).devices) : [];
 
     // Helpers for Freebox plugin: firmware / update status when exposed by backend
     let freeboxModelName: string | undefined;
@@ -820,7 +825,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                         {/* UniFi system state: temperature badge (when gateway exposes it, e.g. UDM Pro/SE/Dream Router)
                             + bandwidth badges (Analyse tab only, replacing the sparklines hidden above). */}
-                        {pluginId === 'unifi' && isActive && (showDeviceTables || unifiPortErrors || typeof (stats.system as any)?.temperature === 'number') && (
+                        {pluginId === 'unifi' && isActive && (showDeviceTables || unifiPortErrors || unifiSfpIssues.length > 0 || typeof (stats.system as any)?.temperature === 'number') && (
                             <div className={SYSTEM_STATE_FRAME}>
                                 <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
                                 <div className="flex flex-wrap items-center gap-2">
@@ -831,6 +836,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             color="text-emerald-400"
                                         />
                                     )}
+                                    <SfpAlertBadge issues={unifiSfpIssues} />
                                     {unifiPortErrors && (
                                         <PortErrorsTooltip rows={unifiPortErrors.rows}>
                                             <StatusBadge
@@ -1636,6 +1642,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         value="OK"
                                         color="text-green-400"
                                     />
+
+                                    {/* Fibre module without signal or weak (nothing when fine) */}
+                                    <FreeboxSfpAlert enabled={!!isActive} />
 
                                     {/* Connection State */}
                                     <StatusBadge
