@@ -2,34 +2,10 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { usePolling } from './usePolling';
 import type { SfpLevel } from '../vendor/unifi-device-card/mynetwork-sfp.js';
+// Type-only: the response shape is defined once, next to the route that builds it
+import type { FreeboxSfpLan, FreeboxSfpResult, FreeboxSfpWan } from '../../server/utils/freeboxSfp';
 
-export interface FreeboxSfpWan {
-    role: 'wan';
-    present: boolean | null;
-    has_signal: boolean | null;
-    link: boolean | null;
-    alim_ok: boolean | null;
-    link_type: string | null;
-    model: string | null;
-    vendor: string | null;
-    serial: string | null;
-    rx_dbm: number | null;
-    tx_dbm: number | null;
-}
-
-export interface FreeboxSfpLan {
-    role: 'lan';
-    id: number | null;
-    name: string;
-    link: string | null;
-    speed: number | null;
-    mode: string | null;
-    hosts: string[];
-}
-
-export interface FreeboxSfpResult {
-    modules: Array<FreeboxSfpWan | FreeboxSfpLan>;
-}
+export type { FreeboxSfpLan, FreeboxSfpResult, FreeboxSfpWan };
 
 // PON receivers work down to about -27 dBm (GPON class B+), far below the 10G Ethernet optics.
 export const PON_RX_WARN_DBM = -24;
