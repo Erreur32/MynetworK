@@ -365,18 +365,16 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                 <div className="space-y-4">
                     {/* Statistics */}
                     <div className="grid grid-cols-3 gap-3">
-                        <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                            <div className="text-2xl font-bold text-gray-200">{totalIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.totalIps')}</div>
-                        </div>
-                        <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                            <div className="text-2xl font-bold text-emerald-400">{onlineIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.online')}</div>
-                        </div>
-                        <div className="text-center p-3 bg-[#1a1a1a] rounded-lg border border-gray-800">
-                            <div className="text-2xl font-bold text-red-400">{offlineIps}</div>
-                            <div className="text-xs text-gray-400 mt-1">{t('networkScan.widget.offline')}</div>
-                        </div>
+                        {([
+                            { count: totalIps, label: t('networkScan.widget.totalIps'), color: 'text-gray-200' },
+                            { count: onlineIps, label: t('networkScan.widget.online'), color: 'text-emerald-400' },
+                            { count: offlineIps, label: t('networkScan.widget.offline'), color: 'text-red-400' },
+                        ]).map((stat) => (
+                            <div key={stat.label} className="flex items-baseline justify-center gap-1.5 px-2 py-1.5 bg-[#1a1a1a] rounded-lg border border-gray-800">
+                                <span className={`text-lg font-bold leading-none ${stat.color}`}>{stat.count}</span>
+                                <span className="text-xs text-gray-400">{stat.label}</span>
+                            </div>
+                        ))}
                     </div>
 
                     {/* Last scan - Same format as Info Scans */}
