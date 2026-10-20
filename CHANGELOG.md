@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - UniFi Overview: System info is compact and holds the update status chips (up to date, update available, critical update, total devices); it is aligned with Network alerts at equal height
 - UniFi tabs reordered: Overview, Switch, Clients, then Traffic, Threats, Analyse
 - Reset layout button restyled and only shown once the card layout was changed
+- Search page: for a wired client, the fake 8-square port strip is replaced by the real front-panel card of its switch (real ports and LEDs) with the client's port selected
 
 ### Removed
 

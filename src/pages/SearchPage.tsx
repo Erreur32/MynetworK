@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import logoFreebox from '../icons/logo_ultra.svg';
 import logoUnifi from '../icons/logo_unifi.svg';
 import { VendorIcon } from '../components/ui/VendorIcon';
+import { SwitchPortsCard } from '../components/unifi/SwitchPortsCard';
 import { getErrorMessage, getApiErrorPayload } from '../utils/errorMessage';
 
 /** Ports connus : numéro → nom du service (comme sur la page Scan) */
@@ -2037,45 +2038,45 @@ export const SearchPage: React.FC<SearchPageProps> = ({ onBack }) => {
                                                 const eqDetail = ipDetails.unifi.switch?.ip || ipDetails.unifi.switch?.model || ipDetails.unifi.ap?.ip || ipDetails.unifi.ap?.model;
                                                 const swPort = ipDetails.unifi.client.is_wired ? ipDetails.unifi.client.sw_port : null;
                                                 const portNum = swPort != null ? Number(swPort) : null;
-                                                const maxPorts = 8;
                                                 return (
                                                     <>
                                                         <div className="font-medium text-theme-primary text-sm truncate">{eqName}</div>
                                                         {eqDetail && <div className="text-xs text-theme-tertiary font-mono">{eqDetail}</div>}
-                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                                                            <span className="text-[10px] text-blue-300/80 uppercase mr-1">Port</span>
-                                                            {portNum != null ? (
-                                                                <>
-                                                                    {Array.from({ length: maxPorts }, (_, i) => i + 1).map((p) => (
-                                                                        <div
-                                                                            key={p}
-                                                                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-mono font-semibold border-2 transition-colors ${
-                                                                                p === portNum
-                                                                                    ? 'bg-blue-500/30 border-blue-400 text-blue-200 shadow-md shadow-blue-500/20'
-                                                                                    : 'bg-theme-secondary/50 border-theme/40 text-theme-tertiary'
-                                                                            }`}
-                                                                            title={p === portNum ? `Connecté (port ${p})` : `Port ${p}`}
-                                                                        >
-                                                                            {p}
+                                                        {portNum != null ? (
+                                                            // The card's selected port replaces the plain port badge once loaded.
+                                                            <div className="mt-2">
+                                                                <SwitchPortsCard
+                                                                    switchMac={ipDetails.unifi.client.sw_mac || ipDetails.unifi.switch?.mac}
+                                                                    clientPort={portNum}
+                                                                    fallback={
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-[10px] text-blue-300/80 uppercase">Port</span>
+                                                                            <span className="px-2 py-1 rounded-lg text-sm font-mono font-semibold border-2 bg-blue-500/30 border-blue-400 text-blue-200">
+                                                                                {portNum}
+                                                                            </span>
                                                                         </div>
-                                                                    ))}
-                                                                    <span className="text-xs text-blue-400 ml-1">← connecté</span>
-                                                                </>
-                                                            ) : ipDetails.unifi.client.is_wireless ? (
-                                                                (() => {
-                                                                    const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
-                                                                    return ssid ? (
-                                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300">
-                                                                            <Wifi size={14} /> {ssid}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-theme-tertiary text-sm">--</span>
-                                                                    );
-                                                                })()
-                                                            ) : (
-                                                                <span className="text-theme-tertiary text-sm">--</span>
-                                                            )}
-                                                        </div>
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                                <span className="text-[10px] text-blue-300/80 uppercase mr-1">Port</span>
+                                                                {ipDetails.unifi.client.is_wireless ? (
+                                                                    (() => {
+                                                                        const ssid = ipDetails.unifi.client.ssid || ipDetails.unifi.client.essid || ipDetails.unifi.client.wifi_ssid || ipDetails.unifi.client.wlan_ssid;
+                                                                        return ssid ? (
+                                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500/20 border border-blue-500/50 text-blue-300">
+                                                                                <Wifi size={14} /> {ssid}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-theme-tertiary text-sm">--</span>
+                                                                        );
+                                                                    })()
+                                                                ) : (
+                                                                    <span className="text-theme-tertiary text-sm">--</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                         {ipDetails.unifi.client.last_seen && (
                                                             <div className="text-xs text-theme-tertiary mt-2 flex items-center gap-1">
                                                                 <Clock size={12} />
