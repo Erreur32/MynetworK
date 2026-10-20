@@ -9,4 +9,6 @@ Local changes (everything else is untouched upstream code):
 - `helpers.js`: `buildDeviceContext` delegates `mn:` device ids to the adapter.
 - `unifi-device-card.js`: front panel background reads `--udc-panel-bg` (theming); the initial port selection prefers the real uplink (`ctx.uplink_port` detected by the adapter, or the `uplink_port` config); port RX/TX are shown as bit/s, kbit/s, Mbit/s, Gbit/s (`_formatRate`); `VERSION` is a constant (no build-time define); ports with live traffic get a `has-traffic` class and a faster LED blink (`port_led_traffic_blink_speed`).
 
+SFP: `mynetwork-sfp.js` (new, shared with the React views) reads and grades the `sfp_*` fields of a port; the adapter attaches it as `port.sfp`, and `_renderPortDetail` lists it (module kind electrical / optical, temperature, RX / TX for optical only) with `.warn` / `.crit` value colors.
+
 Excluded from SonarCloud (`sonar.exclusions`).

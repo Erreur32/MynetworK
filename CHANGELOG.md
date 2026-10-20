@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.2] - 2026-10-20
+
+### Added
+
+- UniFi SFP modules: temperature and optical power (RX / TX) per transceiver, graded orange from 70 °C and red from 85 °C, optical RX orange below -14 dBm and red below -18 dBm. Shown in the front-panel card port detail and in a "SFP modules" list under each device on the Overview page
+- Electrical (copper) and optical modules are told apart: a copper transceiver reports placeholder optical power, so only its temperature is graded
+- Freebox page: SFP card (column 3) with the fibre module (model, vendor, serial, link, signal, module power, RX / TX in dBm, orange below -24 dBm and red below -27 dBm) and the SFP LAN port (link, speed, connected device). New `GET /api/settings/sfp` (cached 2 min). The box reports no temperature for either
+- Freebox page: "Latest devices" card (column 4) listing the newest and the last disconnected devices from the LAN browser timestamps
+- MCP: `sfp_modules` in the UniFi device summaries, SFP readings in `card-devices` (serial numbers left out), module identity in the Freebox FTTH summary
+
+### Changed
+
+- Freebox page: the SFP and latest devices cards sit in columns 3 and 4, so column 1 is no longer the only loaded one
+
+---
+
 ## [0.13.1] - 2026-10-20
 
 ### Added

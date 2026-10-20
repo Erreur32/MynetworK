@@ -35,6 +35,7 @@ import {
   shouldShowHybridVisualPanel,
   supportsDeviceLayoutModes,
 } from "./helpers.js";
+import { sfpDetailItems } from "./mynetwork-sfp.js";
 import { normalizeMac } from "./identity.js";
 import { t } from "./translations.js";
 import {
@@ -4219,6 +4220,8 @@ class UnifiDeviceCard extends HTMLElement {
       .detail-value.online { color: var(--udc-green); }
       .detail-value.offline { color: var(--udc-muted); }
       .detail-value.pending { color: #efb21a; }
+      .detail-value.warn { color: var(--udc-orange, #f59e0b); }
+      .detail-value.crit { color: #ef4444; }
 
       .actions {
         display: flex;
@@ -4394,6 +4397,11 @@ class UnifiDeviceCard extends HTMLElement {
           <div class="detail-label">TX</div>
           <div class="detail-value">${this._escapeHtml(txVal)}</div>
         </div>` : ""}
+        ${selected.sfp ? sfpDetailItems(selected.sfp, this._hass?.language).map((item) => `
+        <div class="detail-item">
+          <div class="detail-label">${this._escapeHtml(item.label)}</div>
+          <div class="detail-value ${item.level === "ok" ? "" : item.level}">${this._escapeHtml(item.value)}</div>
+        </div>`).join("") : ""}
       </div>
       <div class="actions">
         ${selected.port_switch_entity ? (() => {

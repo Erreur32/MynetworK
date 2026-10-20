@@ -289,6 +289,23 @@
           "desc": "Deployment type not yet detected. It will be determined on the first connection."
         }
       }
+    },
+    "sfp": {
+      "title": "SFP modules",
+      "port": "Port {{port}}",
+      "electrical": "Electrical",
+      "optical": "Optical",
+      "tooltipTitle": "SFP module, port {{port}}",
+      "module": "Module",
+      "compliance": "Standard",
+      "temperature": "Temperature",
+      "voltage": "Voltage",
+      "current": "Current",
+      "fault": "Fault",
+      "rxLos": "No signal received (LOS)",
+      "txFault": "Transmit fault",
+      "electricalNote": "Copper (RJ45) transceiver: the optical power it reports is not meaningful, so only its temperature is graded.",
+      "thresholds": "Temperature: orange from {{tempWarn}} °C, red from {{tempCrit}} °C. Optical RX: orange below {{rxWarn}} dBm, red below {{rxCrit}} dBm."
     }
   }
 }

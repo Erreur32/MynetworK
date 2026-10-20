@@ -100,6 +100,8 @@ import {
 import { useCapabilitiesStore } from "./stores/capabilitiesStore";
 import { useUpdateStore } from "./stores/updateStore";
 import { useFreeboxFirmwareStore } from "./stores/freeboxFirmwareStore";
+import { FreeboxSfpCard } from "./components/freebox/FreeboxSfpCard";
+import { FreeboxRecentDevices } from "./components/freebox/FreeboxRecentDevices";
 import { POLLING_INTERVALS, formatSpeed } from "./utils/constants";
 import { decodeHtmlEntities } from "./utils/textUtils";
 import {
@@ -1317,8 +1319,9 @@ const App: React.FC = () => {
               </Card>
             </div>
 
-            {/* Column 3 - VMs & Fichiers */}
+            {/* Column 3 - SFP, VMs & Fichiers */}
             <div className="flex flex-col gap-6">
+              {isFreeboxLoggedIn && <FreeboxSfpCard enabled={onFreeboxPage} />}
               <Card
                 title={
                   hasLimitedVmSupport() ? `VMs (max ${getMaxVms()})` : "VMs"
@@ -1484,8 +1487,9 @@ const App: React.FC = () => {
               </Card>
             </div>
 
-            {/* Column 4 - Historique */}
+            {/* Column 4 - Derniers appareils & Historique (logs / événements) */}
             <div className="flex flex-col gap-6">
+              {isFreeboxLoggedIn && <FreeboxRecentDevices devices={devices} />}
               <Card
                 title="Historique"
                 actions={

@@ -1,0 +1,73 @@
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { Cable, Signal, UserPlus, LogOut } from 'lucide-react';
+import { Card } from '../widgets/Card';
+import type { Device } from '../../types';
+
+const MAX_EVENTS = 10;
+// A device first seen earlier than this is not "new" any more.
+const NEW_WINDOW_S = 30 * 86400;
+
+interface DeviceEvent {
+    key: string;
+    kind: 'new' | 'left';
+    at: number;
+    device: Device;
+}
+
+// The box keeps no event journal: events are read from the LAN browser timestamps.
+// "new" = first time the box saw the device, "left" = last time an offline device answered.
+export function recentDeviceEvents(devices: Device[], nowS: number): DeviceEvent[] {
+    const events: DeviceEvent[] = [];
+    for (const device of devices) {
+        if (device.firstSeen && nowS - device.firstSeen < NEW_WINDOW_S) {
+            events.push({ key: `new-${device.id}`, kind: 'new', at: device.firstSeen, device });
+        }
+        if (!device.active && device.lastSeen) {
+            events.push({ key: `left-${device.id}`, kind: 'left', at: device.lastSeen, device });
+        }
+    }
+    return events.sort((a, b) => b.at - a.at).slice(0, MAX_EVENTS);
+}
+
+const relativeTime = (t: TFunction, at: number, nowS: number, locale: string): string => {
+    const diff = nowS - at;
+    if (diff < 60) return t('phone.justNow');
+    if (diff < 3600) return t('phone.agoMin', { n: Math.floor(diff / 60) });
+    if (diff < 86400) return t('phone.agoHour', { n: Math.floor(diff / 3600) });
+    if (diff < 7 * 86400) return t('phone.agoDay', { n: Math.floor(diff / 86400) });
+    return new Date(at * 1000).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+};
+
+// Latest devices the box saw arrive or leave, newest first.
+export const FreeboxRecentDevices: React.FC<{ devices: Device[] }> = ({ devices }) => {
+    const { t, i18n } = useTranslation();
+    const nowS = Date.now() / 1000;
+    const events = recentDeviceEvents(devices, nowS);
+    if (events.length === 0) return null;
+    return (
+        <Card title={t('freebox.recent.title')}>
+            <ul className="space-y-1.5">
+                {events.map((e) => {
+                    const isNew = e.kind === 'new';
+                    const Link = e.device.connection === 'wifi' ? Signal : Cable;
+                    return (
+                        <li key={e.key} className="flex items-center gap-2 bg-[#1a1a1a] rounded-lg px-3 py-2 text-xs">
+                            {isNew ? <UserPlus size={14} className="shrink-0 text-emerald-400" /> : <LogOut size={14} className="shrink-0 text-gray-500" />}
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-gray-200 font-medium">{e.device.name}</div>
+                                <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                                    <Link size={10} />
+                                    <span className={isNew ? 'text-emerald-400' : ''}>{t(isNew ? 'freebox.recent.new' : 'freebox.recent.left')}</span>
+                                    {e.device.ip && <span className="font-mono truncate">{e.device.ip}</span>}
+                                </div>
+                            </div>
+                            <span className="shrink-0 text-gray-400">{relativeTime(t, e.at, nowS, i18n.language)}</span>
+                        </li>
+                    );
+                })}
+            </ul>
+        </Card>
+    );
+};

@@ -6,6 +6,7 @@ import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middlew
 import { param } from '../utils/params.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
 import { getPortErrors } from '../utils/freeboxPortErrors.js';
+import { getFreeboxSfp } from '../utils/freeboxSfp.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -153,6 +154,9 @@ router.put('/connection/ipv6', requireAdmin, relay((req) => freeboxApi.updateIpv
 
 // GET /api/settings/connection/ftth - Get FTTH info
 router.get('/connection/ftth', relay(() => freeboxApi.getFtthInfo()));
+
+// GET /api/settings/sfp - Freebox SFP modules: fibre module power and identity, SFP LAN ports (cached 2 min)
+router.get('/sfp', relay(async () => ({ success: true, result: await getFreeboxSfp(freeboxApi) })));
 
 // ===== LAN Config =====
 
