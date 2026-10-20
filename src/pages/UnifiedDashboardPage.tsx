@@ -16,7 +16,7 @@ interface UnifiedDashboardPageProps {
     onNavigateToUniFi?: () => void;
     onNavigateToPlugins?: (pluginId?: string) => void;
     onNavigateToNetworkScan?: () => void;
-    onNavigateToOfflineScan?: () => void;
+    onNavigateToScanWith?: (query: Record<string, string>) => void;
 }
 
 export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
@@ -24,7 +24,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
     onNavigateToUniFi,
     onNavigateToPlugins,
     onNavigateToNetworkScan,
-    onNavigateToOfflineScan
+    onNavigateToScanWith
 }) => {
     const { t } = useTranslation();
     const { plugins, fetchPlugins, fetchAllStats } = usePluginStore();
@@ -104,7 +104,7 @@ export const UnifiedDashboardPage: React.FC<UnifiedDashboardPageProps> = ({
                     {hasScanReseau && (
                         <NetworkScanWidget
                             onViewDetails={onNavigateToNetworkScan}
-                            onViewOffline={onNavigateToOfflineScan}
+                            onOpenScan={onNavigateToScanWith}
                         />
                     )}
                 </div>

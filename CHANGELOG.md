@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Freebox page: the SFP and latest devices cards sit in columns 3 and 4, so column 1 is no longer the only loaded one
-- Home Network scan card: the offline IP list shows 5 entries at most, with a button to the scan page already filtered on offline IPs (`/network-scan?status=offline`)
+- Home Network scan card: the "Offline IPs" and "Top worst latency" titles are links to the scan page with the matching filter and sort (`/network-scan?status=offline`, `?status=online&sortBy=ping_latency&sortOrder=desc`); the offline list shows 5 entries at most; the stat rectangles are flatter; the data volume block sits before the offline list; the last scan line fits on one line
 
 ---
 

@@ -21,9 +21,24 @@ import { TopTrafficOverlay } from '../ui/TopTrafficOverlay';
 
 interface NetworkScanWidgetProps {
     onViewDetails?: () => void;
-    // Opens the scan page already filtered on offline IPs
-    onViewOffline?: () => void;
+    // Opens the scan page with a filter / sort preset (query params read by NetworkScanPage)
+    onOpenScan?: (query: Record<string, string>) => void;
 }
+
+const OFFLINE_SCAN_QUERY = { status: 'offline' };
+const WORST_LATENCY_SCAN_QUERY = { status: 'online', sortBy: 'ping_latency', sortOrder: 'desc' };
+
+// Category title that opens the scan page on the matching list
+const TitleLink: React.FC<{ onClick: () => void; title: string; children: React.ReactNode }> = ({ onClick, title, children }) => (
+    <button
+        onClick={onClick}
+        title={title}
+        className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+    >
+        {children}
+        <ArrowRight size={12} />
+    </button>
+);
 
 // The home card lists only the first offline IPs, the scan page has the rest
 const OFFLINE_PREVIEW_COUNT = 5;
@@ -87,7 +102,7 @@ interface AutoStatus {
     } | null;
 }
 
-export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDetails, onViewOffline }) => {
+export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDetails, onOpenScan }) => {
     const { t, i18n } = useTranslation();
     const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     const { pluginStats } = usePluginStore();
@@ -383,13 +398,13 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             <div className="font-medium text-gray-300 mb-2">{t('networkScan.widget.lastScan')}</div>
                             {autoStatus?.lastScan ? (
                                 <div className="mb-2">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
                                         {autoStatus.lastScan.isManual ? (
-                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.widget.manual')}</span>
+                                            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium shrink-0">{t('networkScan.widget.manual')}</span>
                                         ) : (
-                                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium">{t('networkScan.widget.auto')}</span>
+                                            <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium shrink-0">{t('networkScan.widget.auto')}</span>
                                         )}
-                                        <span className="text-gray-400">
+                                        <span className="text-gray-400 shrink-0">
                                             {autoStatus.lastScan.type === 'full' ? (
                                                 <>{t('networkScan.widget.fullScan')} <span className="text-gray-500">({t('networkScan.widget.complete')})</span></>
                                             ) : (
@@ -397,25 +412,28 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                             )}
                                         </span>
                                         {autoStatus.lastScan.range && (
-                                            <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium">
+                                            <span className="px-1.5 py-0.5 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-medium shrink-0">
                                                 {autoStatus.lastScan.range}
                                             </span>
                                         )}
-                                        <span className="text-gray-300 font-medium">{formatDate(autoStatus.lastScan.timestamp)}</span>
-                                        <span className="text-gray-500 text-xs mt-0.5">
-                                            {formatRelativeTime(autoStatus.lastScan.timestamp)}
-                                        </span>
+                                        <span className="text-gray-300 font-medium shrink-0">{formatDate(autoStatus.lastScan.timestamp)}</span>
+                                        {/* Older scans: the relative time falls back to the date, already shown above */}
+                                        {formatRelativeTime(autoStatus.lastScan.timestamp) !== formatDate(autoStatus.lastScan.timestamp) && (
+                                            <span className="text-gray-500 text-xs truncate">
+                                                {formatRelativeTime(autoStatus.lastScan.timestamp)}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             ) : lastScan ? (
                                 <div className="mb-2">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">{t('networkScan.widget.manual')}</span>
-                                        <span className="text-gray-300">{t('networkScan.scanTypes.scan')}</span>
-                                        <span className="text-gray-300 font-medium">{formatDate(lastScan.toISOString())}</span>
-                                    </div>
-                                    <div className="text-gray-500 text-xs mt-0.5">
-                                        {formatRelativeTime(lastScan.toISOString())}
+                                    <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium shrink-0">{t('networkScan.widget.manual')}</span>
+                                        <span className="text-gray-300 shrink-0">{t('networkScan.scanTypes.scan')}</span>
+                                        <span className="text-gray-300 font-medium shrink-0">{formatDate(lastScan.toISOString())}</span>
+                                        {formatRelativeTime(lastScan.toISOString()) !== formatDate(lastScan.toISOString()) && (
+                                            <span className="text-gray-500 text-xs truncate">{formatRelativeTime(lastScan.toISOString())}</span>
+                                        )}
                                     </div>
                                 </div>
                             ) : (
@@ -470,49 +488,6 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             )}
                         </div>
                     </div>
-
-                    {/* Offline IPs list */}
-                    {offlineIps > 0 && (
-                        <div className="pt-2 border-t border-gray-800">
-                            <div className="text-xs text-gray-400 mb-2 font-medium">
-                                {t('networkScan.widget.offlineIps')} ({offlineIps})
-                            </div>
-                            {loading && offlineIpsList.length === 0 ? (
-                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
-                            ) : offlineIpsList.length > 0 ? (
-                                <div className="space-y-1">
-                                    {offlineIpsList.map((item) => (
-                                        <div 
-                                            key={item.id} 
-                                            className="flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] rounded border border-gray-800"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                                                <span className="text-gray-300 font-mono">{item.ip}</span>
-                                                {item.hostname && (
-                                                    <span className="text-gray-500">({item.hostname})</span>
-                                                )}
-                                            </div>
-                                            {item.mac && (
-                                                <span className="text-gray-500 font-mono text-[10px]">{item.mac}</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noOfflineRecent')}</div>
-                            )}
-                            {onViewOffline && (
-                                <button
-                                    onClick={onViewOffline}
-                                    className="mt-2 w-full text-[11px] text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1 transition-colors py-1.5 bg-blue-500/10 hover:bg-blue-500/20 rounded border border-blue-500/20"
-                                >
-                                    {t('networkScan.widget.viewOffline', { count: offlineIps })}
-                                    <ArrowRight size={12} />
-                                </button>
-                            )}
-                        </div>
-                    )}
 
                     {/* Top traffic consumers — UniFi only (Freebox API has no per-host byte counters) */}
                     {!hasUniFi && (
@@ -596,12 +571,58 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                         </div>
                     )}
 
+                    {/* Offline IPs list */}
+                    {offlineIps > 0 && (
+                        <div className="pt-2 border-t border-gray-800">
+                            {/* The category title is the link to the scan page filtered on offline IPs */}
+                            <div className="text-xs text-gray-400 mb-2 font-medium">
+                                {onOpenScan ? (
+                                    <TitleLink onClick={() => onOpenScan(OFFLINE_SCAN_QUERY)} title={t('networkScan.widget.viewOffline', { count: offlineIps })}>
+                                        {t('networkScan.widget.offlineIps')} ({offlineIps})
+                                    </TitleLink>
+                                ) : (
+                                    <>{t('networkScan.widget.offlineIps')} ({offlineIps})</>
+                                )}
+                            </div>
+                            {loading && offlineIpsList.length === 0 ? (
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
+                            ) : offlineIpsList.length > 0 ? (
+                                <div className="space-y-1">
+                                    {offlineIpsList.map((item) => (
+                                        <div 
+                                            key={item.id} 
+                                            className="flex items-center justify-between text-[11px] py-1 px-2 bg-[#1a1a1a] rounded border border-gray-800"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                                                <span className="text-gray-300 font-mono">{item.ip}</span>
+                                                {item.hostname && (
+                                                    <span className="text-gray-500">({item.hostname})</span>
+                                                )}
+                                            </div>
+                                            {item.mac && (
+                                                <span className="text-gray-500 font-mono text-[10px]">{item.mac}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noOfflineRecent')}</div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Worst latency IPs */}
                     {onlineIps > 0 && (
                         <div className="pt-2 border-t border-gray-800">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs text-gray-400 font-medium">
-                                    {t('networkScan.widget.topWorstLatency')} ({worstLatencyIps.length > 0 ? Math.min(worstLatencyIps.length, latencyLimit) : '--'})
+                                    {(() => {
+                                        const label = `${t('networkScan.widget.topWorstLatency')} (${worstLatencyIps.length > 0 ? Math.min(worstLatencyIps.length, latencyLimit) : '--'})`;
+                                        return onOpenScan
+                                            ? <TitleLink onClick={() => onOpenScan(WORST_LATENCY_SCAN_QUERY)} title={t('networkScan.widget.viewWorstLatency')}>{label}</TitleLink>
+                                            : label;
+                                    })()}
                                 </div>
                                 <span className="inline-flex items-center gap-0.5 bg-[#1b1b1b] rounded-full p-0.5 border border-gray-800 text-[11px]">
                                     <button
