@@ -5,9 +5,11 @@ import { usePluginStore } from '../../stores/pluginStore';
 import { usePolling } from '../../hooks/usePolling';
 import { GripVertical, RotateCcw } from 'lucide-react';
 import { applyOrder, clampSpan, DEFAULT_SPAN, GRID_COLUMNS, useCardLayout } from './cardLayout';
-import { createMynetworkHass, type MnDevice } from '../../vendor/unifi-device-card/mynetwork-adapter';
+import { createMynetworkHass, mnDeviceId, type MnDevice } from '../../vendor/unifi-device-card/mynetwork-adapter';
 
 const LIVE_REFRESH_MS = 5000;
+
+const TYPE_RANK: Record<MnDevice['type'], number> = { gateway: 0, switch: 1, access_point: 2 };
 
 // Maps the card's own palette onto the application theme variables, so it
 // follows the dark/glass/modern themes instead of its built-in colors. Set on
@@ -34,6 +36,8 @@ const THEME_VARS: Record<string, string> = {
 
 interface CardTabProps {
     devicesArr: any[];
+    // Extra content under each card, given the raw controller device and its card kind.
+    renderDetails?: (device: any, kind: MnDevice['type']) => React.ReactNode;
 }
 
 type CardElement = HTMLElement & { setConfig: (c: Record<string, unknown>) => void; hass: unknown };
@@ -41,14 +45,13 @@ type CardElement = HTMLElement & { setConfig: (c: Record<string, unknown>) => vo
 interface DeviceCardProps {
     deviceId: string;
     hass: unknown;
-    showPanel: boolean;
     height?: number;
     uplinkPort?: number;
 }
 
 // With a chosen height the card keeps its natural layout and is reduced
 // proportionally to fit.
-const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, height, uplinkPort }) => {
+const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, height, uplinkPort }) => {
     const outerRef = useRef<HTMLDivElement>(null);
     const hostRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<CardElement | null>(null);
@@ -62,7 +65,8 @@ const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, heig
         el.setConfig({
             type: 'custom:unifi-device-card',
             device_id: deviceId,
-            show_panel: showPanel,
+            // Ports only: the realistic chassis view is not offered.
+            show_panel: false,
             // Without a detected uplink, open on a connected special port (SFP+, 10G) instead of the first one.
             default_uplink_port: 'auto',
             // Manual choice; without it the card uses the uplink detected from the controller.
@@ -79,7 +83,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({ deviceId, hass, showPanel, heig
             el.remove();
             cardRef.current = null;
         };
-    }, [deviceId, showPanel, uplinkPort]);
+    }, [deviceId, uplinkPort]);
 
     useEffect(() => {
         if (cardRef.current) cardRef.current.hass = hass;
@@ -120,12 +124,10 @@ function useIsWide(): boolean {
     return wide;
 }
 
-export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
+export const CardTab: React.FC<CardTabProps> = ({ devicesArr, renderDetails }) => {
     const { t, i18n } = useTranslation();
     const fetchPluginStats = usePluginStore((s) => s.fetchPluginStats);
     const [cardReady, setCardReady] = useState(false);
-    // Realistic front panel (chassis drawn in the model's own colors) vs ports only.
-    const [showPanel, setShowPanel] = useState(false);
 
     // The card is a plain custom element: load it only when this tab is opened.
     useEffect(() => {
@@ -151,8 +153,13 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
     );
 
     const deviceIds = useMemo(() => devices.map((d: MnDevice) => d.id), [devices]);
-    const { order, spans, heights, uplinks, move, setSpan, setHeight, setUplink, reset } = useCardLayout(deviceIds);
-    const orderedDevices = useMemo(() => applyOrder<MnDevice>(devices, order), [devices, order]);
+    const rawById = useMemo(() => new Map(devicesArr.map((raw) => [mnDeviceId(raw), raw])), [devicesArr]);
+    const { isDefault, order, spans, heights, uplinks, move, setSpan, setHeight, setUplink, reset } = useCardLayout(deviceIds);
+    // Default order: gateway, then switches, then access points; a saved manual order wins.
+    const orderedDevices = useMemo(
+        () => applyOrder<MnDevice>([...devices].sort((a, b) => TYPE_RANK[a.type] - TYPE_RANK[b.type]), order),
+        [devices, order]
+    );
     const isWide = useIsWide();
     const gridRef = useRef<HTMLDivElement>(null);
     const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -208,14 +215,17 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-4">
                 <p className="text-xs text-gray-500">{t('unifi.card.intro', { seconds: LIVE_REFRESH_MS / 1000 })}</p>
-                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-                    <input type="checkbox" checked={showPanel} onChange={(e) => setShowPanel(e.target.checked)} />
-                    {t('unifi.card.hardwareView')}
-                </label>
-                <button type="button" onClick={reset} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200">
-                    <RotateCcw size={12} />
-                    {t('unifi.card.resetLayout')}
-                </button>
+                {!isDefault && (
+                    <button
+                        type="button"
+                        onClick={reset}
+                        title={t('unifi.card.resetHint')}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-700 bg-[#111827] text-xs text-gray-200 transition-colors hover:bg-[#1f2937] hover:border-gray-500"
+                    >
+                        <RotateCcw size={14} />
+                        {t('unifi.card.resetLayout')}
+                    </button>
+                )}
             </div>
             <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
             {orderedDevices.map((d: MnDevice) => (
@@ -281,10 +291,10 @@ export const CardTab: React.FC<CardTabProps> = ({ devicesArr }) => {
                     {cardReady && <DeviceCard
                         deviceId={d.id}
                         hass={hass}
-                        showPanel={showPanel}
                         height={heights[d.id]}
                         uplinkPort={uplinks[d.id]}
                     />}
+                    {renderDetails && rawById.has(d.id) && renderDetails(rawById.get(d.id), d.type)}
                 </Card>
                 {/* The whole lower border is the height handle */}
                 <div

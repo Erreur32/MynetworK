@@ -6,7 +6,6 @@
       "nat": "NAT",
       "clients": "Clients",
       "switches": "Switch",
-      "card": "CARD",
       "analyse": "Analysis",
       "bandwidth": "Bandwidth",
       "traffic": "Traffic",
@@ -21,7 +20,6 @@
         "nat": "UniFi gateway, WAN/LAN ports and NAT port forwarding rules.",
         "clients": "Connected network devices, filter by type (Wi-Fi / Ethernet), status (active/idle) and search by IP, name or MAC.",
         "switches": "UniFi switch ports, link speed, POE status, RX/TX errors and port name.",
-        "card": "Experimental: realistic live device cards (front panel, ports, PoE, link speed), refreshed every few seconds.",
         "debug": "Raw UniFi API data, used for technical diagnostics and development."
       }
     },
@@ -32,7 +30,6 @@
           "exact": "Front panel: {{key}}",
           "generic": "Front panel: generic (model not in registry)",
           "ports": "{{count}} port(s)",
-      "hardwareView": "Hardware front panel view",
       "dragHint": "Drag to reorder",
       "resizeHint": "Drag the right edge to resize",
       "heightHint": "Drag the lower border to set the height (the card is reduced proportionally). Double-click to reset",
@@ -40,7 +37,8 @@
       "uplink": "Uplink",
       "uplinkAuto": "Auto (port {{port}})",
       "uplinkAutoNone": "Auto (not detected)",
-      "resetLayout": "Reset layout"
+      "resetLayout": "Reset layout",
+      "resetHint": "Restore the default order, widths, heights and uplinks"
     },
     "threats": {
       "title": "Network Threat Analysis",

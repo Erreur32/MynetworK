@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, ShieldAlert, FlaskConical } from 'lucide-react';
+import { ArrowLeft, Activity, Users, TrendingUp, Network, AlertCircle, RefreshCw, CheckCircle, XCircle, ShieldAlert } from 'lucide-react';
 import { RichTooltip } from '../components/ui/RichTooltip';
 import { Card } from '../components/widgets/Card';
 import { usePluginStore } from '../stores/pluginStore';
@@ -16,9 +16,9 @@ import { usePolling } from '../hooks/usePolling';
 import { useUnifiWebSocket } from '../hooks/useUnifiWebSocket';
 import { POLLING_INTERVALS } from '../utils/constants';
 import { api } from '../api/client';
+import { classifyUnifiDevice } from '../vendor/unifi-device-card/mynetwork-adapter';
 import { OverviewTab, type OverviewSubTab } from './unifi/OverviewTab';
 import { SwitchesTab } from './unifi/SwitchesTab';
-import { CardTab } from './unifi/CardTab';
 import { AnalyseTab } from './unifi/AnalyseTab';
 import { ClientsTab } from './unifi/ClientsTab';
 import { TrafficTab } from './unifi/TrafficTab';
@@ -31,7 +31,7 @@ interface UniFiPageProps {
 }
 
 // 'nat' and 'debug' are intentionally excluded: they moved to Overview sub-tabs (see redirect effect below).
-const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'analyse', 'clients', 'traffic', 'threats', 'switches', 'card']);
+const VALID_UNIFI_TABS = new Set<TabType>(['overview', 'analyse', 'clients', 'traffic', 'threats', 'switches']);
 
 export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch }) => {
     const { t } = useTranslation();
@@ -91,6 +91,10 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     const devicesArr = ((unifiStats as any)?.devices || []) as any[];
     const clientsArr = devicesArr.filter(d => (d.type || '').toString().toLowerCase() === 'client');
 
+    // Threats needs a gateway running the IDS/IPS engine, and a controller type that exposes IPS events.
+    const threatsAvailable = devicesArr.some((d) => classifyUnifiDevice(d) === 'gateway')
+        && systemInfo?.capabilities?.ipsEvents !== false;
+
     const siteNameFromStats =
         (systemInfo?.name as string | undefined) ||
         (systemInfo?.siteName as string | undefined);
@@ -121,6 +125,20 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         }
     }, [activeTab]);
 
+    // CARD used to be a top-level tab, now merged into Overview.
+    useEffect(() => {
+        if (urlTab === 'card') {
+            navigate('/unifi/overview', { replace: true });
+        }
+    }, [urlTab, navigate]);
+
+    // Threats tab is hidden without a compatible gateway: leave it once the device list has loaded.
+    useEffect(() => {
+        if (urlTab === 'threats' && devicesArr.length > 0 && !threatsAvailable) {
+            navigate('/unifi/overview', { replace: true });
+        }
+    }, [urlTab, devicesArr.length, threatsAvailable, navigate]);
+
     // NAT and Debug used to be top-level tabs, now Overview sub-tabs: redirect old bookmarks/links.
     useEffect(() => {
         if (urlTab === 'nat' || urlTab === 'debug') {
@@ -128,14 +146,14 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
         }
     }, [urlTab, navigate]);
 
-    // Poll stats every 30 seconds if active (first call on mount). The CARD tab runs
-    // its own faster poll of the same stats, so this one is off while it is open.
+    // Poll stats every 30 seconds if active (first call on mount). The device cards on
+    // the Overview info sub-tab run their own faster poll of the same stats, so this one is off there.
     usePolling(() => {
         if (isActive) {
             fetchPluginStats('unifi');
         }
     }, {
-        enabled: isActive && activeTab !== 'card',
+        enabled: isActive && !(activeTab === 'overview' && overviewSubTab === 'info'),
         interval: POLLING_INTERVALS.system
     });
 
@@ -219,15 +237,15 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
     };
 
     // NAT and Debug moved into the Overview tab as sub-tabs (see OverviewTab.tsx), no longer top-level tabs.
-    const tabs: { id: TabType; label: string; desc: string; icon: React.ElementType }[] = [
+    const allTabs: { id: TabType; label: string; desc: string; icon: React.ElementType }[] = [
         { id: 'overview', label: t('unifi.tabs.overview'), desc: t('unifi.tabs.desc.overview'), icon: Activity },
+        { id: 'switches', label: t('unifi.tabs.switches'), desc: t('unifi.tabs.desc.switches'), icon: Network },
+        { id: 'clients',  label: t('unifi.tabs.clients'),  desc: t('unifi.tabs.desc.clients'),  icon: Users },
         { id: 'traffic',  label: t('unifi.tabs.traffic'),  desc: t('unifi.tabs.desc.traffic'),  icon: TrendingUp },
         { id: 'threats',  label: t('unifi.tabs.threats'),  desc: t('unifi.tabs.desc.threats'),  icon: ShieldAlert },
         { id: 'analyse',  label: t('unifi.tabs.analyse'),  desc: t('unifi.tabs.desc.analyse'),  icon: Activity },
-        { id: 'clients',  label: t('unifi.tabs.clients'),  desc: t('unifi.tabs.desc.clients'),  icon: Users },
-        { id: 'switches', label: t('unifi.tabs.switches'), desc: t('unifi.tabs.desc.switches'), icon: Network },
-        { id: 'card', label: t('unifi.tabs.card'), desc: t('unifi.tabs.desc.card'), icon: FlaskConical },
     ];
+    const tabs = allTabs.filter((tab) => tab.id !== 'threats' || threatsAvailable);
 
     if (!unifiPlugin) {
         return (
@@ -472,8 +490,6 @@ export const UniFiPage: React.FC<UniFiPageProps> = ({ onBack, onNavigateToSearch
                             onNavigateToSearch={onNavigateToSearch}
                         />
                     )}
-
-                    {activeTab === 'card' && <CardTab devicesArr={devicesArr} />}
 
                     {activeTab === 'analyse' && (
                         <AnalyseTab onNavigateToSearch={onNavigateToSearch} />
