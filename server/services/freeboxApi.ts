@@ -1642,6 +1642,10 @@ class FreeboxApiService {
         return this.requestWithLock('GET', API_ENDPOINTS.SWITCH_PORT);
     }
 
+    async getSwitchPortStats(id: number): Promise<FreeboxApiResponse> {
+        return this.requestWithLock('GET', `${API_ENDPOINTS.SWITCH_PORT}${id}/stats/`);
+    }
+
     // ==================== LCD ====================
 
     async getLcdConfig(): Promise<FreeboxApiResponse> {

@@ -11,12 +11,15 @@ import { Card } from './Card';
 import { BarChart } from './BarChart';
 import { StatusBadge } from '../ui';
 import { RichTooltip } from '../ui/RichTooltip';
+import { summarizePortErrors, type PortErrorCount } from '../../utils/unifiPortErrors';
+import { PortErrorsTooltip } from '../unifi/PortErrorsTooltip';
 import { usePluginStore } from '../../stores/pluginStore';
 import { useConnectionStore, useWifiStore } from '../../stores';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { useUnifiRealtimeStore } from '../../stores/unifiRealtimeStore';
 import { api } from '../../api/client';
+import { usePolling } from '../../hooks/usePolling';
 import { formatSpeed, formatTemperature } from '../../utils/constants';
 import { decodeHtmlEntities } from '../../utils/textUtils';
 import { Server, Wifi, Activity, ArrowRight, ArrowDown, ArrowUp, CheckCircle, XCircle, AlertCircle, Cpu, HardDrive, Fan, Phone, Link2 } from 'lucide-react';
@@ -83,6 +86,9 @@ const getAvgFanRpm = (fans: SystemFan[]): number | null => {
     return Math.round(avg);
 };
 
+// Same fixed minimum height on the Freebox and UniFi cards so the two system state frames line up (room for two rows of badges)
+const SYSTEM_STATE_FRAME = 'bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs min-h-[9rem]';
+
 export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, onViewDetails, hideController = false, cardClassName, showDeviceTables = false, onNavigateToSearch }) => {
     const { t } = useTranslation();
     const { plugins, pluginStats } = usePluginStore();
@@ -109,6 +115,16 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
     const firmwareNotifRef = useRef<HTMLDivElement | null>(null);
     const unpinFirmware = useCallback(() => setFirmwareTooltipPinned(false), []);
     useClickOutside(firmwareNotifRef, unpinFirmware, firmwareTooltipPinned);
+
+    // Freebox switch port error counters: the box is asked at most every 5 min (server cache)
+    const [freeboxPortErrors, setFreeboxPortErrors] = useState<{
+        total: number;
+        ports: Array<{ id: number; total: number; causes: Record<string, number> }>;
+    } | null>(null);
+    usePolling(async () => {
+        const res = await api.get<typeof freeboxPortErrors>('/api/settings/switch/errors').catch(() => null);
+        if (res?.success) setFreeboxPortErrors(res.result ?? null);
+    }, { enabled: pluginId === 'freebox' && !!isActive, interval: 5 * 60_000 });
 
     // Pre-fetch UniFi bandwidth via HTTP so mini graph shows data immediately (don't wait for WebSocket)
     const [unifiHttpFetched, setUnifiHttpFetched] = useState(false);
@@ -174,10 +190,14 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
         activePorts: number;
         totalPorts: number;
         speed?: number; // Max speed of active ports in Mbps
+        // undefined when no port reports error counters; otherwise RX + TX over all ports
+        totalErrors?: number;
+        errorPorts: PortErrorCount[];
     }
 
     let unifiApRows: UnifiApRow[] = [];
     let unifiSwitchRows: UnifiSwitchRow[] = [];
+    let unifiPortErrors: { total: number; rows: Array<PortErrorCount & { device: string }> } | null = null;
     let unifiClientsConnected = 0;
     let unifiClientsTotal = 0;
     let unifiControllerVersion: string | undefined;
@@ -453,14 +473,29 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                     }
                 }
 
+                const { total: totalErrors, ports: errorPorts } = summarizePortErrors(ports);
+
                 return {
                     name,
                     ip: d.ip as string | undefined,
                     activePorts,
                     totalPorts,
-                    speed: maxSpeed
+                    speed: maxSpeed,
+                    totalErrors,
+                    errorPorts
                 };
             });
+
+        // Port errors over all switches: total and the ports concerned (home card badge)
+        const switchesWithCounters = unifiSwitchRows.filter((r) => r.totalErrors !== undefined);
+        if (switchesWithCounters.length > 0) {
+            unifiPortErrors = {
+                total: switchesWithCounters.reduce((sum, r) => sum + (r.totalErrors ?? 0), 0),
+                rows: switchesWithCounters
+                    .flatMap((r) => r.errorPorts.map((p) => ({ device: r.name, ...p })))
+                    .sort((a, b) => b.rx + b.tx - (a.rx + a.tx))
+            };
+        }
 
         // Controller IP from plugin settings URL (hostname part)
         const url = plugin.settings?.url as string | undefined;
@@ -691,8 +726,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                         {/* UniFi DHCP info, below firmware, same style as Freebox */}
                         {pluginId === 'unifi' && isActive && stats.system && (stats.system as any).dhcpEnabled !== undefined && (
                             <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
+                                    <div className="flex items-center gap-2">
                                         <span className="text-gray-400 shrink-0">DHCP</span>
                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
                                             (stats.system as any).dhcpEnabled
@@ -701,11 +736,32 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                         }`}>
                                             {(stats.system as any).dhcpEnabled ? t('network.active') : t('network.inactive')}
                                         </span>
+                                        {(stats.system as any).dhcpEnabled && (() => {
+                                            // Same figure as Freebox: clients holding an IPv4 lease / size of the DHCP pool
+                                            const ipv4 = /^\d+\.\d+\.\d+\.\d+$/;
+                                            const leased = ((stats.devices || []) as any[]).filter((d) =>
+                                                (d.type || '').toString().toLowerCase() === 'client' && d.active !== false && ipv4.test(String(d.ip))
+                                            ).length;
+                                            const toNum = (ip: string) => ip.split('.').reduce((acc, o) => acc * 256 + Number(o), 0);
+                                            const [from, to] = String((stats.system as any).dhcpRange || '').split(/\s*-\s*/);
+                                            const poolSize = ipv4.test(from || '') && ipv4.test(to || '') ? toNum(to) - toNum(from) + 1 : undefined;
+                                            return (
+                                                <span className="text-gray-300 shrink-0" title={t('unifi.dhcpLeasesHint')}>
+                                                    <span className="text-emerald-300 font-semibold">{leased}</span>
+                                                    {poolSize !== undefined && poolSize > 0 && (
+                                                        <>
+                                                            <span className="text-gray-500"> / </span>
+                                                            <span className="text-gray-200">{poolSize}</span>
+                                                        </>
+                                                    )}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                     {(stats.system as any).dhcpRange && (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-end gap-2 min-w-0 whitespace-nowrap">
                                             <span className="text-gray-500 shrink-0 text-[10px] uppercase tracking-wide">Range</span>
-                                            <span className="font-mono text-gray-300 text-[10px]">{(stats.system as any).dhcpRange}</span>
+                                            <span className="font-mono text-gray-300 text-[10px] truncate" title={(stats.system as any).dhcpRange}>{(stats.system as any).dhcpRange}</span>
                                         </div>
                                     )}
                                 </div>
@@ -764,8 +820,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                         {/* UniFi system state: temperature badge (when gateway exposes it, e.g. UDM Pro/SE/Dream Router)
                             + bandwidth badges (Analyse tab only, replacing the sparklines hidden above). */}
-                        {pluginId === 'unifi' && isActive && (showDeviceTables || typeof (stats.system as any)?.temperature === 'number') && (
-                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
+                        {pluginId === 'unifi' && isActive && (showDeviceTables || unifiPortErrors || typeof (stats.system as any)?.temperature === 'number') && (
+                            <div className={SYSTEM_STATE_FRAME}>
                                 <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     {typeof (stats.system as any)?.temperature === 'number' && (
@@ -774,6 +830,15 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             value={`${(stats.system as any).temperature}°C`}
                                             color="text-emerald-400"
                                         />
+                                    )}
+                                    {unifiPortErrors && (
+                                        <PortErrorsTooltip rows={unifiPortErrors.rows}>
+                                            <StatusBadge
+                                                icon={<AlertCircle size={14} />}
+                                                value={`${unifiPortErrors.total.toLocaleString()} ${t('unifi.errorsShort')}`}
+                                                color={unifiPortErrors.total > 0 ? 'text-red-400' : 'text-emerald-400'}
+                                            />
+                                        </PortErrorsTooltip>
                                     )}
                                     {showDeviceTables && (() => {
                                         const last = unifiHistory.length > 0 ? unifiHistory[unifiHistory.length - 1] : undefined;
@@ -1166,11 +1231,12 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             <table className="w-full text-[11px] text-gray-300 table-fixed">
                                                 <thead className="bg-[#181818] text-gray-400">
                                                     <tr>
-                                                                <th className="px-2 py-2 text-left" style={{ width: '22%' }}>{t('unifi.tableName')}</th>
-                                                                <th className="px-2 py-2 text-left" style={{ width: '28%' }}>IP</th>
-                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>{t('unifi.activePorts')}</th>
-                                                                <th className="px-2 py-2 text-right" style={{ width: '16%' }}>Speed</th>
-                                                                <th className="px-2 py-2 text-right" style={{ width: '18%' }}>{t('unifi.total')}</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '20%' }}>{t('unifi.tableName')}</th>
+                                                                <th className="px-2 py-2 text-left" style={{ width: '25%' }}>IP</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '14%' }}>{t('unifi.activePorts')}</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '14%' }}>Speed</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '13%' }}>{t('unifi.errorsShort')}</th>
+                                                                <th className="px-2 py-2 text-right" style={{ width: '14%' }}>{t('unifi.total')}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1190,6 +1256,29 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                                             </td>
                                                                     <td className="px-2 py-2 text-right text-gray-300 align-middle">
                                                                 {row.speed ? `${row.speed}` : '-'}
+                                                            </td>
+                                                                    <td className="px-2 py-2 text-right align-middle">
+                                                                {row.totalErrors === undefined ? (
+                                                                    <span className="text-gray-500">-</span>
+                                                                ) : (
+                                                                    <RichTooltip
+                                                                        title={t('unifi.tooltip.errors.switchTitle', { name: row.name })}
+                                                                        rows={row.errorPorts.slice(0, 6).map((ep) => ({
+                                                                            label: t('unifi.tooltip.errors.portLabel', { port: ep.port }),
+                                                                            value: `RX ${ep.rx.toLocaleString()} · TX ${ep.tx.toLocaleString()}`,
+                                                                            color: 'red' as const,
+                                                                            dot: true
+                                                                        }))}
+                                                                        description={row.errorPorts.length === 0 ? t('unifi.tooltip.errors.noneValue') : undefined}
+                                                                        footer={row.errorPorts.length > 6 ? t('unifi.tooltip.errors.morePorts', { count: row.errorPorts.length - 6 }) : undefined}
+                                                                        position="top"
+                                                                        width={260}
+                                                                    >
+                                                                        <span className={`cursor-help font-medium ${row.totalErrors > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                                                            {row.totalErrors.toLocaleString()}
+                                                                        </span>
+                                                                    </RichTooltip>
+                                                                )}
                                                             </td>
                                                                     <td className="px-2 py-2 text-right text-gray-200 align-middle">
                                                                 {row.totalPorts > 0 ? row.totalPorts : '-'}
@@ -1277,9 +1366,10 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                 )}
                                 {/* Freebox, Firmware and LAN Network - Labels on first line, data on second line */}
-                                <div className="space-y-1">
+                                {/* One shared grid (labels row, then data row) so each cell stays on a single line */}
+                                <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] gap-x-3 gap-y-1 items-center whitespace-nowrap">
                                     {/* First line: Labels */}
-                                    <div className="grid grid-cols-5 gap-4 items-center">
+                                    <div className="contents">
                                         <div className="flex flex-col">
                                             <span className="text-gray-500 text-[10px] uppercase tracking-wide">Freebox</span>
                                         </div>
@@ -1323,9 +1413,9 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                     </div>
                                     
                                     {/* Second line: Data */}
-                                    <div className="grid grid-cols-5 gap-4 items-center">
+                                    <div className="contents">
                                         <div className="flex flex-col">
-                                            <span className="text-gray-400 text-xs">{freeboxModelName || 'Freebox'}</span>
+                                            <span className="text-gray-400 text-xs">{freeboxModelName?.replace(/^freebox\s+/i, '') || '-'}</span>
                                         </div>
                                         {freeboxApiVersion ? (
                                             <div className="flex flex-col">
@@ -1333,8 +1423,8 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                             </div>
                                         ) : <div></div>}
                                         {(freeboxVersion || freeboxPlayerVersion) ? (
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
+                                            <div className="flex flex-col min-w-0">
+                                                <div className="flex items-center gap-2 truncate">
                                                     {freeboxVersion && (
                                                         <div className="flex items-center gap-1 text-sm text-gray-100">
                                                             <span className="text-[11px] text-gray-400">Box</span>
@@ -1392,6 +1482,37 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
                                 </div>
                             </div>
                         )}
+
+                        {/* Freebox switch port errors: total badge, detail by port and cause on hover */}
+                        {pluginId === 'freebox' && isActive && freeboxPortErrors && (() => {
+                            const rows = freeboxPortErrors.ports
+                                .flatMap((port) => Object.entries(port.causes).map(([cause, n]) => ({ port: port.id, cause, n })))
+                                .sort((a, b) => b.n - a.n);
+                            return (
+                                <div className="bg-[#1a1a1a] rounded-lg px-3 py-2 text-xs flex items-center justify-between">
+                                    <span className="text-gray-400">{t('freebox.portErrors.label')}</span>
+                                    <RichTooltip
+                                        title={t('freebox.portErrors.title')}
+                                        description={rows.length > 0 ? t('freebox.portErrors.whyDesc') : t('unifi.tooltip.errors.noneValue')}
+                                        rows={rows.slice(0, 8).map((r) => ({
+                                            label: `${t('unifi.tooltip.errors.portLabel', { port: r.port })} · ${t(`freebox.portErrors.causes.${r.cause}`)}`,
+                                            value: r.n.toLocaleString(),
+                                            color: 'red' as const,
+                                            dot: true
+                                        }))}
+                                        footer={rows.length > 8 ? t('freebox.portErrors.more', { count: rows.length - 8 }) : undefined}
+                                        position="top"
+                                        width={320}
+                                    >
+                                        <StatusBadge
+                                            icon={<AlertCircle size={14} />}
+                                            value={`${freeboxPortErrors.total.toLocaleString()} ${t('unifi.errorsShort')}`}
+                                            color={freeboxPortErrors.total > 0 ? 'text-red-400' : 'text-emerald-400'}
+                                        />
+                                    </RichTooltip>
+                                </div>
+                            );
+                        })()}
 
                         {/* Freebox DHCP + NAT, standalone block, same position as UniFi DHCP */}
                         {pluginId === 'freebox' && isActive && stats.system && ((stats.system as any).dhcp || (stats.system as any).portForwarding) && (
@@ -1455,7 +1576,7 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                         {/* Freebox badges and stats (copied from header) */}
                         {pluginId === 'freebox' && connectionStatus && (
-                            <div className="bg-[#1a1a1a] rounded-lg p-3 space-y-3 text-xs">
+                            <div className={SYSTEM_STATE_FRAME}>
                                 <div className="text-gray-400 text-[11px] uppercase tracking-wide mb-2">{t('freebox.systemState')}</div>
 
                                 {/* System badges */}
@@ -1532,8 +1653,13 @@ export const PluginSummaryCard: React.FC<PluginSummaryCardProps> = ({ pluginId, 
 
                                 </div>
 
+                            </div>
+                        )}
+
+                        {pluginId === 'freebox' && connectionStatus && wifiStoreNetworks && wifiStoreNetworks.length > 0 && (
+                            <div className="bg-[#1a1a1a] rounded-lg p-3 text-xs">
                                 {/* Mini-carte Bornes Wi‑Fi Freebox / Répéteurs (neutre, sans fond coloré spécifique) */}
-                                {wifiStoreNetworks && wifiStoreNetworks.length > 0 && (
+                                {(
                                     <div className="mt-2 border-t border-gray-800 pt-2 space-y-2">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[11px] text-gray-400 font-medium">

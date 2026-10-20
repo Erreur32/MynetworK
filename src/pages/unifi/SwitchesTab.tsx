@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Network } from 'lucide-react';
 import { Card } from '../../components/widgets/Card';
+import { zebraRowClass } from './tableStyles';
 import { RichTooltip } from '../../components/ui/RichTooltip';
 
 interface SwitchesTabProps {
@@ -12,6 +13,8 @@ interface SwitchesTabProps {
 
 export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr, onNavigateToSearch }) => {
     const { t } = useTranslation();
+    // Switch chosen from the title badges; null shows every switch.
+    const [selectedSwitch, setSelectedSwitch] = useState<string | null>(null);
 
     const renderClickableIp = (ip: string | null | undefined, className: string = '', size: number = 9) => {
         if (!ip || ip === '-' || ip === 'N/A') {
@@ -50,23 +53,60 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
         speed: number | null;
         poe: string;
         errors: string;
+        // Exact counters from the controller, undefined when the port reports none.
+        rxErrors?: number;
+        txErrors?: number;
+        rxDropped?: number;
+        txDropped?: number;
         portName: string;
     }
 
+    const counter = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+    const formatCount = (value: number | undefined): string => (value === undefined ? '-' : value.toLocaleString());
+
+    const switches = devicesArr.filter((d: any) => {
+        const type = (d.type || '').toString().toLowerCase();
+        const model = (d.model || '').toString().toLowerCase();
+        return type.startsWith('usw') ||
+            type.includes('switch') ||
+            model.includes('usw') ||
+            model.includes('switch');
+    });
+
+    const switchKey = (sw: any): string => String(sw.mac || sw.id);
+    const activeSwitch = switches.some((sw: any) => switchKey(sw) === selectedSwitch) ? selectedSwitch : null;
+
     return (
         <div className="col-span-full space-y-6">
-            <Card title={t('unifi.switchPortsTitle')} className="bg-unifi-card border border-gray-800 rounded-xl">
+            <Card
+                title={
+                    <span className="flex flex-wrap items-center gap-2">
+                        {t('unifi.switchPortsTitle')}
+                        {switches.map((sw: any) => {
+                            const key = switchKey(sw);
+                            const selected = key === activeSwitch;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    aria-pressed={selected}
+                                    onClick={() => setSelectedSwitch(selected ? null : key)}
+                                    className={`px-2 py-0.5 rounded-lg border text-xs font-semibold transition-colors ${
+                                        selected
+                                            ? 'bg-blue-500/40 border-blue-400 text-white'
+                                            : `bg-blue-500/20 border-blue-500/50 text-blue-300 hover:bg-blue-500/30 ${activeSwitch ? 'opacity-50' : ''}`
+                                    }`}
+                                >
+                                    {sw.name || sw.model}
+                                </button>
+                            );
+                        })}
+                    </span>
+                }
+                className="bg-unifi-card border border-gray-800 rounded-xl"
+            >
                 {unifiStats?.devices ? (
                     (() => {
-                        const switches = devicesArr.filter((d: any) => {
-                            const type = (d.type || '').toString().toLowerCase();
-                            const model = (d.model || '').toString().toLowerCase();
-                            return type.startsWith('usw') ||
-                                type.includes('switch') ||
-                                model.includes('usw') ||
-                                model.includes('switch');
-                        });
-
                         if (switches.length === 0) {
                             return (
                                 <div className="text-center py-8 text-gray-500">
@@ -86,7 +126,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
 
                         const portRows: PortRow[] = [];
 
-                        switches.forEach((switchDevice: any) => {
+                        switches.filter((sw: any) => !activeSwitch || switchKey(sw) === activeSwitch).forEach((switchDevice: any) => {
                             const switchName = switchDevice.name || switchDevice.model || 'Switch';
                             const switchIp = switchDevice.ip || 'N/A';
 
@@ -169,6 +209,10 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                         speed,
                                         poe,
                                         errors,
+                                        rxErrors: counter(port.rx_errors),
+                                        txErrors: counter(port.tx_errors),
+                                        rxDropped: counter(port.rx_dropped),
+                                        txDropped: counter(port.tx_dropped),
                                         portName
                                     });
                                 });
@@ -212,9 +256,9 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                         return (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm table-fixed">
-                                    <thead className="bg-[#0a1929] text-gray-300">
+                                    <thead className="bg-theme-card text-gray-200">
                                         <tr>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '20%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '20%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <div className="flex gap-0.5">
                                                         <div className="w-2.5 h-2.5 bg-gray-400 rounded-sm"></div>
@@ -223,7 +267,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span>SWITCH</span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '15%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '15%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -231,7 +275,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span>IP</span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '12%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '12%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -254,7 +298,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     </span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '10%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '10%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -276,7 +320,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     </span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '8%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '8%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -284,7 +328,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     <span>PORT</span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '10%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '10%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -305,7 +349,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                     </span>
                                                 </div>
                                             </th>
-                                            <th className="px-4 py-3 text-left font-semibold" style={{ width: '25%' }}>
+                                            <th className="px-3 py-2 text-left font-semibold" style={{ width: '25%' }}>
                                                 <div className="flex items-center gap-2">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -319,15 +363,15 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                         {portRows.map((row, index) => (
                                             <tr
                                                 key={`${row.switchName}-${row.port}-${index}`}
-                                                className={index % 2 === 0 ? 'bg-[#0f1729]' : 'bg-[#1a1f2e]'}
+                                                className={zebraRowClass(index)}
                                             >
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-1.5">
                                                     <span className="text-cyan-400 font-semibold">{row.switchName}</span>
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-1.5">
                                                     {renderClickableIp(row.switchIp, 'text-blue-400 font-mono', 9)}
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-1.5">
                                                     {row.speed !== null ? (
                                                         <span className="text-emerald-400">
                                                             {row.speed >= 1000 ? `${row.speed / 1000}G` : `${row.speed}`}
@@ -336,7 +380,7 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                         <span className="text-gray-500">-</span>
                                                     )}
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-1.5">
                                                     {(() => {
                                                         const poeColor = row.poe === 'auto' || row.poe === 'passthrough' || row.poe === '24v' ? 'text-yellow-400' : row.poe === 'off' || row.poe === 'N/A' ? 'text-gray-500' : 'text-yellow-300';
                                                         const poeDesc = row.poe === 'auto' ? t('unifi.tooltip.poe.autoValue') : row.poe === '24v' ? t('unifi.tooltip.poe.v24Value') : row.poe === 'off' ? t('unifi.tooltip.poe.offValue') : undefined;
@@ -348,13 +392,41 @@ export const SwitchesTab: React.FC<SwitchesTabProps> = ({ unifiStats, devicesArr
                                                         );
                                                     })()}
                                                 </td>
-                                                <td className="px-4 py-3 text-white">{row.port}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className={row.errors !== 'N/A' && parseInt(row.errors) > 0 ? 'text-red-400' : 'text-emerald-400'}>
-                                                        {row.errors}
-                                                    </span>
+                                                <td className="px-3 py-1.5 text-white">{row.port}</td>
+                                                <td className="px-3 py-1.5">
+                                                    {(() => {
+                                                        const hasErrors = row.errors !== 'N/A' && parseInt(row.errors) > 0;
+                                                        const value = (
+                                                            <span className={hasErrors ? 'text-red-400' : 'text-emerald-400'}>
+                                                                {row.errors}
+                                                            </span>
+                                                        );
+                                                        const hasCounters = row.rxErrors !== undefined || row.txErrors !== undefined;
+                                                        if (!hasCounters) return value;
+                                                        const problem = (n: number | undefined) => (n ? 'red' : 'emerald');
+                                                        const dropColor = (n: number | undefined) => (n ? 'amber' : 'gray');
+                                                        return (
+                                                            <RichTooltip
+                                                                title={t('unifi.tooltip.errors.portTitle', { port: row.port, name: row.switchName })}
+                                                                rows={[
+                                                                    { label: t('unifi.tooltip.errors.rxErrors'), value: formatCount(row.rxErrors), color: problem(row.rxErrors), dot: true },
+                                                                    { label: t('unifi.tooltip.errors.txErrors'), value: formatCount(row.txErrors), color: problem(row.txErrors), dot: true },
+                                                                    ...(row.rxDropped !== undefined || row.txDropped !== undefined ? [
+                                                                        { label: t('unifi.tooltip.errors.rxDropped'), value: formatCount(row.rxDropped), color: dropColor(row.rxDropped), dot: true },
+                                                                        { label: t('unifi.tooltip.errors.txDropped'), value: formatCount(row.txDropped), color: dropColor(row.txDropped), dot: true },
+                                                                    ] as const : []),
+                                                                ]}
+                                                                footer={hasErrors ? t('unifi.tooltip.errors.presentValue') : t('unifi.tooltip.errors.noneValue')}
+                                                                footerVariant={hasErrors ? 'warning' : 'default'}
+                                                                position="top"
+                                                                width={260}
+                                                            >
+                                                                <span className="cursor-help">{value}</span>
+                                                            </RichTooltip>
+                                                        );
+                                                    })()}
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-1.5">
                                                     <span className="text-yellow-400">{row.portName}</span>
                                                 </td>
                                             </tr>

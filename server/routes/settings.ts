@@ -5,6 +5,7 @@ import { getDatabase } from '../database/connection.js';
 import { requireAuth, requireAdmin, type AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { param } from '../utils/params.js';
 import { redactForNonAdmin } from '../utils/redactSecrets.js';
+import { getPortErrors } from '../utils/freeboxPortErrors.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -119,6 +120,9 @@ router.get('/switch', relay(() => freeboxApi.getSwitchStatus()));
 
 // GET /api/settings/switch/ports - Get switch ports
 router.get('/switch/ports', relay(() => freeboxApi.getSwitchPorts()));
+
+// GET /api/settings/switch/errors - Error counters per switch port (cached 5 min)
+router.get('/switch/errors', relay(async () => ({ success: true, result: await getPortErrors(freeboxApi) })));
 
 // ===== LCD =====
 
