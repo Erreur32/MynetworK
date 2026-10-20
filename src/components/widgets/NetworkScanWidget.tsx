@@ -442,7 +442,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                             
                             {/* Prochains scans automatiques - Même style que Info Scans */}
                             {autoStatus && autoStatus.enabled && (autoStatus.fullScan.config.enabled || autoStatus.refresh.config.enabled) && (
-                                <div className="pt-2 border-t border-gray-800 space-y-2">
+                                <div className="pt-2 space-y-2">
                                     {autoStatus.fullScan.config.enabled && (
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-gray-300 font-medium w-14">{t('networkScan.widget.fullScan')}</span>
@@ -491,7 +491,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
 
                     {/* Top traffic consumers — UniFi only (Freebox API has no per-host byte counters) */}
                     {!hasUniFi && (
-                        <div className="pt-4 border-t border-gray-800">
+                        <div className="pt-4">
                             <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-2">
                                 <Gauge size={13} className="text-gray-600" />
                                 {t('networkScan.widget.topTraffic')}
@@ -503,7 +503,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                         </div>
                     )}
                     {hasUniFi && (
-                        <div className="pt-4 border-t border-gray-800">
+                        <div className="pt-4">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5">
                                     <Gauge size={13} className="text-cyan-400" />
@@ -573,7 +573,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
 
                     {/* Offline IPs list */}
                     {offlineIps > 0 && (
-                        <div className="pt-2 border-t border-gray-800">
+                        <div className="pt-2">
                             {/* The category title is the link to the scan page filtered on offline IPs */}
                             <div className="text-xs text-gray-400 mb-2 font-medium">
                                 {onOpenScan ? (
@@ -614,7 +614,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
 
                     {/* Worst latency IPs */}
                     {onlineIps > 0 && (
-                        <div className="pt-2 border-t border-gray-800">
+                        <div className="pt-2">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs text-gray-400 font-medium">
                                     {(() => {
