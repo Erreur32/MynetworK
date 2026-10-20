@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Freebox page: the SFP and latest devices cards sit in columns 3 and 4, so column 1 is no longer the only loaded one
+- Home Network scan card: the offline IP list shows 5 entries at most, with a button to the scan page already filtered on offline IPs (`/network-scan?status=offline`)
 
 ---
 

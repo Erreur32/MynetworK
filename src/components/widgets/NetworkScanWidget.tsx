@@ -21,7 +21,12 @@ import { TopTrafficOverlay } from '../ui/TopTrafficOverlay';
 
 interface NetworkScanWidgetProps {
     onViewDetails?: () => void;
+    // Opens the scan page already filtered on offline IPs
+    onViewOffline?: () => void;
 }
+
+// The home card lists only the first offline IPs, the scan page has the rest
+const OFFLINE_PREVIEW_COUNT = 5;
 
 interface NetworkScanItem {
     id: number;
@@ -82,7 +87,7 @@ interface AutoStatus {
     } | null;
 }
 
-export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDetails }) => {
+export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDetails, onViewOffline }) => {
     const { t, i18n } = useTranslation();
     const dateLocale = i18n.language?.startsWith('fr') ? 'fr-FR' : 'en-GB';
     const { pluginStats } = usePluginStore();
@@ -207,7 +212,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                 // Fetch offline IPs
                 const offlineParams = new URLSearchParams({
                     status: 'offline',
-                    limit: '10',
+                    limit: String(OFFLINE_PREVIEW_COUNT),
                     sortBy: 'last_seen',
                     sortOrder: 'desc'
                 });
@@ -472,12 +477,12 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     {offlineIps > 0 && (
                         <div className="pt-2 border-t border-gray-800">
                             <div className="text-xs text-gray-400 mb-2 font-medium">
-                                {t('networkScan.widget.offlineIps')} ({offlineIpsList.length > 0 ? offlineIpsList.length : offlineIps})
+                                {t('networkScan.widget.offlineIps')} ({offlineIps})
                             </div>
                             {loading && offlineIpsList.length === 0 ? (
                                 <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.loading')}</div>
                             ) : offlineIpsList.length > 0 ? (
-                                <div className="space-y-1 max-h-80 overflow-y-auto">
+                                <div className="space-y-1">
                                     {offlineIpsList.map((item) => (
                                         <div 
                                             key={item.id} 
@@ -498,6 +503,15 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                                 </div>
                             ) : (
                                 <div className="text-[11px] text-gray-500 py-2">{t('networkScan.widget.noOfflineRecent')}</div>
+                            )}
+                            {onViewOffline && (
+                                <button
+                                    onClick={onViewOffline}
+                                    className="mt-2 w-full text-[11px] text-blue-400 hover:text-blue-300 flex items-center justify-center gap-1 transition-colors py-1.5 bg-blue-500/10 hover:bg-blue-500/20 rounded border border-blue-500/20"
+                                >
+                                    {t('networkScan.widget.viewOffline', { count: offlineIps })}
+                                    <ArrowRight size={12} />
+                                </button>
                             )}
                         </div>
                     )}

@@ -504,7 +504,9 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
     // Filters - Load from localStorage or use defaults
     const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>(() => {
         try {
-            const saved = localStorage.getItem('networkScan_statusFilter');
+            // Deep link from the home widget (/network-scan?status=offline) wins over the saved filter
+            const fromUrl = new URLSearchParams(window.location.search).get('status');
+            const saved = fromUrl ?? localStorage.getItem('networkScan_statusFilter');
             if (saved && ['all', 'online', 'offline'].includes(saved)) {
                 return saved as 'all' | 'online' | 'offline';
             }

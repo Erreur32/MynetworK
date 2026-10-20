@@ -1083,6 +1083,7 @@ const App: React.FC = () => {
               onNavigateToFreebox={() => setCurrentPage("freebox")}
               onNavigateToUniFi={() => setCurrentPage("unifi")}
               onNavigateToNetworkScan={() => setCurrentPage("network-scan")}
+              onNavigateToOfflineScan={() => navigate("/network-scan?status=offline")}
               onNavigateToPlugins={(pluginId) => {
                 if (pluginId) {
                   setPluginConfigId(pluginId);
