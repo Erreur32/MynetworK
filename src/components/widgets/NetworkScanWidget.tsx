@@ -393,7 +393,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                     </div>
 
                     {/* Last scan - Same format as Info Scans */}
-                    <div className="pt-2 border-t border-gray-800">
+                    <div className="pt-2 pb-3 border-t border-gray-800">
                         <div className="text-xs space-y-2">
                             <div className="font-medium text-gray-300 mb-2">{t('networkScan.widget.lastScan')}</div>
                             {autoStatus?.lastScan ? (
