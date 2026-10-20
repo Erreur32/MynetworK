@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-10-20
+
+### Changed
+
+- UniFi Overview: the Access points, Switches and Sites sections are replaced by one Devices card showing the live front-panel cards (gateway, then switches, then APs by default, drag to reorder as before) with the status, system and network info back under each card. Client / AP / switch totals are now tags on the card header
+- UniFi Overview: System info is compact and holds the update status chips (up to date, update available, critical update, total devices); it is aligned with Network alerts at equal height
+- UniFi tabs reordered: Overview, Switch, Clients, then Traffic, Threats, Analyse
+- Reset layout button restyled and only shown once the card layout was changed
+
+### Removed
+
+- UniFi CARD tab, merged into Overview (`/unifi/card` redirects to `/unifi/overview`)
+- Hardware front panel view toggle (cards always show the ports view)
+- Threats tab is hidden when there is no compatible gateway (no gateway device, or a controller type without IPS events)
+
+---
+
 ## [0.12.4] - 2026-10-19
 
 ### Changed

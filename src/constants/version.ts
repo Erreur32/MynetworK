@@ -4,7 +4,7 @@
  * Do not modify this file manually - use the update script instead
  */
 
-export const APP_VERSION = '0.12.4';
+export const APP_VERSION = '0.13.0';
 
 /**
  * Environment information from server
