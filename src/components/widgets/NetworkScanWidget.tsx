@@ -491,7 +491,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
 
                     {/* Top traffic consumers — UniFi only (Freebox API has no per-host byte counters) */}
                     {!hasUniFi && (
-                        <div className="pt-2 border-t border-gray-800">
+                        <div className="pt-4 border-t border-gray-800">
                             <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5 mb-2">
                                 <Gauge size={13} className="text-gray-600" />
                                 {t('networkScan.widget.topTraffic')}
@@ -503,7 +503,7 @@ export const NetworkScanWidget: React.FC<NetworkScanWidgetProps> = ({ onViewDeta
                         </div>
                     )}
                     {hasUniFi && (
-                        <div className="pt-2 border-t border-gray-800">
+                        <div className="pt-4 border-t border-gray-800">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-xs text-gray-400 font-medium flex items-center gap-1.5">
                                     <Gauge size={13} className="text-cyan-400" />
