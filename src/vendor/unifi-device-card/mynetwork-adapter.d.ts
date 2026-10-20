@@ -9,6 +9,8 @@ export interface MnDevice {
     ports: number[];
     uplinkPort: number | null;
 }
+export function classifyUnifiDevice(device: unknown): MnDevice['type'] | null;
+export function mnDeviceId(device: unknown): string;
 export function createMynetworkHass(
     unifiDevices: unknown[],
     language?: string

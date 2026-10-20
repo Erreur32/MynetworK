@@ -97,5 +97,10 @@ export function useCardLayout(deviceIds: string[]) {
 
     const reset = useCallback(() => setLayout(EMPTY), []);
 
-    return { order: layout.order, spans: layout.spans, heights: layout.heights, uplinks: layout.uplinks, move, setSpan, setHeight, setUplink, reset };
+    const isDefault = layout.order.length === 0
+        && Object.keys(layout.spans).length === 0
+        && Object.keys(layout.heights).length === 0
+        && Object.keys(layout.uplinks).length === 0;
+
+    return { isDefault, order: layout.order, spans: layout.spans, heights: layout.heights, uplinks: layout.uplinks, move, setSpan, setHeight, setUplink, reset };
 }
