@@ -18,6 +18,10 @@ import { WiresharkVendorService } from './wiresharkVendorService.js';
 import { logger } from '../utils/logger.js';
 
 const POLL_INTERVAL_MS = 30_000; // 30s — matches the network-scan page's own refresh cadence
+// Reuse a stat/sta answer another caller (live tab, getStats, MCP) fetched this recently.
+// Below POLL_INTERVAL_MS so a poll never reuses its own previous answer; counters are
+// cumulative, so a slightly older sample only shifts the delta to the next poll.
+const CLIENTS_MAX_AGE_MS = 25_000;
 const DAILY_RETENTION_DAYS = 30; // per-day rows purged after this; all-time totals are never purged
 const PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -50,7 +54,7 @@ class UniFiTrafficHistoryService {
         if (!unifiPlugin?.isEnabled?.() || typeof unifiPlugin.getApiService !== 'function') return;
 
         try {
-            const clients = await unifiPlugin.getApiService().getClients();
+            const clients = await unifiPlugin.getApiService().getClients({ maxAgeMs: CLIENTS_MAX_AGE_MS });
             const seenMacs = new Set<string>();
             const batch: TrafficDeltaInput[] = [];
 
