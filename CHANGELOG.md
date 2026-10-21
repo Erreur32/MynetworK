@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.4] - 2026-10-21
+
+### Changed
+
+- UniFi per-client traffic history (background poll every 30 s) now reuses a `stat/sta` answer that another reader (live tab, stats, MyServices, MCP) fetched in the last 25 s instead of sending its own request. Counters are cumulative, so the recorded totals stay exact; fewer `GET stat/sta` calls reach the controller
+
+---
+
 ## [0.13.3] - 2026-10-20
 
 ### Security

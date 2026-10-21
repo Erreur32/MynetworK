@@ -793,16 +793,18 @@ export class UniFiApiService {
      * GET request to the UniFi controller API, served from the short-lived response cache
      * when the path is cacheable (see responseCacheTtlMs), with in-flight sharing.
      */
-    private async controllerRequest<T>(path: string): Promise<T> {
-        return (await this.controllerRequestWithMeta<T>(path)).data;
+    private async controllerRequest<T>(path: string, options?: { maxAgeMs?: number }): Promise<T> {
+        return (await this.controllerRequestWithMeta<T>(path, options)).data;
     }
 
     /**
      * Same as controllerRequest, plus the time the data was fetched from the controller
-     * (older than now when served from the cache). bypassCache forces a real request.
+     * (older than now when served from the cache). bypassCache forces a real request,
+     * maxAgeMs lets a caller accept a cached answer older than the path's default TTL.
      */
-    private async controllerRequestWithMeta<T>(path: string, options?: { bypassCache?: boolean }): Promise<{ data: T; fetchedAt: number }> {
-        const ttlMs = options?.bypassCache ? 0 : UniFiApiService.responseCacheTtlMs(path);
+    private async controllerRequestWithMeta<T>(path: string, options?: { bypassCache?: boolean; maxAgeMs?: number }): Promise<{ data: T; fetchedAt: number }> {
+        const defaultTtlMs = options?.bypassCache ? 0 : UniFiApiService.responseCacheTtlMs(path);
+        const ttlMs = defaultTtlMs > 0 ? Math.max(defaultTtlMs, options?.maxAgeMs ?? 0) : 0;
         if (ttlMs <= 0) {
             const data = await this.fetchControllerJson<T>(path);
             return { data, fetchedAt: Date.now() };
@@ -1253,9 +1255,10 @@ export class UniFiApiService {
     }
 
     /**
-     * Get all clients (connected devices)
+     * Get all clients (connected devices). maxAgeMs (controller API only) accepts a stat/sta
+     * answer another caller fetched within that window instead of a new request.
      */
-    async getClients(): Promise<any[]> {
+    async getClients(options?: { maxAgeMs?: number }): Promise<any[]> {
         await this.ensureLoggedIn();
 
         try {
@@ -1283,7 +1286,7 @@ export class UniFiApiService {
                 // Controller API (local) - HTTP + cookie: /api/s/<site>/stat/sta
                 const encodedSite = encodeURIComponent(this.site);
                 logger.debug('UniFi', `Getting clients for site via HTTP: ${this.site} (encoded: ${encodedSite})`);
-                const clients = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/sta`);
+                const clients = await this.controllerRequest<any[]>(`/api/s/${encodedSite}/stat/sta`, options);
                 return clients;
             }
         } catch (error) {
