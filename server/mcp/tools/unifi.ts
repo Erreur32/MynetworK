@@ -187,6 +187,11 @@ function cardPortRow(row: any, knownMacs: Set<string>) {
     sfp_txfault: cardBool(row?.sfp_txfault),
     'rx_bytes-r': toNumber(row?.['rx_bytes-r']),
     'tx_bytes-r': toNumber(row?.['tx_bytes-r']),
+    // Cumulative since the device booted; a port without them stays undefined (unknown, not zero).
+    rx_errors: toNumber(row?.rx_errors),
+    tx_errors: toNumber(row?.tx_errors),
+    rx_dropped: toNumber(row?.rx_dropped),
+    tx_dropped: toNumber(row?.tx_dropped),
     lldp_table: neighbours.length ? neighbours : undefined
   };
 }

@@ -94,3 +94,17 @@ test('the ethernet port tables are accepted when port_table is empty', () => {
     const [d] = summarizeCardDevices([{ mac: 'aa:bb:cc:00:00:09', type: 'usw', port_table: [], eth_port_table: [{ port_idx: 1, up: false }] }]);
     assert.equal(d.port_table.length, 1);
 });
+
+test('port error and drop counters are kept when reported, never invented', () => {
+    const [d] = summarizeCardDevices([{ mac: 'aa:bb:cc:00:00:0a', type: 'usw', port_table: [
+        { port_idx: 1, up: true, rx_errors: 12, tx_errors: 0, tx_dropped: '3' },
+        { port_idx: 2, up: true }
+    ] }]);
+    const [withCounters, without] = d.port_table;
+    assert.equal(withCounters.rx_errors, 12);
+    assert.equal(withCounters.tx_errors, 0);
+    assert.equal(withCounters.rx_dropped, undefined);
+    assert.equal(withCounters.tx_dropped, 3);
+    const json = JSON.parse(JSON.stringify(without));
+    for (const k of ['rx_errors', 'tx_errors', 'rx_dropped', 'tx_dropped']) assert.ok(!(k in json), k);
+});

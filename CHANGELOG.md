@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.6] - 2026-10-21
+
+### Added
+
+- `GET /api/plugins/unifi/card-devices`: each port row now carries `rx_errors`, `tx_errors`, `rx_dropped` and `tx_dropped` (cumulative controller counters since the device booted); a port that does not report them leaves them out instead of sending 0
+
+---
+
 ## [0.13.5] - 2026-10-21
 
 ### Security
