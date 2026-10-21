@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.5] - 2026-10-21
+
+### Security
+
+- Bump `@modelcontextprotocol/sdk` from 1.31.0 to 1.32.1 and `vite` from 6.4.3 to 6.4.5 (replaces Dependabot PR #97, whose security check cannot read the repository secret)
+
+---
+
 ## [0.13.4] - 2026-10-21
 
 ### Changed
