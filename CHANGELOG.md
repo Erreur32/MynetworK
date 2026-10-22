@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.7] - 2026-10-22
+
+### Security
+
+- Rebuild the Docker image on Node.js 22.23.4 (`node:22-alpine`) to fix CVE-2026-111497, an out-of-bounds write in the Brotli decoder reachable through `fetch()` and the Express 5 body parser; 0.13.x images shipped Node.js 22.23.3
+
+---
+
 ## [0.13.6] - 2026-10-21
 
 ### Added
