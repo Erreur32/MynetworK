@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.10] - 2026-10-23
+
+### Fixed
+
+- Network scan: the console showed a stream of `429 Too Many Requests` on `/api/network-scan/progress`, `port-scan-progress`, `stats` and `history` during a scan started from the UI. The page polls up to about 120 requests per minute during a scan while `scanLimiter` allowed 60. Read requests (GET and the read-only `POST /traffic/batch`) now use the general API limit (300 per minute); scan triggers and other writes keep the 60 per minute limit
+- Network scan: the auto-scan progress poller no longer runs at the same time as the manual scan/refresh poller, which made `/progress` be requested twice every 2 seconds
+
+---
+
 ## [0.13.9] - 2026-10-23
 
 ### Security

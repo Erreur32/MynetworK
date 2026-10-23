@@ -444,12 +444,18 @@ setTimeout(() => {
 
 // Rate limiting
 import { apiLimiter, scanLimiter } from "./middleware/rateLimiter.js";
-// Apply API rate limiter to all routes except network-scan (has its own limiter)
+// Network-scan reads (GET + read-only traffic batch) are what the UI polls during a scan
+// (~2 req/s), so they share the general API limit; scan triggers and writes keep scanLimiter.
+// Lowercased because Express routing is case-insensitive (/API/Network-Scan/scan still matches).
+const isNetworkScanRead = (method: string, path: string): boolean =>
+  method === "GET" || path === "/network-scan/traffic/batch";
 app.use("/api/", (req, res, next) => {
-  if (req.path.startsWith("/network-scan")) return next();
+  const path = req.path.toLowerCase();
+  if (path.startsWith("/network-scan") && !isNetworkScanRead(req.method, path)) {
+    return scanLimiter(req, res, next);
+  }
   return apiLimiter(req, res, next);
 });
-app.use("/api/network-scan", scanLimiter);
 
 app.use("/api/users", usersRoutes);
 app.use("/api/plugins", pluginsRoutes);
