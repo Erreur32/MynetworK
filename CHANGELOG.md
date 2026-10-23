@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.8] - 2026-10-23
+
+### Fixed
+
+- Home Assistant Ingress: `index.html` is now served with its asset, icon and manifest paths prefixed by the `X-Ingress-Path` value, and without the PWA service worker registration (its scope `/` would land on the Home Assistant host). Before, the browser requested `/assets/...` from the Home Assistant root and got a blank page. Only applied in Ingress mode with a valid `/api/hassio_ingress/<token>` header; other deployments are unchanged
+
+---
+
 ## [0.13.7] - 2026-10-22
 
 ### Security

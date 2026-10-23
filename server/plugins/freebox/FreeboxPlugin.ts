@@ -29,7 +29,7 @@ export class FreeboxPlugin extends BasePlugin {
     private readonly STATS_TTL_MS = 10_000;
 
     constructor() {
-        super('freebox', 'Freebox', '0.13.7');
+        super('freebox', 'Freebox', '0.13.8');
     }
 
     async initialize(config: PluginConfig): Promise<void> {
