@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.8] - 2026-10-23
+
+### Fixed
+
+- Home Assistant Ingress: `index.html` is now served with its asset, icon and manifest paths prefixed by the `X-Ingress-Path` value, and without the PWA service worker registration (its scope `/` would land on the Home Assistant host). Before, the browser requested `/assets/...` from the Home Assistant root and got a blank page. Only applied in Ingress mode with a valid `/api/hassio_ingress/<token>` header; other deployments are unchanged
+- Home Assistant Ingress: lazy-loaded pages failed with `Unable to preload CSS for /assets/...` because the Vite preload helper used absolute `/assets/` URLs. Asset URLs inside JS and CSS are now built relative to the importing file (`experimental.renderBuiltUrl`)
+- Home Assistant Ingress: `/api/system/environment` and `/api/settings/theme` were fetched from the Home Assistant root (404); they now go through the Ingress base path like the other API calls
+
+---
+
 ## [0.13.7] - 2026-10-22
 
 ### Security

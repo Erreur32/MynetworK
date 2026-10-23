@@ -534,9 +534,38 @@ app.get("/api/config", (req, res) => {
 // IMPORTANT: Must be BEFORE error handler for SPA fallback to work
 if (process.env.NODE_ENV === "production") {
   const distPath = path.join(__dirname, "..", "dist");
+  const indexPath = path.join(distPath, "index.html");
+
+  // Home Assistant Ingress serves the app under /api/hassio_ingress/<token>/, but the
+  // Vite build references /assets/... from the host root. Under Ingress, prefix those
+  // paths with the Ingress path and drop the PWA service worker registration (its scope
+  // "/" would be the Home Assistant host). Strict match: the value is written into HTML.
+  const INGRESS_PATH_RE = /^\/api\/hassio_ingress\/[\w-]+$/;
+  const isIngress =
+    process.env.INGRESS_MODE === "1" || process.env.ADDON_INGRESS === "1";
+  let ingressIndexCache: { base: string; html: string } | null = null;
+  const sendIndex = (req: express.Request, res: express.Response) => {
+    const base = String(req.headers["x-ingress-path"] ?? "").trim().replace(/\/$/, "");
+    if (!isIngress || !INGRESS_PATH_RE.test(base)) {
+      res.sendFile(indexPath);
+      return;
+    }
+    if (ingressIndexCache?.base !== base) {
+      const html = fsSync
+        .readFileSync(indexPath, "utf8")
+        .replace(/<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/, "")
+        .replace(/(\s(?:src|href)=")\/(?!\/)/g, `$1${base}/`);
+      ingressIndexCache = { base, html };
+    }
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.type("html").send(ingressIndexCache.html);
+  };
+
   // Add cache control headers to prevent caching issues
   app.use(
     express.static(distPath, {
+      // "/" goes to the SPA fallback below so sendIndex can adapt it for Ingress
+      index: false,
       setHeaders: (res, filePath) => {
         // Disable cache for HTML files
         if (filePath.endsWith(".html")) {
@@ -559,7 +588,7 @@ if (process.env.NODE_ENV === "production") {
     if (req.path.startsWith("/api/") || req.path.startsWith("/ws/")) {
       return next();
     }
-    res.sendFile(path.join(distPath, "index.html"));
+    sendIndex(req, res);
   });
 }
 

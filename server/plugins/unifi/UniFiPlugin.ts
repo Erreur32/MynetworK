@@ -291,7 +291,7 @@ export class UniFiPlugin extends BasePlugin {
     private static readonly HISTORY_COMPACT_STEP_MS = 30_000;
 
     constructor() {
-        super('unifi', 'UniFi Controller', '0.13.7');
+        super('unifi', 'UniFi Controller', '0.13.8');
         this.apiService = new UniFiApiService();
     }
 
