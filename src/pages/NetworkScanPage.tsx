@@ -915,7 +915,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
         }
     }, [isAutoScanRunning, isScanning, isRefreshing]);
 
-    // Poll progress every 2 seconds during auto scans
+    // Poll progress every 2 seconds during auto scans (not while the manual scan/refresh poller already does it)
     usePolling(async () => {
         try {
             const progressResponse = await api.get<{ scanned: number; total: number; found: number; updated: number }>('/api/network-scan/progress');
@@ -929,7 +929,7 @@ export const NetworkScanPage: React.FC<NetworkScanPageProps> = ({ onBack, onNavi
             // Ignore errors, progress is optional
         }
     }, {
-        enabled: isAutoScanRunning,
+        enabled: isAutoScanRunning && scanPollMode === null,
         interval: 2000,
         immediate: false
     });
