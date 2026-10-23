@@ -4,6 +4,8 @@
  * Do not modify this file manually - use the update script instead
  */
 
+import { getBasePath } from '../utils/ingress';
+
 export const APP_VERSION = '0.13.8';
 
 /**
@@ -20,7 +22,7 @@ let environmentInfo: {
  */
 export const fetchEnvironmentInfo = async (): Promise<void> => {
   try {
-    const response = await fetch('/api/system/environment');
+    const response = await fetch(`${getBasePath() || '/'}api/system/environment`);
     if (response.ok) {
       const data = await response.json();
       if (data.success && data.result) {

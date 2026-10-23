@@ -4,6 +4,8 @@
  * Gère le changement de thème et la persistance dans localStorage
  */
 
+import { getBasePath } from './ingress';
+
 export type Theme = 'dark' | 'glass' | 'modern' | 'nightly' | 'neon' | 'elegant' | 'full-animation';
 
 const THEME_STORAGE_KEY = 'mynetwork_theme';
@@ -114,7 +116,7 @@ export const initTheme = async (): Promise<void> => {
 
   // Try to load theme config (custom colors + card opacity) from server
   try {
-    const response = await fetch('/api/settings/theme', {
+    const response = await fetch(`${getBasePath() || '/'}api/settings/theme`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

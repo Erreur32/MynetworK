@@ -34,6 +34,14 @@ if (process.env.NODE_ENV !== "production") {
 
 export default defineConfig({
   base: "/",
+  // Asset URLs inside JS and CSS (lazy-chunk preloads, fonts, images) are resolved
+  // relative to the importing file instead of "/", so they keep the Home Assistant
+  // Ingress prefix (/api/hassio_ingress/<token>/). index.html keeps absolute paths:
+  // the server prefixes them under Ingress, and they stay valid on nested SPA routes.
+  experimental: {
+    renderBuiltUrl: (_filename, { hostType }) =>
+      hostType === "html" ? undefined : { relative: true },
+  },
   server: {
     port: parseInt(process.env.VITE_PORT || "5173", 10),
     host: "0.0.0.0", // Listen on all interfaces to allow access via IP
