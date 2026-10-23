@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.9] - 2026-10-23
+
+### Security
+
+- Bump `dompurify` 3.4.16 to 3.4.17 (via `jspdf`): fixes GHSA-cg2g-xh64-v4q7 (critical, SAFE_FOR_TEMPLATES bypass), GHSA-mrv2-3pqr-j5jr (high, IN_PLACE detached subtree handlers) and GHSA-c6gr-qvv4-5v3f (low)
+- Bump `body-parser` 2.3.0 to 2.4.0 (via `express`): fixes CVE-2026-111181, a process crash on a compressed request body with trailing bytes
+- Bump `ip-address` 10.7.3 to 10.7.4 (via `express-rate-limit`): fixes GHSA-rxp7-6hxx-x8q5, quadratic-time zone identifier matching on long IPv6 strings
+
+---
+
 ## [0.13.8] - 2026-10-23
 
 ### Fixed
