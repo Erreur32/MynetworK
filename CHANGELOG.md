@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.12] - 2026-11-04
+
+### Security
+
+- Bump `@hono/node-server` 2.1.1 to 2.1.6 (via `@modelcontextprotocol/sdk`): fixes the advisories affecting versions below 2.1.3
+- Bump `serialize-javascript` 7.1.0 to 7.1.4 (via `vite-plugin-pwa` and `workbox-build`, build time only): fixes the advisory affecting versions below 7.1.3
+- Lockfile only, both stay within their declared ranges. Replaces Dependabot PR #107
+
+---
+
 ## [0.13.11] - 2026-11-04
 
 ### Security
