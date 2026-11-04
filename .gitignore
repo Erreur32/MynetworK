@@ -79,7 +79,13 @@ unitfi_test.sh
 *~
 
 # Secrets and sensitive files
-*secret*
+# Specific patterns only: a broad *secret* glob silently excluded source files (e.g. redactSecrets.ts on case-insensitive setups)
+*.secret
+*.secret.*
+*_secret
+*_secret.*
+.secrets
+secrets/
 # Token credential files (specific patterns to avoid excluding source code)
 *.token
 *.token.*

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.11] - 2026-11-04
+
+### Security
+
+- Bump `fast-uri` 4.2.1 to 4.2.3 (via `@modelcontextprotocol/sdk` and `ajv`), override raised to `>=4.2.3`; replaces Dependabot PR #105
+- Server network stats: removed the shell `exec` fallback that ran `cat` on the same three `/proc/net/dev` paths the `fs.readFile` loop already reads. No behaviour change, one less shell call
+
+### Changed
+
+- `.gitignore` and `.dockerignore`: the broad `*secret*` glob is replaced by specific patterns (`*.secret`, `*.secret.*`, `*_secret`, `*_secret.*`, `.secrets`, `secrets/`) so source files with "secret" in their name are never silently excluded
+
+---
+
 ## [0.13.10] - 2026-10-23
 
 ### Fixed
