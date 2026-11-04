@@ -85,7 +85,13 @@ logs
 .reboot_schedule.json
 
 # Secrets and sensitive files (additional patterns)
-*secret*
+# Specific patterns only: a broad *secret* glob silently excluded source files (e.g. redactSecrets.ts on case-insensitive setups)
+*.secret
+*.secret.*
+*_secret
+*_secret.*
+.secrets
+secrets/
 # Token files (credentials) — use specific patterns to avoid excluding source code
 *.token
 *.token.*

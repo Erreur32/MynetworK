@@ -252,7 +252,6 @@ const MAX_HISTORY = 60; // Keep last 60 data points (5 minutes at 5s interval)
  */
 const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } | null> => {
   const fs = await import('fs/promises');
-  const fsSync = await import('fs');
   
   // List of possible paths to try (Docker might mount host /proc)
   const possiblePaths = [
@@ -306,59 +305,6 @@ const getNetworkStats = async (): Promise<{ rxBytes: number; txBytes: number } |
       // Continue to next path
       continue;
     }
-  }
-  
-  // Fallback: try using command (might work if we have access)
-  try {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-    
-    // Try to read from host if in Docker
-    const commands = [
-      'cat /proc/net/dev 2>/dev/null',
-      'cat /host/proc/net/dev 2>/dev/null',
-      'cat /host/run/host/proc/net/dev 2>/dev/null'
-    ];
-    
-    for (const cmd of commands) {
-      try {
-        const { stdout } = await execAsync(cmd, { timeout: 2000 });
-        const lines = stdout.trim().split('\n').slice(2);
-        
-        let totalRxBytes = 0;
-        let totalTxBytes = 0;
-        let validInterfaces = 0;
-        
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          if (parts.length >= 10) {
-            const iface = parts[0].replace(':', '');
-            if (iface === 'lo' || iface.startsWith('docker') || iface.startsWith('veth') || iface.startsWith('br-')) {
-              continue;
-            }
-            
-            const rxBytes = parseInt(parts[1], 10);
-            const txBytes = parseInt(parts[9], 10);
-            
-            if (!isNaN(rxBytes) && !isNaN(txBytes) && rxBytes > 0 && txBytes > 0) {
-              totalRxBytes += rxBytes;
-              totalTxBytes += txBytes;
-              validInterfaces++;
-            }
-          }
-        }
-        
-        if (validInterfaces > 0 && (totalRxBytes > 0 || totalTxBytes > 0)) {
-          logger.debug('Network', `Successfully read via command: ${cmd}, found ${validInterfaces} interfaces`);
-          return { rxBytes: totalRxBytes, txBytes: totalTxBytes };
-        }
-      } catch {
-        continue;
-      }
-    }
-  } catch (error) {
-    logger.debug('Network', 'Command fallback also failed');
   }
   
   logger.debug('Network', 'Could not read network stats from any source');

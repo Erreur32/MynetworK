@@ -6,7 +6,7 @@
 
 import { getBasePath } from '../utils/ingress';
 
-export const APP_VERSION = '0.13.10';
+export const APP_VERSION = '0.13.11';
 
 /**
  * Environment information from server
